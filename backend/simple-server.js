@@ -10,10 +10,10 @@ const ocrRoutes = require('./routes/ocr');
 console.log('OCR路由已加载: ', typeof ocrRoutes);
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
-// 简易内存数据库
-const db = {
+// 简易内存数据库 - 使用全局变量确保所有路由共享同一个实例
+global.db = {
   resumes: []
 };
 
@@ -46,10 +46,20 @@ app.use(cors({
 // JSON解析中间件
 app.use(express.json());
 
-// 设置全局前缀
+// 设置全局前缀和日志中间件
 app.use('/api', (req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
+});
+
+// 错误处理中间件
+app.use((err, req, res, next) => {
+  console.error('全局错误:', err);
+  res.status(500).json({
+    success: false,
+    message: '服务器内部错误',
+    error: err.message
+  });
 });
 
 // 添加OCR测试路由，放在所有路由之前
@@ -88,7 +98,11 @@ app.get('/api/status', (req, res) => {
   res.json({
     status: 'running',
     timestamp: new Date().toISOString(),
-    port: process.env.PORT || 3001
+    port: process.env.PORT || 3001,
+    dbStatus: {
+      initialized: !!global.db,
+      resumeCount: global.db ? global.db.resumes.length : 0
+    }
   });
 });
 
@@ -164,10 +178,20 @@ app.post('/api/upload/file/:category', upload.single('file'), async (req, res) =
 
 // 获取简历列表
 app.get('/api/resumes', (req, res) => {
+  try {
   console.log('收到获取简历列表请求');
+    console.log('当前简历数据状态:', global.db ? '已初始化' : '未初始化');
+    console.log('简历数量:', global.db && global.db.resumes ? global.db.resumes.length : '无法访问');
+    
+    // 确保db对象存在
+    if (!global.db || !global.db.resumes) {
+      console.log('初始化数据库对象');
+      global.db = { resumes: [] };
+    }
   
   // 如果没有简历，返回模拟数据
-  if (db.resumes.length === 0) {
+    if (global.db.resumes.length === 0) {
+      console.log('没有实际简历数据，返回模拟数据');
     const mockData = [
       {
         id: '68201d6d8ef64c8bc6b85767',
@@ -198,16 +222,32 @@ app.get('/api/resumes', (req, res) => {
   }
   
   // 返回存储的简历数据
-  res.json(db.resumes);
+    console.log('返回实际简历数据，数量:', global.db.resumes.length);
+    res.json(global.db.resumes);
+  } catch (error) {
+    console.error('获取简历列表失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '获取简历列表失败', 
+      error: error.message 
+    });
+  }
 });
 
 // 获取指定ID的简历
 app.get('/api/resumes/:id', (req, res) => {
+  try {
   const { id } = req.params;
   console.log(`收到获取简历详情请求，ID: ${id}`);
+    
+    // 确保db对象存在
+    if (!global.db || !global.db.resumes) {
+      console.log('初始化数据库对象');
+      global.db = { resumes: [] };
+    }
   
   // 查找实际存储的简历
-  const resume = db.resumes.find(r => r.id === id);
+    const resume = global.db.resumes.find(r => r.id === id);
   
   if (resume) {
     console.log(`找到ID为 ${id} 的简历数据`);
@@ -234,12 +274,27 @@ app.get('/api/resumes/:id', (req, res) => {
   };
   
   res.json(mockData);
+  } catch (error) {
+    console.error(`获取简历(ID: ${req.params.id})失败:`, error);
+    res.status(500).json({ 
+      success: false, 
+      message: '获取简历详情失败', 
+      error: error.message 
+    });
+  }
 });
 
 // 创建简历
 app.post('/api/resumes', (req, res) => {
+  try {
   console.log('收到创建简历请求');
   console.log('请求数据:', req.body);
+    
+    // 确保db对象存在
+    if (!global.db || !global.db.resumes) {
+      console.log('初始化数据库对象');
+      global.db = { resumes: [] };
+    }
   
   // 生成模拟ID
   const id = new Date().getTime().toString(16) + Math.floor(Math.random() * 10000).toString(16);
@@ -253,19 +308,34 @@ app.post('/api/resumes', (req, res) => {
   };
   
   // 存储简历数据
-  db.resumes.push(newResume);
-  console.log(`简历创建成功，ID: ${id}，现有简历数量: ${db.resumes.length}`);
+    global.db.resumes.push(newResume);
+    console.log(`简历创建成功，ID: ${id}，现有简历数量: ${global.db.resumes.length}`);
   
   res.status(201).json(newResume);
+  } catch (error) {
+    console.error('创建简历失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '创建简历失败', 
+      error: error.message 
+    });
+  }
 });
 
 // 更新简历
 app.put('/api/resumes/:id', (req, res) => {
+  try {
   const { id } = req.params;
   console.log(`收到更新简历请求，ID: ${id}`);
+    
+    // 确保db对象存在
+    if (!global.db || !global.db.resumes) {
+      console.log('初始化数据库对象');
+      global.db = { resumes: [] };
+    }
   
   // 查找简历索引
-  const index = db.resumes.findIndex(r => r.id === id);
+    const index = global.db.resumes.findIndex(r => r.id === id);
   
   if (index === -1) {
     return res.status(404).json({ message: `未找到ID为 ${id} 的简历` });
@@ -273,19 +343,33 @@ app.put('/api/resumes/:id', (req, res) => {
   
   // 更新简历
   const updatedResume = {
-    ...db.resumes[index],
+      ...global.db.resumes[index],
     ...req.body,
     id, // 确保ID不变
     updatedAt: new Date().toISOString()
   };
   
   // 替换原来的简历
-  db.resumes[index] = updatedResume;
+    global.db.resumes[index] = updatedResume;
   console.log(`简历更新成功，ID: ${id}`);
   
   res.json(updatedResume);
+  } catch (error) {
+    console.error(`更新简历(ID: ${req.params.id})失败:`, error);
+    res.status(500).json({ 
+      success: false, 
+      message: '更新简历失败', 
+      error: error.message 
+    });
+  }
 });
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`简单服务器运行在端口: ${port}，文件将上传到腾讯云COS`);
+  
+  // 在启动时初始化数据库
+  if (!global.db) {
+    global.db = { resumes: [] };
+    console.log('数据库对象已初始化');
+  }
 }); 

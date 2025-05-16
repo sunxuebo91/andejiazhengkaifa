@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Row, Col, Statistic, Spin, message, Space } from 'antd';
-import { UserOutlined, FileAddOutlined, CheckCircleOutlined, CloseCircleOutlined, HomeOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Statistic, Spin, message, Space, Alert, Button } from 'antd';
+import { UserOutlined, FileAddOutlined, CheckCircleOutlined, CloseCircleOutlined, HomeOutlined, ReloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalResumes: 0,
     newTodayResumes: 0,
@@ -19,7 +20,10 @@ const Dashboard: React.FC = () => {
   // 从后端获取统计数据
   const fetchStats = async () => {
     setLoading(true);
+    setError(null);
+    
     try {
+      console.log('正在获取简历数据...');
       // 获取所有简历
       const response = await axios.get('/api/resumes', {
         timeout: 10000,
@@ -28,6 +32,8 @@ const Dashboard: React.FC = () => {
           'Pragma': 'no-cache'
         }
       });
+
+      console.log('获取到简历数据:', response.data ? response.data.length : 0, '条记录');
 
       // 当天的起始时间（零点）
       const todayStart = dayjs().startOf('day');
@@ -55,6 +61,7 @@ const Dashboard: React.FC = () => {
       });
     } catch (error) {
       console.error('获取统计数据失败:', error);
+      setError('获取统计数据失败，请稍后重试');
       messageApi.error('获取统计数据失败，请稍后刷新页面');
     } finally {
       setLoading(false);
@@ -72,8 +79,32 @@ const Dashboard: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
+  const handleRetry = () => {
+    fetchStats();
+  };
+
   const content = (
     <Card style={{ marginBottom: 24 }}>
+      {error && (
+        <Alert
+          message="数据加载错误"
+          description={error}
+          type="error"
+          showIcon
+          action={
+            <Button 
+              size="small" 
+              type="primary" 
+              onClick={handleRetry}
+              icon={<ReloadOutlined />}
+            >
+              重试
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      )}
+      
       <Row gutter={[24, 24]}>
         <Col xs={24} sm={12} md={8} lg={8} xl={8}>
           <Card variant="outlined">
@@ -139,6 +170,17 @@ const Dashboard: React.FC = () => {
       header={{
         title: '驾驶舱',
       }}
+      extra={[
+        <Button 
+          key="refresh" 
+          type="primary" 
+          icon={<ReloadOutlined />} 
+          onClick={handleRetry}
+          loading={loading}
+        >
+          刷新数据
+        </Button>
+      ]}
     >
       {contextHolder}
       

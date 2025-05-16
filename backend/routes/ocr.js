@@ -60,13 +60,13 @@ refreshBaiduAccessToken();
 
 // 获取百度OCR的access_token
 async function getBaiduAccessToken() {
-  if (!baiduAccessToken || Date.now() >= tokenExpiryTime) {
-    await refreshBaiduAccessToken();
-  }
-  if (!baiduAccessToken) {
-    throw new Error('无法获取百度API访问令牌');
-  }
-  return baiduAccessToken;
+    if (!baiduAccessToken || Date.now() >= tokenExpiryTime) {
+      await refreshBaiduAccessToken();
+    }
+    if (!baiduAccessToken) {
+      throw new Error('无法获取百度API访问令牌');
+    }
+    return baiduAccessToken;
 }
 
 // 测试路由 - 验证OCR模块正常工作

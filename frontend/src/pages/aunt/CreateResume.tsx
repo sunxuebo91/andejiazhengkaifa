@@ -325,7 +325,7 @@ const CreateResume = () => {
           }
         }, 3000);
       }
-    } catch (error) {
+        } catch (error) {
       debugLog('检查OCR连接时出错:', error);
       message.destroy('ocrConnecting');
       setOcrApiAvailable(false);
@@ -382,8 +382,21 @@ const CreateResume = () => {
         return;
       }
       
+      // 记录原始文件大小
+      const originalSizeKB = (file.size / 1024).toFixed(2);
+      debugLog(`原始${type === 'front' ? '身份证正面' : '身份证背面'}文件大小: ${originalSizeKB} KB`);
+      
+      // 压缩图片，限制在50KB内
+      const compressedFile = await compressImage(file);
+      const compressedSizeKB = (compressedFile.size / 1024).toFixed(2);
+      
+      debugLog(`压缩后${type === 'front' ? '身份证正面' : '身份证背面'}文件大小: ${compressedSizeKB} KB`);
+      if (originalSizeKB !== compressedSizeKB) {
+        message.success(`${type === 'front' ? '身份证正面' : '身份证背面'}图片已压缩: ${originalSizeKB} KB → ${compressedSizeKB} KB`);
+      }
+      
       // 创建预览 - 更新UI立即响应，提高用户体验
-      const previewUrl = createImagePreview(file);
+      const previewUrl = createImagePreview(compressedFile);
       
       // 根据身份证类型更新状态
       if (type === 'front') {
@@ -392,14 +405,14 @@ const CreateResume = () => {
           revokeImagePreview(idCardFrontPreview);
         }
         setIdCardFrontPreview(previewUrl);
-        setIdCardFrontFile(file);
+        setIdCardFrontFile(compressedFile);
       } else {
         // 清理旧预览
         if (idCardBackPreview) {
           revokeImagePreview(idCardBackPreview);
         }
         setIdCardBackPreview(previewUrl);
-        setIdCardBackFile(file);
+        setIdCardBackFile(compressedFile);
       }
       
       // 仅当上传的是身份证正面且OCR已可用时才尝试OCR识别
@@ -445,7 +458,7 @@ const CreateResume = () => {
         
         try {
           // 执行OCR识别，并设置超时限制
-          const ocrResultPromise = recognizeIdCard(file, type);
+          const ocrResultPromise = recognizeIdCard(compressedFile, type);
           const ocrResult = await Promise.race([ocrResultPromise, timeoutPromise]);
           
           // 关闭加载提示
@@ -526,7 +539,14 @@ const CreateResume = () => {
       // 获取原始文件
       const rawFiles = [...newFiles];
       
-      // 压缩所有文件
+      // 分类文件
+      const pdfFiles = rawFiles.filter(file => file.type === 'application/pdf');
+      const imageFiles = rawFiles.filter(file => file.type !== 'application/pdf');
+      
+      // 显示文件分类信息
+      debugLog(`准备处理文件: 共${rawFiles.length}个文件, 其中图片${imageFiles.length}个, PDF${pdfFiles.length}个`);
+      
+      // 只压缩图片文件
       const compressPromises = rawFiles.map(file => compressImage(file));
       const compressedFiles = await Promise.all(compressPromises);
       
@@ -550,7 +570,11 @@ const CreateResume = () => {
       const originalSizeKB = (totalOriginalSize / 1024).toFixed(2);
       const compressedSizeKB = (totalCompressedSize / 1024).toFixed(2);
       
+      if (pdfFiles.length > 0) {
+        message.success(`${type}上传成功: ${originalSizeKB} KB → ${compressedSizeKB} KB (包含${pdfFiles.length}个PDF文件未压缩)`);
+      } else {
       message.success(`${type}上传成功: ${originalSizeKB} KB → ${compressedSizeKB} KB`);
+      }
     } catch (error) {
       message.error(`${type}处理失败，请重试`);
       console.error(`${type}上传失败:`, error);
@@ -664,16 +688,26 @@ const CreateResume = () => {
         if (idCardFrontFile) {
           const formData = new FormData();
           formData.append('file', idCardFrontFile);
+          try {
           const response = await axios.post(`/api/upload/id-card/front`, formData);
           fileUrls.idCardFrontUrl = response.data.url;
+          } catch (uploadError) {
+            console.error('上传身份证正面失败:', uploadError);
+            throw new Error(`上传身份证正面失败: ${uploadError.response?.status || '网络错误'}`);
+          }
         } 
         
         // 上传身份证背面
         if (idCardBackFile) {
           const formData = new FormData();
           formData.append('file', idCardBackFile);
+          try {
           const response = await axios.post(`/api/upload/id-card/back`, formData);
           fileUrls.idCardBackUrl = response.data.url;
+          } catch (uploadError) {
+            console.error('上传身份证背面失败:', uploadError);
+            throw new Error(`上传身份证背面失败: ${uploadError.response?.status || '网络错误'}`);
+          }
         }
         
         // 上传个人照片
@@ -681,8 +715,13 @@ const CreateResume = () => {
           for (const file of photoFiles) {
             const formData = new FormData();
             formData.append('file', file);
+            try {
             const response = await axios.post(`/api/upload/file/photo`, formData);
             fileUrls.photoUrls.push(response.data.url);
+            } catch (uploadError) {
+              console.error('上传个人照片失败:', uploadError);
+              throw new Error(`上传个人照片失败: ${uploadError.response?.status || '网络错误'}`);
+            }
           }
         }
         
@@ -691,8 +730,13 @@ const CreateResume = () => {
           for (const file of certificateFiles) {
             const formData = new FormData();
             formData.append('file', file);
+            try {
             const response = await axios.post(`/api/upload/file/certificate`, formData);
             fileUrls.certificateUrls.push(response.data.url);
+            } catch (uploadError) {
+              console.error('上传技能证书失败:', uploadError);
+              throw new Error(`上传技能证书失败: ${uploadError.response?.status || '网络错误'}`);
+            }
           }
         }
         
@@ -701,8 +745,13 @@ const CreateResume = () => {
           for (const file of medicalReportFiles) {
             const formData = new FormData();
             formData.append('file', file);
+            try {
             const response = await axios.post(`/api/upload/file/medical-report`, formData);
             fileUrls.medicalReportUrls.push(response.data.url);
+            } catch (uploadError) {
+              console.error('上传体检报告失败:', uploadError);
+              throw new Error(`上传体检报告失败: ${uploadError.response?.status || '网络错误'}`);
+            }
           }
         }
         
@@ -724,7 +773,10 @@ const CreateResume = () => {
         }
       } catch (error) {
         console.error('上传文件失败:', error);
-        message.error('上传文件失败，请重试');
+        const errorMessage = error.response?.status === 500 
+          ? '服务器错误：文件上传失败（HTTP 500）' 
+          : `上传文件失败: ${error.message || '未知错误'}`;
+        message.error(errorMessage);
         setLoading(false);
         setSubmitting(false);
         return;

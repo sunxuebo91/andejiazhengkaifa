@@ -3,30 +3,67 @@ import imageCompression from 'browser-image-compression';
 /**
  * 压缩图片文件
  * @param file 原始图片文件
- * @param maxSizeMB 最大大小（MB）
+ * @param maxSizeMB 最大大小（MB），默认0.03MB(30KB)
  * @param maxWidthOrHeight 最大宽度或高度（像素）
  * @returns 压缩后的图片文件
  */
 export const compressImage = async (
   file: File, 
-  maxSizeMB: number = 1, 
-  maxWidthOrHeight: number = 1920
+  maxSizeMB: number = 0.03, 
+  maxWidthOrHeight: number = 1280
 ): Promise<File> => {
   console.log('开始压缩图片:', file.name, `(${(file.size / 1024 / 1024).toFixed(2)}MB)`);
   
   try {
+    // 跳过PDF文件压缩
+    if (file.type === 'application/pdf') {
+      console.log('PDF文件无需压缩:', file.name);
+      return file;
+    }
+    
+    // 检查是否为图片文件
+    if (!isValidImage(file)) {
+      console.log('非图片文件，跳过压缩:', file.name, file.type);
+      return file;
+    }
+    
     const options = {
-      maxSizeMB, // 最大文件大小
-      maxWidthOrHeight, // 最大宽度或高度
-      useWebWorker: true, // 使用Web Worker提高性能
-      preserveExif: true, // 保留EXIF数据
+      maxSizeMB, // 最大文件大小设为30KB
+      maxWidthOrHeight, // 降低最大宽高以减小文件大小
+      useWebWorker: true, 
+      preserveExif: false, // 不保留EXIF数据以减少文件大小
+      initialQuality: 0.6, // 降低初始质量以确保文件大小更小
     };
     
     const compressedFile = await imageCompression(file, options);
+    
+    // 检查是否达到目标大小，如果未达到，进行二次压缩
+    if (compressedFile.size > 50 * 1024) {
+      console.log('需要二次压缩，当前大小:', (compressedFile.size / 1024).toFixed(2), 'KB');
+      const secondOptions = {
+        maxSizeMB: 0.02, // 更严格的大小限制
+        maxWidthOrHeight: 800, // 进一步降低尺寸
+        useWebWorker: true,
+        preserveExif: false,
+        initialQuality: 0.4, // 更低的质量
+      };
+      
+      const secondCompressed = await imageCompression(compressedFile, secondOptions);
+      
+      console.log(
+        '图片压缩完成(二次压缩):', 
+        secondCompressed.name,
+        `(${(secondCompressed.size / 1024).toFixed(2)}KB)`,
+        `压缩率: ${((1 - secondCompressed.size / file.size) * 100).toFixed(2)}%`
+      );
+      
+      return secondCompressed;
+    }
+    
     console.log(
       '图片压缩完成:', 
       compressedFile.name,
-      `(${(compressedFile.size / 1024 / 1024).toFixed(2)}MB)`,
+      `(${(compressedFile.size / 1024).toFixed(2)}KB)`,
       `压缩率: ${((1 - compressedFile.size / file.size) * 100).toFixed(2)}%`
     );
     

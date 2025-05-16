@@ -11,11 +11,11 @@ const CHECK_INTERVAL = 60000; // 1分钟检查间隔
 const getOcrServerUrl = () => {
   // 优先级顺序 - 减少尝试次数，提高性能
   const testUrls = [
-    // 1. 通过相对路径访问（Vite代理）- 最可靠的方式
+    // 1. API服务器OCR端点 (通过Vite代理)
     '/api/ocr',
-    // 2. 通过专用OCR代理访问
-    '/ocr-server',
-    // 3. 本地测试服务
+    // 2. 后端直接OCR服务路径
+    '/api/ocr-direct',
+    // 3. 独立OCR服务器
     'http://localhost:3002'
   ];
   
@@ -55,11 +55,11 @@ export const recognizeIdCard = async (
   try {
     // 压缩图片 - 提高传输和处理速度
     let processedFile = file;
-    if (file.size > 800 * 1024) { // 如果大于800KB则压缩
-      debugLog(`图片大小(${(file.size/1024/1024).toFixed(2)}MB)过大，进行压缩`);
-      // 增加压缩率，减小文件尺寸
-      processedFile = await compressImage(file, 0.7, 1500);
-      debugLog(`压缩后图片大小: ${(processedFile.size/1024/1024).toFixed(2)}MB`);
+    if (file.size > 50 * 1024) { // 如果大于50KB则压缩
+      debugLog(`图片大小(${(file.size/1024).toFixed(2)}KB)过大，进行压缩`);
+      // 使用统一的压缩设置，保持50KB以内
+      processedFile = await compressImage(file); // 使用默认参数即可，现在是50KB
+      debugLog(`压缩后图片大小: ${(processedFile.size/1024).toFixed(2)}KB`);
     }
     
     // 创建表单数据
@@ -80,16 +80,25 @@ export const recognizeIdCard = async (
       const requests = baseUrls.map(baseUrl => {
         // 构建完整API路径
         let apiPath = '/idcard';
-        const url = baseUrl.endsWith('/') && apiPath.startsWith('/') 
-          ? `${baseUrl}${apiPath.substring(1)}` 
-          : `${baseUrl}${apiPath}`;
         
-        // 添加时间戳防止缓存
-        const requestUrl = `${url}?_=${timestamp}`;
+        // 处理不同类型的URL
+        let requestUrl;
+        if (baseUrl.startsWith('/api/')) {
+          // API代理路径
+          requestUrl = `${baseUrl}${apiPath}?_=${timestamp}`;
+        } else if (baseUrl.startsWith('http')) {
+          // 完整URL（独立服务器）
+          requestUrl = `${baseUrl}${apiPath}?_=${timestamp}`;
+        } else {
+          // 其他路径
+          requestUrl = `${baseUrl}${apiPath}?_=${timestamp}`;
+        }
+        
+        debugLog(`尝试连接OCR服务: ${requestUrl}`);
         
         // 使用axios发送请求
         return axios.post(requestUrl, formData, {
-          timeout: 15000, // 减少超时时间
+          timeout: 15000, // 15秒超时
           headers: {
             'Content-Type': 'multipart/form-data',
             'Cache-Control': 'no-cache',
@@ -227,9 +236,23 @@ export const testOcrConnection = async (): Promise<boolean> => {
     // 获取所有可能的OCR服务器URL
     const serverUrls = getOcrServerUrl();
     
-    // 并行发送测试请求到所有端点
-    const testPromises = serverUrls.map(baseUrl => {
-      const testUrl = `${baseUrl}${baseUrl === '/ocr-test' ? '' : '/test'}?_=${Date.now()}`;
+    // 构建测试请求
+    const testRequests = serverUrls.map(baseUrl => {
+      // 根据不同类型的URL构建测试路径
+      let testUrl;
+      if (baseUrl.startsWith('/api/')) {
+        // API代理路径
+        testUrl = `${baseUrl}/test?_=${Date.now()}`;
+      } else if (baseUrl.startsWith('http')) {
+        // 完整URL（独立服务器）
+        testUrl = `${baseUrl}/test?_=${Date.now()}`; 
+      } else {
+        // 其他路径
+        testUrl = `${baseUrl}/test?_=${Date.now()}`;
+      }
+      
+      debugLog(`测试OCR服务连接: ${testUrl}`);
+      
       return fetch(testUrl, {
         method: 'GET',
         headers: {
@@ -238,24 +261,37 @@ export const testOcrConnection = async (): Promise<boolean> => {
         },
         cache: 'no-store'
       })
-      .then(response => response.ok)
-      .catch(() => false);
+      .then(response => {
+        if (!response.ok) {
+          debugLog(`服务器 ${baseUrl} 测试失败: ${response.status} ${response.statusText}`);
+          return Promise.reject(new Error(`HTTP错误 ${response.status}`));
+        }
+        debugLog(`服务器 ${baseUrl} 测试成功`);
+        return true;
+      })
+      .catch(error => {
+        debugLog(`服务器 ${baseUrl} 测试错误:`, error);
+        return Promise.reject(error);
+      });
     });
     
-    // 使用Promise.any获取第一个成功的结果
-    const results = await Promise.allSettled(testPromises);
-    const isAvailable = results.some(result => 
-      result.status === 'fulfilled' && result.value === true
-    );
-    
-    // 更新缓存
-    cachedOcrServerAvailable = isAvailable;
-    lastCheckTime = now;
-    
-    debugLog('OCR服务连接状态:', isAvailable);
-    return isAvailable;
+    try {
+      // 尝试至少有一个服务器可用
+      await Promise.any(testRequests);
+      debugLog('OCR服务连接状态: true (至少一个服务器可用)');
+      cachedOcrServerAvailable = true;
+      lastCheckTime = now;
+      return true;
+    } catch (aggregateError) {
+      debugLog('OCR服务连接状态: false (所有服务器均不可用)');
+      cachedOcrServerAvailable = false;
+      lastCheckTime = now;
+      return false;
+    }
   } catch (error) {
-    debugLog('测试OCR服务器连接时出错:', error);
+    debugLog('OCR服务测试出错:', error);
+    cachedOcrServerAvailable = false;
+    lastCheckTime = Date.now();
     return false;
   }
 }; 

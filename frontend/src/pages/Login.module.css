@@ -1,0 +1,177 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  overflow: auto;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.content {
+  width: 100%;
+  max-width: 420px;
+  padding: 40px 0;
+}
+
+.top {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.header {
+  height: 60px;
+  line-height: 60px;
+}
+
+.title {
+  position: relative;
+  color: #2B5AED;
+  font-weight: 600;
+  font-size: 36px;
+  font-family: 'Myriad Pro', 'Helvetica Neue', Arial, Helvetica, sans-serif;
+  letter-spacing: 0.5px;
+}
+
+.desc {
+  margin-top: 8px;
+  margin-bottom: 24px;
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 16px;
+}
+
+.main {
+  width: 100%;
+  background: white;
+  border-radius: 8px;
+  padding: 32px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 表单控件容器样式 */
+.formControls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 统一间距 */
+.formControls > * {
+  margin-bottom: 0 !important;
+  margin-top: 0 !important;
+}
+
+.formControls :global(.ant-form-item) {
+  margin-bottom: 0 !important;
+}
+
+/* 记住我选项样式 - 左对齐 */
+.rememberMe {
+  width: 100%;
+  text-align: left;
+  align-self: flex-start !important;
+  padding-left: 0;
+}
+
+/* 调整表单整体的样式 */
+.noResizeBar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 确保表单元素也是100%宽度 */
+.noResizeBar :global(.ant-pro-form-login-main),
+.noResizeBar :global(.ant-pro-form-login-container),
+.noResizeBar :global(.ant-row),
+.noResizeBar :global(.ant-form),
+.noResizeBar :global(.ant-form-item),
+.noResizeBar :global(.ant-form-item-control) {
+  width: 100%;
+}
+
+/* 调整输入框内部间距保持对称 */
+.noResizeBar :global(.ant-input-affix-wrapper) {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+@media (max-width: 576px) {
+  .main {
+    width: 90%;
+    padding: 24px 16px;
+  }
+  
+  .content {
+    max-width: 90%;
+  }
+}
+
+.prefixIcon {
+  color: #1890ff;
+}
+
+.submit {
+  width: 100%;
+  height: 40px;
+  font-size: 16px;
+}
+
+/* 完全隐藏底部拉动器和灰色条 */
+:global(.ant-pro-form-login-main) {
+  min-height: auto !important;
+  overflow: hidden;
+}
+
+:global(.ant-pro-form-login-container) {
+  min-height: auto !important;
+}
+
+/* 隐藏所有拖动调整大小的元素 */
+:global(.ant-resize-handle),
+:global(.ant-resize-handle-bottom), 
+:global(.ant-resize-handle-top), 
+:global(.ant-resize-handle-right), 
+:global(.ant-resize-handle-left) {
+  display: none !important;
+}
+
+/* 隐藏所有方向的拖动条 */
+:global([class*='resize-handle']),
+:global([class*='dragHandle']),
+:global([class*='Resizer']),
+:global([class*='resizer']),
+:global([class*='draggable']) {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: none !important;
+}
+
+/* 新增：移除底部灰色条 */
+.noResizeBar :global(.ant-pro-form-login-main::after),
+.noResizeBar :global(.ant-pro-form-login-main::before),
+.noResizeBar :global(.ant-pro-form-login-main > div::after),
+.noResizeBar :global(.ant-pro-form-login-main > div::before) {
+  display: none !important;
+}
+
+/* 移除所有可能的灰色线元素 */
+.noResizeBar :global(.ant-divider),
+.noResizeBar :global(.ant-divider-horizontal),
+.noResizeBar :global(.ant-form-item-split),
+.noResizeBar :global(.ant-pro-form-login-other) {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+} 

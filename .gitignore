@@ -1,0 +1,46 @@
+# 依赖
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# 编译输出
+dist
+build
+/frontend/dist
+/backend/dist
+
+# 环境变量
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 编辑器文件
+.idea
+.vscode
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 数据库文件
+/mongodb
+*.db
+*.sqlite
+*.sqlite3
+
+# 日志
+logs
+*.log
+
+# 测试覆盖率
+coverage
+
+# 临时文件
+tmp
+.tmp
+temp 

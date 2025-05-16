@@ -6,6 +6,10 @@ const multer = require('multer'); // 用于文件上传
 const path = require('path'); // 用于处理文件路径
 const fs = require('fs'); // 用于文件系统操作
 
+// 引入路由模块
+const resumeRoutes = require('./routes/resume');
+const ocrRoutes = require('./routes/ocr');
+
 const app = express();
 const PORT = 3001; // 修改为3001端口
 
@@ -51,9 +55,6 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-// 引入路由和控制器
-const resumeRoutes = require('./routes/resume');
-
 // 添加调试路由
 app.post('/api/test', (req, res) => {
   console.log('原始请求体:', req.body);
@@ -65,8 +66,9 @@ app.post('/api/test', (req, res) => {
   });
 });
 
-// Routes
+// 注册路由
 app.use('/api/resumes', resumeRoutes);
+app.use('/api/ocr', ocrRoutes);
 
 app.get('/api/resumes', async (req, res) => {
   try {

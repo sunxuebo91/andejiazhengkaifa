@@ -65,7 +65,6 @@ const LoginPage: React.FC = () => {
             containerStyle={{ height: 'auto', resize: 'none', overflow: 'hidden', padding: 0 }}
             contentStyle={{ minHeight: 'auto', resize: 'none', overflow: 'hidden', width: '100%' }}
             style={{ resize: 'none', overflow: 'hidden', width: '100%' }}
-            resizeCallbacks={false}
             submitter={{
               searchConfig: {
                 submitText: '登 录'

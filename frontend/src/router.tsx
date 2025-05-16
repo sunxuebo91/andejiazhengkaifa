@@ -20,6 +20,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const AuntResumeList = lazy(() => import('./pages/aunt/ResumeList'));
 const AuntCreateResume = lazy(() => import('./pages/aunt/CreateResume'));
 const AuntResumeDetail = lazy(() => import('./pages/aunt/ResumeDetail'));
+const OcrTestPage = lazy(() => import('./pages/tools/OcrTest'));
 
 export interface RouteConfig {
   path: string;
@@ -91,6 +92,17 @@ export const basicLayoutRoutes: RouteConfig[] = [
             path: 'resumes/detail/:id',
             name: '简历详情',
             element: <AuntResumeDetail />,
+          },
+        ],
+      },
+      {
+        path: 'tools',
+        name: '工具',
+        children: [
+          {
+            path: 'ocr-test',
+            name: 'OCR测试',
+            element: <OcrTestPage />,
           },
         ],
       },

@@ -84,12 +84,40 @@ export class ResumeService {
       const resumes = await this.resumeRepository.find();
       console.log(`找到 ${resumes.length} 条简历记录`);
       
-      // 打印ID信息
+      // 打印ID信息并检查简历是否有ID
       if (resumes.length > 0) {
         console.log('简历ID示例:');
         resumes.slice(0, 3).forEach((resume, index) => {
-          console.log(`[${index}] ID: ${resume.id}`);
+          // 检查ID是否存在
+          if (!resume.id) {
+            console.warn(`警告: 第${index}条简历缺少ID!`);
+          } else {
+            console.log(`[${index}] ID: ${resume.id}`);
+          }
         });
+        
+        // 检查并修复没有ID的简历
+        const resumesWithoutId = resumes.filter(resume => !resume.id);
+        if (resumesWithoutId.length > 0) {
+          console.warn(`发现 ${resumesWithoutId.length} 条简历没有ID, 正在修复...`);
+          
+          // 为每条没有ID的简历生成新ID并更新
+          for (const resume of resumesWithoutId) {
+            const newId = new ObjectId().toString();
+            console.log(`为简历 ${resume.name || '未知姓名'} 生成新ID: ${newId}`);
+            
+            // 更新内存中的ID
+            resume.id = newId;
+            
+            // 保存到数据库
+            try {
+              await this.resumeRepository.update({ name: resume.name, phone: resume.phone }, { id: newId });
+              console.log(`简历ID更新成功: ${newId}`);
+            } catch (error) {
+              console.error(`更新简历ID失败:`, error);
+            }
+          }
+        }
       }
       
       return resumes;

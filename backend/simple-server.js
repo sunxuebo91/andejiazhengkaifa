@@ -5,8 +5,9 @@ const path = require('path');
 const fs = require('fs');
 const cosService = require('./utils/cos-service');
 
-// 引入OCR路由
+// 引入OCR路由 - 确保路径正确
 const ocrRoutes = require('./routes/ocr');
+console.log('OCR路由已加载: ', typeof ocrRoutes);
 
 const app = express();
 const port = 3001;
@@ -49,6 +50,57 @@ app.use(express.json());
 app.use('/api', (req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
+});
+
+// 添加OCR测试路由，放在所有路由之前
+app.get('/api/ocr/test', (req, res) => {
+  console.log('收到OCR测试请求 /api/ocr/test');
+  
+  try {
+    // 设置允许跨域
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Content-Type', 'application/json');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    
+    // 返回成功响应
+    return res.status(200).json({
+      success: true,
+      message: "主服务OCR接口连接成功",
+      time: new Date().toISOString(),
+      info: {
+        status: "ready",
+        version: "1.0.0"
+      }
+    });
+  } catch (error) {
+    console.error('OCR测试接口错误:', error);
+    return res.status(500).json({
+      success: false,
+      message: '服务器内部错误',
+      error: error.message
+    });
+  }
+});
+
+// 添加调试路由
+app.get('/api/status', (req, res) => {
+  console.log('收到状态检查请求');
+  res.json({
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    port: process.env.PORT || 3001
+  });
+});
+
+// 添加一个测试路由检查OCR路由是否正确加载
+app.get('/api/test-ocr', (req, res) => {
+  res.json({
+    success: true,
+    message: 'OCR路由测试',
+    routerType: typeof ocrRoutes,
+    hasRouter: !!ocrRoutes,
+    hasRouterMethods: !!ocrRoutes.stack
+  });
 });
 
 // 注册OCR路由

@@ -11,14 +11,33 @@ export default defineConfig({
         target: 'https://restapi.amap.com',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api\/amap/, '')
+        rewrite: (path) => path.replace(/^\\/api\\\\/amap/, '')
+      },
+      // OCR API直连代理
+      '/api/ocr': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\\/api\\\\/ocr/, '/api/ocr')
+      },
+      // OCR测试服务器直连代理
+      '/ocr-server': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+        secure: false
+      },
+      // OCR测试路径直连
+      '/ocr-test': {
+        target: 'http://localhost:3002/test',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => ''
       },
       // 后端API代理
       '/api': {
-        target: 'http://localhost:3001', // 后端服务器
+        target: 'http://localhost:3001',
         changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path
+        secure: false
       }
     }
   }

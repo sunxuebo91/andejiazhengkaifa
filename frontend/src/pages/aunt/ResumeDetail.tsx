@@ -619,8 +619,12 @@ const ResumeDetail = () => {
           ],
         }}
       >
-        <div className="loading-container" style={{ textAlign: 'center', padding: '50px' }}>
-          <Spin tip="加载中..." size="large" />
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '500px' }}>
+          <Spin size="large">
+            <div style={{ padding: '30px', textAlign: 'center' }}>
+              加载中...
+            </div>
+          </Spin>
         </div>
       </PageContainer>
     );

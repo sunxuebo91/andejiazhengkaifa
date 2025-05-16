@@ -26,7 +26,11 @@ const AuthorizedRoute: React.FC<AuthorizedRouteProps> = ({
         alignItems: 'center', 
         height: '100vh' 
       }}>
-        <Spin size="large" tip="加载权限信息..." />
+        <Spin size="large">
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            加载权限信息...
+          </div>
+        </Spin>
       </div>
     );
   }

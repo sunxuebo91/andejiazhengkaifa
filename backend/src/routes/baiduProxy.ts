@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import axios from 'axios';
-import { Request, Response } from 'express';
+import { Request, Response, IRouter } from 'express';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-const router = Router();
+// 添加明确的类型注释
+const router: IRouter = Router();
 
 // 百度地图AK密钥，从环境变量获取
 const BAIDU_AK = process.env.BAIDU_MAP_AK || 'VTbVdzUtKzhAgCxMvonJkfOJROIAZ4VX';

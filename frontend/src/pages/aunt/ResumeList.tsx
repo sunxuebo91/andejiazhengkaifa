@@ -64,10 +64,10 @@ const ResumeList = () => {
       // 格式化数据
       let formattedData = response.data.map(resume => ({
         ...resume,
-        // 使用ID的前8位字符
+        // 使用ID的前8位字符，如果ID不存在则显示"未知ID"
         formattedId: resume.id ? 
           resume.id.substring(0, 8).padEnd(8, '0') : 
-          '未知ID',
+          '未知ID(请联系管理员)',
         // 检查是否有体检报告
         hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
       }));

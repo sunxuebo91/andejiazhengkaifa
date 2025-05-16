@@ -30,7 +30,11 @@ const Authorized: React.FC<AuthorizedProps> = ({
         height: '100%',
         padding: '50px 0' 
       }}>
-        <Spin tip="正在加载权限..." />
+        <Spin>
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            正在加载权限...
+          </div>
+        </Spin>
       </div>
     );
   }

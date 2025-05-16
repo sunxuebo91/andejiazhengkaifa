@@ -12,13 +12,40 @@ import imageCompression from 'browser-image-compression';
 // 引入自定义的百度地图地址自动补全组件
 // import BaiduAddressAutocomplete from '../../components/BaiduAddressAutocomplete';
 import BaiduMapCard from '../../components/BaiduMapCard';
-import { compressImage, createImagePreview, revokeImagePreview } from '../../utils/imageUtils';
-import { recognizeIdCard, extractIdCardFormData, testOcrConnection } from '../../utils/ocrUtils';
 
 // 设置 axios 默认配置
 // API请求通过vite代理转发
 axios.defaults.withCredentials = true;
 axios.defaults.timeout = 10000;
+
+// 定义图片压缩选项
+const compressionOptions = {
+  maxSizeMB: 0.05,      // 50KB = 0.05MB
+  maxWidthOrHeight: 1024,
+  useWebWorker: true
+};
+
+// 图片压缩函数
+const compressImage = async (file) => {
+  try {
+    console.log(`压缩前文件大小: ${(file.size / 1024).toFixed(2)} KB`);
+    
+    // 检查文件类型，只压缩图片
+    if (!file.type.includes('image')) {
+      console.log('非图片文件，不进行压缩:', file.type);
+      return file;
+    }
+    
+    // 压缩图片
+    const compressedFile = await imageCompression(file, compressionOptions);
+    console.log(`压缩后文件大小: ${(compressedFile.size / 1024).toFixed(2)} KB`);
+    
+    return compressedFile;
+  } catch (error) {
+    console.error('图片压缩失败:', error);
+    return file; // 压缩失败则返回原文件
+  }
+};
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -138,10 +165,6 @@ const CreateResume = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState('');
   const [previewTitle, setPreviewTitle] = useState('');
-  const [previewUrl, setPreviewUrl] = useState<string>(''); 
-  const [idCardFrontPreview, setIdCardFrontPreview] = useState<string>('');
-  const [idCardBackPreview, setIdCardBackPreview] = useState<string>('');
-  const [ocrApiAvailable, setOcrApiAvailable] = useState<boolean>(false); // 添加OCR API可用性状态
 
   // 创建Form实例并确保它在整个组件生命周期中是稳定的
   const [form] = Form.useForm();
@@ -200,310 +223,265 @@ const CreateResume = () => {
     </div>
   );
 
-  // 检查OCR服务连接
-  const checkOcrConnection = async () => {
-    try {
-      // 显示加载提示
-      message.loading({
-        content: '正在检查OCR服务连接...',
-        key: 'ocrConnecting',
-        duration: 0
-      });
-      
-      debugLog('检查OCR服务连接...');
-      
-      // 增加延迟给服务器一些响应时间
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // 执行连接测试
-      const isAvailable = await testOcrConnection();
-      
-      debugLog('OCR服务连接状态:', isAvailable ? '可用' : '不可用');
-      setOcrApiAvailable(isAvailable);
-      
-      // 清除加载提示
-      message.destroy('ocrConnecting');
-      
-      // 根据连接状态显示不同提示
-      if (isAvailable) {
-        notification.success({
-          message: '身份证OCR功能已启用',
-          description: '上传身份证正面照片后，系统将自动识别并填充相关信息',
-          placement: 'topRight',
-          duration: 5
-        });
-      } else {
-        message.warning('OCR服务不可用，您仍然可以上传身份证并手动填写信息');
-        
-        // 提示OCR服务不可用
-        notification.warning({
-          message: 'OCR服务不可用',
-          description: '您可以上传身份证照片，但需要手动填写身份信息',
-          placement: 'topRight',
-          duration: 8
-        });
-        
-        // 后台再次尝试直接连接测试
-        setTimeout(async () => {
-          try {
-            debugLog('尝试直接检测OCR服务器...');
-            const response = await fetch('/api/ocr/test?_=' + Date.now());
-            if (response.ok) {
-              const data = await response.json();
-              debugLog('成功连接到OCR服务!', data);
-              setOcrApiAvailable(true);
-              notification.success({
-                message: 'OCR服务已连接',
-                description: '现在您可以使用身份证OCR识别功能了',
-                placement: 'topRight',
-                duration: 5
-              });
-            }
-          } catch (directError) {
-            debugLog('直接连接OCR服务失败:', directError);
-          }
-        }, 5000);
-      }
-    } catch (error) {
-      debugLog('检查OCR连接时出错:', error);
-      message.destroy('ocrConnecting');
-      message.error('检查OCR服务时出错');
-      setOcrApiAvailable(false);
-    }
-  };
-
-  // 组件挂载时检查服务连接
-  useEffect(() => {
-    checkBackendConnection();
-    checkOcrConnection();
-    
-    // 组件卸载时清理预览URLs
-    return () => {
-      if (previewUrl) {
-        revokeImagePreview(previewUrl);
-      }
-      if (idCardFrontPreview) {
-        revokeImagePreview(idCardFrontPreview);
-      }
-      if (idCardBackPreview) {
-        revokeImagePreview(idCardBackPreview);
-      }
-    };
-  }, []);
-
-  // 处理身份证上传
+  // 身份证文件上传变更处理
   const handleIdCardUpload = async (type: 'front' | 'back', info: any) => {
+    debugLog(`${type === 'front' ? '身份证正面' : '身份证背面'}上传信息:`, info);
+    
+    if (!info || !info.file) {
+      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败: 未获取到文件信息`);
+        return;
+      }
+
+    // 获取文件对象
+    const file = info.file.originFileObj || info.file;
+    
+    if (!file) {
+      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败: 未获取到文件对象`);
+        return;
+      }
+    
+    // 显示图片预览
     try {
-      debugLog(`处理${type === 'front' ? '身份证正面' : '身份证背面'}上传`, info);
-      
-      // 获取文件对象 - 修复原始文件对象获取问题
-      let file = null;
-      
-      if (info.file && info.file.originFileObj) {
-        // 从Upload组件获取文件
-        file = info.file.originFileObj;
-      } else if (info.file instanceof File) {
-        // 直接是File对象
-        file = info.file;
-      } else if (info.target && info.target.files && info.target.files[0]) {
-        // 从input元素获取文件
-        file = info.target.files[0];
-      }
-      
-      if (!file) {
-        console.error('找不到原始文件对象', info);
-        message.error(`${type === 'front' ? '身份证正面' : '身份证背面'}上传失败: 无效的文件对象`);
-        return;
-      }
-      
-      // 验证文件类型
-      if (!file.type.includes('image')) {
-        message.error('请上传图片格式的身份证照片');
-        return;
-      }
-      
-      // 创建预览
-      const previewUrl = createImagePreview(file);
-      
-      // 根据身份证类型更新状态
+      debugLog(`${type === 'front' ? '身份证正面' : '身份证背面'}文件信息:`, {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+      });
+
+      // 压缩图片
+      const compressedFile = await compressImage(file);
+
+      // 设置状态
       if (type === 'front') {
-        // 清理旧预览
-        if (idCardFrontPreview) {
-          revokeImagePreview(idCardFrontPreview);
-        }
-        setIdCardFrontPreview(previewUrl);
-        setIdCardFrontFile(file);
-      } else {
-        // 清理旧预览
-        if (idCardBackPreview) {
-          revokeImagePreview(idCardBackPreview);
-        }
-        setIdCardBackPreview(previewUrl);
-        setIdCardBackFile(file);
-      }
-      
-      // 仅当上传的是身份证正面时才尝试OCR识别
-      if (type === 'front') {
-        // 显示加载提示
-        message.loading({
-          content: '正在识别身份证信息...',
-          key: 'ocrLoading',
-          duration: 0
-        });
+        setIdCardFrontFile(compressedFile);
         
-        // 延迟执行，让UI有时间更新预览图片
-        setTimeout(async () => {
-          try {
-            // 判断是否已经有可用的连接
-            let canUseOcr = ocrApiAvailable;
+        // 创建URL以显示图片
+        try {
+          const url = URL.createObjectURL(compressedFile);
+          debugLog('身份证正面文件URL创建成功:', url);
+        } catch (error) {
+          console.error('身份证正面文件URL创建失败:', error);
+        }
+        
+        // 调用OCR识别API
+        try {
+          setLoading(true);
+          
+          // 创建FormData对象
+          const formData = new FormData();
+          formData.append('idCardImage', compressedFile);
+          formData.append('idCardSide', 'front');
+          
+          console.log('OCR请求表单字段:', 
+            Array.from(formData.entries()).map(e => `${e[0]}=${e[1] instanceof File ? e[1].name : e[1]}`).join(', ')
+          );
+          
+          // 直接发送到后端服务器，绕过Vite代理
+          const BACKEND_URL = 'http://localhost:3001';
+          const response = await axios.post(`${BACKEND_URL}/api/ocr/idcard`, formData, {
+            timeout: 30000, // 增加超时时间到30秒
+            // 查看请求详情
+            onUploadProgress: p => console.log(`上传进度: ${Math.round(p.loaded * 100 / (p.total || 1))}%`)
+          });
+          
+          if (response.data.success) {
+            message.success('身份证识别成功');
             
-            // 如果之前检测不可用，再尝试一次检测
-            if (!canUseOcr) {
-              debugLog('OCR API之前检测不可用，重新测试连接');
-              const isNowAvailable = await testOcrConnection();
-              setOcrApiAvailable(isNowAvailable);
-              canUseOcr = isNowAvailable;
-              
-              if (!isNowAvailable) {
-                message.destroy('ocrLoading');
-                notification.info({
-                  message: '身份证OCR识别不可用',
-                  description: '无法连接到身份证识别服务，将以图片形式保存身份证。请手动填写身份证信息。',
-                  placement: 'topRight',
-                  duration: 5
-                });
-                return; // 不再尝试OCR识别
-              }
-            }
+            // 从OCR结果中获取身份证信息
+            const idCardData = response.data.data;
+            debugLog('身份证OCR识别结果:', idCardData);
             
-            // 执行OCR识别 - 增加错误处理和重试逻辑
-            debugLog('开始执行身份证OCR识别');
-            try {
-              const ocrResult = await recognizeIdCard(file, type);
+            // 自动填充表单
+            const formValues: any = {};
+            
+            if (idCardData.words_result) {
+              const wordsResult = idCardData.words_result;
               
-              // 关闭加载提示
-              message.destroy('ocrLoading');
-              
-              if (ocrResult.success) {
-                debugLog('身份证OCR识别成功:', ocrResult);
-                notification.success({
-                  message: '身份证识别成功',
-                  description: '系统已自动填充相关信息，请检查并补充其他字段',
-                  placement: 'topRight',
-                  duration: 3,
-                });
-                
-                // 处理OCR结果
-                handleOcrResult(ocrResult, form);
-              } else {
-                debugLog('身份证OCR识别失败:', ocrResult.message);
-                notification.warning({
-                  message: '身份证识别失败',
-                  description: '请手动填写身份证信息',
-                  placement: 'topRight',
-                  duration: 3,
-                });
+              // 填充姓名
+              if (wordsResult.姓名?.words) {
+                formValues.name = wordsResult.姓名.words;
               }
-            } catch (recognizeError) {
-              // OCR识别过程出错
-              debugLog('OCR识别过程出错，尝试后备方案:', recognizeError);
-              message.destroy('ocrLoading');
               
-              // 使用硬编码的URL作为最后手段
-              try {
-                const backupUrls = [
-                  '/ocr-server/idcard',
-                  'http://localhost:3002/idcard',
-                  'http://127.0.0.1:3002/idcard'
-                ];
+              // 填充民族
+              if (wordsResult.民族?.words) {
+                // 去掉民族字段中的"族"字
+                let ethnicity = wordsResult.民族.words;
+                if (ethnicity.endsWith('族')) {
+                  ethnicity = ethnicity.substring(0, ethnicity.length - 1);
+                }
+                formValues.ethnicity = ethnicity;
+              }
+              
+              // 填充身份证号
+              if (wordsResult.公民身份号码?.words) {
+                formValues.idNumber = wordsResult.公民身份号码.words;
                 
-                let backupSuccess = false;
+                // 从身份证号中提取出生日期
+                const idNumber = wordsResult.公民身份号码.words;
+                if (idNumber && idNumber.length === 18) {
+                  // 计算年龄
+                  const birthYear = parseInt(idNumber.substring(6, 10));
+                  const birthMonth = parseInt(idNumber.substring(10, 12)) - 1; // 月份从0开始
+                  const birthDay = parseInt(idNumber.substring(12, 14));
+                  const birthDate = new Date(birthYear, birthMonth, birthDay);
+                  
+                  const today = new Date();
+                  let age = today.getFullYear() - birthDate.getFullYear();
+                  const m = today.getMonth() - birthDate.getMonth();
+                  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                  }
+                  
+                  formValues.age = age;
+                  
+                  // 填充出生日期，使用dayjs格式化
+                  formValues.birthDate = dayjs(`${birthYear}-${birthMonth+1}-${birthDay}`);
+                  
+                  // 判断性别: 身份证第17位，奇数为男，偶数为女
+                  const genderCode = parseInt(idNumber.charAt(16));
+                  formValues.gender = genderCode % 2 === 1 ? '男' : '女';
+                }
+              }
+              
+              // 直接从OCR结果中获取出生日期
+              if (wordsResult.出生?.words) {
+                const birthStr = wordsResult.出生.words;
+                if (birthStr && birthStr.length === 8) {
+                  const year = birthStr.substring(0, 4);
+                  const month = birthStr.substring(4, 6);
+                  const day = birthStr.substring(6, 8);
+                  // 使用dayjs创建日期对象
+                  formValues.birthDate = dayjs(`${year}-${month}-${day}`);
+                }
+              }
+              
+              // 填充地址
+              if (wordsResult.住址?.words) {
+                formValues.hukouAddress = wordsResult.住址.words;
                 
-                for (const backupUrl of backupUrls) {
-                  try {
-                    debugLog(`尝试备用OCR URL: ${backupUrl}`);
-                    
-                    // 创建表单数据
-                    const formData = new FormData();
-                    formData.append('idCardImage', file);
-                    formData.append('idCardSide', type);
-                    
-                    const timestamp = new Date().getTime();
-                    const response = await fetch(`${backupUrl}?_=${timestamp}`, {
-                      method: 'POST',
-                      body: formData,
-                      credentials: 'omit',
-                      mode: 'cors',
-                      cache: 'no-store'
-                    });
-                    
-                    if (response.ok) {
-                      const data = await response.json();
-                      
-                      if (data && data.success) {
-                        debugLog(`备用OCR URL ${backupUrl} 识别成功:`, data);
-                        notification.success({
-                          message: '身份证识别成功',
-                          description: '系统已自动填充相关信息，请检查并补充其他字段',
-                          placement: 'topRight',
-                          duration: 3,
-                        });
-                        
-                        // 处理OCR结果
-                        handleOcrResult(data, form);
-                        backupSuccess = true;
-                        break;
-                      }
-                    }
-                  } catch (backupError) {
-                    debugLog(`备用OCR URL ${backupUrl} 识别失败:`, backupError);
+                // 从住址中提取省/自治区/直辖市填充籍贯
+                const address = wordsResult.住址.words;
+                // 遍历provinces数组，查找地址中是否包含某个省份
+                for (const province of provinces) {
+                  if (address.startsWith(province)) {
+                    formValues.nativePlace = province;
+                    break;
                   }
                 }
+              }
+              
+              // 从出生日期计算生肖和星座
+              if (formValues.birthDate) {
+                // 计算生肖
+                const birthYear = formValues.birthDate.year();
+                const zodiacIndex = (birthYear - 4) % 12; // 从鼠年开始，1900年是鼠年
+                const zodiacValues = ['rat', 'ox', 'tiger', 'rabbit', 'dragon', 'snake', 'horse', 'goat', 'monkey', 'rooster', 'dog', 'pig'];
+                formValues.zodiac = zodiacValues[zodiacIndex];
                 
-                // 如果所有备用URL都失败
-                if (!backupSuccess) {
-                  notification.warning({
-                    message: '身份证识别失败',
-                    description: '所有OCR服务尝试均失败，请手动填写身份证信息',
-                    placement: 'topRight',
-                    duration: 5,
-                  });
+                // 计算星座
+                const month = formValues.birthDate.month() + 1; // dayjs月份从0开始
+                const day = formValues.birthDate.date();
+                
+                // 星座日期范围定义
+                if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) {
+                  formValues.zodiacSign = 'aquarius'; // 水瓶座 1.20-2.18
+                } else if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) {
+                  formValues.zodiacSign = 'pisces'; // 双鱼座 2.19-3.20
+                } else if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) {
+                  formValues.zodiacSign = 'aries'; // 白羊座 3.21-4.19
+                } else if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) {
+                  formValues.zodiacSign = 'taurus'; // 金牛座 4.20-5.20
+                } else if ((month === 5 && day >= 21) || (month === 6 && day <= 21)) {
+                  formValues.zodiacSign = 'gemini'; // 双子座 5.21-6.21
+                } else if ((month === 6 && day >= 22) || (month === 7 && day <= 22)) {
+                  formValues.zodiacSign = 'cancer'; // 巨蟹座 6.22-7.22
+                } else if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) {
+                  formValues.zodiacSign = 'leo'; // 狮子座 7.23-8.22
+                } else if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) {
+                  formValues.zodiacSign = 'virgo'; // 处女座 8.23-9.22
+                } else if ((month === 9 && day >= 23) || (month === 10 && day <= 23)) {
+                  formValues.zodiacSign = 'libra'; // 天秤座 9.23-10.23
+                } else if ((month === 10 && day >= 24) || (month === 11 && day <= 22)) {
+                  formValues.zodiacSign = 'scorpio'; // 天蝎座 10.24-11.22
+                } else if ((month === 11 && day >= 23) || (month === 12 && day <= 21)) {
+                  formValues.zodiacSign = 'sagittarius'; // 射手座 11.23-12.21
+      } else {
+                  formValues.zodiacSign = 'capricorn'; // 摩羯座 12.22-1.19
                 }
-              } catch (allFailed) {
-                // 所有尝试均失败
-                debugLog('所有OCR识别尝试均失败:', allFailed);
-                notification.error({
-                  message: '身份证识别服务异常',
-                  description: '请手动填写身份证信息',
-                  placement: 'topRight',
-                  duration: 5,
-                });
               }
             }
-          } catch (error) {
-            debugLog('OCR识别过程出错:', error);
-            message.destroy('ocrLoading');
             
-            // 根据错误类型显示不同提示
-            if (error.message && error.message.includes('连接')) {
-              notification.error({
-                message: '无法连接OCR服务',
-                description: '无法连接到身份证识别服务，请检查网络或稍后重试，也可以手动填写信息',
-                placement: 'topRight',
-                duration: 5,
-              });
-            } else {
-              message.error('身份证识别服务异常，请手动填写信息');
-            }
-            
-            // 标记OCR API不可用
-            setOcrApiAvailable(false);
+            // 更新表单
+            debugLog('自动填充表单数据:', formValues);
+            form.setFieldsValue(formValues);
+          } else {
+            message.error(`身份证识别失败: ${response.data.message}`);
           }
-        }, 300); // 短暂延迟，确保UI已更新
+        } catch (error) {
+          console.error('OCR识别请求出错:', error);
+          if (error.code === 'ECONNABORTED') {
+            message.error('身份证识别服务响应超时，请稍后重试或手动输入身份证信息');
+          } else if (error.response) {
+            message.error(`身份证识别失败: ${error.response.data?.message || '服务器错误'}`);
+          } else {
+            message.error('身份证识别服务异常，请手动输入身份证信息');
+          }
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setIdCardBackFile(compressedFile);
+        
+        try {
+          const url = URL.createObjectURL(compressedFile);
+          debugLog('身份证背面文件URL创建成功:', url);
+        } catch (error) {
+          console.error('身份证背面文件URL创建失败:', error);
+        }
+        
+        // 调用OCR识别API处理身份证背面
+        try {
+          setLoading(true);
+          
+          // 创建FormData对象
+          const formData = new FormData();
+          formData.append('idCardImage', compressedFile);
+          formData.append('idCardSide', 'back');
+          
+          console.log('OCR请求表单字段(背面):', 
+            Array.from(formData.entries()).map(e => `${e[0]}=${e[1] instanceof File ? e[1].name : e[1]}`).join(', ')
+          );
+          
+          // 发送请求到后端 - 注意：不要手动设置Content-Type，让axios自动处理
+          const response = await axios.post('/api/ocr/idcard', formData, {
+            timeout: 30000, // 增加超时时间到30秒
+            // 查看请求详情
+            onUploadProgress: p => console.log(`上传进度(背面): ${Math.round(p.loaded * 100 / (p.total || 1))}%`)
+          });
+          
+          if (response.data.success) {
+            message.success('身份证背面识别成功');
+            debugLog('身份证背面OCR识别结果:', response.data.data);
+            // 背面通常包含签发机关等信息，可以根据需要提取
+          } else {
+            message.error(`身份证背面识别失败: ${response.data.message}`);
+          }
+        } catch (error) {
+          console.error('OCR识别请求出错:', error);
+          if (error.code === 'ECONNABORTED') {
+            message.error('身份证背面识别服务响应超时，请稍后重试');
+          } else if (error.response) {
+            message.error(`身份证背面识别失败: ${error.response.data?.message || '服务器错误'}`);
+          } else {
+            message.error('身份证背面识别服务异常');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
     } catch (error) {
-      debugLog(`${type === 'front' ? '身份证正面' : '身份证背面'}处理错误:`, error);
-      message.error(`${type === 'front' ? '身份证正面' : '身份证背面'}上传失败: ${error.message || '未知错误'}`);
+      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}处理错误:`, error);
+      message.error(`${type === 'front' ? '身份证正面' : '身份证背面'}上传失败`);
     }
   };
 
@@ -957,171 +935,6 @@ const CreateResume = () => {
       }
     }
   }, [form, message]);
-
-  // 从OCR结果中提取日期并转换为dayjs对象
-  const parseOcrDate = (dateString: string) => {
-    if (!dateString) return null;
-    
-    // 尝试解析常见的日期格式
-    const formats = [
-      'YYYY年MM月DD日',
-      'YYYY年M月D日',
-      'YYYY/MM/DD',
-      'YYYY-MM-DD',
-      'YYYYMMDD'
-    ];
-    
-    // 移除不必要的字符
-    const cleanedDateString = dateString.replace(/[^0-9年月日/\-]/g, '');
-    
-    for (const format of formats) {
-      const date = dayjs(cleanedDateString, format);
-      if (date.isValid()) {
-        return date;
-      }
-    }
-    
-    // 如果是身份证号，尝试从中提取出生日期
-    if (/^\d{17}[\dXx]$/.test(dateString)) {
-      const birthPart = dateString.substring(6, 14);
-      const year = birthPart.substring(0, 4);
-      const month = birthPart.substring(4, 6);
-      const day = birthPart.substring(6, 8);
-      return dayjs(`${year}-${month}-${day}`);
-    }
-    
-    return null;
-  };
-
-  // 处理身份证OCR识别结果
-  const handleOcrResult = (ocrResult: any, formInstance: any) => {
-    if (!ocrResult || !ocrResult.success || !ocrResult.data) {
-      message.error('识别结果无效，请手动填写信息');
-      return;
-    }
-    
-    try {
-      // 提取表单数据
-      const formData = extractIdCardFormData(ocrResult.data);
-      console.log('从OCR结果中提取的表单数据:', formData);
-      
-      if (!formData || Object.keys(formData).length === 0) {
-        message.warning('未能从身份证中提取到有效信息，请手动填写');
-        return;
-      }
-      
-      // 获取当前表单值
-      const currentValues = formInstance.getFieldsValue();
-      
-      // 需要更新的字段
-      const fieldsToUpdate: Record<string, any> = {};
-      const updatedFields: string[] = [];
-      
-      // 添加姓名
-      if (formData.name && !currentValues.name) {
-        fieldsToUpdate.name = formData.name;
-        updatedFields.push('姓名');
-      }
-      
-      // 添加民族
-      if (formData.ethnicity && !currentValues.ethnicity) {
-        fieldsToUpdate.ethnicity = formData.ethnicity;
-        updatedFields.push('民族');
-      }
-      
-      // 添加身份证号码
-      if (formData.idNumber && !currentValues.idNumber) {
-        const idNumber = formData.idNumber.replace(/[^\dXx]/g, ''); // 清除非数字和X的字符
-        
-        if (/^\d{17}[\dXx]$/.test(idNumber)) {
-          fieldsToUpdate.idNumber = idNumber;
-          updatedFields.push('身份证号');
-          
-          // 从身份证号码提取性别
-          if (!currentValues.gender) {
-            // 第17位，奇数为男，偶数为女
-            const genderValue = parseInt(idNumber.charAt(16));
-            fieldsToUpdate.gender = genderValue % 2 === 1 ? 'male' : 'female';
-            updatedFields.push('性别');
-          }
-          
-          // 从身份证号码提取年龄
-          if (!currentValues.age) {
-            const birthYear = parseInt(idNumber.substring(6, 10));
-            const currentYear = new Date().getFullYear();
-            fieldsToUpdate.age = currentYear - birthYear;
-            updatedFields.push('年龄');
-          }
-          
-          // 从身份证号码提取出生日期
-          if (!currentValues.birthDate) {
-            const birthPart = idNumber.substring(6, 14);
-            const year = birthPart.substring(0, 4);
-            const month = birthPart.substring(4, 6);
-            const day = birthPart.substring(6, 8);
-            const birthDate = dayjs(`${year}-${month}-${day}`);
-            if (birthDate.isValid()) {
-              fieldsToUpdate.birthDate = birthDate;
-              updatedFields.push('出生日期');
-            }
-          }
-        } else {
-          console.error('提取的身份证号码格式不正确:', idNumber);
-        }
-      }
-      
-      // 添加户籍地址
-      if (formData.hukouAddress && !currentValues.hukouAddress) {
-        fieldsToUpdate.hukouAddress = formData.hukouAddress;
-        updatedFields.push('户籍地址');
-        
-        // 尝试从户籍地址中提取省份作为籍贯
-        if (!currentValues.nativePlace) {
-          // 遍历省份列表，查找匹配项
-          for (const province of provinces) {
-            if (formData.hukouAddress.startsWith(province)) {
-              fieldsToUpdate.nativePlace = province;
-              updatedFields.push('籍贯');
-              break;
-            }
-          }
-        }
-      }
-      
-      // 添加出生日期（如果身份证号提取失败，则尝试从出生字段提取）
-      if (formData.birthDateString && !fieldsToUpdate.birthDate && !currentValues.birthDate) {
-        const birthDate = parseOcrDate(formData.birthDateString);
-        if (birthDate && birthDate.isValid()) {
-          fieldsToUpdate.birthDate = birthDate;
-          updatedFields.push('出生日期');
-        }
-      }
-      
-      // 更新表单
-      if (Object.keys(fieldsToUpdate).length > 0) {
-        console.log('将更新以下字段:', fieldsToUpdate);
-        formInstance.setFieldsValue(fieldsToUpdate);
-        
-        // 显示成功消息，列出已填充的字段
-        if (updatedFields.length > 0) {
-          const fieldsList = updatedFields.join('、');
-          notification.success({
-            message: '身份证信息填充成功',
-            description: `已自动填充: ${fieldsList}`,
-            placement: 'topRight',
-            duration: 5
-          });
-        } else {
-          message.info('表单已更新');
-        }
-      } else {
-        message.info('未发现需要填充的新信息');
-      }
-    } catch (error) {
-      console.error('处理OCR结果时出错:', error);
-      message.error('处理识别结果时出错，请手动填写信息');
-    }
-  };
 
   return (
     <PageContainer

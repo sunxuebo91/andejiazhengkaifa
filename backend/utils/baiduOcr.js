@@ -13,11 +13,38 @@ const SECRET_KEY = 'ORMoWvctBsi0X8CjmIdMJAgv8UmbE6r2';
 // 创建百度OCR客户端
 const client = new AipOcr(APP_ID, API_KEY, SECRET_KEY);
 
-// 设置请求选项
+// 身份证识别请求选项
 const options = {
-  detect_direction: true, // 检测图片方向
-  detect_risk: true       // 检测身份证风险
+  detect_direction: false, // 禁用图片方向检测以提高速度
+  detect_risk: false,      // 禁用风险检测以提高速度
+  accuracy: 'normal'       // 使用普通精度模式，提高速度
 };
+
+// 缓存access token，避免重复获取
+let accessToken = null;
+let tokenExpireTime = 0;
+
+// 刷新访问令牌
+async function refreshAccessToken() {
+  if (accessToken && Date.now() < tokenExpireTime) {
+    return accessToken;
+  }
+  
+  try {
+    // 设置新的过期时间（提前5分钟过期，确保安全）
+    tokenExpireTime = Date.now() + 2592000000 - 300000; // 30天 - 5分钟
+    
+    // 直接使用client已经提供的getAccessToken方法
+    const tokenResult = await client.getAccessToken();
+    accessToken = tokenResult.access_token;
+    
+    console.log('Baidu access token refreshed:', accessToken);
+    return accessToken;
+  } catch (error) {
+    console.error('刷新百度访问令牌失败:', error);
+    throw error;
+  }
+}
 
 /**
  * 识别身份证正面
@@ -78,10 +105,30 @@ async function recognizeIdCardBack(imagePath) {
  * @returns {Promise<Object>} 识别结果
  */
 async function recognizeIdCard(imagePath, side = 'front') {
-  if (side === 'front') {
-    return await recognizeIdCardFront(imagePath);
-  } else {
-    return await recognizeIdCardBack(imagePath);
+  // 确保文件存在
+  if (!fs.existsSync(imagePath)) {
+    throw new Error(`文件不存在: ${imagePath}`);
+  }
+
+  try {
+    // 读取图片文件
+    const image = fs.readFileSync(imagePath);
+    
+    // 检查图片大小，如果太大则抛出错误
+    if (image.length > 4 * 1024 * 1024) { // 4MB限制
+      throw new Error('图片大小超过4MB，百度API限制');
+    }
+    
+    // 确保访问令牌有效
+    await refreshAccessToken();
+    
+    // 使用百度SDK识别身份证
+    const result = await client.idcard(image, side, options);
+    
+    return result;
+  } catch (error) {
+    console.error(`身份证${side === 'front' ? '正面' : '背面'}识别失败:`, error);
+    throw error;
   }
 }
 
@@ -112,21 +159,12 @@ async function recognizeIdCardFromBase64(imageBase64, side = 'front') {
  */
 async function testOcrConnection() {
   try {
-    // 测试百度OCR SDK是否正常初始化
-    console.log('测试百度OCR SDK连接...');
+    // 尝试刷新token，这是测试连接最直接的方式
+    const token = await refreshAccessToken();
     
-    // 检查客户端是否正确初始化
-    if (!client) {
-      throw new Error('百度OCR客户端未正确初始化');
+    if (!token) {
+      throw new Error('无法获取访问令牌');
     }
-    
-    // 简单测试SDK可用性
-    // SDK初始化需要配置AppID/API Key/Secret Key，检查这些配置是否存在
-    if (!APP_ID || !API_KEY || !SECRET_KEY) {
-      throw new Error('缺少必要的百度OCR配置参数');
-    }
-    
-    console.log('百度OCR SDK初始化成功');
     
     return {
       success: true,

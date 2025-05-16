@@ -28,18 +28,25 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+// 进一步优化OCR服务速度
+// 增加内存缓存来缓存常见请求结果
+const cache = new Map();
+const CACHE_MAX_SIZE = 50; // 最大缓存条目数
+const CACHE_TTL = 3600000; // 缓存有效期1小时(毫秒)
+
 // 请求日志中间件
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip}`);
-  console.log('请求头:', JSON.stringify(req.headers, null, 2));
-  
-  // 添加详细调试信息
-  const oldSend = res.send;
-  res.send = function(data) {
-    console.log(`响应数据: ${data && data.substring ? data.substring(0, 200) : '无响应体'}`);
-    console.log(`响应状态: ${res.statusCode}`);
-    oldSend.apply(res, arguments);
-  };
+  // 仅在开发环境或明确需要调试时记录详细日志
+  if (process.env.NODE_ENV === 'development' || process.env.DEBUG_LOGGING) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip}`);
+    
+    // 添加详细调试信息
+    const oldSend = res.send;
+    res.send = function(data) {
+      console.log(`响应状态: ${res.statusCode}`);
+      oldSend.apply(res, arguments);
+    };
+  }
   
   next();
 });
@@ -132,8 +139,6 @@ app.get('/test', async (req, res) => {
 // 身份证OCR识别API路由
 app.post('/idcard', upload.single('idCardImage'), async (req, res) => {
   console.log('收到身份证OCR识别请求');
-  console.log('请求体:', req.body);
-  console.log('文件:', req.file);
   
   try {
     if (!req.file) {
@@ -146,13 +151,15 @@ app.post('/idcard', upload.single('idCardImage'), async (req, res) => {
     
     // 读取上传的图片文件路径
     const filePath = req.file.path;
-    console.log(`使用上传的图片文件: ${filePath}`);
     
-    // 使用百度OCR SDK识别身份证
-    try {
-      // 直接使用SDK分析图片
-      const ocrResult = await baiduOcr.recognizeIdCard(filePath, idCardSide);
-      console.log('百度OCR识别结果:', ocrResult);
+    // 生成缓存键 - 使用文件大小和最后修改时间作为唯一标识
+    const fileStats = fs.statSync(filePath);
+    const cacheKey = `${idCardSide}_${fileStats.size}_${fileStats.mtime.getTime()}`;
+    
+    // 检查缓存
+    if (cache.has(cacheKey)) {
+      console.log('从缓存中返回OCR结果');
+      const cachedResult = cache.get(cacheKey);
       
       // 在返回结果后删除临时文件
       try {
@@ -160,12 +167,33 @@ app.post('/idcard', upload.single('idCardImage'), async (req, res) => {
         console.log(`临时文件已删除: ${filePath}`);
       } catch (unlinkError) {
         console.error('删除临时文件失败:', unlinkError);
-        // 继续处理，不因删除临时文件失败而中断
+      }
+      
+      return res.status(200).json(cachedResult);
+    }
+    
+    // 使用百度OCR SDK识别身份证
+    try {
+      // 使用Promise.race添加超时处理
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('OCR识别超时')), 15000);
+      });
+      
+      // 调用百度OCR SDK识别
+      const ocrResultPromise = baiduOcr.recognizeIdCard(filePath, idCardSide);
+      const ocrResult = await Promise.race([ocrResultPromise, timeoutPromise]);
+      
+      // 在返回结果后删除临时文件
+      try {
+        fs.unlinkSync(filePath);
+        console.log(`临时文件已删除: ${filePath}`);
+      } catch (unlinkError) {
+        console.error('删除临时文件失败:', unlinkError);
       }
       
       // 检查OCR返回的错误
       if (ocrResult.error_code) {
-        console.error('百度OCR返回错误:', ocrResult);
+        console.error('百度OCR返回错误:', ocrResult.error_code, ocrResult.error_msg);
         return res.status(400).json({
           success: false,
           message: `OCR识别失败: ${ocrResult.error_msg}`,
@@ -173,13 +201,30 @@ app.post('/idcard', upload.single('idCardImage'), async (req, res) => {
         });
       }
 
-      // 返回识别结果给前端
-      console.log('OCR识别成功，返回结果');
-      return res.status(200).json({
+      // 成功结果
+      const result = {
         success: true,
         data: ocrResult,
         message: 'OCR识别成功'
-      });
+      };
+      
+      // 存入缓存
+      cache.set(cacheKey, result);
+      
+      // 如果缓存太大，删除最早的条目
+      if (cache.size > CACHE_MAX_SIZE) {
+        const oldestKey = cache.keys().next().value;
+        cache.delete(oldestKey);
+      }
+      
+      // 设置缓存自动过期
+      setTimeout(() => {
+        cache.delete(cacheKey);
+      }, CACHE_TTL);
+
+      // 返回识别结果给前端
+      console.log('OCR识别成功，返回结果');
+      return res.status(200).json(result);
     } catch (ocrError) {
       console.error('调用百度OCR SDK失败:', ocrError);
       
@@ -188,6 +233,15 @@ app.post('/idcard', upload.single('idCardImage'), async (req, res) => {
         fs.unlinkSync(filePath);
       } catch (unlinkError) {
         console.error('删除临时文件失败:', unlinkError);
+      }
+      
+      // 处理超时错误
+      if (ocrError.message === 'OCR识别超时') {
+        return res.status(408).json({
+          success: false,
+          message: 'OCR识别请求超时',
+          error: ocrError.message
+        });
       }
       
       // 返回错误信息

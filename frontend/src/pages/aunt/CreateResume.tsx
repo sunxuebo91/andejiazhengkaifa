@@ -212,8 +212,8 @@ const CreateResume = () => {
       
       debugLog('检查OCR服务连接...');
       
-      // 增加延迟给服务器一些响应时间
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // 减少延迟时间
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       // 执行连接测试
       const isAvailable = await testOcrConnection();
@@ -230,44 +230,35 @@ const CreateResume = () => {
           message: '身份证OCR功能已启用',
           description: '上传身份证正面照片后，系统将自动识别并填充相关信息',
           placement: 'topRight',
-          duration: 5
+          duration: 3
         });
       } else {
         message.warning('OCR服务不可用，您仍然可以上传身份证并手动填写信息');
         
-        // 提示OCR服务不可用
-        notification.warning({
-          message: 'OCR服务不可用',
-          description: '您可以上传身份证照片，但需要手动填写身份信息',
-          placement: 'topRight',
-          duration: 8
-        });
-        
-        // 后台再次尝试直接连接测试
+        // 后台再次尝试直接连接，但不显示加载状态，避免阻塞用户体验
         setTimeout(async () => {
           try {
-            debugLog('尝试直接检测OCR服务器...');
-            const response = await fetch('/api/ocr/test?_=' + Date.now());
+            debugLog('静默测试OCR服务器...');
+            const response = await fetch('/api/ocr/test?_=' + Date.now(), {
+              signal: AbortSignal.timeout(2000) // 限制请求时间为2秒
+            });
             if (response.ok) {
-              const data = await response.json();
-              debugLog('成功连接到OCR服务!', data);
               setOcrApiAvailable(true);
               notification.success({
                 message: 'OCR服务已连接',
                 description: '现在您可以使用身份证OCR识别功能了',
                 placement: 'topRight',
-                duration: 5
+                duration: 3
               });
             }
           } catch (directError) {
             debugLog('直接连接OCR服务失败:', directError);
           }
-        }, 5000);
+        }, 3000);
       }
     } catch (error) {
       debugLog('检查OCR连接时出错:', error);
       message.destroy('ocrConnecting');
-      message.error('检查OCR服务时出错');
       setOcrApiAvailable(false);
     }
   };
@@ -322,7 +313,7 @@ const CreateResume = () => {
         return;
       }
       
-      // 创建预览
+      // 创建预览 - 更新UI立即响应，提高用户体验
       const previewUrl = createImagePreview(file);
       
       // 根据身份证类型更新状态
@@ -342,8 +333,35 @@ const CreateResume = () => {
         setIdCardBackFile(file);
       }
       
-      // 仅当上传的是身份证正面时才尝试OCR识别
+      // 仅当上传的是身份证正面且OCR已可用时才尝试OCR识别
       if (type === 'front') {
+        // 首先检查OCR是否可用，如果之前检测到可用则直接使用
+        let canUseOcr = ocrApiAvailable;
+        
+        if (!canUseOcr) {
+          // 如果OCR不可用，先显示信息，再后台尝试重新检测
+          notification.info({
+            message: '正在验证OCR服务',
+            description: '系统将尝试连接OCR服务，如果成功将自动识别身份证信息',
+            placement: 'topRight',
+            duration: 3
+          });
+          
+          // 立即开始OCR服务检测
+          canUseOcr = await testOcrConnection();
+          setOcrApiAvailable(canUseOcr);
+          
+          if (!canUseOcr) {
+            notification.info({
+              message: '身份证OCR识别不可用',
+              description: '请手动填写身份证信息',
+              placement: 'topRight',
+              duration: 3
+            });
+            return; // 不再尝试OCR识别
+          }
+        }
+        
         // 显示加载提示
         message.loading({
           content: '正在识别身份证信息...',
@@ -351,159 +369,63 @@ const CreateResume = () => {
           duration: 0
         });
         
-        // 延迟执行，让UI有时间更新预览图片
-        setTimeout(async () => {
-          try {
-            // 判断是否已经有可用的连接
-            let canUseOcr = ocrApiAvailable;
+        // 使用Promise.race添加超时控制，防止过长等待
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('OCR识别超时')), 10000);
+        });
+        
+        try {
+          // 执行OCR识别，并设置超时限制
+          const ocrResultPromise = recognizeIdCard(file, type);
+          const ocrResult = await Promise.race([ocrResultPromise, timeoutPromise]);
+          
+          // 关闭加载提示
+          message.destroy('ocrLoading');
+          
+          if (ocrResult.success) {
+            debugLog('身份证OCR识别成功:', ocrResult);
+            notification.success({
+              message: '身份证识别成功',
+              description: '系统已自动填充相关信息，请检查并补充其他字段',
+              placement: 'topRight',
+              duration: 3,
+            });
             
-            // 如果之前检测不可用，再尝试一次检测
-            if (!canUseOcr) {
-              debugLog('OCR API之前检测不可用，重新测试连接');
-              const isNowAvailable = await testOcrConnection();
-              setOcrApiAvailable(isNowAvailable);
-              canUseOcr = isNowAvailable;
-              
-              if (!isNowAvailable) {
-                message.destroy('ocrLoading');
-                notification.info({
-                  message: '身份证OCR识别不可用',
-                  description: '无法连接到身份证识别服务，将以图片形式保存身份证。请手动填写身份证信息。',
-                  placement: 'topRight',
-                  duration: 5
-                });
-                return; // 不再尝试OCR识别
-              }
-            }
-            
-            // 执行OCR识别 - 增加错误处理和重试逻辑
-            debugLog('开始执行身份证OCR识别');
-            try {
-              const ocrResult = await recognizeIdCard(file, type);
-              
-              // 关闭加载提示
-              message.destroy('ocrLoading');
-              
-              if (ocrResult.success) {
-                debugLog('身份证OCR识别成功:', ocrResult);
-                notification.success({
-                  message: '身份证识别成功',
-                  description: '系统已自动填充相关信息，请检查并补充其他字段',
-                  placement: 'topRight',
-                  duration: 3,
-                });
-                
-                // 处理OCR结果
-                handleOcrResult(ocrResult, form);
-              } else {
-                debugLog('身份证OCR识别失败:', ocrResult.message);
-                notification.warning({
-                  message: '身份证识别失败',
-                  description: '请手动填写身份证信息',
-                  placement: 'topRight',
-                  duration: 3,
-                });
-              }
-            } catch (recognizeError) {
-              // OCR识别过程出错
-              debugLog('OCR识别过程出错，尝试后备方案:', recognizeError);
-              message.destroy('ocrLoading');
-              
-              // 使用硬编码的URL作为最后手段
-              try {
-                const backupUrls = [
-                  '/ocr-server/idcard',
-                  'http://localhost:3002/idcard',
-                  'http://127.0.0.1:3002/idcard'
-                ];
-                
-                let backupSuccess = false;
-                
-                for (const backupUrl of backupUrls) {
-                  try {
-                    debugLog(`尝试备用OCR URL: ${backupUrl}`);
-                    
-                    // 创建表单数据
-                    const formData = new FormData();
-                    formData.append('idCardImage', file);
-                    formData.append('idCardSide', type);
-                    
-                    const timestamp = new Date().getTime();
-                    const response = await fetch(`${backupUrl}?_=${timestamp}`, {
-                      method: 'POST',
-                      body: formData,
-                      credentials: 'omit',
-                      mode: 'cors',
-                      cache: 'no-store'
-                    });
-                    
-                    if (response.ok) {
-                      const data = await response.json();
-                      
-                      if (data && data.success) {
-                        debugLog(`备用OCR URL ${backupUrl} 识别成功:`, data);
-                        notification.success({
-                          message: '身份证识别成功',
-                          description: '系统已自动填充相关信息，请检查并补充其他字段',
-                          placement: 'topRight',
-                          duration: 3,
-                        });
-                        
-                        // 处理OCR结果
-                        handleOcrResult(data, form);
-                        backupSuccess = true;
-                        break;
-                      }
-                    }
-                  } catch (backupError) {
-                    debugLog(`备用OCR URL ${backupUrl} 识别失败:`, backupError);
-                  }
-                }
-                
-                // 如果所有备用URL都失败
-                if (!backupSuccess) {
-                  notification.warning({
-                    message: '身份证识别失败',
-                    description: '所有OCR服务尝试均失败，请手动填写身份证信息',
-                    placement: 'topRight',
-                    duration: 5,
-                  });
-                }
-              } catch (allFailed) {
-                // 所有尝试均失败
-                debugLog('所有OCR识别尝试均失败:', allFailed);
-                notification.error({
-                  message: '身份证识别服务异常',
-                  description: '请手动填写身份证信息',
-                  placement: 'topRight',
-                  duration: 5,
-                });
-              }
-            }
-          } catch (error) {
-            debugLog('OCR识别过程出错:', error);
-            message.destroy('ocrLoading');
-            
-            // 根据错误类型显示不同提示
-            if (error.message && error.message.includes('连接')) {
-              notification.error({
-                message: '无法连接OCR服务',
-                description: '无法连接到身份证识别服务，请检查网络或稍后重试，也可以手动填写信息',
-                placement: 'topRight',
-                duration: 5,
-              });
-            } else {
-              message.error('身份证识别服务异常，请手动填写信息');
-            }
-            
-            // 标记OCR API不可用
-            setOcrApiAvailable(false);
+            // 处理OCR结果并更新表单
+            handleOcrResult(ocrResult, form);
+          } else {
+            debugLog('身份证OCR识别失败:', ocrResult.message);
+            notification.warning({
+              message: '身份证识别未成功',
+              description: '请手动填写身份证信息，或重新上传更清晰的照片',
+              placement: 'topRight',
+              duration: 3
+            });
           }
-        }, 300); // 短暂延迟，确保UI已更新
+        } catch (ocrError) {
+          // 关闭加载提示
+          message.destroy('ocrLoading');
+          
+          if (ocrError.message === 'OCR识别超时') {
+            notification.warning({
+              message: '身份证识别超时',
+              description: '请手动填写身份证信息，或稍后重试',
+              placement: 'topRight',
+              duration: 3
+            });
+          } else {
+            notification.error({
+              message: '身份证识别失败',
+              description: '请手动填写身份证信息',
+              placement: 'topRight',
+              duration: 3
+            });
+          }
+        }
       }
     } catch (error) {
-      debugLog(`${type === 'front' ? '身份证正面' : '身份证背面'}处理错误:`, error);
-      message.error(`${type === 'front' ? '身份证正面' : '身份证背面'}上传失败: ${error.message || '未知错误'}`);
+      debugLog('处理身份证上传时出错:', error);
+      message.error('上传处理出错，请重试');
     }
   };
 
@@ -741,6 +663,14 @@ const CreateResume = () => {
       
       // 合并所有表单数据
       const allFormData = { ...values };
+      
+      // 转换性别值为英文（确保数据库保存的是英文格式）
+      if (allFormData.gender) {
+        allFormData.gender = allFormData.gender === '男' ? 'male' : 
+                            allFormData.gender === '女' ? 'female' : 
+                            allFormData.gender;
+      }
+      
       debugLog('表单数据:', allFormData);
       
       // 处理工作经验中的日期格式
@@ -1041,7 +971,7 @@ const CreateResume = () => {
           if (!currentValues.gender) {
             // 第17位，奇数为男，偶数为女
             const genderValue = parseInt(idNumber.charAt(16));
-            fieldsToUpdate.gender = genderValue % 2 === 1 ? 'male' : 'female';
+            fieldsToUpdate.gender = genderValue % 2 === 1 ? '男' : '女';
             updatedFields.push('性别');
           }
           

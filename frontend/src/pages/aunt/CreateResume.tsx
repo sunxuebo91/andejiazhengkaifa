@@ -169,9 +169,78 @@ const CreateResume = () => {
   // 页面标题
   const pageTitle = isEditing ? '编辑简历' : '创建简历';
 
+  // 计算生肖和星座
+  const calculateZodiacFromBirthDate = (birthDate: dayjs.Dayjs, currentValues: any) => {
+    if (!birthDate || !birthDate.isValid()) return {};
+    
+    const updates: Record<string, any> = {};
+    
+    // 计算生肖
+    const birthYear = birthDate.year();
+    const zodiacIndex = (birthYear - 4) % 12;
+    const zodiacValues = ['rat', 'ox', 'tiger', 'rabbit', 'dragon', 'snake', 'horse', 'goat', 'monkey', 'rooster', 'dog', 'pig'];
+    updates.zodiac = zodiacValues[zodiacIndex];
+    
+    // 计算星座
+    const month = birthDate.month() + 1; // dayjs月份从0开始
+    const day = birthDate.date();
+    
+    // 根据月份和日期确定星座
+    let zodiacSign = '';
+    if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) {
+      zodiacSign = 'aquarius'; // 水瓶座 1.20-2.18
+    } else if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) {
+      zodiacSign = 'pisces'; // 双鱼座 2.19-3.20
+    } else if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) {
+      zodiacSign = 'aries'; // 白羊座 3.21-4.19
+    } else if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) {
+      zodiacSign = 'taurus'; // 金牛座 4.20-5.20
+    } else if ((month === 5 && day >= 21) || (month === 6 && day <= 21)) {
+      zodiacSign = 'gemini'; // 双子座 5.21-6.21
+    } else if ((month === 6 && day >= 22) || (month === 7 && day <= 22)) {
+      zodiacSign = 'cancer'; // 巨蟹座 6.22-7.22
+    } else if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) {
+      zodiacSign = 'leo'; // 狮子座 7.23-8.22
+    } else if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) {
+      zodiacSign = 'virgo'; // 处女座 8.23-9.22
+    } else if ((month === 9 && day >= 23) || (month === 10 && day <= 23)) {
+      zodiacSign = 'libra'; // 天秤座 9.23-10.23
+    } else if ((month === 10 && day >= 24) || (month === 11 && day <= 22)) {
+      zodiacSign = 'scorpio'; // 天蝎座 10.24-11.22
+    } else if ((month === 11 && day >= 23) || (month === 12 && day <= 21)) {
+      zodiacSign = 'sagittarius'; // 射手座 11.23-12.21
+    } else {
+      zodiacSign = 'capricorn'; // 摩羯座 12.22-1.19
+    }
+    
+    updates.zodiacSign = zodiacSign;
+    
+    return updates;
+  };
+
   // 处理表单值变化
   const handleFormChange = (changedValues: any, allValues: any) => {
     debugLog('表单值变化:', changedValues);
+    
+    // 检查是否修改了出生日期
+    if (changedValues.birthDate) {
+      const birthDate = changedValues.birthDate;
+      
+      // 如果birthDate有效，自动计算生肖和星座
+      if (birthDate && birthDate.isValid()) {
+        const zodiacValues = calculateZodiacFromBirthDate(birthDate, allValues);
+        
+        // 只有当生肖和星座未手动设置时，才自动计算
+        if (Object.keys(zodiacValues).length > 0) {
+          // 延迟更新以避免与当前更改冲突
+          setTimeout(() => {
+            form.setFieldsValue(zodiacValues);
+            debugLog('已自动计算生肖和星座:', zodiacValues);
+          }, 100);
+        }
+      }
+    }
+    
     // 将新值合并到formValues中，而不是替换
     setFormValues(prev => ({
       ...prev,
@@ -993,6 +1062,19 @@ const CreateResume = () => {
             if (birthDate.isValid()) {
               fieldsToUpdate.birthDate = birthDate;
               updatedFields.push('出生日期');
+              
+              // 计算生肖和星座
+              if (!currentValues.zodiac || !currentValues.zodiacSign) {
+                const zodiacValues = calculateZodiacFromBirthDate(birthDate, currentValues);
+                if (zodiacValues.zodiac && !currentValues.zodiac) {
+                  fieldsToUpdate.zodiac = zodiacValues.zodiac;
+                  updatedFields.push('生肖');
+                }
+                if (zodiacValues.zodiacSign && !currentValues.zodiacSign) {
+                  fieldsToUpdate.zodiacSign = zodiacValues.zodiacSign;
+                  updatedFields.push('星座');
+                }
+              }
             }
           }
         } else {
@@ -1024,6 +1106,19 @@ const CreateResume = () => {
         if (birthDate && birthDate.isValid()) {
           fieldsToUpdate.birthDate = birthDate;
           updatedFields.push('出生日期');
+          
+          // 计算生肖和星座
+          if (!currentValues.zodiac || !currentValues.zodiacSign) {
+            const zodiacValues = calculateZodiacFromBirthDate(birthDate, currentValues);
+            if (zodiacValues.zodiac && !currentValues.zodiac) {
+              fieldsToUpdate.zodiac = zodiacValues.zodiac;
+              updatedFields.push('生肖');
+            }
+            if (zodiacValues.zodiacSign && !currentValues.zodiacSign) {
+              fieldsToUpdate.zodiacSign = zodiacValues.zodiacSign;
+              updatedFields.push('星座');
+            }
+          }
         }
       }
       

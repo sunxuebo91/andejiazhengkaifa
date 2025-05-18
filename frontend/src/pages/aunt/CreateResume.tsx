@@ -776,7 +776,7 @@ const CreateResume = () => {
           });
           
           const response = await Promise.race([
-            axios.post(`/api/api/upload/id-card/front`, formData),
+            axios.post(`/api/upload/id-card/front`, formData),
             timeout
           ]);
           
@@ -809,7 +809,7 @@ const CreateResume = () => {
           });
           
           const response = await Promise.race([
-            axios.post(`/api/api/upload/id-card/back`, formData),
+            axios.post(`/api/upload/id-card/back`, formData),
             timeout
           ]);
           
@@ -1034,6 +1034,32 @@ const CreateResume = () => {
         allFormData.expectedSalary = parseInt(allFormData.expectedSalary, 10);
       }
       
+      // 确保所有必填字段都有值
+      if (!allFormData.name) allFormData.name = '';
+      if (!allFormData.phone) allFormData.phone = '';
+      if (!allFormData.education) allFormData.education = '';
+      if (!allFormData.nativePlace) allFormData.nativePlace = '';
+      if (!allFormData.jobType) allFormData.jobType = '';
+      
+      // 确保数值类型字段为数字
+      if (allFormData.age === undefined || allFormData.age === null || allFormData.age === '') {
+        allFormData.age = 0;
+      } else if (typeof allFormData.age === 'string') {
+        allFormData.age = parseInt(allFormData.age, 10) || 0;
+      }
+      
+      if (allFormData.experienceYears === undefined || allFormData.experienceYears === null || allFormData.experienceYears === '') {
+        allFormData.experienceYears = 0;
+      } else if (typeof allFormData.experienceYears === 'string') {
+        allFormData.experienceYears = parseInt(allFormData.experienceYears, 10) || 0;
+      }
+      
+      if (allFormData.expectedSalary === undefined || allFormData.expectedSalary === null || allFormData.expectedSalary === '') {
+        allFormData.expectedSalary = 0;
+      } else if (typeof allFormData.expectedSalary === 'string') {
+        allFormData.expectedSalary = parseInt(allFormData.expectedSalary, 10) || 0;
+      }
+      
       // 准备提交的数据，确保fileUrls也经过安全克隆
       const requestData = {
         ...allFormData,
@@ -1053,6 +1079,31 @@ const CreateResume = () => {
         }
       });
       
+      // 移除空的数组字段
+      if (Array.isArray(requestData.photoUrls) && requestData.photoUrls.length === 0) {
+        delete requestData.photoUrls;
+      }
+      if (Array.isArray(requestData.certificateUrls) && requestData.certificateUrls.length === 0) {
+        delete requestData.certificateUrls;
+      }
+      if (Array.isArray(requestData.medicalReportUrls) && requestData.medicalReportUrls.length === 0) {
+        delete requestData.medicalReportUrls;
+      }
+      if (Array.isArray(requestData.skills) && requestData.skills.length === 0) {
+        delete requestData.skills;
+      }
+      
+      // 确保workExperience字段格式正确
+      if (requestData.workExperience && !Array.isArray(requestData.workExperience)) {
+        try {
+          // 尝试将workExperience字段转换为数组
+          requestData.workExperience = [];
+        } catch (e) {
+          // 如果转换失败，删除该字段
+          delete requestData.workExperience;
+        }
+      }
+      
       debugLog('最终提交的简化数据:', requestData);
       
       // 更新加载提示
@@ -1071,6 +1122,12 @@ const CreateResume = () => {
       
       try {
         // 提交表单数据到后端（使用Promise.race添加超时控制）
+        console.log('发送简历数据请求:', {
+          method: method.toLowerCase(),
+          url: apiUrl,
+          data: JSON.stringify(requestData)
+        });
+        
         const response = await Promise.race([
           axios[method.toLowerCase()](apiUrl, requestData),
           timeoutPromise
@@ -1126,6 +1183,14 @@ const CreateResume = () => {
         }
       } catch (error) {
         console.error('数据提交错误:', error);
+        // 记录详细的错误信息
+        console.error('错误详情:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          config: error.config
+        });
         
         const isMongoDB = error.response?.data?.message?.includes('MongoDB') || 
                          error.response?.data?.message?.includes('propertyName') ||
@@ -1517,7 +1582,7 @@ const CreateResume = () => {
             const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
             
             const response = await axios.post(
-              `/api/api/upload/file/${category}`, 
+              `/api/upload/file/${category}`, 
               formData,
               { signal: controller.signal }
             );

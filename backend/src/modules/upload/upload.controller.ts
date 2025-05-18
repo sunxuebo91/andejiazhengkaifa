@@ -3,7 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 import { cosConfig } from '../../config/cos.config';
 
-@Controller('api/upload')
+@Controller('upload')
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 

@@ -46,11 +46,11 @@ export const api = {
     recognizeIdCard: (file: File, side: 'front' | 'back' = 'front') => {
       const formData = new FormData();
       formData.append('file', file);
-      return request.post(`/api/api/upload/id-card/${side}`, formData, {
+      return request.post(`/api/upload/id-card/${side}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
     },
     testConnection: () => 
-      request.get('/api/api/upload/test-connection'),
+      request.get('/api/upload/test-connection'),
   }
 }; 

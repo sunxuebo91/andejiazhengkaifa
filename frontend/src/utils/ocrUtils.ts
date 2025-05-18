@@ -9,8 +9,8 @@ const CHECK_INTERVAL = 60000; // 1分钟检查间隔
 
 // 获取OCR服务器地址
 const getOcrServerUrl = () => {
-  // 只使用正确的API路径
-  return '/api/api/upload';
+  // 根据后端的实际路由配置，返回正确的API路径
+  return '/api/upload';
 };
 
 // 调试日志

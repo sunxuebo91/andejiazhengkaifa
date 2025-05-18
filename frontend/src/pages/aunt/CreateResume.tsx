@@ -269,66 +269,39 @@ const CreateResume = () => {
     </div>
   );
 
-  // 检查OCR服务连接
+  // 检查OCR服务是否可用
   const checkOcrConnection = async () => {
     try {
-      // 显示加载提示
-      message.loading({
-        content: '正在检查OCR服务连接...',
-        key: 'ocrConnecting',
-        duration: 0
-      });
-      
-      debugLog('检查OCR服务连接...');
-      
-      // 减少延迟时间
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // 执行连接测试
+      debugLog('检查OCR服务是否可用');
       const isAvailable = await testOcrConnection();
-      
-      debugLog('OCR服务连接状态:', isAvailable ? '可用' : '不可用');
       setOcrApiAvailable(isAvailable);
       
-      // 清除加载提示
-      message.destroy('ocrConnecting');
-      
-      // 根据连接状态显示不同提示
       if (isAvailable) {
+        debugLog('OCR服务可用');
+        // 显示OCR服务可用的提示
         notification.success({
-          message: '身份证OCR功能已启用',
-          description: '上传身份证正面照片后，系统将自动识别并填充相关信息',
+          message: '身份证OCR识别服务可用',
+          description: '您可以上传身份证照片进行自动识别',
           placement: 'topRight',
           duration: 3
         });
       } else {
-        message.warning('OCR服务不可用，您仍然可以上传身份证并手动填写信息');
-        
-        // 后台再次尝试直接连接，但不显示加载状态，避免阻塞用户体验
-        setTimeout(async () => {
-          try {
-            debugLog('静默测试OCR服务器...');
-            const response = await fetch('/api/ocr/test?_=' + Date.now(), {
-              signal: AbortSignal.timeout(2000) // 限制请求时间为2秒
-            });
-            if (response.ok) {
-              setOcrApiAvailable(true);
-              notification.success({
-                message: 'OCR服务已连接',
-                description: '现在您可以使用身份证OCR识别功能了',
-                placement: 'topRight',
-                duration: 3
-              });
-            }
-          } catch (directError) {
-            debugLog('直接连接OCR服务失败:', directError);
-          }
-        }, 3000);
+        debugLog('OCR服务不可用');
+        // 显示OCR服务不可用的提示，让用户知道需要手动填写
+        notification.info({
+          message: '身份证OCR识别功能暂不可用',
+          description: '后端存储服务配置问题，请手动填写身份证信息',
+          placement: 'topRight',
+          duration: 5
+        });
       }
-        } catch (error) {
-      debugLog('检查OCR连接时出错:', error);
-      message.destroy('ocrConnecting');
+      
+      return isAvailable;
+    } catch (error) {
+      debugLog('检查OCR服务出错', error);
       setOcrApiAvailable(false);
+      message.error('OCR服务检测失败');
+      return false;
     }
   };
 
@@ -417,25 +390,41 @@ const CreateResume = () => {
       
       // 仅当上传的是身份证正面且OCR已可用时才尝试OCR识别
       if (type === 'front') {
+        debugLog('准备开始OCR识别流程');
+        
         // 首先检查OCR是否可用，如果之前检测到可用则直接使用
         let canUseOcr = ocrApiAvailable;
         
         if (!canUseOcr) {
-          // 如果OCR不可用，先显示信息，再后台尝试重新检测
+          debugLog('OCR服务可用性未知，开始检测...');
+          // 如果OCR不可用，提示用户
           notification.info({
-            message: '正在验证OCR服务',
-            description: '系统将尝试连接OCR服务，如果成功将自动识别身份证信息',
+            message: '检测OCR服务状态',
+            description: '系统将尝试连接OCR服务，请稍候...',
             placement: 'topRight',
             duration: 3
           });
           
           // 立即开始OCR服务检测
-          canUseOcr = await testOcrConnection();
-          setOcrApiAvailable(canUseOcr);
-          
-          if (!canUseOcr) {
-            notification.info({
-              message: '身份证OCR识别不可用',
+          try {
+            canUseOcr = await testOcrConnection();
+            setOcrApiAvailable(canUseOcr);
+            
+            debugLog('OCR服务检测结果:', canUseOcr);
+            
+            if (!canUseOcr) {
+              notification.info({
+                message: '身份证OCR识别不可用',
+                description: '后端存储服务配置问题，请手动填写身份证信息',
+                placement: 'topRight',
+                duration: 5
+              });
+              return; // 不再尝试OCR识别
+            }
+          } catch (error) {
+            debugLog('OCR服务检测失败:', error);
+            notification.error({
+              message: 'OCR服务检测失败',
               description: '请手动填写身份证信息',
               placement: 'topRight',
               duration: 3
@@ -451,9 +440,11 @@ const CreateResume = () => {
           duration: 0
         });
         
+        debugLog('开始身份证OCR识别请求');
+        
         // 使用Promise.race添加超时控制，防止过长等待
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('OCR识别超时')), 10000);
+          setTimeout(() => reject(new Error('OCR识别超时')), 15000); // 增加到15秒超时
         });
         
         try {
@@ -477,30 +468,53 @@ const CreateResume = () => {
             handleOcrResult(ocrResult, form);
           } else {
             debugLog('身份证OCR识别失败:', ocrResult.message);
-            notification.warning({
-              message: '身份证识别未成功',
-              description: '请手动填写身份证信息，或重新上传更清晰的照片',
-              placement: 'topRight',
-              duration: 3
-            });
+            
+            // 检查是否为腾讯云COS错误
+            if (ocrResult.message && ocrResult.message.includes('SecretId')) {
+              notification.warning({
+                message: '身份证识别服务配置问题',
+                description: '后端存储服务认证参数缺失，请手动填写身份证信息',
+                placement: 'topRight',
+                duration: 5
+              });
+            } else {
+              notification.warning({
+                message: '身份证识别未成功',
+                description: '请手动填写身份证信息，或重新上传更清晰的照片',
+                placement: 'topRight',
+                duration: 3
+              });
+            }
           }
         } catch (ocrError) {
           // 关闭加载提示
           message.destroy('ocrLoading');
           
-          if (ocrError.message === 'OCR识别超时') {
+          debugLog('OCR识别过程中发生错误:', ocrError);
+          
+          // 检查是否为腾讯云COS错误
+          const errorMsg = ocrError.message || '';
+          
+          if (errorMsg === 'OCR识别超时') {
             notification.warning({
               message: '身份证识别超时',
               description: '请手动填写身份证信息，或稍后重试',
               placement: 'topRight',
               duration: 3
             });
+          } else if (errorMsg.includes('SecretId') || errorMsg.includes('All promises were rejected')) {
+            notification.error({
+              message: '身份证识别服务配置问题',
+              description: '后端存储服务认证参数缺失，请手动填写身份证信息',
+              placement: 'topRight',
+              duration: 5
+            });
           } else {
             notification.error({
               message: '身份证识别失败',
-              description: '请手动填写身份证信息',
+              description: `错误: ${errorMsg || '未知错误'}`,
               placement: 'topRight',
-              duration: 3
+              duration: 5
             });
           }
         }
@@ -581,237 +595,257 @@ const CreateResume = () => {
     }
   };
 
-  // 修改handleSubmit函数，支持更新操作
+  // 处理表单提交
   const handleSubmit = async (values: any) => {
     try {
-      const values = await form.validateFields();
-      debugLog('表单值:', values);
+      debugLog('表单提交', values);
       
-      // 检查必填字段是否已填写
-      const requiredFields = [
-        { key: 'name', label: '姓名' },
-        { key: 'age', label: '年龄' },
-        { key: 'phone', label: '手机号码' },
-        { key: 'gender', label: '性别' },
-        { key: 'nativePlace', label: '籍贯' },
-        { key: 'jobType', label: '工种' },
-        { key: 'expectedSalary', label: '期望薪资' },
-        // 移除了currentAddress, ethnicity, education, serviceArea的必填验证
-      ];
-      
-      // 检查是否有未填写的必填字段
-      const missingFields = requiredFields.filter(field => !values[field.key]);
-      if (missingFields.length > 0) {
-        const missingLabels = missingFields.map(field => field.label).join(', ');
-        message.error(`请填写以下必填字段: ${missingLabels}`);
-        return;
-      }
-
-      // 查重检查 - 在提交前检查手机号和身份证号是否已存在
-      try {
-        message.loading('正在检查数据...');
-        // 只有创建新简历时才检查重复
-        if (!isEditing && (values.phone || values.idNumber)) {
-          console.log('检查手机号和身份证号是否重复');
+      // 如果简历已存在，先确认是否重复
+      if (!isEditing) {
+        try {
+          // 执行查重检查
+          const duplicateCheckResult = await api.resumes.checkDuplicate({
+            name: values.name,
+            phone: values.phone,
+            idNumber: values.idNumber
+          });
           
-          // 从本地存储获取所有简历
-          let localResumeList = [];
-          try {
-            const storedResumeList = localStorage.getItem('resumeList');
-            if (storedResumeList) {
-              localResumeList = JSON.parse(storedResumeList);
-            }
-          } catch (e) {
-            console.error('无法解析本地简历列表:', e);
-          }
+          debugLog('查重结果:', duplicateCheckResult);
           
-          // 从API获取简历列表
-          try {
-            const response = await axios.get('/api/resumes');
-            // 处理NestJS嵌套响应结构
-            let apiResumes = [];
-            
-            if (response.data) {
-              // 检查嵌套结构
-              if (response.data.data && response.data.data.data && response.data.data.data.items) {
-                // 完全嵌套结构: data.data.data.items
-                apiResumes = response.data.data.data.items;
-              } else if (response.data.data && response.data.data.items) {
-                // 部分嵌套结构: data.data.items
-                apiResumes = response.data.data.items;
-              } else if (response.data.items && Array.isArray(response.data.items)) {
-                // 简单嵌套结构: data.items
-                apiResumes = response.data.items;
-              } else if (Array.isArray(response.data)) {
-                // 直接数组结构
-                apiResumes = response.data;
+          if (duplicateCheckResult && duplicateCheckResult.isDuplicate) {
+            // 找到重复简历，提示用户
+            Modal.confirm({
+              title: '发现重复简历',
+              content: `系统中已存在姓名为 ${values.name} 的简历记录，确定要继续保存吗？`,
+              okText: '继续保存',
+              cancelText: '取消',
+              onCancel: () => {
+                debugLog('用户取消了重复简历的保存');
+              },
+              onOk: () => {
+                debugLog('用户确认继续保存重复简历');
+                // 继续保存流程
+                continueSubmit(values);
               }
-            }
-            
-            // 合并API和本地数据
-            if (apiResumes.length > 0) {
-              localResumeList = [...localResumeList, ...apiResumes];
-            }
-            
-            debugLog('API获取的简历数量:', apiResumes.length);
-          } catch (e) {
-            console.error('无法从API获取简历列表:', e);
-          }
-          
-          // 检查手机号是否重复
-          const duplicatePhone = localResumeList.some(resume => 
-            resume.phone && resume.phone === values.phone
-          );
-          
-          // 检查身份证号是否重复
-          const duplicateIdNumber = values.idNumber && localResumeList.some(resume => 
-            resume.idNumber && resume.idNumber === values.idNumber
-          );
-          
-          console.log('查重结果:', { duplicatePhone, duplicateIdNumber });
-          
-          // 如果存在重复数据
-          if (duplicatePhone || duplicateIdNumber) {
-            const duplicateFields = [];
-            if (duplicatePhone) duplicateFields.push('手机号');
-            if (duplicateIdNumber) duplicateFields.push('身份证号');
-            
-            // 显示错误信息并停止提交
-            Modal.error({
-              title: '已存在相同信息的简历',
-              content: `系统中已存在使用相同${duplicateFields.join('或')}的简历，请勿重复创建。`,
-              okText: '我知道了'
             });
-            message.destroy(); // 清除loading消息
             return;
           }
+        } catch (error) {
+          debugLog('查重失败:', error);
+          // 查重失败不阻止提交，但记录错误
+          message.warning('简历查重检查失败，将继续提交');
         }
-      } catch (error) {
-        console.error('查重检查失败:', error);
-        // 查重失败不阻止提交，但记录错误
-        message.warning('简历查重检查失败，将继续提交');
       }
 
-      setSubmitting(true);
-      setLoading(true);
-      message.loading('正在处理文件，请稍候...');
-      
-      // 先上传所有文件
-      const fileUrls: any = {
-        idCardFrontUrl: '',
-        idCardBackUrl: '',
-        photoUrls: [],
-        certificateUrls: [],
-        medicalReportUrls: []
-      };
-      
-      try {
-        // 上传身份证正面
-        if (idCardFrontFile) {
-          const formData = new FormData();
-          formData.append('file', idCardFrontFile);
-          try {
-          const response = await axios.post(`/api/upload/id-card/front`, formData);
+      continueSubmit(values);
+    } catch (error) {
+      debugLog('提交处理失败:', error);
+      message.error('提交失败，请重试');
+      setSubmitting(false);
+      setLoading(false);
+    }
+  };
+
+  // 继续提交流程
+  const continueSubmit = async (values: any) => {
+    setSubmitting(true);
+    setLoading(true);
+    message.loading('正在处理文件，请稍候...');
+    
+    // 先上传所有文件
+    const fileUrls: any = {
+      idCardFrontUrl: '',
+      idCardBackUrl: '',
+      photoUrls: [],
+      certificateUrls: [],
+      medicalReportUrls: []
+    };
+    
+    let uploadSuccess = true;
+    let uploadError = null;
+    let isCosError = false;
+    
+    try {
+      // 上传身份证正面
+      if (idCardFrontFile) {
+        const formData = new FormData();
+        formData.append('file', idCardFrontFile);
+        try {
+          const response = await axios.post(`/api/api/upload/id-card/front`, formData);
           fileUrls.idCardFrontUrl = response.data.url;
-          } catch (uploadError) {
-            console.error('上传身份证正面失败:', uploadError);
-            throw new Error(`上传身份证正面失败: ${uploadError.response?.status || '网络错误'}`);
+        } catch (error) {
+          uploadError = error;
+          uploadSuccess = false;
+          console.error('上传身份证正面失败:', error);
+          
+          // 检查是否是COS配置错误
+          const errorMsg = error.response?.data?.message || error.message || '';
+          if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
+            isCosError = true;
           }
-        } 
-        
-        // 上传身份证背面
-        if (idCardBackFile) {
-          const formData = new FormData();
-          formData.append('file', idCardBackFile);
-          try {
-          const response = await axios.post(`/api/upload/id-card/back`, formData);
+          
+          throw new Error(`上传身份证正面失败: ${error.response?.status || '网络错误'}`);
+        }
+      } 
+      
+      // 上传身份证背面
+      if (idCardBackFile) {
+        const formData = new FormData();
+        formData.append('file', idCardBackFile);
+        try {
+          const response = await axios.post(`/api/api/upload/id-card/back`, formData);
           fileUrls.idCardBackUrl = response.data.url;
-          } catch (uploadError) {
-            console.error('上传身份证背面失败:', uploadError);
-            throw new Error(`上传身份证背面失败: ${uploadError.response?.status || '网络错误'}`);
+        } catch (error) {
+          uploadError = error;
+          uploadSuccess = false;
+          console.error('上传身份证背面失败:', error);
+          
+          // 检查是否是COS配置错误
+          const errorMsg = error.response?.data?.message || error.message || '';
+          if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
+            isCosError = true;
           }
+          
+          throw new Error(`上传身份证背面失败: ${error.response?.status || '网络错误'}`);
         }
-        
-        // 上传个人照片
-        if (photoFiles.length > 0) {
-          for (const file of photoFiles) {
-            const formData = new FormData();
-            formData.append('file', file);
-            try {
-            const response = await axios.post(`/api/upload/file/photo`, formData);
+      }
+      
+      // 上传个人照片
+      if (photoFiles.length > 0) {
+        for (const file of photoFiles) {
+          const formData = new FormData();
+          formData.append('file', file);
+          try {
+            const response = await axios.post(`/api/api/upload/file/photo`, formData);
             fileUrls.photoUrls.push(response.data.url);
-            } catch (uploadError) {
-              console.error('上传个人照片失败:', uploadError);
-              throw new Error(`上传个人照片失败: ${uploadError.response?.status || '网络错误'}`);
+          } catch (error) {
+            uploadError = error;
+            uploadSuccess = false;
+            console.error('上传个人照片失败:', error);
+            
+            // 检查是否是COS配置错误
+            const errorMsg = error.response?.data?.message || error.message || '';
+            if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
+              isCosError = true;
             }
+            
+            throw new Error(`上传个人照片失败: ${error.response?.status || '网络错误'}`);
           }
         }
-        
-        // 上传技能证书
-        if (certificateFiles.length > 0) {
-          for (const file of certificateFiles) {
-            const formData = new FormData();
-            formData.append('file', file);
-            try {
-            const response = await axios.post(`/api/upload/file/certificate`, formData);
+      }
+      
+      // 上传技能证书
+      if (certificateFiles.length > 0) {
+        for (const file of certificateFiles) {
+          const formData = new FormData();
+          formData.append('file', file);
+          try {
+            const response = await axios.post(`/api/api/upload/file/certificate`, formData);
             fileUrls.certificateUrls.push(response.data.url);
-            } catch (uploadError) {
-              console.error('上传技能证书失败:', uploadError);
-              throw new Error(`上传技能证书失败: ${uploadError.response?.status || '网络错误'}`);
+          } catch (error) {
+            uploadError = error;
+            uploadSuccess = false;
+            console.error('上传技能证书失败:', error);
+            
+            // 检查是否是COS配置错误
+            const errorMsg = error.response?.data?.message || error.message || '';
+            if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
+              isCosError = true;
             }
+            
+            throw new Error(`上传技能证书失败: ${error.response?.status || '网络错误'}`);
           }
         }
-        
-        // 上传体检报告
-        if (medicalReportFiles.length > 0) {
-          for (const file of medicalReportFiles) {
-            const formData = new FormData();
-            formData.append('file', file);
-            try {
-            const response = await axios.post(`/api/upload/file/medical-report`, formData);
+      }
+      
+      // 上传体检报告
+      if (medicalReportFiles.length > 0) {
+        for (const file of medicalReportFiles) {
+          const formData = new FormData();
+          formData.append('file', file);
+          try {
+            const response = await axios.post(`/api/api/upload/file/medical-report`, formData);
             fileUrls.medicalReportUrls.push(response.data.url);
-            } catch (uploadError) {
-              console.error('上传体检报告失败:', uploadError);
-              throw new Error(`上传体检报告失败: ${uploadError.response?.status || '网络错误'}`);
+          } catch (error) {
+            uploadError = error;
+            uploadSuccess = false;
+            console.error('上传体检报告失败:', error);
+            
+            // 检查是否是COS配置错误
+            const errorMsg = error.response?.data?.message || error.message || '';
+            if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
+              isCosError = true;
             }
+            
+            throw new Error(`上传体检报告失败: ${error.response?.status || '网络错误'}`);
           }
+        }
+      }
+      
+      // 如果是编辑模式，且有可用的URL，合并现有和新上传的URL
+      if (isEditing) {
+        // 只有当用户没有删除已有图片时，才保留它们
+        if (hasExistingIdCardFront && !idCardFrontFile) {
+          fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
         }
         
-        // 如果是编辑模式，且有可用的URL，合并现有和新上传的URL
-        if (isEditing) {
-          // 只有当用户没有删除已有图片时，才保留它们
-          if (hasExistingIdCardFront && !idCardFrontFile) {
-            fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
-          }
-          
-          if (hasExistingIdCardBack && !idCardBackFile) {
-            fileUrls.idCardBackUrl = existingIdCardBackUrl;
-          }
-          
-          // 合并所有已有的照片URL和新上传的照片URL
-          fileUrls.photoUrls = [...fileUrls.photoUrls, ...existingPhotoUrls];
-          fileUrls.certificateUrls = [...fileUrls.certificateUrls, ...existingCertificateUrls];
-          fileUrls.medicalReportUrls = [...fileUrls.medicalReportUrls, ...existingMedicalReportUrls];
+        if (hasExistingIdCardBack && !idCardBackFile) {
+          fileUrls.idCardBackUrl = existingIdCardBackUrl;
         }
-      } catch (error) {
-        console.error('上传文件失败:', error);
-        const errorMessage = error.response?.status === 500 
-          ? '服务器错误：文件上传失败（HTTP 500）' 
-          : `上传文件失败: ${error.message || '未知错误'}`;
-        message.error(errorMessage);
-        setLoading(false);
-        setSubmitting(false);
+        
+        // 合并所有已有的照片URL和新上传的照片URL
+        fileUrls.photoUrls = [...fileUrls.photoUrls, ...existingPhotoUrls];
+        fileUrls.certificateUrls = [...fileUrls.certificateUrls, ...existingCertificateUrls];
+        fileUrls.medicalReportUrls = [...fileUrls.medicalReportUrls, ...existingMedicalReportUrls];
+      }
+    } catch (error) {
+      console.error('上传文件失败:', error);
+      
+      // 如果是COS错误，提示用户并询问是否继续提交
+      if (isCosError) {
+        Modal.confirm({
+          title: '文件上传服务配置问题',
+          content: '由于腾讯云COS配置缺失，文件上传失败。您可以选择跳过文件上传，仅保存基本信息，或者取消提交。',
+          okText: '仅保存基本信息',
+          cancelText: '取消提交',
+          onCancel: () => {
+            message.info('已取消提交');
+            setLoading(false);
+            setSubmitting(false);
+          },
+          onOk: () => {
+            // 继续提交，但跳过文件上传部分
+            debugLog('用户选择仅保存基本信息');
+            finalSubmit(values, fileUrls);
+          }
+        });
         return;
       }
       
+      const errorMessage = error.response?.status === 500 
+        ? '服务器错误：文件上传失败（HTTP 500）' 
+        : `上传文件失败: ${error.message || '未知错误'}`;
+      message.error(errorMessage);
+      setLoading(false);
+      setSubmitting(false);
+      return;
+    }
+    
+    // 如果文件上传成功，继续提交表单数据
+    await finalSubmit(values, fileUrls);
+  };
+  
+  // 最终提交表单数据
+  const finalSubmit = async (values: any, fileUrls: any) => {
+    try {
       // 合并所有表单数据
       const allFormData = { ...values };
       
       // 转换性别值为英文（确保数据库保存的是英文格式）
       if (allFormData.gender) {
         allFormData.gender = allFormData.gender === '男' ? 'male' : 
-                            allFormData.gender === '女' ? 'female' : 
-                            allFormData.gender;
+                             allFormData.gender === '女' ? 'female' : 
+                             allFormData.gender;
       }
       
       debugLog('表单数据:', allFormData);
@@ -881,43 +915,52 @@ const CreateResume = () => {
       const method = isEditing ? 'PUT' : 'POST';
       
       // 提交表单数据到后端
-      try {
-        // 使用axios发送请求
-        const response = isEditing
-          ? await axios.put(apiUrl, requestData)
-          : await axios.post(apiUrl, requestData);
+      const response = isEditing
+        ? await axios.put(apiUrl, requestData)
+        : await axios.post(apiUrl, requestData);
+      
+      debugLog('提交响应:', response.data);
+      
+      if (response.data && response.data.success) {
+        message.success(`简历${isEditing ? '更新' : '创建'}成功`);
         
-        debugLog('提交响应:', response.data);
+        // 更新成功后，清空表单
+        form.resetFields();
         
-        // 显示成功消息并导航到简历详情页
-        message.success(isEditing ? '简历更新成功' : '简历创建成功');
+        // 清理预览和文件状态
+        if (idCardFrontPreview) {
+          revokeImagePreview(idCardFrontPreview);
+          setIdCardFrontPreview('');
+        }
+        if (idCardBackPreview) {
+          revokeImagePreview(idCardBackPreview);
+          setIdCardBackPreview('');
+        }
         
-        // 清除编辑状态
+        setIdCardFrontFile(null);
+        setIdCardBackFile(null);
+        setPhotoFiles([]);
+        setCertificateFiles([]);
+        setMedicalReportFiles([]);
+        
+        // 如果是编辑模式，则从localStorage移除编辑数据
         if (isEditing) {
           localStorage.removeItem('editingResume');
-          setIsEditing(false);
-          setEditingResumeId(null);
         }
         
-        // 表单重置和跳转
-        form.resetFields();
-        // 跳转到简历详情页
-        navigate(`/aunt/resume/${response.data.id}`);
-      } catch (error) {
-        // 错误处理
-        setLoading(false);
-        setSubmitting(false);
-        
-        if (error.response) {
-          message.error(`${isEditing ? '更新' : '创建'}失败: ${error.response.data?.message || '未知错误'}`);
-          } else {
-          message.error(`${isEditing ? '更新' : '创建'}失败，请检查网络连接`);
-        }
-        console.error('提交失败:', error);
+        // 导航到简历列表页面
+        navigate('/aunt/resume-list');
+      } else {
+        message.error(`简历${isEditing ? '更新' : '创建'}失败: ${response.data?.message || '未知错误'}`);
       }
     } catch (error) {
-      console.error('表单提交错误:', error);
-      message.error(`${isEditing ? '更新' : '创建'}失败，请检查表单`);
+      console.error('数据提交错误:', error);
+      
+      const errorMessage = error.response?.status === 500
+        ? '服务器错误：提交失败（HTTP 500）'
+        : `提交失败: ${error.response?.data?.message || error.message || '未知错误'}`;
+      
+      message.error(errorMessage);
     } finally {
       setLoading(false);
       setSubmitting(false);
@@ -1068,12 +1111,14 @@ const CreateResume = () => {
 
   // 处理身份证OCR识别结果
   const handleOcrResult = (ocrResult: any, formInstance: any) => {
-    if (!ocrResult || !ocrResult.success || !ocrResult.data) {
+    if (!ocrResult || !ocrResult.success) {
       message.error('识别结果无效，请手动填写信息');
       return;
     }
     
     try {
+      debugLog('原始OCR结果:', ocrResult);
+      
       // 提取表单数据
       const formData = extractIdCardFormData(ocrResult.data);
       console.log('从OCR结果中提取的表单数据:', formData);
@@ -1096,6 +1141,12 @@ const CreateResume = () => {
         updatedFields.push('姓名');
       }
       
+      // 添加性别（腾讯云OCR直接提供性别）
+      if (formData.gender && !currentValues.gender) {
+        fieldsToUpdate.gender = formData.gender;
+        updatedFields.push('性别');
+      }
+      
       // 添加民族
       if (formData.ethnicity && !currentValues.ethnicity) {
         fieldsToUpdate.ethnicity = formData.ethnicity;
@@ -1110,8 +1161,8 @@ const CreateResume = () => {
           fieldsToUpdate.idNumber = idNumber;
           updatedFields.push('身份证号');
           
-          // 从身份证号码提取性别
-          if (!currentValues.gender) {
+          // 从身份证号码提取性别（如果腾讯云OCR没有直接提供）
+          if (!currentValues.gender && !fieldsToUpdate.gender) {
             // 第17位，奇数为男，偶数为女
             const genderValue = parseInt(idNumber.charAt(16));
             fieldsToUpdate.gender = genderValue % 2 === 1 ? '男' : '女';
@@ -1198,7 +1249,7 @@ const CreateResume = () => {
       
       // 更新表单
       if (Object.keys(fieldsToUpdate).length > 0) {
-        console.log('将更新以下字段:', fieldsToUpdate);
+        debugLog('将更新以下字段:', fieldsToUpdate);
         formInstance.setFieldsValue(fieldsToUpdate);
         
         // 显示成功消息，列出已填充的字段

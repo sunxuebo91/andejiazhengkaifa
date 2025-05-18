@@ -31,16 +31,15 @@ request.interceptors.response.use(
     // 处理NestJS返回的嵌套数据结构
     const responseData = response.data || {};
     
-    // 检查是否有嵌套的data字段
-    if (responseData.data && responseData.code === 0) {
-      // 返回最终的业务数据
-      if (responseData.data.data) {
-        return responseData.data.data;
-      }
+    // 打印一下响应数据结构，方便调试
+    console.log('API响应数据结构:', responseData);
+    
+    // 检查标准响应格式：code = 0 表示成功，data字段包含实际数据
+    if (responseData.code === 0 && responseData.data !== undefined) {
       return responseData.data;
     }
     
-    // 如果没有嵌套结构，直接返回响应数据
+    // 如果没有标准嵌套结构，直接返回响应数据
     return responseData;
   },
   (error) => {

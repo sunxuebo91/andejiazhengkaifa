@@ -43,14 +43,14 @@ export const api = {
   
   // OCR相关
   ocr: {
-    recognizeIdCard: (file: File) => {
+    recognizeIdCard: (file: File, side: 'front' | 'back' = 'front') => {
       const formData = new FormData();
       formData.append('file', file);
-      return request.post('/ocr/idcard', formData, {
+      return request.post(`/api/api/upload/id-card/${side}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
     },
     testConnection: () => 
-      request.get('/ocr/test'),
+      request.get('/api/api/upload/test-connection'),
   }
 }; 

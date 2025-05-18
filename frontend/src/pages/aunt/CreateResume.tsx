@@ -61,6 +61,50 @@ function debugLog(...args) {
 // console.log('表单值变化: Object'); => debugLog('表单值变化: Object');
 // console.log('Form实例初始化: true'); => debugLog('Form实例初始化: true');
 
+// 创建一个安全的对象复制函数，防止循环引用
+const safeClone = (obj) => {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  // 避免处理DOM节点和React元素
+  if (
+    obj instanceof HTMLElement || 
+    obj instanceof Node ||
+    (obj.$$typeof && obj.$$typeof.toString().includes('Symbol(react'))
+  ) {
+    return '[DOM_ELEMENT]';
+  }
+
+  // 处理日期对象
+  if (obj instanceof Date) {
+    return new Date(obj.getTime());
+  }
+
+  // 处理数组
+  if (Array.isArray(obj)) {
+    return obj.map(item => safeClone(item));
+  }
+
+  // 处理普通对象
+  const clone = {};
+  Object.keys(obj).forEach(key => {
+    // 跳过以"_"或"$"开头的属性，这些通常是内部属性
+    if (key.startsWith('_') || key.startsWith('$') || key.startsWith('__')) {
+      return;
+    }
+    
+    try {
+      clone[key] = safeClone(obj[key]);
+    } catch (e) {
+      // 如果出现错误，使用安全的占位符
+      clone[key] = '[CIRCULAR_REFERENCE]';
+    }
+  });
+  
+  return clone;
+};
+
 const CreateResume = () => {
   // 检查URL是否包含edit参数，如果不包含，应当是创建新简历
   useEffect(() => {
@@ -548,7 +592,10 @@ const CreateResume = () => {
       if (newFiles.length === 0) return;
       
       // 显示压缩中的提示
-      const compressingKey = message.loading('正在处理文件...');
+      const compressingKey = message.loading({
+        content: `正在处理${type}文件...`, 
+        duration: 0
+      });
       
       // 获取原始文件
       const rawFiles = [...newFiles];
@@ -560,9 +607,23 @@ const CreateResume = () => {
       // 显示文件分类信息
       debugLog(`准备处理文件: 共${rawFiles.length}个文件, 其中图片${imageFiles.length}个, PDF${pdfFiles.length}个`);
       
-      // 只压缩图片文件
-      const compressPromises = rawFiles.map(file => compressImage(file));
-      const compressedFiles = await Promise.all(compressPromises);
+      // 使用批处理方式压缩图片
+      let compressedFiles = [];
+      
+      try {
+        // 使用批处理压缩
+        if (imageFiles.length > 0) {
+          const compressedImages = await batchCompressImages(imageFiles, 3); // 每批处理3个文件
+          compressedFiles = [...compressedImages, ...pdfFiles];
+        } else {
+          compressedFiles = [...pdfFiles];
+        }
+      } catch (compressionError) {
+        console.error('图片批量压缩失败:', compressionError);
+        // 如果批量压缩失败，使用原始文件
+        compressedFiles = rawFiles;
+        message.warning(`${type}压缩失败，将使用原始文件`);
+      }
       
       // 根据类型设置文件
       if (type === '个人照片') {
@@ -587,7 +648,7 @@ const CreateResume = () => {
       if (pdfFiles.length > 0) {
         message.success(`${type}上传成功: ${originalSizeKB} KB → ${compressedSizeKB} KB (包含${pdfFiles.length}个PDF文件未压缩)`);
       } else {
-      message.success(`${type}上传成功: ${originalSizeKB} KB → ${compressedSizeKB} KB`);
+        message.success(`${type}上传成功: ${originalSizeKB} KB → ${compressedSizeKB} KB`);
       }
     } catch (error) {
       message.error(`${type}处理失败，请重试`);
@@ -598,16 +659,18 @@ const CreateResume = () => {
   // 处理表单提交
   const handleSubmit = async (values: any) => {
     try {
-      debugLog('表单提交', values);
+      // 深度克隆并清理表单值，防止循环引用
+      const cleanValues = safeClone(values);
+      debugLog('表单提交', cleanValues);
       
       // 如果简历已存在，先确认是否重复
       if (!isEditing) {
         try {
           // 执行查重检查
           const duplicateCheckResult = await api.resumes.checkDuplicate({
-            name: values.name,
-            phone: values.phone,
-            idNumber: values.idNumber
+            name: cleanValues.name,
+            phone: cleanValues.phone,
+            idNumber: cleanValues.idNumber
           });
           
           debugLog('查重结果:', duplicateCheckResult);
@@ -616,7 +679,7 @@ const CreateResume = () => {
             // 找到重复简历，提示用户
             Modal.confirm({
               title: '发现重复简历',
-              content: `系统中已存在姓名为 ${values.name} 的简历记录，确定要继续保存吗？`,
+              content: `系统中已存在姓名为 ${cleanValues.name} 的简历记录，确定要继续保存吗？`,
               okText: '继续保存',
               cancelText: '取消',
               onCancel: () => {
@@ -625,7 +688,7 @@ const CreateResume = () => {
               onOk: () => {
                 debugLog('用户确认继续保存重复简历');
                 // 继续保存流程
-                continueSubmit(values);
+                continueSubmit(cleanValues);
               }
             });
             return;
@@ -637,7 +700,7 @@ const CreateResume = () => {
         }
       }
 
-      continueSubmit(values);
+      continueSubmit(cleanValues);
     } catch (error) {
       debugLog('提交处理失败:', error);
       message.error('提交失败，请重试');
@@ -650,7 +713,14 @@ const CreateResume = () => {
   const continueSubmit = async (values: any) => {
     setSubmitting(true);
     setLoading(true);
-    message.loading('正在处理文件，请稍候...');
+    
+    // 使用带倒计时的加载提示
+    const loadingKey = 'submitLoading';
+    message.loading({
+      content: '正在处理文件，请稍候...',
+      key: loadingKey,
+      duration: 0
+    });
     
     // 先上传所有文件
     const fileUrls: any = {
@@ -665,13 +735,32 @@ const CreateResume = () => {
     let uploadError = null;
     let isCosError = false;
     
+    // 创建一个超时Promise
+    const timeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('提交超时，请稍后重试')), 60000); // 60秒超时
+    });
+    
     try {
+      // 清理内存与缓存，为上传做准备
+      clearCompressionCache();
+      
       // 上传身份证正面
       if (idCardFrontFile) {
         const formData = new FormData();
         formData.append('file', idCardFrontFile);
         try {
-          const response = await axios.post(`/api/api/upload/id-card/front`, formData);
+          // 更新加载提示
+          message.loading({
+            content: '正在上传身份证正面...',
+            key: loadingKey,
+            duration: 0
+          });
+          
+          const response = await Promise.race([
+            axios.post(`/api/api/upload/id-card/front`, formData),
+            timeout
+          ]);
+          
           fileUrls.idCardFrontUrl = response.data.url;
         } catch (error) {
           uploadError = error;
@@ -693,7 +782,18 @@ const CreateResume = () => {
         const formData = new FormData();
         formData.append('file', idCardBackFile);
         try {
-          const response = await axios.post(`/api/api/upload/id-card/back`, formData);
+          // 更新加载提示
+          message.loading({
+            content: '正在上传身份证背面...',
+            key: loadingKey,
+            duration: 0
+          });
+          
+          const response = await Promise.race([
+            axios.post(`/api/api/upload/id-card/back`, formData),
+            timeout
+          ]);
+          
           fileUrls.idCardBackUrl = response.data.url;
         } catch (error) {
           uploadError = error;
@@ -710,75 +810,51 @@ const CreateResume = () => {
         }
       }
       
-      // 上传个人照片
-      if (photoFiles.length > 0) {
-        for (const file of photoFiles) {
-          const formData = new FormData();
-          formData.append('file', file);
-          try {
-            const response = await axios.post(`/api/api/upload/file/photo`, formData);
-            fileUrls.photoUrls.push(response.data.url);
-          } catch (error) {
-            uploadError = error;
-            uploadSuccess = false;
-            console.error('上传个人照片失败:', error);
-            
-            // 检查是否是COS配置错误
-            const errorMsg = error.response?.data?.message || error.message || '';
-            if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
-              isCosError = true;
-            }
-            
-            throw new Error(`上传个人照片失败: ${error.response?.status || '网络错误'}`);
-          }
+      // 使用批量上传函数处理多文件上传
+      try {
+        // 更新加载提示
+        if (photoFiles.length > 0) {
+          message.loading({
+            content: `正在上传个人照片(${photoFiles.length}张)...`,
+            key: loadingKey,
+            duration: 0
+          });
+          
+          await batchUploadFiles(photoFiles, 'photo', fileUrls.photoUrls);
         }
-      }
-      
-      // 上传技能证书
-      if (certificateFiles.length > 0) {
-        for (const file of certificateFiles) {
-          const formData = new FormData();
-          formData.append('file', file);
-          try {
-            const response = await axios.post(`/api/api/upload/file/certificate`, formData);
-            fileUrls.certificateUrls.push(response.data.url);
-          } catch (error) {
-            uploadError = error;
-            uploadSuccess = false;
-            console.error('上传技能证书失败:', error);
-            
-            // 检查是否是COS配置错误
-            const errorMsg = error.response?.data?.message || error.message || '';
-            if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
-              isCosError = true;
-            }
-            
-            throw new Error(`上传技能证书失败: ${error.response?.status || '网络错误'}`);
-          }
+        
+        if (certificateFiles.length > 0) {
+          message.loading({
+            content: `正在上传证书(${certificateFiles.length}份)...`,
+            key: loadingKey,
+            duration: 0
+          });
+          
+          await batchUploadFiles(certificateFiles, 'certificate', fileUrls.certificateUrls);
         }
-      }
-      
-      // 上传体检报告
-      if (medicalReportFiles.length > 0) {
-        for (const file of medicalReportFiles) {
-          const formData = new FormData();
-          formData.append('file', file);
-          try {
-            const response = await axios.post(`/api/api/upload/file/medical-report`, formData);
-            fileUrls.medicalReportUrls.push(response.data.url);
-          } catch (error) {
-            uploadError = error;
-            uploadSuccess = false;
-            console.error('上传体检报告失败:', error);
-            
-            // 检查是否是COS配置错误
-            const errorMsg = error.response?.data?.message || error.message || '';
-            if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
-              isCosError = true;
-            }
-            
-            throw new Error(`上传体检报告失败: ${error.response?.status || '网络错误'}`);
-          }
+        
+        if (medicalReportFiles.length > 0) {
+          message.loading({
+            content: `正在上传体检报告(${medicalReportFiles.length}份)...`,
+            key: loadingKey,
+            duration: 0
+          });
+          
+          await batchUploadFiles(medicalReportFiles, 'medical-report', fileUrls.medicalReportUrls);
+        }
+      } catch (error) {
+        uploadError = error;
+        uploadSuccess = false;
+        console.error('批量上传文件失败:', error);
+        
+        // 检查是否是COS配置错误
+        const errorMsg = error.response?.data?.message || error.message || '';
+        if (errorMsg.includes('SecretId') || errorMsg.includes('COS')) {
+          isCosError = true;
+        } else if (errorMsg.includes('timeout') || errorMsg.includes('超时')) {
+          throw new Error('文件上传超时，请稍后重试或减少文件数量');
+        } else {
+          throw new Error(`上传文件失败: ${errorMsg || '网络错误'}`);
         }
       }
       
@@ -793,13 +869,38 @@ const CreateResume = () => {
           fileUrls.idCardBackUrl = existingIdCardBackUrl;
         }
         
-        // 合并所有已有的照片URL和新上传的照片URL
-        fileUrls.photoUrls = [...fileUrls.photoUrls, ...existingPhotoUrls];
-        fileUrls.certificateUrls = [...fileUrls.certificateUrls, ...existingCertificateUrls];
-        fileUrls.medicalReportUrls = [...fileUrls.medicalReportUrls, ...existingMedicalReportUrls];
+        // 使用安全的数组克隆方法，确保没有循环引用
+        fileUrls.photoUrls = [
+          ...safeClone(fileUrls.photoUrls), 
+          ...safeClone(existingPhotoUrls)
+        ];
+        
+        fileUrls.certificateUrls = [
+          ...safeClone(fileUrls.certificateUrls), 
+          ...safeClone(existingCertificateUrls)
+        ];
+        
+        fileUrls.medicalReportUrls = [
+          ...safeClone(fileUrls.medicalReportUrls), 
+          ...safeClone(existingMedicalReportUrls)
+        ];
       }
+      
+      // 文件上传完成后更新加载提示
+      message.loading({
+        content: '文件上传完成，正在提交表单数据...',
+        key: loadingKey,
+        duration: 0
+      });
     } catch (error) {
       console.error('上传文件失败:', error);
+      
+      // 关闭加载提示并显示错误信息
+      message.error({
+        content: error.message || '上传文件失败',
+        key: loadingKey,
+        duration: 3
+      });
       
       // 如果是COS错误，提示用户并询问是否继续提交
       if (isCosError) {
@@ -816,7 +917,9 @@ const CreateResume = () => {
           onOk: () => {
             // 继续提交，但跳过文件上传部分
             debugLog('用户选择仅保存基本信息');
-            finalSubmit(values, fileUrls);
+            // 确保最终传入的数据是安全的
+            const safeFileUrls = safeClone(fileUrls);
+            finalSubmit(values, safeFileUrls);
           }
         });
         return;
@@ -832,14 +935,16 @@ const CreateResume = () => {
     }
     
     // 如果文件上传成功，继续提交表单数据
-    await finalSubmit(values, fileUrls);
+    await finalSubmit(values, safeClone(fileUrls));
   };
   
   // 最终提交表单数据
   const finalSubmit = async (values: any, fileUrls: any) => {
+    const loadingKey = 'submitLoading';
+    
     try {
-      // 合并所有表单数据
-      const allFormData = { ...values };
+      // 合并所有表单数据并深度克隆以去除循环引用
+      const allFormData = safeClone({ ...values });
       
       // 转换性别值为英文（确保数据库保存的是英文格式）
       if (allFormData.gender) {
@@ -855,7 +960,7 @@ const CreateResume = () => {
         debugLog('处理前的工作经历数据:', JSON.stringify(allFormData.workExperiences));
         
         // 获取当前表单的原始值，确保能拿到正确的日期对象
-        const formWorkExps = form.getFieldValue('workExperiences');
+        const formWorkExps = safeClone(form.getFieldValue('workExperiences'));
         debugLog('Form中的工作经历数据:', formWorkExps);
         
         // 直接使用表单实例中的数据，并过滤掉空值
@@ -901,28 +1006,50 @@ const CreateResume = () => {
       // 准备工作经历数据
       const workExperiences = allFormData.workExperiences || [];
       
-      // 准备提交的数据
+      // 准备提交的数据，确保fileUrls也经过安全克隆
       const requestData = {
         ...allFormData,
         workExperiences,
-        ...fileUrls
+        ...safeClone(fileUrls)
       };
       
+      // 移除可能导致问题的特殊字段
+      delete requestData.__proto__;
+      delete requestData.constructor;
+      delete requestData.prototype;
+      
       debugLog('最终提交的完整数据:', requestData);
+      
+      // 更新加载提示
+      message.loading({
+        content: '正在保存数据到服务器...',
+        key: loadingKey,
+        duration: 0
+      });
       
       // 判断是编辑还是创建
       const apiUrl = isEditing ? `/api/resumes/${editingResumeId}` : '/api/resumes';
       const method = isEditing ? 'PUT' : 'POST';
       
       // 提交表单数据到后端
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+      
       const response = isEditing
-        ? await axios.put(apiUrl, requestData)
-        : await axios.post(apiUrl, requestData);
+        ? await axios.put(apiUrl, requestData, { signal: controller.signal })
+        : await axios.post(apiUrl, requestData, { signal: controller.signal });
+      
+      clearTimeout(timeoutId);
       
       debugLog('提交响应:', response.data);
       
       if (response.data && response.data.success) {
-        message.success(`简历${isEditing ? '更新' : '创建'}成功`);
+        // 关闭加载提示并显示成功消息
+        message.success({
+          content: `简历${isEditing ? '更新' : '创建'}成功`,
+          key: loadingKey,
+          duration: 2
+        });
         
         // 更新成功后，清空表单
         form.resetFields();
@@ -943,24 +1070,39 @@ const CreateResume = () => {
         setCertificateFiles([]);
         setMedicalReportFiles([]);
         
+        // 清理图片压缩缓存
+        clearCompressionCache();
+        
         // 如果是编辑模式，则从localStorage移除编辑数据
         if (isEditing) {
           localStorage.removeItem('editingResume');
         }
         
         // 导航到简历列表页面
-        navigate('/aunt/resume-list');
+        setTimeout(() => {
+          navigate('/aunt/resume-list');
+        }, 1000);
       } else {
-        message.error(`简历${isEditing ? '更新' : '创建'}失败: ${response.data?.message || '未知错误'}`);
+        message.error({
+          content: `简历${isEditing ? '更新' : '创建'}失败: ${response.data?.message || '未知错误'}`,
+          key: loadingKey,
+          duration: 3
+        });
       }
     } catch (error) {
       console.error('数据提交错误:', error);
       
       const errorMessage = error.response?.status === 500
         ? '服务器错误：提交失败（HTTP 500）'
-        : `提交失败: ${error.response?.data?.message || error.message || '未知错误'}`;
+        : error.name === 'AbortError'
+          ? '提交超时，请稍后重试'
+          : `提交失败: ${error.response?.data?.message || error.message || '未知错误'}`;
       
-      message.error(errorMessage);
+      message.error({
+        content: errorMessage,
+        key: loadingKey,
+        duration: 3
+      });
     } finally {
       setLoading(false);
       setSubmitting(false);
@@ -1270,6 +1412,78 @@ const CreateResume = () => {
     } catch (error) {
       console.error('处理OCR结果时出错:', error);
       message.error('处理识别结果时出错，请手动填写信息');
+    }
+  };
+
+  // 批量上传文件，支持重试和错误恢复
+  const batchUploadFiles = async (files, category, urlList) => {
+    const maxRetries = 2; // 最大重试次数
+    const batchSize = 3; // 每批处理的文件数量
+    
+    if (!files || files.length === 0) return;
+    
+    for (let i = 0; i < files.length; i += batchSize) {
+      // 获取当前批次的文件
+      const batch = files.slice(i, i + batchSize);
+      const uploadPromises = batch.map(async (file) => {
+        let retryCount = 0;
+        let uploaded = false;
+        let url = '';
+        
+        // 尝试上传，支持重试
+        while (!uploaded && retryCount <= maxRetries) {
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // 设置超时
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+            
+            const response = await axios.post(
+              `/api/api/upload/file/${category}`, 
+              formData,
+              { signal: controller.signal }
+            );
+            
+            clearTimeout(timeoutId); // 清除超时
+            
+            if (response.data && response.data.url) {
+              url = response.data.url;
+              uploaded = true;
+            } else {
+              throw new Error('无效的上传响应');
+            }
+          } catch (error) {
+            retryCount++;
+            if (retryCount > maxRetries) {
+              throw error; // 重试次数用完，抛出错误
+            }
+            
+            // 等待一段时间后重试
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            debugLog(`文件 ${file.name} 上传失败，正在进行第 ${retryCount} 次重试...`);
+          }
+        }
+        
+        return url;
+      });
+      
+      try {
+        // 并行上传当前批次
+        const urls = await Promise.all(uploadPromises);
+        
+        // 将成功的URL添加到列表
+        urls.filter(url => url).forEach(url => urlList.push(url));
+        
+        // 如果还有更多批次，添加短暂延迟
+        if (i + batchSize < files.length) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (error) {
+        console.error(`批量上传文件失败（类别: ${category}）:`, error);
+        throw error;
+      }
     }
   };
 

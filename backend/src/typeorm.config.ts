@@ -1,5 +1,7 @@
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { Resume } from './modules/resume/models/resume.entity';
+import { User } from './modules/user/models/user.entity';
+import { RefreshToken } from './modules/auth/models/refresh-token.entity';
 import * as dotenv from 'dotenv';
 import * as process from 'process';
 
@@ -10,9 +12,9 @@ export const dataSourceOptions: DataSourceOptions = {
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '27017', 10),
   database: process.env.DB_NAME || 'housekeeping',
-  entities: [Resume],
+  entities: [Resume, User, RefreshToken],
   synchronize: process.env.NODE_ENV === 'development',
-  logging: true,
+  logging: process.env.NODE_ENV === 'development',
 };
 
 const dataSource = new DataSource(dataSourceOptions);

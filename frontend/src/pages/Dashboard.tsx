@@ -33,13 +33,18 @@ const Dashboard: React.FC = () => {
         }
       });
 
-      console.log('获取到简历数据:', response.data ? response.data.length : 0, '条记录');
+      // 解析NestJS返回的嵌套响应格式
+      const responseData = response.data || {};
+      const data = responseData.data || {};
+      const items = data.data?.items || [];
+      
+      console.log('获取到简历数据:', items ? items.length : 0, '条记录');
 
       // 当天的起始时间（零点）
       const todayStart = dayjs().startOf('day');
       
       // 分类统计
-      const resumes = response.data || [];
+      const resumes = items;
       const totalResumes = resumes.length;
       
       // 今日新增：创建时间在今天的简历

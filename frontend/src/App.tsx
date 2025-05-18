@@ -19,6 +19,7 @@ import { ReactNode, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { AuthProvider } from './contexts/AuthContext';
 import AuthorizedRoute from './components/AuthorizedRoute';
+import QueryLoadingIndicator from './components/QueryLoadingIndicator';
 
 interface AppProps {
   children?: ReactNode;
@@ -42,6 +43,7 @@ export default function App({ children }: AppProps) {
       <AntdApp>
         <BrowserRouter>
           <AuthProvider>
+            <QueryLoadingIndicator />
             <Routes>
               {/* 登录页面 - 不需要权限 */}
               <Route path="/login" element={<Login />} />

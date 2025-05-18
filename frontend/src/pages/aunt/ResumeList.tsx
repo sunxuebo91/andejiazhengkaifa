@@ -1,10 +1,10 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Form, message, Modal, Button, Select, Input, Table, Space, Tag, Tooltip } from 'antd';
+import { Card, Form, Modal, Button, Select, Input, Table, Space, Tag, Tooltip } from 'antd';
 import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined } from '@ant-design/icons';
-import { useEffect, useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import dayjs from 'dayjs';
+import { useResumeList, useAddFollowUp } from '../../hooks/queries/useResumes';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -24,130 +24,55 @@ const genderMap = {
 
 const ResumeList = () => {
   const [form] = Form.useForm();
-  const [messageApi, contextHolder] = message.useMessage();
-  const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpVisible, setFollowUpVisible] = useState(false);
   const [followUpForm] = Form.useForm();
   const [currentResumeId, setCurrentResumeId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [searchParams, setSearchParams] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [resumeList, setResumeList] = useState([]);
-  const [total, setTotal] = useState(0);
   
   const navigate = useNavigate();
   const searchTimeoutRef = useRef(null);
 
-  // 获取简历列表
-  const fetchResumeList = async (params = {}) => {
-    setLoading(true);
-    try {
-      // 将关键词参数转换为后端API所需的格式
-      const apiParams = { ...params };
-      
-      // 记录搜索关键词用于前端过滤
-      const searchKeyword = apiParams.keyword ? apiParams.keyword.toLowerCase() : '';
-      
-      console.log('尝试连接API: /api/resumes');
-      // 使用相对路径，让Vite代理处理
-      const response = await axios.get('/api/resumes', { 
-        params: apiParams,
-        timeout: 30000, // 增加超时时间到30秒
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
-      console.log('获取简历列表:', response.data);
-      
-      // 格式化数据
-      let formattedData = response.data.map(resume => ({
-        ...resume,
-        // 使用ID的前8位字符，如果ID不存在则显示"未知ID"
-        formattedId: resume.id ? 
-          resume.id.substring(0, 8).padEnd(8, '0') : 
-          '未知ID(请联系管理员)',
-        // 检查是否有体检报告
-        hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
-      }));
-      
-      // 如果有搜索关键词，在前端进行过滤
-      if (searchKeyword) {
-        formattedData = formattedData.filter(resume => {
-          // 在多个字段中搜索关键词
-          return (
-            (resume.name && resume.name.toLowerCase().includes(searchKeyword)) ||
-            (resume.phone && resume.phone.includes(searchKeyword)) ||
-            (resume.idCard && resume.idCard.includes(searchKeyword)) ||
-            (resume.id && resume.id.toLowerCase().includes(searchKeyword)) ||
-            (resume.formattedId && resume.formattedId.toLowerCase().includes(searchKeyword))
-          );
-        });
-        
-        if (formattedData.length === 0) {
-          messageApi.info('没有找到匹配的简历');
-        }
-      }
-      
-      setResumeList(formattedData);
-      setTotal(formattedData.length); // 更新为过滤后的总数
-    } catch (error) {
-      console.error('获取简历列表失败:', error);
-      messageApi.error('获取简历列表失败，请稍后重试');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // 使用React Query获取简历列表
+  const { 
+    data: resumeData,
+    isLoading,
+    refetch 
+  } = useResumeList({
+    ...searchParams,
+    page: currentPage,
+    pageSize,
+  });
 
-  // 初始加载和搜索参数变化时获取数据
-  useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    
-    // 延迟执行搜索，防止频繁请求
-    searchTimeoutRef.current = setTimeout(() => {
-      fetchResumeList({
-        ...searchParams,
-        page: currentPage,
-        pageSize
-      });
-    }, 300);
-    
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [searchParams, currentPage, pageSize]);
+  // 添加跟进记录
+  const addFollowUpMutation = useAddFollowUp(currentResumeId || '');
 
-  // 添加定时刷新功能
-  useEffect(() => {
-    // 设置定时器，每60秒刷新一次数据，检查是否有新简历
-    const intervalId = setInterval(() => {
-      console.log('定时检查新简历...');
-      fetchResumeList({
-        ...searchParams,
-        page: currentPage,
-        pageSize,
-        _t: Date.now() // 添加时间戳防止缓存
-      });
-    }, 60000); // 1分钟刷新一次
-    
-    // 组件卸载时清除定时器
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [searchParams, currentPage, pageSize]);
+  // 格式化数据 - 增加额外的数据检查，确保resumeData是数组
+  let dataItems = [];
+  if (resumeData) {
+    // 检查响应数据结构
+    if (Array.isArray(resumeData)) {
+      dataItems = resumeData;
+    } else if (resumeData.items && Array.isArray(resumeData.items)) {
+      dataItems = resumeData.items;
+    }
+  }
+
+  const resumeList = dataItems.map(resume => ({
+    ...resume,
+    formattedId: resume.id ? 
+      resume.id.substring(0, 8).padEnd(8, '0') : 
+      '未知ID(请联系管理员)',
+    hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
+  }));
 
   // 处理搜索
   const handleSearch = (values) => {
     const { keyword } = values;
-    // 使用一个统一关键词搜索多个字段
     const searchQuery = keyword ? { keyword } : {};
     setSearchParams(searchQuery);
-    setCurrentPage(1); // 重置到第一页
+    setCurrentPage(1);
   };
 
   // 重置搜索
@@ -170,46 +95,18 @@ const ResumeList = () => {
     followUpForm.resetFields();
   };
 
-  // 提交跟进记录 - 使用localStorage代替API
+  // 提交跟进记录
   const handleFollowUpSubmit = async () => {
     try {
-      setFollowUpLoading(true);
       const values = await followUpForm.validateFields();
       
-      // 构建跟进记录数据
-      const followUpData = {
-        id: Date.now().toString(), // 生成临时ID
-        resumeId: currentResumeId,
-        type: values.type,
-        content: values.content,
-        createdAt: new Date().toISOString(),
-        createdBy: 'current_user', // 应当从登录信息中获取
-      };
+      // 使用React Query的mutation提交
+      await addFollowUpMutation.mutateAsync(values);
       
-      // 从localStorage获取现有记录
-      const existingRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
-      
-      // 添加新记录
-      const updatedRecords = [...existingRecords, followUpData];
-      
-      // 保存回localStorage
-      localStorage.setItem('followUpRecords', JSON.stringify(updatedRecords));
-      
-      messageApi.success('添加跟进记录成功');
       setFollowUpVisible(false);
       followUpForm.resetFields();
-      
-      // 刷新列表
-      fetchResumeList({
-        ...searchParams,
-        page: currentPage,
-        pageSize
-      });
     } catch (error) {
-      console.error('添加跟进记录失败:', error);
-      messageApi.error('添加跟进记录失败，请重试');
-    } finally {
-      setFollowUpLoading(false);
+      console.error('表单验证失败:', error);
     }
   };
 
@@ -255,106 +152,93 @@ const ResumeList = () => {
       dataIndex: 'orderStatus',
       key: 'orderStatus',
       render: (status) => {
-        const statusInfo = orderStatusMap[status] || { text: '未知', color: 'default' };
+        const statusInfo = orderStatusMap[status] || { text: status || '未知', color: 'default' };
         return <Tag color={statusInfo.color}>{statusInfo.text}</Tag>;
       },
     },
     {
-      title: '体检报告',
+      title: '经验',
+      dataIndex: 'experienceYears',
+      key: 'experienceYears',
+      render: (years) => years ? `${years}年` : '-',
+    },
+    {
+      title: '体检',
       dataIndex: 'hasMedicalReport',
       key: 'hasMedicalReport',
-      render: (hasMedicalReport) => (
-        hasMedicalReport ? 
-          <Tag color="green">有</Tag> : 
-          <Tag color="red">无</Tag>
-      ),
+      render: (has) => has ? <Tag color="green">有</Tag> : <Tag color="red">无</Tag>,
     },
     {
       title: '操作',
       key: 'action',
       render: (_, record) => (
         <Space size="middle">
-          <Tooltip title="添加跟进记录">
-            <Button 
-              type="primary" 
-              icon={<CommentOutlined />} 
-              size="small" 
-              onClick={() => handleFollowUp(record.id)}
-            />
-          </Tooltip>
+          <a onClick={() => navigate(`/aunt/resume/${record.id}`)}>查看</a>
+          <a onClick={() => handleFollowUp(record.id)}>
+            <Tooltip title="添加跟进记录">
+              <CommentOutlined />
+            </Tooltip>
+          </a>
         </Space>
       ),
     },
   ];
 
-  // 显示自动刷新状态的组件
-  const AutoRefreshIndicator = () => (
-    <div style={{ textAlign: 'right', marginBottom: 8 }}>
-      <Tag color="processing" icon={<ReloadOutlined spin />}>
-        自动检查新简历
-      </Tag>
-    </div>
-  );
-
   return (
-    <PageContainer
-      header={{
-        title: '简历列表',
-        extra: [
-          <Button 
-            key="add" 
-            type="primary" 
-            icon={<PlusOutlined />}
-            onClick={() => navigate('/aunt/create-resume')}
-          >
-            新建简历
-          </Button>
-        ],
-      }}
-    >
-      {contextHolder}
-      
-      {/* 查询表单 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Form
-          form={form}
-          name="resumeSearch"
-          layout="inline"
-          onFinish={handleSearch}
-          style={{ marginBottom: 16 }}
-        >
-          <Form.Item name="keyword" label="关键词">
-            <Input placeholder="请输入姓名、手机号、身份证号或简历ID" allowClear />
+    <PageContainer>
+      {/* 搜索表单 */}
+      <Card>
+        <Form form={form} layout="inline" onFinish={handleSearch}>
+          <Form.Item name="keyword" style={{ width: '300px' }}>
+            <Input 
+              placeholder="搜索姓名、手机号、身份证或ID" 
+              allowClear
+              prefix={<SearchOutlined />}
+            />
           </Form.Item>
-          
           <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" icon={<SearchOutlined />}>
-                查询
-              </Button>
-              <Button onClick={handleReset} icon={<ReloadOutlined />}>
-                重置
-              </Button>
-            </Space>
+            <Button type="primary" htmlType="submit">
+              搜索
+            </Button>
+          </Form.Item>
+          <Form.Item>
+            <Button onClick={handleReset}>
+              重置
+            </Button>
+          </Form.Item>
+          <Form.Item>
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={() => refetch()}
+            >
+              刷新
+            </Button>
+          </Form.Item>
+          <Form.Item>
+            <Button 
+              type="primary" 
+              icon={<PlusOutlined />}
+              onClick={() => navigate('/aunt/create-resume')}
+            >
+              新建简历
+            </Button>
           </Form.Item>
         </Form>
       </Card>
-      
-      {/* 数据表格 */}
-      <Card>
-        <AutoRefreshIndicator />
+
+      {/* 表格 */}
+      <Card style={{ marginTop: 16 }}>
         <Table
           columns={columns}
           dataSource={resumeList}
           rowKey="id"
-          loading={loading}
+          loading={isLoading}
           pagination={{
             current: currentPage,
             pageSize: pageSize,
-            total: total,
+            total: resumeList.length,
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
           }}
           onChange={handleTableChange}
         />
@@ -364,37 +248,20 @@ const ResumeList = () => {
       <Modal
         title="添加跟进记录"
         open={followUpVisible}
+        onOk={handleFollowUpSubmit}
         onCancel={() => setFollowUpVisible(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setFollowUpVisible(false)}>
-            取消
-          </Button>,
-          <Button 
-            key="submit" 
-            type="primary" 
-            loading={followUpLoading}
-            onClick={handleFollowUpSubmit}
-          >
-            提交
-          </Button>,
-        ]}
-        destroyOnClose
+        confirmLoading={addFollowUpMutation.isPending}
       >
-        <Form
-          form={followUpForm}
-          layout="vertical"
-          initialValues={{ type: 'phone' }}
-        >
+        <Form form={followUpForm} layout="vertical">
           <Form.Item
             name="type"
             label="跟进类型"
             rules={[{ required: true, message: '请选择跟进类型' }]}
           >
-            <Select>
-              <Option value="phone">电话沟通</Option>
+            <Select placeholder="请选择跟进类型">
+              <Option value="phone">电话跟进</Option>
+              <Option value="visit">上门拜访</Option>
               <Option value="interview">面试</Option>
-              <Option value="offer">录用</Option>
-              <Option value="reject">拒绝</Option>
               <Option value="other">其他</Option>
             </Select>
           </Form.Item>
@@ -403,7 +270,7 @@ const ResumeList = () => {
             label="跟进内容"
             rules={[{ required: true, message: '请输入跟进内容' }]}
           >
-            <TextArea rows={4} placeholder="请输入跟进内容" maxLength={500} showCount />
+            <TextArea rows={4} placeholder="请输入跟进内容" />
           </Form.Item>
         </Form>
       </Modal>

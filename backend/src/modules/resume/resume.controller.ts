@@ -1,12 +1,36 @@
-import { Controller, Get, Post, Body, Param, UsePipes, ValidationPipe, UploadedFile, UseInterceptors, Put, Delete, UploadedFiles, Logger, Query, InternalServerErrorException, HttpException, HttpStatus } from '@nestjs/common';
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  Body, 
+  Param, 
+  UsePipes, 
+  ValidationPipe, 
+  UploadedFile, 
+  UseInterceptors, 
+  Put, 
+  Delete, 
+  UploadedFiles, 
+  Logger, 
+  Query, 
+  InternalServerErrorException, 
+  HttpException, 
+  HttpStatus,
+  UseGuards
+} from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ResumeService } from './resume.service';
 import { Resume } from './models/resume.entity';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { Express } from 'express';
-import { ObjectId } from 'mongodb';
 import { UploadService } from '../upload/upload.service';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../user/models/user.entity';
 
+@ApiTags('resumes')
 @Controller('resumes')
 export class ResumeController {
   private readonly logger = new Logger(ResumeController.name);
@@ -29,10 +53,19 @@ export class ResumeController {
         return callback(new Error('无效的文件'), false);
       }
       
-      console.log(`处理文件: ${file.originalname}, 类型: ${file.mimetype}`);
-      
-      if (!file.originalname.match(/\.(jpg|jpeg|png|pdf)$/)) {
-        return callback(new Error('只允许上传jpg、jpeg、png和pdf文件！'), false);
+      try {
+        // 使用try-catch避免TypeScript的undefined警告
+        const originalname = file.originalname ?? '未知文件名';
+        const mimetype = file.mimetype ?? '未知类型';
+        
+        // 使用Logger的静态方法而不是实例方法，避免this绑定问题
+        Logger.debug(`处理文件: ${originalname}, 类型: ${mimetype}`, 'ResumeController');
+        
+        if (!originalname.match(/\.(jpg|jpeg|png|pdf)$/)) {
+          return callback(new Error('只允许上传jpg、jpeg、png和pdf文件！'), false);
+        }
+      } catch (error) {
+        return callback(new Error('文件处理错误'), false);
       }
       
       callback(null, true);
@@ -42,6 +75,14 @@ export class ResumeController {
     },
   }))
   @UsePipes(new ValidationPipe())
+  @ApiOperation({ summary: '创建新简历' })
+  @ApiResponse({ status: 201, description: '简历创建成功' })
+  @ApiResponse({ status: 400, description: '无效的请求数据' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: '创建简历的表单数据，包含基本信息和文件',
+    type: CreateResumeDto,
+  })
   async create(
     @Body() createResumeDto: CreateResumeDto,
     @UploadedFiles() files: {
@@ -97,14 +138,8 @@ export class ResumeController {
         }
       }
 
-      // 合并文件URL到简历数据中
-      const resumeData = {
-        ...createResumeDto,
-        ...fileUrls,
-      };
-
-      this.logger.debug('准备保存简历数据:', resumeData);
-      return await this.resumeService.create(resumeData);
+      this.logger.debug('准备保存简历数据');
+      return await this.resumeService.createWithFiles(createResumeDto, fileUrls);
     } catch (error) {
       this.logger.error('处理文件上传时出错:', {
         message: error.message,
@@ -127,89 +162,83 @@ export class ResumeController {
   }
 
   @Put(':id')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '更新简历' })
+  @ApiResponse({ status: 200, description: '简历更新成功' })
+  @ApiResponse({ status: 404, description: '简历不存在' })
   @UsePipes(new ValidationPipe())
   async update(
     @Param('id') id: string,
     @Body() updateResumeDto: CreateResumeDto,
-  ): Promise<Resume | null> {
+  ): Promise<Resume> {
+    this.logger.debug(`更新简历，ID: ${id}`);
     return this.resumeService.update(id, updateResumeDto);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '删除简历' })
+  @ApiResponse({ status: 204, description: '简历删除成功' })
+  @ApiResponse({ status: 404, description: '简历不存在' })
   async remove(@Param('id') id: string): Promise<void> {
+    this.logger.debug(`删除简历，ID: ${id}`);
     return this.resumeService.remove(id);
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<Resume | { message: string }> {
-    this.logger.debug(`接收到获取简历请求，ID: ${id}`);
-    try {
-      const resume = await this.resumeService.findOne(id);
-      
-      if (!resume) {
-        this.logger.warn(`未找到ID为 ${id} 的简历`);
-        return { message: `未找到ID为 ${id} 的简历` };
-      }
-      
-      this.logger.debug(`返回简历数据: ${JSON.stringify(resume)}`);
-      return resume;
-    } catch (error) {
-      this.logger.error(`获取简历时发生错误: ${error.message}`);
-      throw error;
-    }
+  @ApiOperation({ summary: '获取简历详情' })
+  @ApiResponse({ status: 200, description: '返回简历详情' })
+  @ApiResponse({ status: 404, description: '简历不存在' })
+  async findOne(@Param('id') id: string): Promise<Resume> {
+    this.logger.debug(`获取简历详情，ID: ${id}`);
+    return this.resumeService.findOne(id);
   }
 
   @Get()
-  async findAll(): Promise<Resume[]> {
-    return this.resumeService.findAll();
+  @ApiOperation({ summary: '获取所有简历' })
+  @ApiResponse({ status: 200, description: '返回简历列表' })
+  async findAll(
+    @Query('page') page = 1,
+    @Query('pageSize') pageSize = 10,
+    @Query('search') search?: string,
+  ) {
+    this.logger.debug(`获取简历列表，页码: ${page}, 每页数量: ${pageSize}, 搜索: ${search || '无'}`);
+    
+    // 如果有搜索关键词，进行搜索
+    if (search) {
+      return this.resumeService.searchResumes(search);
+    }
+    
+    // 否则进行分页查询
+    const parsedPage = parseInt(page as any);
+    const parsedPageSize = parseInt(pageSize as any);
+    
+    return this.resumeService.findWithPagination(parsedPage, parsedPageSize);
   }
 
   @Get('check-duplicate')
-  async checkDuplicate(@Query('phone') phone: string, @Query('idNumber') idNumber: string) {
-    try {
-      console.log('查重检查请求:', { phone, idNumber });
-      
-      if (!phone && !idNumber) {
-        return {
-          message: '请提供手机号或身份证号进行查重',
-          duplicate: false
-        };
-      }
-
-      // 构建查询条件
-      const queryConditions = [];
-      let duplicatePhone = false;
-      let duplicateIdNumber = false;
-
-      // 如果提供了手机号，添加手机号查询条件
-      if (phone) {
-        const phoneResult = await this.resumeService.findOne({ phone });
-        duplicatePhone = !!phoneResult;
-        if (duplicatePhone) {
-          console.log('发现重复手机号:', phone);
-        }
-      }
-
-      // 如果提供了身份证号，添加身份证号查询条件
-      if (idNumber) {
-        const idNumberResult = await this.resumeService.findOne({ idNumber });
-        duplicateIdNumber = !!idNumberResult;
-        if (duplicateIdNumber) {
-          console.log('发现重复身份证号:', idNumber);
-        }
-      }
-
-      // 返回查重结果
+  @ApiOperation({ summary: '检查简历是否重复' })
+  @ApiResponse({ status: 200, description: '返回查重结果' })
+  async checkDuplicate(
+    @Query('phone') phone?: string, 
+    @Query('idNumber') idNumber?: string
+  ) {
+    this.logger.debug(`查重检查: phone=${phone}, idNumber=${idNumber}`);
+    
+    if (!phone && !idNumber) {
       return {
-        duplicate: duplicatePhone || duplicateIdNumber,
-        duplicatePhone,
-        duplicateIdNumber,
-        message: (duplicatePhone || duplicateIdNumber) ? 
-          '发现重复数据，请勿重复提交' : '未发现重复数据'
+        message: '请提供手机号或身份证号进行查重',
+        duplicate: false
       };
+    }
+
+    try {
+      return await this.resumeService.checkDuplicate(phone, idNumber);
     } catch (error) {
-      console.error('查重检查失败:', error);
+      this.logger.error('查重检查失败:', error);
       throw new InternalServerErrorException('查重检查失败');
     }
   }

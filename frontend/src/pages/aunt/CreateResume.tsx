@@ -628,10 +628,32 @@ const CreateResume = () => {
           // 从API获取简历列表
           try {
             const response = await axios.get('/api/resumes');
-            if (response.data && Array.isArray(response.data)) {
-              // 合并API和本地数据
-              localResumeList = [...localResumeList, ...response.data];
+            // 处理NestJS嵌套响应结构
+            let apiResumes = [];
+            
+            if (response.data) {
+              // 检查嵌套结构
+              if (response.data.data && response.data.data.data && response.data.data.data.items) {
+                // 完全嵌套结构: data.data.data.items
+                apiResumes = response.data.data.data.items;
+              } else if (response.data.data && response.data.data.items) {
+                // 部分嵌套结构: data.data.items
+                apiResumes = response.data.data.items;
+              } else if (response.data.items && Array.isArray(response.data.items)) {
+                // 简单嵌套结构: data.items
+                apiResumes = response.data.items;
+              } else if (Array.isArray(response.data)) {
+                // 直接数组结构
+                apiResumes = response.data;
+              }
             }
+            
+            // 合并API和本地数据
+            if (apiResumes.length > 0) {
+              localResumeList = [...localResumeList, ...apiResumes];
+            }
+            
+            debugLog('API获取的简历数量:', apiResumes.length);
           } catch (e) {
             console.error('无法从API获取简历列表:', e);
           }

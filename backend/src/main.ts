@@ -16,17 +16,20 @@ import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { HttpExceptionFilter } from './filters/http-exception.filter';
+import { TransformInterceptor } from './interceptors/transform.interceptor';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
 
-  // 增加错误处理中间件
-  app.use((err, req, res, next) => {
-    console.error('Unhandled error:', err);
-    res.status(500).send('Internal Server Error');
-  });
+  // 应用全局异常过滤器
+  app.useGlobalFilters(new HttpExceptionFilter());
+  
+  // 应用全局响应拦截器
+  app.useGlobalInterceptors(new TransformInterceptor());
 
   // 启用CORS以支持前端应用
   app.enableCors({
@@ -46,7 +49,19 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true, // 自动删除非DTO中定义的属性
     transform: true, // 自动类型转换
+    forbidNonWhitelisted: true, // 禁止未在DTO中声明的属性
+    errorHttpStatusCode: 422, // 验证错误时返回422状态码
   }));
+  
+  // 设置Swagger文档
+  const config = new DocumentBuilder()
+    .setTitle('安德佳政 API')
+    .setDescription('家政管理系统API文档')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
 
   // 配置文件上传限制
   app.use((req, res, next) => {
@@ -58,6 +73,7 @@ async function bootstrap() {
   try {
     await app.listen(port, '0.0.0.0');
     console.log(`应用程序正在运行，端口: ${port}`);
+    console.log(`Swagger文档: http://localhost:${port}/api/docs`);
   } catch (error) {
     console.error('启动失败:', error.message);
     process.exit(1);

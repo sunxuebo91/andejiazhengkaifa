@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect('mongodb://localhost:27018/housekeeping', {
+    const conn = await mongoose.connect('mongodb://localhost:27017/housekeeping', {
       useNewUrlParser: true,
       useUnifiedTopology: true
     });

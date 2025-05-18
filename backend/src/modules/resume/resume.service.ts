@@ -1,15 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { ObjectId } from 'mongodb';
 import { Resume } from './models/resume.entity';
+import { BaseService } from '../../common/base.service';
+import { CreateResumeDto } from './dto/create-resume.dto';
 
 @Injectable()
-export class ResumeService {
+export class ResumeService extends BaseService<Resume> {
+  private readonly logger = new Logger(ResumeService.name);
+
   constructor(
     @InjectRepository(Resume)
     private resumeRepository: Repository<Resume>,
-  ) {}
+  ) {
+    super(resumeRepository);
+  }
 
   async create(resumeData: Partial<Resume>): Promise<Resume> {
     try {
@@ -125,5 +131,100 @@ export class ResumeService {
       console.error('获取所有简历时出错:', error);
       return [];
     }
+  }
+
+  async findByPhone(phone: string): Promise<Resume | null> {
+    this.logger.debug(`通过手机号查询简历: ${phone}`);
+    return this.resumeRepository.findOne({ where: { phone } });
+  }
+
+  async findByIdNumber(idNumber: string): Promise<Resume | null> {
+    this.logger.debug(`通过身份证号查询简历: ${idNumber}`);
+    return this.resumeRepository.findOne({ where: { idNumber } });
+  }
+
+  async checkDuplicate(phone?: string, idNumber?: string): Promise<{
+    duplicate: boolean;
+    duplicatePhone: boolean;
+    duplicateIdNumber: boolean;
+    message: string;
+  }> {
+    this.logger.debug(`检查重复: phone=${phone}, idNumber=${idNumber}`);
+    
+    let duplicatePhone = false;
+    let duplicateIdNumber = false;
+
+    if (phone) {
+      const phoneResult = await this.findByPhone(phone);
+      duplicatePhone = !!phoneResult;
+    }
+
+    if (idNumber) {
+      const idNumberResult = await this.findByIdNumber(idNumber);
+      duplicateIdNumber = !!idNumberResult;
+    }
+
+    const duplicate = duplicatePhone || duplicateIdNumber;
+    
+    return {
+      duplicate,
+      duplicatePhone,
+      duplicateIdNumber,
+      message: duplicate ? '发现重复数据，请勿重复提交' : '未发现重复数据'
+    };
+  }
+
+  async findByCondition(condition: Partial<Resume>): Promise<Resume | null> {
+    this.logger.debug(`按条件查询简历: ${JSON.stringify(condition)}`);
+    return this.resumeRepository.findOne({ 
+      where: condition as unknown as FindOptionsWhere<Resume> 
+    });
+  }
+
+  async createWithFiles(resumeData: CreateResumeDto, fileUrls: any): Promise<Resume> {
+    this.logger.debug('创建带文件的简历');
+    
+    const data = {
+      ...resumeData,
+      ...fileUrls,
+    };
+
+    return this.create(data);
+  }
+
+  async searchResumes(query: string): Promise<Resume[]> {
+    this.logger.debug(`搜索简历: ${query}`);
+    
+    // 构建查询条件
+    return this.resumeRepository
+      .createQueryBuilder('resume')
+      .where('resume.name LIKE :query OR resume.phone LIKE :query OR resume.idNumber LIKE :query', { 
+        query: `%${query}%` 
+      })
+      .getMany();
+  }
+
+  async findWithPagination(page: number = 1, pageSize: number = 10): Promise<{ items: Resume[]; total: number; page: number; pageSize: number }> {
+    this.logger.debug(`分页查询简历: page=${page}, pageSize=${pageSize}`);
+    
+    // 获取总记录数
+    const total = await this.resumeRepository.count();
+    
+    // 获取分页数据
+    const skip = (page - 1) * pageSize;
+    const items = await this.resumeRepository.find({
+      skip,
+      take: pageSize,
+      order: { 
+        createdAt: 'DESC' 
+      }
+    });
+    
+    return {
+      items,
+      total,
+      page,
+      pageSize
+    };
   }
 }

@@ -12,7 +12,7 @@ import imageCompression from 'browser-image-compression';
 // 引入自定义的百度地图地址自动补全组件
 // import BaiduAddressAutocomplete from '../../components/BaiduAddressAutocomplete';
 import BaiduMapCard from '../../components/BaiduMapCard';
-import { compressImage, createImagePreview, revokeImagePreview } from '../../utils/imageUtils';
+import { compressImage, createImagePreview, revokeImagePreview, clearCompressionCache } from '../../utils/imageUtils';
 import { recognizeIdCard, extractIdCardFormData, testOcrConnection } from '../../utils/ocrUtils';
 
 // 设置 axios 默认配置
@@ -125,8 +125,8 @@ const CreateResume = () => {
     try {
       message.loading('正在连接后端服务...');
       debugLog('尝试连接后端服务...');
-      // 使用相对路径，Vite代理会自动处理
-      const response = await axios.get('/api/resumes', {
+      // 将URL改回 /api/resumes，这与之前 NestJS RouterExplorer 显示的 ResumeController 路由一致
+      const response = await axios.get('/api/resumes', { 
         timeout: 8000 // 增加超时时间
       });
       debugLog('后端连接正常:', response.data);
@@ -657,24 +657,29 @@ const CreateResume = () => {
   };
 
   // 处理表单提交
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (/* values: any - this argument will be the event, ignore it */) => {
+    // Indicate processing has started
+    setLoading(true);
+    setSubmitting(true);
+
     try {
-      // 深度克隆并清理表单值，防止循环引用
-      const cleanValues = safeClone(values);
-      debugLog('表单提交', cleanValues);
-      
-      // 如果简历已存在，先确认是否重复
+      const formAllValues = await form.validateFields(); // Validate and get all form values
+
+      const cleanValues = safeClone(formAllValues);
+      debugLog('表单提交 (通过 validateFields 获取)', cleanValues);
+
       if (!isEditing) {
         try {
           // 执行查重检查
-          const duplicateCheckResult = await api.resumes.checkDuplicate({
+          // 确保这里的api.resumes.checkDuplicate也使用正确的路径前缀，如果它是axios实例的一部分
+          const duplicateCheckResult = await api.resumes.checkDuplicate({ 
             name: cleanValues.name,
             phone: cleanValues.phone,
-            idNumber: cleanValues.idNumber
+            idNumber: cleanValues.idNumber,
           });
-          
+
           debugLog('查重结果:', duplicateCheckResult);
-          
+
           if (duplicateCheckResult && duplicateCheckResult.isDuplicate) {
             // 找到重复简历，提示用户
             Modal.confirm({
@@ -682,31 +687,45 @@ const CreateResume = () => {
               content: `系统中已存在姓名为 ${cleanValues.name} 的简历记录，确定要继续保存吗？`,
               okText: '继续保存',
               cancelText: '取消',
-              onCancel: () => {
-                debugLog('用户取消了重复简历的保存');
-              },
               onOk: () => {
                 debugLog('用户确认继续保存重复简历');
-                // 继续保存流程
+                // setLoading and setSubmitting are already true.
+                // continueSubmit will proceed and eventually reset them via finalSubmit's finally block.
                 continueSubmit(cleanValues);
-              }
+              },
+              onCancel: () => {
+                debugLog('用户取消了重复简历的保存');
+                setLoading(false); // Reset states if cancelled
+                setSubmitting(false);
+              },
             });
-            return;
+            return; // Exit handleSubmit after Modal.confirm is called; further action is handled by Modal's callbacks.
           }
         } catch (error) {
           debugLog('查重失败:', error);
           // 查重失败不阻止提交，但记录错误
           message.warning('简历查重检查失败，将继续提交');
+          // Fall through to continueSubmit(cleanValues) below
+          // setLoading and setSubmitting remain true
         }
       }
 
-      continueSubmit(cleanValues);
-    } catch (error) {
-      debugLog('提交处理失败:', error);
-      message.error('提交失败，请重试');
-      setSubmitting(false);
+      // If not editing, or if editing, or if duplicate check passed/failed with warning (and no modal return)
+      await continueSubmit(cleanValues); // This will eventually call finalSubmit which has a finally block to reset states
+    } catch (errorInfo) {
+      // This catch is for form.validateFields() errors or other synchronous errors before async ops in continueSubmit
+      debugLog('表单校验失败或提交准备阶段出错:', errorInfo);
+      // Check if errorInfo is a validation error object from AntD
+      if (errorInfo && typeof errorInfo === 'object' && 'errorFields' in errorInfo && Array.isArray(errorInfo.errorFields) && errorInfo.errorFields.length > 0) {
+        message.error('表单校验失败，请检查红色标记的字段。');
+      } else {
+        message.error('提交处理时发生错误，请重试。'); // <--- CORRECTED SYNTAX (removed stray backslash)
+      }
       setLoading(false);
+      setSubmitting(false);
     }
+    // setLoading and setSubmitting are primarily reset by finalSubmit's finally block
+    // or by the catch block here, or by Modal's onCancel.
   };
 
   // 继续提交流程
@@ -938,6 +957,35 @@ const CreateResume = () => {
     await finalSubmit(values, safeClone(fileUrls));
   };
   
+  // MongoDB错误时临时保存表单数据
+  const saveFormDataLocally = (formData: any) => {
+    try {
+      // 创建需要保存的数据的深拷贝
+      const dataToSave = JSON.parse(JSON.stringify(formData));
+      
+      // 转换日期对象为字符串
+      if (dataToSave.birthDate && typeof dataToSave.birthDate === 'object') {
+        dataToSave.birthDate = dayjs(dataToSave.birthDate).format('YYYY-MM-DD');
+      }
+      
+      // 处理工作经验中的日期
+      if (dataToSave.workExperiences) {
+        dataToSave.workExperiences = dataToSave.workExperiences.map(exp => ({
+          ...exp,
+          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
+          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
+        }));
+      }
+      
+      // 保存到localStorage
+      localStorage.setItem('resumeFormBackup', JSON.stringify(dataToSave));
+      return true;
+    } catch (e) {
+      console.error('保存表单数据到本地失败:', e);
+      return false;
+    }
+  };
+
   // 最终提交表单数据
   const finalSubmit = async (values: any, fileUrls: any) => {
     const loadingKey = 'submitLoading';
@@ -953,63 +1001,43 @@ const CreateResume = () => {
                              allFormData.gender;
       }
       
-      debugLog('表单数据:', allFormData);
-      
-      // 处理工作经验中的日期格式
-      if (allFormData.workExperiences && allFormData.workExperiences.length > 0) {
-        debugLog('处理前的工作经历数据:', JSON.stringify(allFormData.workExperiences));
-        
-        // 获取当前表单的原始值，确保能拿到正确的日期对象
-        const formWorkExps = safeClone(form.getFieldValue('workExperiences'));
-        debugLog('Form中的工作经历数据:', formWorkExps);
-        
-        // 直接使用表单实例中的数据，并过滤掉空值
-        const validWorkExps = formWorkExps.filter(exp => exp && (exp.startDate || exp.endDate || exp.description));
-        debugLog('有效的工作经历数据:', validWorkExps);
-        
-        // 处理日期格式
-        allFormData.workExperiences = validWorkExps.map((exp, index) => {
-          debugLog(`处理工作经历[${index}]`);
-          
-          // 处理开始日期
-          let startDateStr = '';
-          if (exp.startDate) {
-            if (typeof exp.startDate.format === 'function') {
-              startDateStr = exp.startDate.format('YYYY-MM');
-              debugLog(`工作经历[${index}]开始时间格式化为:`, startDateStr);
-            } else if (typeof exp.startDate === 'string') {
-              startDateStr = exp.startDate;
+      // 强制处理birthDate为字符串格式 - 使用最简单的方式
+      if (allFormData.birthDate) {
+        if (typeof allFormData.birthDate === 'object' && typeof allFormData.birthDate.format === 'function') {
+          // Dayjs对象
+          allFormData.birthDate = allFormData.birthDate.format('YYYY-MM-DD');
+        } else if (typeof allFormData.birthDate !== 'string') {
+          // 尝试转换其他类型
+          try {
+            const date = new Date(allFormData.birthDate);
+            if (!isNaN(date.getTime())) {
+              allFormData.birthDate = date.toISOString().split('T')[0]; // 'YYYY-MM-DD'格式
+            } else {
+              delete allFormData.birthDate; // 如果无效，移除该字段
             }
+          } catch (e) {
+            delete allFormData.birthDate; // 无法转换则移除
           }
-          
-          // 处理结束日期
-          let endDateStr = '';
-          if (exp.endDate) {
-            if (typeof exp.endDate.format === 'function') {
-              endDateStr = exp.endDate.format('YYYY-MM');
-              debugLog(`工作经历[${index}]结束时间格式化为:`, endDateStr);
-            } else if (typeof exp.endDate === 'string') {
-              endDateStr = exp.endDate;
-            }
-          }
-          
-          return {
-            startDate: startDateStr,
-            endDate: endDateStr,
-            description: exp.description || ''
-          };
-        });
-        
-        debugLog('处理后的工作经历数据:', JSON.stringify(allFormData.workExperiences));
+        }
       }
       
-      // 准备工作经历数据
-      const workExperiences = allFormData.workExperiences || [];
+      // 简化工作经验处理 - 完全移除该字段（后端日志显示它可能导致问题）
+      delete allFormData.workExperiences;
+      delete allFormData.workExperience;
+      
+      // 确保所有数字类型字段都是数字而非字符串
+      if (allFormData.age && typeof allFormData.age === 'string') {
+        allFormData.age = parseInt(allFormData.age, 10);
+      }
+      
+      if (allFormData.expectedSalary && typeof allFormData.expectedSalary === 'string') {
+        allFormData.expectedSalary = parseInt(allFormData.expectedSalary, 10);
+      }
       
       // 准备提交的数据，确保fileUrls也经过安全克隆
       const requestData = {
         ...allFormData,
-        workExperiences,
+        // 移除所有可能引起问题的复杂或未使用字段
         ...safeClone(fileUrls)
       };
       
@@ -1018,7 +1046,14 @@ const CreateResume = () => {
       delete requestData.constructor;
       delete requestData.prototype;
       
-      debugLog('最终提交的完整数据:', requestData);
+      // 确保没有undefined值
+      Object.keys(requestData).forEach(key => {
+        if (requestData[key] === undefined) {
+          delete requestData[key];
+        }
+      });
+      
+      debugLog('最终提交的简化数据:', requestData);
       
       // 更新加载提示
       message.loading({
@@ -1031,75 +1066,116 @@ const CreateResume = () => {
       const apiUrl = isEditing ? `/api/resumes/${editingResumeId}` : '/api/resumes';
       const method = isEditing ? 'PUT' : 'POST';
       
-      // 提交表单数据到后端
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+      // 创建一个超时Promise
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('请求超时，请稍后重试')), 30000));
       
-      const response = isEditing
-        ? await axios.put(apiUrl, requestData, { signal: controller.signal })
-        : await axios.post(apiUrl, requestData, { signal: controller.signal });
-      
-      clearTimeout(timeoutId);
-      
-      debugLog('提交响应:', response.data);
-      
-      if (response.data && response.data.success) {
-        // 关闭加载提示并显示成功消息
-        message.success({
-          content: `简历${isEditing ? '更新' : '创建'}成功`,
-          key: loadingKey,
-          duration: 2
-        });
+      try {
+        // 提交表单数据到后端（使用Promise.race添加超时控制）
+        const response = await Promise.race([
+          axios[method.toLowerCase()](apiUrl, requestData),
+          timeoutPromise
+        ]);
         
-        // 更新成功后，清空表单
-        form.resetFields();
+        debugLog('提交响应:', response.data);
         
-        // 清理预览和文件状态
-        if (idCardFrontPreview) {
-          revokeImagePreview(idCardFrontPreview);
-          setIdCardFrontPreview('');
+        if (response.data && response.data.success) {
+          // 关闭加载提示并显示成功消息
+          message.success({
+            content: `简历${isEditing ? '更新' : '创建'}成功`,
+            key: loadingKey,
+            duration: 2
+          });
+          
+          // 更新成功后，清空表单
+          form.resetFields();
+          
+          // 清理预览和文件状态
+          if (idCardFrontPreview) {
+            revokeImagePreview(idCardFrontPreview);
+            setIdCardFrontPreview('');
+          }
+          if (idCardBackPreview) {
+            revokeImagePreview(idCardBackPreview);
+            setIdCardBackPreview('');
+          }
+          
+          setIdCardFrontFile(null);
+          setIdCardBackFile(null);
+          setPhotoFiles([]);
+          setCertificateFiles([]);
+          setMedicalReportFiles([]);
+          
+          // 清理图片压缩缓存
+          clearCompressionCache();
+          
+          // 如果是编辑模式，则从localStorage移除编辑数据
+          if (isEditing) {
+            localStorage.removeItem('editingResume');
+          }
+          
+          // 导航到简历列表页面
+          setTimeout(() => {
+            navigate('/aunt/resume-list');
+          }, 1000);
+        } else {
+          message.error({
+            content: `简历${isEditing ? '更新' : '创建'}失败: ${response.data?.message || '未知错误'}`,
+            key: loadingKey,
+            duration: 3
+          });
         }
-        if (idCardBackPreview) {
-          revokeImagePreview(idCardBackPreview);
-          setIdCardBackPreview('');
+      } catch (error) {
+        console.error('数据提交错误:', error);
+        
+        const isMongoDB = error.response?.data?.message?.includes('MongoDB') || 
+                         error.response?.data?.message?.includes('propertyName') ||
+                         error.response?.data?.message?.includes('Cannot read properties');
+        
+        let errorMessage;
+        if (isMongoDB) {
+          // 保存表单数据到localStorage
+          const savedLocally = saveFormDataLocally(form.getFieldsValue());
+          
+          errorMessage = '数据库错误：您的表单数据' + 
+                        (savedLocally ? '已自动保存到本地' : '无法保存') + 
+                        '。请联系管理员解决数据库配置问题。';
+        } else if (error.response?.status === 500) {
+          // 也尝试保存表单数据
+          saveFormDataLocally(form.getFieldsValue());
+          errorMessage = '服务器内部错误，您的数据已本地保存，请稍后重试';
+        } else if (error.name === 'AbortError' || error.message === '请求超时，请稍后重试') {
+          errorMessage = '提交超时，请稍后重试';
+        } else {
+          errorMessage = `提交失败: ${error.response?.data?.message || error.message || '未知错误'}`;
         }
         
-        setIdCardFrontFile(null);
-        setIdCardBackFile(null);
-        setPhotoFiles([]);
-        setCertificateFiles([]);
-        setMedicalReportFiles([]);
-        
-        // 清理图片压缩缓存
-        clearCompressionCache();
-        
-        // 如果是编辑模式，则从localStorage移除编辑数据
-        if (isEditing) {
-          localStorage.removeItem('editingResume');
+        // 对于数据库错误，显示模态框而不只是普通消息
+        if (isMongoDB) {
+          Modal.error({
+            title: '数据库错误',
+            content: (
+              <div>
+                <p>{errorMessage}</p>
+                <p>错误详情: <code>Cannot read properties of undefined (reading 'propertyName')</code></p>
+                <p>这是后端MongoDB配置问题，与您填写的数据无关。</p>
+                <p>如需恢复已保存的表单，请刷新页面后检查。</p>
+              </div>
+            ),
+            okText: '我知道了'
+          });
+          message.destroy(loadingKey);
+        } else {
+          message.error({
+            content: errorMessage,
+            key: loadingKey,
+            duration: 5
+          });
         }
-        
-        // 导航到简历列表页面
-        setTimeout(() => {
-          navigate('/aunt/resume-list');
-        }, 1000);
-      } else {
-        message.error({
-          content: `简历${isEditing ? '更新' : '创建'}失败: ${response.data?.message || '未知错误'}`,
-          key: loadingKey,
-          duration: 3
-        });
       }
     } catch (error) {
-      console.error('数据提交错误:', error);
-      
-      const errorMessage = error.response?.status === 500
-        ? '服务器错误：提交失败（HTTP 500）'
-        : error.name === 'AbortError'
-          ? '提交超时，请稍后重试'
-          : `提交失败: ${error.response?.data?.message || error.message || '未知错误'}`;
-      
+      console.error('准备提交数据时出错:', error);
       message.error({
-        content: errorMessage,
+        content: '准备提交数据时出错，请检查表单数据',
         key: loadingKey,
         duration: 3
       });
@@ -1486,6 +1562,50 @@ const CreateResume = () => {
       }
     }
   };
+
+  // 检查是否有之前保存的表单数据
+  useEffect(() => {
+    const savedForm = localStorage.getItem('resumeFormBackup');
+    if (savedForm) {
+      try {
+        const formData = JSON.parse(savedForm);
+        debugLog('检测到本地保存的表单数据', formData);
+        
+        // 询问用户是否要恢复之前保存的数据
+        Modal.confirm({
+          title: '检测到未提交的表单数据',
+          content: '发现之前因数据库错误而未能提交的表单数据，是否恢复？',
+          okText: '恢复数据',
+          cancelText: '不需要',
+          onOk: () => {
+            // 处理日期字段
+            if (formData.birthDate) {
+              formData.birthDate = dayjs(formData.birthDate);
+            }
+            
+            // 处理工作经验中的日期
+            if (formData.workExperiences && Array.isArray(formData.workExperiences)) {
+              formData.workExperiences = formData.workExperiences.map(exp => ({
+                ...exp,
+                startDate: exp.startDate ? dayjs(exp.startDate) : undefined,
+                endDate: exp.endDate ? dayjs(exp.endDate) : undefined
+              }));
+            }
+            
+            // 设置表单值
+            form.setFieldsValue(formData);
+            message.success('表单数据已恢复');
+          },
+          onCancel: () => {
+            localStorage.removeItem('resumeFormBackup');
+            message.info('已清除本地表单数据');
+          }
+        });
+      } catch (e) {
+        console.error('解析本地表单数据失败:', e);
+      }
+    }
+  }, [form]);
 
   return (
     <PageContainer

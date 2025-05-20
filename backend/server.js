@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const mongoose = require('mongoose');
 const multer = require('multer'); // 用于文件上传
 const path = require('path'); // 用于处理文件路径
 const fs = require('fs'); // 用于文件系统操作
@@ -67,16 +66,6 @@ app.post('/api/test', (req, res) => {
 
 // Routes
 app.use('/api/resumes', resumeRoutes);
-
-app.get('/api/resumes', async (req, res) => {
-  try {
-    const resumes = await Resume.find().exec();
-    res.json(resumes);
-  } catch (error) {
-    console.error('Fetch error details:', error);
-    res.status(500).json({ message: 'Failed to fetch resumes', error: error.message });
-  }
-});
 
 // 错误处理中间件
 app.use((err, req, res, next) => {

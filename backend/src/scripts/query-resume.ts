@@ -1,28 +1,26 @@
-import { MongoClient } from 'mongodb';
+import { dataSource } from '../typeorm.config';
+import { Resume } from '../modules/resume/models/resume.entity';
 import * as dotenv from 'dotenv';
 
 // 加载环境变量
 dotenv.config();
 
 async function queryDatabase() {
-  // 连接到MongoDB
-  const uri = `mongodb://${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '27018'}`;
-  console.log(`尝试连接到MongoDB: ${uri}`);
-  const client = new MongoClient(uri);
-  
   try {
-    await client.connect();
-    console.log('连接到MongoDB成功');
+    // 初始化 TypeORM 数据源
+    await dataSource.initialize();
+    console.log('成功连接到数据库');
     
-    const database = client.db(process.env.DB_NAME || 'housekeeping'); // 使用正确的数据库名称
-    const collection = database.collection('resumes');
-    
-    // 查询最新的10条简历数据
-    const resumes = await collection.find({}).sort({ createdAt: -1 }).limit(10).toArray();
+    // 使用 TypeORM Repository 查询数据
+    const resumeRepository = dataSource.getRepository(Resume);
+    const resumes = await resumeRepository.find({
+      order: { createdAt: 'DESC' },
+      take: 10
+    });
     
     console.log(`找到 ${resumes.length} 条简历记录:`);
     resumes.forEach((resume, index) => {
-      console.log(`\n[${index + 1}] 简历ID: ${resume._id}`);
+      console.log(`\n[${index + 1}] 简历ID: ${resume.id}`);
       console.log(`姓名: ${resume.name || '未提供'}`);
       console.log(`电话: ${resume.phone || '未提供'}`);
       console.log(`身份证正面: ${resume.idCardFrontUrl || '未提供'}`);
@@ -35,8 +33,11 @@ async function queryDatabase() {
   } catch (error) {
     console.error('查询数据库出错:', error);
   } finally {
-    await client.close();
-    console.log('MongoDB连接已关闭');
+    // 关闭数据库连接
+    if (dataSource.isInitialized) {
+      await dataSource.destroy();
+      console.log('数据库连接已关闭');
+    }
   }
 }
 

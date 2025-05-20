@@ -29,10 +29,13 @@ const Dashboard: React.FC = () => {
         }
       });
 
-      // 适配API返回的新格式
-      const resumes = response.data.success && response.data.data ? 
-        (response.data.data.items || []) : 
-        (Array.isArray(response.data) ? response.data : []);
+      // 使用后端返回的新格式
+      const { success, data } = response.data;
+      if (!success || !data) {
+        throw new Error('获取数据失败');
+      }
+
+      const { items: resumes = [] } = data;
 
       // 当天的起始时间（零点）
       const todayStart = dayjs().startOf('day');
@@ -49,7 +52,8 @@ const Dashboard: React.FC = () => {
       const acceptingResumes = resumes.filter(resume => resume.orderStatus === 'accepting').length;
       const notAcceptingResumes = resumes.filter(resume => resume.orderStatus === 'not-accepting').length;
       const onServiceResumes = resumes.filter(resume => resume.orderStatus === 'on-service').length;
-      
+
+      // 更新统计数据
       setStats({
         totalResumes,
         newTodayResumes,
@@ -59,7 +63,7 @@ const Dashboard: React.FC = () => {
       });
     } catch (error) {
       console.error('获取统计数据失败:', error);
-      messageApi.error('获取统计数据失败，请稍后刷新页面');
+      messageApi.error('获取统计数据失败，请稍后重试');
     } finally {
       setLoading(false);
     }

@@ -1,11 +1,18 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { ObjectId } from 'mongodb';
 
 @Entity('resumes')
 export class Resume {
   @PrimaryGeneratedColumn()
   id: number;
 
+  // MongoDB的_id字段
+  _id: ObjectId;
+
   // 基本信息
+  @Column({ type: 'string', unique: true, nullable: true })
+  databaseId: string;  // 新增字段用于存储MongoDB的_id
+
   @Column()
   name: string;
 
@@ -16,88 +23,84 @@ export class Resume {
   age: number;
 
   @Column({ nullable: true })
-  wechat: string;
+  wechat?: string;
 
-  @Column()
-  idCardNumber: string;
+  @Column({ nullable: true })
+  idNumber?: string;
 
   @Column()
   education: string;
 
   @Column()
-  maritalStatus: string;
+  nativePlace: string;
+
+  @Column()
+  experienceYears: number;
 
   @Column({ nullable: true })
-  religion: string;
+  maritalStatus?: string;
 
-  @Column()
-  currentAddress: string;
+  @Column({ nullable: true })
+  religion?: string;
 
-  @Column()
-  hometown: string;
+  @Column({ nullable: true })
+  currentAddress?: string;
 
-  @Column()
-  hukou: string;
+  @Column({ nullable: true })
+  hukouAddress?: string;
 
-  @Column()
-  birthday: Date;
+  @Column({ nullable: true })
+  birthDate?: string;
 
-  @Column()
-  ethnicity: string;
+  @Column({ nullable: true })
+  ethnicity?: string;
 
-  @Column()
-  gender: string;
+  @Column({ nullable: true })
+  gender?: string;
 
-  @Column()
-  zodiac: string;
+  @Column({ nullable: true })
+  zodiac?: string;
 
-  @Column()
-  constellation: string;
+  @Column({ nullable: true })
+  zodiacSign?: string;
 
   // 工作信息
   @Column()
   jobType: string;
 
-  @Column()
-  expectedSalary: number;
+  @Column({ nullable: true })
+  expectedSalary?: number;
 
-  @Column()
-  workLocation: string;
+  @Column({ nullable: true })
+  serviceArea?: string;
 
-  @Column()
-  workStatus: string;
+  @Column({ nullable: true })
+  orderStatus?: string;
 
   @Column('simple-array', { nullable: true })
-  skills: string[];
+  skills?: string[];
 
-  @Column()
-  experience: string;
+  @Column({ nullable: true })
+  leadSource?: string;
 
-  @Column()
-  sourceChannel: string;
-
-  @Column('jsonb')
-  workExperience: {
-    startDate: string;
-    endDate: string;
-    description: string;
-  }[];
+  @Column('json', { nullable: true })
+  workExperience?: { startDate: string; endDate: string; description: string }[];
 
   // 文件信息
   @Column({ nullable: true })
-  idCardFrontUrl: string;
+  idCardFrontUrl?: string;
 
   @Column({ nullable: true })
-  idCardBackUrl: string;
+  idCardBackUrl?: string;
 
   @Column('simple-array', { nullable: true })
-  photoUrls: string[];
+  photoUrls?: string[];
 
   @Column('simple-array', { nullable: true })
-  certificateUrls: string[];
+  certificateUrls?: string[];
 
   @Column('simple-array', { nullable: true })
-  medicalReportUrls: string[];
+  medicalReportUrls?: string[];
 
   // 时间戳
   @CreateDateColumn()

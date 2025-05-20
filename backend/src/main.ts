@@ -83,11 +83,10 @@ async function bootstrap() {
     next();
   });
 
-  const port = process.env.PORT || 3000; // 使用端口3000
+  const port = process.env.PORT || 3000; // 修改为使用端口3000
   try {
     await app.listen(port, '0.0.0.0');
     console.log(`应用程序正在运行，端口: ${port}`);
-    console.log(`Swagger文档: http://localhost:${port}/api/docs`);
   } catch (error) {
     console.error('启动失败:', error.message);
     process.exit(1);

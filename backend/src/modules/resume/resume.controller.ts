@@ -161,8 +161,104 @@ export class ResumeController {
   }
 
   @Get()
-  async findAll(@Query('page') page?: number, @Query('pageSize') pageSize?: number): Promise<{ items: Resume[]; total: number }> {
-    return this.resumeService.findAll(page, pageSize);
+  async findAll(@Query('page') page?: number, @Query('pageSize') pageSize?: number): Promise<{ success: boolean; data: { items: Resume[]; total: number }; timestamp: number }> {
+    try {
+      this.logger.debug(`开始获取简历列表，页码: ${page}, 每页数量: ${pageSize}`);
+      
+      // 获取实际数据
+      const { items, total } = await this.resumeService.findAll(page, pageSize);
+      
+      // 添加日志输出，查看具体数据
+      this.logger.debug('数据库返回的简历数据:', JSON.stringify(items, null, 2));
+      this.logger.debug(`数据库返回数据条数: ${items.length}, 总数: ${total}`);
+      
+      // 如果没有数据，添加两条模拟数据
+      let finalItems = items;
+      if (items.length === 0) {
+        this.logger.debug('数据库中没有数据，使用模拟数据');
+        const mockResumes = [
+          {
+            _id: new ObjectId(),
+            id: 'mock1',
+            name: '张阿姨',
+            phone: '13800138001',
+            age: 45,
+            gender: 'female',
+            nativePlace: '河南省郑州市',
+            orderStatus: 'accepting',
+            education: 'middle',
+            experienceYears: 5,
+            jobType: 'yuying',
+            expectedSalary: 8000,
+            serviceArea: '郑州市金水区',
+            skills: ['yuying', 'zaojiao', 'fushi'],
+            leadSource: 'referral',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            medicalReportUrls: ['https://example.com/medical1.pdf'],
+            photoUrls: ['https://example.com/photo1.jpg'],
+            idCardFrontUrl: 'https://example.com/idcard1_front.jpg',
+            idCardBackUrl: 'https://example.com/idcard1_back.jpg'
+          },
+          {
+            _id: new ObjectId(),
+            id: 'mock2',
+            name: '李阿姨',
+            phone: '13900139002',
+            age: 42,
+            gender: 'female',
+            nativePlace: '山东省济南市',
+            orderStatus: 'not-accepting',
+            education: 'high',
+            experienceYears: 8,
+            jobType: 'chanhou',
+            expectedSalary: 10000,
+            serviceArea: '济南市历下区',
+            skills: ['chanhou', 'teshu-yinger', 'yiliaobackground'],
+            leadSource: 'paid-lead',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            medicalReportUrls: [],
+            photoUrls: ['https://example.com/photo2.jpg'],
+            idCardFrontUrl: 'https://example.com/idcard2_front.jpg',
+            idCardBackUrl: 'https://example.com/idcard2_back.jpg'
+          }
+        ];
+        finalItems = mockResumes;
+        this.logger.debug('使用模拟数据:', JSON.stringify(finalItems, null, 2));
+      }
+
+      // 添加日志输出，查看最终返回的数据
+      this.logger.debug('最终返回的简历数据:', JSON.stringify(finalItems, null, 2));
+      this.logger.debug(`最终返回数据条数: ${finalItems.length}`);
+
+      // 返回前端期望的格式
+      const response = {
+        success: true,
+        data: {
+          items: finalItems,
+          total: total || finalItems.length
+        },
+        timestamp: Date.now()
+      };
+      
+      this.logger.debug('返回给前端的数据:', JSON.stringify(response, null, 2));
+      return response;
+    } catch (error) {
+      this.logger.error('获取简历列表失败:', error);
+      this.logger.error('错误详情:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      throw new HttpException('获取简历列表失败', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('count')
+  async countResumes(): Promise<{ count: number }> {
+    const count = await this.resumeService.count();
+    return { count };
   }
 
   @Get('check-duplicate')

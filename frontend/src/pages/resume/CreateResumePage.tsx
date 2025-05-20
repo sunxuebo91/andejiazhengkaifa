@@ -40,6 +40,14 @@ const CreateResumePage = () => {
 
   return (
     <div className="resume-form">
+      {/* 在表单中添加简历ID字段 */}
+      {resumeId && (
+        <div className="resume-id">
+          <label>简历ID:</label>
+          <span>{resumeId}</span>
+        </div>
+      )}
+      
       <input 
         id="addressInput"
         value={address}

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ObjectId } from 'mongodb';
-import { Resume } from './models/resume.entity';
+import { Resume } from '../../models/resume.model';  // 使用正确的相对路径
 import { MongoRepository } from 'typeorm';
 
 @Injectable()
@@ -17,20 +17,45 @@ export class ResumeService {
 
   async create(resumeData: Partial<Resume>): Promise<Resume> {
     const newResume = this.resumeRepository.create(resumeData);
+    // 确保设置databaseId字段
+    if (newResume._id && !newResume.databaseId) {
+      newResume.databaseId = newResume._id.toString();
+    }
     return this.resumeRepository.save(newResume);
   }
 
+  // 在findAll方法中添加同样的处理逻辑
   async findAll(page = 1, pageSize = 10): Promise<{ items: Resume[]; total: number }> {
     try {
+      console.log('开始查询简历列表，页码:', page, '每页数量:', pageSize);
+      
       const [items, total] = await this.resumeRepository.findAndCount({
         skip: (page - 1) * pageSize,
         take: pageSize,
         order: { createdAt: 'DESC' },
       });
 
-      // 确保返回的是数组
+      // 确保每个简历对象都有databaseId字段
+      const processedItems = items.map(item => {
+        if (item._id && !item.databaseId) {
+          item.databaseId = item._id.toString();
+        }
+        return item;
+      });
+
+      console.log('数据库查询结果:', {
+        itemsCount: processedItems?.length,
+        total,
+        firstItem: processedItems?.[0] ? {
+          _id: processedItems[0]._id?.toString(),
+          databaseId: processedItems[0].databaseId,
+          name: processedItems[0].name,
+          phone: processedItems[0].phone
+        } : null
+      });
+
       return {
-        items: Array.isArray(items) ? items : [],
+        items: processedItems,
         total: total || 0
       };
     } catch (error) {
@@ -43,17 +68,42 @@ export class ResumeService {
   }
 
   async findOne(id: string): Promise<Resume> {
-    return this.resumeRepository.findOne({ where: { _id: new ObjectId(id) } });
+    try {
+      const resume = await this.resumeRepository.findOne({ where: { _id: new ObjectId(id) } });
+      return resume;
+    } catch (error) {
+      console.error('查找简历失败:', error);
+      return null;
+    }
   }
 
   async update(id: string, updateData: Partial<Resume>): Promise<Resume> {
-    await this.resumeRepository.update(id, updateData);
-    return this.findOne(id);
+    try {
+      await this.resumeRepository.update({ _id: new ObjectId(id) }, updateData);
+      return this.findOne(id);
+    } catch (error) {
+      console.error('更新简历失败:', error);
+      return null;
+    }
   }
 
   async remove(id: string): Promise<boolean> {
-    const result = await this.resumeRepository.delete(id);
-    return result.affected > 0;
+    try {
+      const result = await this.resumeRepository.delete({ _id: new ObjectId(id) });
+      return result.affected > 0;
+    } catch (error) {
+      console.error('删除简历失败:', error);
+      return false;
+    }
+  }
+
+  async count(): Promise<number> {
+    try {
+      return await this.resumeRepository.count();
+    } catch (error) {
+      console.error('获取简历数量失败:', error);
+      return 0;
+    }
   }
 
   async checkDuplicate(phone: string, idNumber?: string): Promise<{ duplicate: boolean; existingResume?: Resume }> {

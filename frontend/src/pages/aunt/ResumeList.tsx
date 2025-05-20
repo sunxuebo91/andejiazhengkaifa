@@ -49,7 +49,7 @@ const ResumeList = () => {
       // 记录搜索关键词用于前端过滤
       const searchKeyword = apiParams.keyword ? apiParams.keyword.toLowerCase() : '';
       
-      console.log('尝试连接API: /api/resumes');
+      console.log('开始请求简历列表，参数:', apiParams);
       // 使用相对路径，让Vite代理处理
       const response = await axios.get('/api/resumes', { 
         params: apiParams,
@@ -59,27 +59,36 @@ const ResumeList = () => {
           'Pragma': 'no-cache'
         }
       });
-      console.log('获取简历列表:', response.data);
+      console.log('获取简历列表响应:', response.data);
       
-      // 适配API返回的新格式
-      const resumes = response.data.success && response.data.data ? 
-        (response.data.data.items || []) : 
-        (Array.isArray(response.data) ? response.data : []);
+      // 使用后端返回的新格式
+      const { success, data } = response.data;
+      if (!success || !data) {
+        console.error('API返回数据格式错误:', response.data);
+        throw new Error('获取数据失败');
+      }
       
-      const totalCount = response.data.success && response.data.data ? 
-        (response.data.data.total || 0) : 
-        (resumes.length);
+      const { items: resumes = [], total: totalCount = 0 } = data;
+      console.log('解析后的简历数据:', { resumesCount: resumes.length, totalCount });
       
       // 格式化数据
-      let formattedData = resumes.map(resume => ({
-        ...resume,
-        // 使用ID的前8位字符
-        formattedId: resume.id ? 
-          resume.id.substring(0, 8).padEnd(8, '0') : 
-          '未知ID',
-        // 检查是否有体检报告
-        hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
-      }));
+      let formattedData = resumes.map(resume => {
+        console.log('处理简历数据:', resume);
+        return {
+          ...resume,
+          // 修改ID格式化逻辑
+          formattedId: resume.id ? 
+            (typeof resume.id === 'string' ? 
+              resume.id.substring(0, 8).padEnd(8, '0') : 
+              String(resume.id).substring(0, 8).padEnd(8, '0')
+            ) : 
+            '未知ID',
+          // 检查是否有体检报告
+          hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
+        };
+      });
+      
+      console.log('格式化后的数据:', formattedData);
       
       // 如果有搜索关键词，在前端进行过滤
       if (searchKeyword) {
@@ -88,7 +97,7 @@ const ResumeList = () => {
           return (
             (resume.name && resume.name.toLowerCase().includes(searchKeyword)) ||
             (resume.phone && resume.phone.includes(searchKeyword)) ||
-            (resume.idCard && resume.idCard.includes(searchKeyword)) ||
+            (resume.idNumber && resume.idNumber.includes(searchKeyword)) ||
             (resume.id && resume.id.toLowerCase().includes(searchKeyword)) ||
             (resume.formattedId && resume.formattedId.toLowerCase().includes(searchKeyword))
           );
@@ -100,9 +109,12 @@ const ResumeList = () => {
       }
       
       setResumeList(formattedData);
-      setTotal(totalCount); // 使用API返回的总数
+      setTotal(totalCount);
     } catch (error) {
       console.error('获取简历列表失败:', error);
+      if (error.response) {
+        console.error('错误响应:', error.response.data);
+      }
       messageApi.error('获取简历列表失败，请稍后重试');
     } finally {
       setLoading(false);
@@ -228,8 +240,11 @@ const ResumeList = () => {
       title: '简历ID',
       dataIndex: 'formattedId',
       key: 'formattedId',
+      width: 120,
       render: (text, record) => (
-        <a onClick={() => navigate(`/aunt/resume/${record.id}`)}>{text}</a>
+        <Tooltip title={`完整ID: ${record.id}`}>
+          <a onClick={() => navigate(`/aunt/resume/${record.id}`)}>{text}</a>
+        </Tooltip>
       ),
     },
     {

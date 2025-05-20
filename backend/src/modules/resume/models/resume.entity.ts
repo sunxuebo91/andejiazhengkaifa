@@ -1,8 +1,11 @@
-import { Entity, PrimaryColumn, Column } from 'typeorm';
+import { Entity, ObjectIdColumn, Column, ObjectId } from 'typeorm';
 
 @Entity('resumes')
 export class Resume {
-  @PrimaryColumn()
+  @ObjectIdColumn()
+  _id: ObjectId;
+
+  @Column()
   id: string;
 
   @Column()
@@ -97,4 +100,10 @@ export class Resume {
 
   @Column()
   updatedAt: Date;
+
+  constructor() {
+    if (this._id && !this.id) {
+      this.id = this._id.toString();
+    }
+  }
 }

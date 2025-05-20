@@ -29,11 +29,15 @@ const Dashboard: React.FC = () => {
         }
       });
 
+      // 适配API返回的新格式
+      const resumes = response.data.success && response.data.data ? 
+        (response.data.data.items || []) : 
+        (Array.isArray(response.data) ? response.data : []);
+
       // 当天的起始时间（零点）
       const todayStart = dayjs().startOf('day');
       
       // 分类统计
-      const resumes = response.data || [];
       const totalResumes = resumes.length;
       
       // 今日新增：创建时间在今天的简历

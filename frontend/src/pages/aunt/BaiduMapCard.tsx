@@ -133,8 +133,17 @@ const BaiduMapCard = memo(({ value, onChange }: BaiduMapCardProps) => {
 
   // 初始化地址自动完成
   const initializeAutocomplete = () => {
-    if (!isBaiduMapLoaded() || !inputRef.current || autocompleteRef.current) {
+    if (!isBaiduMapLoaded() || !inputRef.current) {
       return;
+    }
+    
+    // 如果已有实例，先清理
+    if (autocompleteRef.current) {
+      try {
+        autocompleteRef.current.dispose();
+      } catch (error) {
+        debugLog('清理旧自动完成实例出错:', error);
+      }
     }
     
     try {
@@ -231,18 +240,40 @@ const BaiduMapCard = memo(({ value, onChange }: BaiduMapCardProps) => {
 
   // 组件挂载时加载地图API
   useEffect(() => {
-    loadBaiduMapScript();
+    // 检查是否已加载API
+    if (!window.BMap && !document.getElementById('baidu-map-script')) {
+      loadBaiduMapScript();
+    } else if (window.BMap) {
+      initializeMap();
+    }
     
     // 组件卸载时清理
     return () => {
-      if (document.getElementById('baidu-map-script') && !window.BMap) {
-        document.getElementById('baidu-map-script')?.remove();
-        debugLog('百度地图API脚本已清理');
+      debugLog('组件卸载，执行清理');
+      
+      // 清理地图实例
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.clearOverlays();
+          mapInstanceRef.current.destroy();
+        } catch (error) {
+          debugLog('清理地图实例出错:', error);
+        }
+        mapInstanceRef.current = null;
       }
       
-      // 自动完成实例可能不需要手动销毁
-      autocompleteRef.current = null;
-      mapInstanceRef.current = null;
+      // 清理自动完成实例
+      if (autocompleteRef.current) {
+        try {
+          autocompleteRef.current.dispose();
+        } catch (error) {
+          debugLog('清理自动完成实例出错:', error);
+        }
+        autocompleteRef.current = null;
+      }
+      
+      // 清理全局回调
+      window.BMap_INITIAL_CALLBACK = undefined;
     };
   }, []);
 

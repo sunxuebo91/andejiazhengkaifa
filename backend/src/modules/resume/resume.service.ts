@@ -1,101 +1,122 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ObjectId } from 'mongodb';
 import { Resume } from './models/resume.entity';
+import { MongoRepository } from 'typeorm';
 
 @Injectable()
 export class ResumeService {
   constructor(
     @InjectRepository(Resume)
-    private resumeRepository: Repository<Resume>,
-  ) {}
+    private resumeRepository: MongoRepository<Resume>,
+  ) {
+    // 自动初始化测试数据
+    this.initializeTestData();
+  }
 
   async create(resumeData: Partial<Resume>): Promise<Resume> {
+    const newResume = this.resumeRepository.create(resumeData);
+    return this.resumeRepository.save(newResume);
+  }
+
+  async findAll(page = 1, pageSize = 10): Promise<{ items: Resume[]; total: number }> {
     try {
-      console.log('创建简历数据:', resumeData);
-      
-      // 生成唯一ID
-      const id = new ObjectId().toString();
-      console.log('生成的简历ID:', id);
-      
-      const resume = this.resumeRepository.create({
-        ...resumeData,
-        id, // 设置生成的ID
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const [items, total] = await this.resumeRepository.findAndCount({
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        order: { createdAt: 'DESC' },
       });
-      
-      console.log('准备保存简历:', resume);
-      const savedResume = await this.resumeRepository.save(resume);
-      console.log('简历创建成功:', savedResume);
-      return savedResume;
+
+      // 确保返回的是数组
+      return {
+        items: Array.isArray(items) ? items : [],
+        total: total || 0
+      };
     } catch (error) {
-      console.error('创建简历时出错:', error.stack);
-      throw error;
+      console.error('获取简历列表失败:', error);
+      return {
+        items: [],
+        total: 0
+      };
     }
   }
 
-  async update(id: string, resumeData: Partial<Resume>): Promise<Resume | null> {
-    if (resumeData.idCardFrontUrl || resumeData.idCardBackUrl || resumeData.photoUrls || resumeData.certificateUrls || resumeData.medicalReportUrls) {
-      // 文件 URL 相关的更新
+  async findOne(id: string): Promise<Resume> {
+    return this.resumeRepository.findOne({ where: { _id: new ObjectId(id) } });
+  }
+
+  async update(id: string, updateData: Partial<Resume>): Promise<Resume> {
+    await this.resumeRepository.update(id, updateData);
+    return this.findOne(id);
+  }
+
+  async remove(id: string): Promise<boolean> {
+    const result = await this.resumeRepository.delete(id);
+    return result.affected > 0;
+  }
+
+  async checkDuplicate(phone: string, idNumber?: string): Promise<{ duplicate: boolean; existingResume?: Resume }> {
+    const query: any = { phone };
+    if (idNumber) {
+      query.idNumber = idNumber;
     }
-    await this.resumeRepository.update({ id }, {
-      ...resumeData,
-      updatedAt: new Date(),
-    });
-    return await this.resumeRepository.findOneBy({ id });
+    
+    const existingResume = await this.resumeRepository.findOne({ where: query });
+    
+    if (existingResume) {
+      return { duplicate: true, existingResume };
+    } else {
+      return { duplicate: false };
+    }
   }
-
-  async remove(id: string): Promise<void> {
-    await this.resumeRepository.delete({ id });
-  }
-
-  async findOne(idOrCondition: string | Partial<Resume>): Promise<Resume | null> {
-    console.log(`正在查询简历:`, idOrCondition);
+  
+  // 添加初始化测试数据的方法
+  private async initializeTestData() {
     try {
-      let resume: Resume | null;
-      
-      if (typeof idOrCondition === 'string') {
-        resume = await this.resumeRepository.findOneBy({ id: idOrCondition } as FindOptionsWhere<Resume>);
-      } else {
-        // 将Partial<Resume>转换为FindOptionsWhere<Resume>
-        const conditions: FindOptionsWhere<Resume> = {};
-        Object.keys(idOrCondition).forEach(key => {
-          conditions[key] = idOrCondition[key];
-        });
-        resume = await this.resumeRepository.findOneBy(conditions);
+      // 检查是否有数据
+      const count = await this.resumeRepository.count();
+      if (count === 0) {
+        console.log('正在初始化测试简历数据...');
+        // 创建测试数据
+        const testResumes = [
+          {
+            name: '张三',
+            phone: '13800138001',
+            age: 28,
+            education: '大专',
+            nativePlace: '广东省广州市',
+            experienceYears: 3,
+            maritalStatus: 'married',
+            currentAddress: '深圳市南山区科技园',
+            jobType: 'zhujia-baomu',
+            skills: ['zhongcan', 'fushi'],
+            orderStatus: 'accepting',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            name: '李四',
+            phone: '13900139002',
+            age: 35,
+            education: '高中',
+            nativePlace: '湖南省长沙市',
+            experienceYears: 5,
+            maritalStatus: 'married',
+            currentAddress: '深圳市福田区莲花街道',
+            jobType: 'yuexin',
+            skills: ['teshu-yinger', 'yuying'],
+            orderStatus: 'accepting',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }
+        ];
+        
+        await this.resumeRepository.save(testResumes);
+        console.log('测试简历数据初始化完成');
       }
-      
-      if (!resume) {
-        console.log(`未找到符合条件的简历`);
-        return null;
-      }
-      return resume;
     } catch (error) {
-      console.error(`查询简历时出错:`, error.stack);
-      return null;
-    }
-  }
-
-  async findAll(): Promise<Resume[]> {
-    console.log('获取所有简历数据');
-    try {
-      const resumes = await this.resumeRepository.find();
-      console.log(`找到 ${resumes.length} 条简历记录`);
-      
-      // 打印ID信息
-      if (resumes.length > 0) {
-        console.log('简历ID示例:');
-        resumes.slice(0, 3).forEach((resume, index) => {
-          console.log(`[${index}] ID: ${resume.id}`);
-        });
-      }
-      
-      return resumes;
-    } catch (error) {
-      console.error('获取所有简历时出错:', error);
-      return [];
+      console.error('初始化测试数据失败:', error);
     }
   }
 }

@@ -1,4 +1,4 @@
-import { dataSource } from '../typeorm.config';
+import dataSource from '../typeorm.config';
 import { Resume } from '../modules/resume/models/resume.entity';
 import * as dotenv from 'dotenv';
 

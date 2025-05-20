@@ -61,8 +61,17 @@ const ResumeList = () => {
       });
       console.log('获取简历列表:', response.data);
       
+      // 适配API返回的新格式
+      const resumes = response.data.success && response.data.data ? 
+        (response.data.data.items || []) : 
+        (Array.isArray(response.data) ? response.data : []);
+      
+      const totalCount = response.data.success && response.data.data ? 
+        (response.data.data.total || 0) : 
+        (resumes.length);
+      
       // 格式化数据
-      let formattedData = response.data.map(resume => ({
+      let formattedData = resumes.map(resume => ({
         ...resume,
         // 使用ID的前8位字符
         formattedId: resume.id ? 
@@ -91,7 +100,7 @@ const ResumeList = () => {
       }
       
       setResumeList(formattedData);
-      setTotal(formattedData.length); // 更新为过滤后的总数
+      setTotal(totalCount); // 使用API返回的总数
     } catch (error) {
       console.error('获取简历列表失败:', error);
       messageApi.error('获取简历列表失败，请稍后重试');

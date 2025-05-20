@@ -1,3 +1,9 @@
+/**
+ * 注意：此文件已不再使用！
+ * 当前应用使用NestJS框架，入口文件为src/main.ts
+ * 请使用`npm run start:dev`启动应用
+ */
+
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');

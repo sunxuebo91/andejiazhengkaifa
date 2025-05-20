@@ -1,3 +1,8 @@
+/**
+ * 注意：此文件已不再使用！
+ * 当前应用使用NestJS框架，相关功能已移至src/modules/resume目录
+ */
+
 const express = require('express');
 const multer = require('multer');
 const path = require('path');

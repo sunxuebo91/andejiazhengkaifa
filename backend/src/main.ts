@@ -12,15 +12,28 @@ if (!fs.existsSync(logDir)) {
 
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { ApiResponseInterceptor } from './common/interceptors/api-response.interceptor';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
+  
+  // 启用路由日志
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+  });
+  
+  const configService = app.get(ConfigService);
+  console.log('BAIDU_OCR_APP_ID:', configService.get('BAIDU_OCR_APP_ID'));
 
   // 增加错误处理中间件
   app.use((err, req, res, next) => {
@@ -36,11 +49,17 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // 设置全局前缀
+  // 设置API前缀
   app.setGlobalPrefix('api');
 
-  // 设置静态资源目录
+  // 设置全局响应拦截器和异常过滤器
+  app.useGlobalInterceptors(new ApiResponseInterceptor());
+  app.useGlobalFilters(new HttpExceptionFilter());
+
+  // 设置静态资源目录和文件上传中间件
   app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // 启用全局验证管道
   app.useGlobalPipes(new ValidationPipe({
@@ -48,16 +67,27 @@ async function bootstrap() {
     transform: true, // 自动类型转换
   }));
 
+  // 配置Swagger API文档
+  const config = new DocumentBuilder()
+    .setTitle('安德家政API')
+    .setDescription('安德家政系统API文档')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
+
   // 配置文件上传限制
   app.use((req, res, next) => {
     req.setTimeout(300000); // 5分钟超时
     next();
   });
 
-  const port = process.env.PORT || 3001; // 使用端口3001
+  const port = process.env.PORT || 3000; // 使用端口3000
   try {
     await app.listen(port, '0.0.0.0');
     console.log(`应用程序正在运行，端口: ${port}`);
+    console.log(`Swagger文档: http://localhost:${port}/api/docs`);
   } catch (error) {
     console.error('启动失败:', error.message);
     process.exit(1);

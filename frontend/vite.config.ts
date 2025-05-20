@@ -15,7 +15,7 @@ export default defineConfig({
       },
       // 后端API代理
       '/api': {
-        target: 'http://localhost:3001', // 后端服务器
+        target: 'http://localhost:3000', // 后端服务器
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path

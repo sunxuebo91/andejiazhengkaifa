@@ -137,7 +137,7 @@ export class ResumeController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string): Promise<void> {
+  async remove(@Param('id') id: string): Promise<boolean> {
     return this.resumeService.remove(id);
   }
 
@@ -161,8 +161,8 @@ export class ResumeController {
   }
 
   @Get()
-  async findAll(): Promise<Resume[]> {
-    return this.resumeService.findAll();
+  async findAll(@Query('page') page?: number, @Query('pageSize') pageSize?: number): Promise<{ items: Resume[]; total: number }> {
+    return this.resumeService.findAll(page, pageSize);
   }
 
   @Get('check-duplicate')
@@ -177,36 +177,14 @@ export class ResumeController {
         };
       }
 
-      // 构建查询条件
-      const queryConditions = [];
-      let duplicatePhone = false;
-      let duplicateIdNumber = false;
-
-      // 如果提供了手机号，添加手机号查询条件
-      if (phone) {
-        const phoneResult = await this.resumeService.findOne({ phone });
-        duplicatePhone = !!phoneResult;
-        if (duplicatePhone) {
-          console.log('发现重复手机号:', phone);
-        }
-      }
-
-      // 如果提供了身份证号，添加身份证号查询条件
-      if (idNumber) {
-        const idNumberResult = await this.resumeService.findOne({ idNumber });
-        duplicateIdNumber = !!idNumberResult;
-        if (duplicateIdNumber) {
-          console.log('发现重复身份证号:', idNumber);
-        }
-      }
-
-      // 返回查重结果
+      // 使用checkDuplicate方法进行查重
+      let result = await this.resumeService.checkDuplicate(phone, idNumber);
+      
       return {
-        duplicate: duplicatePhone || duplicateIdNumber,
-        duplicatePhone,
-        duplicateIdNumber,
-        message: (duplicatePhone || duplicateIdNumber) ? 
-          '发现重复数据，请勿重复提交' : '未发现重复数据'
+        duplicate: result.duplicate,
+        duplicatePhone: phone && result.duplicate,
+        duplicateIdNumber: idNumber && result.duplicate,
+        message: result.duplicate ? '发现重复数据，请勿重复提交' : '未发现重复数据'
       };
     } catch (error) {
       console.error('查重检查失败:', error);

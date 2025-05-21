@@ -1,18 +1,27 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, ObjectIdColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { ResumeEntity } from '../modules/resume/models/resume.entity';  // 导入实体类
 import { ObjectId } from 'mongodb';
 
 @Entity('resumes')
-export class Resume {
-  @PrimaryGeneratedColumn()
-  id: number;
-
-  // MongoDB的_id字段
+export class Resume extends ResumeEntity {  // 继承实体类
+  @ObjectIdColumn()
   _id: ObjectId;
 
-  // 基本信息
-  @Column({ type: 'string', unique: true, nullable: true })
-  databaseId: string;  // 新增字段用于存储MongoDB的_id
+  @Column()
+  id: string;  // 添加id字段定义
 
+  // 数据库ID（新增字段用于存储MongoDB的_id）
+  @Column({ type: 'string', unique: true, nullable: true })
+  databaseId?: string;  // 改为可选字段
+
+  constructor() {
+    super();  // 调用父类构造函数
+    if (this._id && !this.id) {
+      this.id = this._id.toString();
+    }
+  }
+
+  // 基本信息
   @Column()
   name: string;
 
@@ -120,3 +129,6 @@ export class Resume {
  *    - 照片: photoUrls[]
  * 3. 所有文件存储路径格式: /uploads/resumes/:id/filename.ext
  */
+
+// 显式导出ResumeEntity
+export { ResumeEntity } from '../modules/resume/models/resume.entity';

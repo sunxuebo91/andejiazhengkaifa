@@ -22,9 +22,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
-  });
+  const app = await NestFactory.create(AppModule);
   
   // 启用路由日志
   app.use((req, res, next) => {
@@ -69,13 +67,84 @@ async function bootstrap() {
 
   // 配置Swagger API文档
   const config = new DocumentBuilder()
-    .setTitle('安德家政API')
-    .setDescription('安德家政系统API文档')
+    .setTitle('安得家政CRM')
+    .setDescription(`
+# 安得家政CRM系统API文档
+
+## 系统概述
+本系统提供家政服务人员管理、简历管理、文件上传等功能。
+
+## 主要功能
+- 简历管理：创建、查询、更新、删除家政服务人员简历
+- 文件上传：支持上传身份证、证书、体检报告等文件
+- 健康检查：系统运行状态监控
+
+## 认证方式
+所有API接口（除健康检查外）都需要通过Bearer Token进行认证。
+
+## 响应格式
+所有API响应都遵循统一的格式：
+\`\`\`json
+{
+  "success": true,
+  "data": {},
+  "message": "操作成功",
+  "timestamp": 1626342025123
+}
+\`\`\`
+
+## 错误处理
+当发生错误时，响应格式为：
+\`\`\`json
+{
+  "success": false,
+  "message": "错误信息",
+  "error": {
+    "code": "错误代码",
+    "details": "详细错误信息"
+  },
+  "timestamp": 1626342025123
+}
+\`\`\`
+    `)
     .setVersion('1.0')
-    .addBearerAuth()
+    .addTag('简历管理', '家政服务人员简历的增删改查')
+    .addTag('文件上传', '文件上传和管理相关接口')
+    .addTag('系统管理', '系统运行状态和配置管理')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: '输入JWT token',
+        in: 'header',
+      },
+      'access-token',
+    )
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('api/docs', app, document, {
+    customSiteTitle: '安得家政CRM API文档',
+    customfavIcon: '/favicon.ico',
+    customJs: [
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.min.js',
+    ],
+    customCssUrl: [
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
+    ],
+    swaggerOptions: {
+      persistAuthorization: true,
+      docExpansion: 'none',
+      filter: true,
+      showExtensions: true,
+      showCommonExtensions: true,
+      syntaxHighlight: {
+        activate: true,
+        theme: 'monokai',
+      },
+    },
+  });
 
   // 配置文件上传限制
   app.use((req, res, next) => {
@@ -83,7 +152,7 @@ async function bootstrap() {
     next();
   });
 
-  const port = process.env.PORT || 3000; // 修改为使用端口3000
+  const port = 3000; // 强制使用端口3000
   try {
     await app.listen(port, '0.0.0.0');
     console.log(`应用程序正在运行，端口: ${port}`);

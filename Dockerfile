@@ -22,7 +22,7 @@ RUN cd frontend && npm run build
 RUN cd backend && npm run build
 
 # 暴露端口
-EXPOSE 3001
+EXPOSE 3000
 
 # 启动命令
 CMD ["node", "backend/dist/main.js"]

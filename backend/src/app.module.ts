@@ -11,11 +11,14 @@ import { AppService } from './app.service';
 
 @Module({
   imports: [
-    OcrModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    TypeOrmModule.forRoot(dataSourceOptions),
+    TypeOrmModule.forRoot({
+      ...dataSourceOptions,
+      autoLoadEntities: true,
+    }),
+    OcrModule,
     ResumeModule,
     UploadModule,
     HealthModule,

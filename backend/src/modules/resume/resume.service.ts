@@ -2,42 +2,54 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ObjectId } from 'mongodb';
-import { Resume } from '../../models/resume.model';  // 使用正确的相对路径
+import { ResumeEntity } from './models/resume.entity';  // 修正导入路径
 import { MongoRepository } from 'typeorm';
 
 @Injectable()
 export class ResumeService {
   constructor(
-    @InjectRepository(Resume)
-    private resumeRepository: MongoRepository<Resume>,
+    @InjectRepository(ResumeEntity)
+    private resumeRepository: Repository<ResumeEntity>,
   ) {
     // 自动初始化测试数据
     this.initializeTestData();
   }
 
-  async create(resumeData: Partial<Resume>): Promise<Resume> {
+  async create(resumeData: Partial<ResumeEntity>): Promise<ResumeEntity> {
     const newResume = this.resumeRepository.create(resumeData);
-    // 确保设置databaseId字段
-    if (newResume._id && !newResume.databaseId) {
+    // 确保设置 id 字段为 _id 的字符串形式
+    if (newResume._id) {
+      newResume.id = newResume._id.toString();
       newResume.databaseId = newResume._id.toString();
     }
     return this.resumeRepository.save(newResume);
   }
 
   // 在findAll方法中添加同样的处理逻辑
-  async findAll(page = 1, pageSize = 10): Promise<{ items: Resume[]; total: number }> {
+  async findAll(page = 1, pageSize = 10, search?: string): Promise<{ items: ResumeEntity[]; total: number }> {
     try {
-      console.log('开始查询简历列表，页码:', page, '每页数量:', pageSize);
+      console.log('开始查询简历列表，页码:', page, '每页数量:', pageSize, '搜索关键词:', search);
+      
+      const query: any = {};
+      if (search) {
+        query.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } },
+          { nativePlace: { $regex: search, $options: 'i' } }
+        ];
+      }
       
       const [items, total] = await this.resumeRepository.findAndCount({
+        where: query,
         skip: (page - 1) * pageSize,
         take: pageSize,
         order: { createdAt: 'DESC' },
       });
 
-      // 确保每个简历对象都有databaseId字段
+      // 确保每个简历对象都有正确的 id 字段
       const processedItems = items.map(item => {
-        if (item._id && !item.databaseId) {
+        if (item._id) {
+          item.id = item._id.toString();
           item.databaseId = item._id.toString();
         }
         return item;
@@ -48,6 +60,7 @@ export class ResumeService {
         total,
         firstItem: processedItems?.[0] ? {
           _id: processedItems[0]._id?.toString(),
+          id: processedItems[0].id,
           databaseId: processedItems[0].databaseId,
           name: processedItems[0].name,
           phone: processedItems[0].phone
@@ -67,7 +80,7 @@ export class ResumeService {
     }
   }
 
-  async findOne(id: string): Promise<Resume> {
+  async findOne(id: string): Promise<ResumeEntity> {
     try {
       const resume = await this.resumeRepository.findOne({ where: { _id: new ObjectId(id) } });
       return resume;
@@ -77,7 +90,7 @@ export class ResumeService {
     }
   }
 
-  async update(id: string, updateData: Partial<Resume>): Promise<Resume> {
+  async update(id: string, updateData: Partial<ResumeEntity>): Promise<ResumeEntity> {
     try {
       await this.resumeRepository.update({ _id: new ObjectId(id) }, updateData);
       return this.findOne(id);
@@ -106,7 +119,7 @@ export class ResumeService {
     }
   }
 
-  async checkDuplicate(phone: string, idNumber?: string): Promise<{ duplicate: boolean; existingResume?: Resume }> {
+  async checkDuplicate(phone: string, idNumber?: string): Promise<{ duplicate: boolean; existingResume?: ResumeEntity }> {
     const query: any = { phone };
     if (idNumber) {
       query.idNumber = idNumber;

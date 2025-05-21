@@ -1,5 +1,5 @@
 import dataSource from '../typeorm.config';
-import { Resume } from '../modules/resume/models/resume.entity';
+import ResumeEntity from '../modules/resume/models/resume.entity';  // 使用默认导出
 import * as dotenv from 'dotenv';
 
 // 加载环境变量
@@ -12,7 +12,7 @@ async function queryDatabase() {
     console.log('成功连接到数据库');
     
     // 使用 TypeORM Repository 查询数据
-    const resumeRepository = dataSource.getRepository(Resume);
+    const resumeRepository = dataSource.getRepository(ResumeEntity);
     const resumes = await resumeRepository.find({
       order: { createdAt: 'DESC' },
       take: 10
@@ -28,6 +28,16 @@ async function queryDatabase() {
       console.log(`照片数量: ${resume.photoUrls ? resume.photoUrls.length : 0}`);
       console.log(`证书数量: ${resume.certificateUrls ? resume.certificateUrls.length : 0}`);
       console.log(`体检报告数量: ${resume.medicalReportUrls ? resume.medicalReportUrls.length : 0}`);
+      console.log(`工作经历数量: ${resume.workExperience ? resume.workExperience.length : 0}`);
+      if (resume.workExperience && resume.workExperience.length > 0) {
+        console.log('工作经历详情:');
+        resume.workExperience.forEach((exp, i) => {
+          console.log(`  经历 ${i + 1}:`);
+          console.log(`    开始时间: ${exp.startDate || '未提供'}`);
+          console.log(`    结束时间: ${exp.endDate || '未提供'}`);
+          console.log(`    工作描述: ${exp.description || '未提供'}`);
+        });
+      }
       console.log(`创建时间: ${resume.createdAt}`);
     });
   } catch (error) {

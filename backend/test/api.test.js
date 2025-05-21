@@ -11,7 +11,7 @@ const https = require('https');
 const url = require('url');
 
 // 配置
-const API_BASE_URL = 'http://localhost:3001';
+const API_BASE_URL = 'http://localhost:3000';
 
 // 测试结果统计
 let passCount = 0;

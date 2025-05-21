@@ -223,11 +223,16 @@ const ResumeDetail = () => {
       const response = await axios.get(`/api/resumes/${id}`);
       console.log('原始API响应:', response);
 
-      // 获取简历数据
-      let resumeData = response.data;
-      if (typeof resumeData === 'string') {
-        resumeData = JSON.parse(resumeData);
+      // 检查响应格式
+      if (!response.data.success) {
+        console.error('API返回错误:', response.data.message);
+        message.error(response.data.message || '获取简历详情失败');
+        return;
       }
+
+      // 获取简历数据
+      const resumeData = response.data.data;
+      console.log('获取到的简历数据:', resumeData);
 
       // 处理工作经验数据
       const formattedWorkExperience = formatWorkExperiences(resumeData);

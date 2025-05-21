@@ -1,5 +1,5 @@
 import { DataSource, DataSourceOptions } from 'typeorm';
-import { Resume } from './modules/resume/models/resume.entity';
+import { ResumeEntity } from './modules/resume/models/resume.entity';
 import * as dotenv from 'dotenv';
 import * as process from 'process';
 
@@ -8,9 +8,9 @@ dotenv.config();
 export const dataSourceOptions: DataSourceOptions = {
   type: 'mongodb',
   host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '27018', 10),
+  port: parseInt(process.env.DB_PORT || '27017', 10),
   database: process.env.DB_NAME || 'housekeeping',
-  entities: [Resume],
+  entities: [ResumeEntity],
   synchronize: process.env.NODE_ENV === 'development',
   logging: ['error', 'warn', 'info'],
   connectTimeoutMS: 10000,

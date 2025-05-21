@@ -1,12 +1,15 @@
 import { Entity, ObjectIdColumn, Column, ObjectId } from 'typeorm';
 
 @Entity('resumes')
-export class Resume {
+export class ResumeEntity {
   @ObjectIdColumn()
   _id: ObjectId;
 
   @Column()
   id: string;
+
+  @Column({ type: 'string', nullable: true })
+  databaseId?: string;
 
   @Column()
   name: string;
@@ -107,3 +110,5 @@ export class Resume {
     }
   }
 }
+
+export default ResumeEntity;

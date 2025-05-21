@@ -1,7 +1,7 @@
 {
   "name": "andejiazhengkaifa",
   "version": "1.0.0",
-  "description": "安德家政系统开发项目",
+  "description": "安得家政CRM系统开发项目",
   "scripts": {
     "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
     "dev:frontend": "cd frontend && npm run dev",
@@ -10,10 +10,21 @@
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build",
     "build": "npm run build:frontend && npm run build:backend",
-    "start": "cd backend && npm run start:prod"
+    "start": "cd backend && npm run start:prod",
+    "docs:update": "node scripts/update-docs.js",
+    "postcommit": "npm run docs:update",
+    "prepush": "npm run docs:update"
   },
   "devDependencies": {
     "@types/node": "^22.15.17",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "husky": "^8.0.0",
+    "moment": "^2.29.4"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "npm run docs:update",
+      "pre-push": "npm run docs:update"
+    }
   }
 }

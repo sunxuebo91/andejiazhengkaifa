@@ -1,12 +1,15 @@
 import { Controller, Get, Post, Body, Param, UsePipes, ValidationPipe, UploadedFile, UseInterceptors, Put, Delete, UploadedFiles, Logger, Query, InternalServerErrorException, HttpException, HttpStatus } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ResumeService } from './resume.service';
-import { Resume } from './models/resume.entity';
+import ResumeEntity from './models/resume.entity';  // 使用默认导出
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { Express } from 'express';
 import { ObjectId } from 'mongodb';
 import { UploadService } from '../upload/upload.service';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('简历管理')
+@ApiBearerAuth()
 @Controller('resumes')
 export class ResumeController {
   private readonly logger = new Logger(ResumeController.name);
@@ -17,6 +20,9 @@ export class ResumeController {
   ) {}
 
   @Post()
+  @ApiOperation({ summary: '创建新简历', description: '创建一个新的家政服务人员简历' })
+  @ApiResponse({ status: 201, description: '简历创建成功' })
+  @ApiResponse({ status: 400, description: '请求参数错误' })
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'idCardFront', maxCount: 1 },
     { name: 'idCardBack', maxCount: 1 },
@@ -51,7 +57,7 @@ export class ResumeController {
       certificateFiles?: Express.Multer.File[],
       medicalReportFiles?: Express.Multer.File[],
     },
-  ): Promise<Resume> {
+  ): Promise<ResumeEntity> {
     this.logger.debug('接收到的 DTO:', createResumeDto);
     this.logger.debug('接收到的文件:', files);
 
@@ -127,135 +133,84 @@ export class ResumeController {
   }
 
   @Put(':id')
+  @ApiOperation({ summary: '更新简历', description: '更新指定ID的简历信息' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '更新成功' })
+  @ApiResponse({ status: 404, description: '简历不存在' })
   @UseInterceptors(FileInterceptor('file'))
   @UsePipes(new ValidationPipe())
   async update(
     @Param('id') id: string,
     @Body() updateResumeDto: CreateResumeDto,
-  ): Promise<Resume | null> {
+  ): Promise<ResumeEntity | null> {
     return this.resumeService.update(id, updateResumeDto);
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: '删除简历', description: '删除指定ID的简历' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '删除成功' })
+  @ApiResponse({ status: 404, description: '简历不存在' })
   async remove(@Param('id') id: string): Promise<boolean> {
     return this.resumeService.remove(id);
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<Resume | { message: string }> {
+  @ApiOperation({ summary: '获取单个简历', description: '根据ID获取单个简历的详细信息' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  @ApiResponse({ status: 404, description: '简历不存在' })
+  async findOne(@Param('id') id: string) {
     this.logger.debug(`接收到获取简历请求，ID: ${id}`);
     try {
       const resume = await this.resumeService.findOne(id);
       
       if (!resume) {
         this.logger.warn(`未找到ID为 ${id} 的简历`);
-        return { message: `未找到ID为 ${id} 的简历` };
+        return {
+          success: false,
+          message: `未找到ID为 ${id} 的简历`,
+          timestamp: Date.now()
+        };
       }
       
       this.logger.debug(`返回简历数据: ${JSON.stringify(resume)}`);
-      return resume;
+      return {
+        success: true,
+        data: resume,
+        timestamp: Date.now()
+      };
     } catch (error) {
       this.logger.error(`获取简历时发生错误: ${error.message}`);
-      throw error;
+      return {
+        success: false,
+        message: '获取简历失败',
+        error: {
+          code: 'RESUME_FETCH_ERROR',
+          details: error.message
+        },
+        timestamp: Date.now()
+      };
     }
   }
 
   @Get()
-  async findAll(@Query('page') page?: number, @Query('pageSize') pageSize?: number): Promise<{ success: boolean; data: { items: Resume[]; total: number }; timestamp: number }> {
-    try {
-      this.logger.debug(`开始获取简历列表，页码: ${page}, 每页数量: ${pageSize}`);
-      
-      // 获取实际数据
-      const { items, total } = await this.resumeService.findAll(page, pageSize);
-      
-      // 添加日志输出，查看具体数据
-      this.logger.debug('数据库返回的简历数据:', JSON.stringify(items, null, 2));
-      this.logger.debug(`数据库返回数据条数: ${items.length}, 总数: ${total}`);
-      
-      // 如果没有数据，添加两条模拟数据
-      let finalItems = items;
-      if (items.length === 0) {
-        this.logger.debug('数据库中没有数据，使用模拟数据');
-        const mockResumes = [
-          {
-            _id: new ObjectId(),
-            id: 'mock1',
-            name: '张阿姨',
-            phone: '13800138001',
-            age: 45,
-            gender: 'female',
-            nativePlace: '河南省郑州市',
-            orderStatus: 'accepting',
-            education: 'middle',
-            experienceYears: 5,
-            jobType: 'yuying',
-            expectedSalary: 8000,
-            serviceArea: '郑州市金水区',
-            skills: ['yuying', 'zaojiao', 'fushi'],
-            leadSource: 'referral',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            medicalReportUrls: ['https://example.com/medical1.pdf'],
-            photoUrls: ['https://example.com/photo1.jpg'],
-            idCardFrontUrl: 'https://example.com/idcard1_front.jpg',
-            idCardBackUrl: 'https://example.com/idcard1_back.jpg'
-          },
-          {
-            _id: new ObjectId(),
-            id: 'mock2',
-            name: '李阿姨',
-            phone: '13900139002',
-            age: 42,
-            gender: 'female',
-            nativePlace: '山东省济南市',
-            orderStatus: 'not-accepting',
-            education: 'high',
-            experienceYears: 8,
-            jobType: 'chanhou',
-            expectedSalary: 10000,
-            serviceArea: '济南市历下区',
-            skills: ['chanhou', 'teshu-yinger', 'yiliaobackground'],
-            leadSource: 'paid-lead',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            medicalReportUrls: [],
-            photoUrls: ['https://example.com/photo2.jpg'],
-            idCardFrontUrl: 'https://example.com/idcard2_front.jpg',
-            idCardBackUrl: 'https://example.com/idcard2_back.jpg'
-          }
-        ];
-        finalItems = mockResumes;
-        this.logger.debug('使用模拟数据:', JSON.stringify(finalItems, null, 2));
-      }
-
-      // 添加日志输出，查看最终返回的数据
-      this.logger.debug('最终返回的简历数据:', JSON.stringify(finalItems, null, 2));
-      this.logger.debug(`最终返回数据条数: ${finalItems.length}`);
-
-      // 返回前端期望的格式
-      const response = {
-        success: true,
-        data: {
-          items: finalItems,
-          total: total || finalItems.length
-        },
-        timestamp: Date.now()
-      };
-      
-      this.logger.debug('返回给前端的数据:', JSON.stringify(response, null, 2));
-      return response;
-    } catch (error) {
-      this.logger.error('获取简历列表失败:', error);
-      this.logger.error('错误详情:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
-      throw new HttpException('获取简历列表失败', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
+  @ApiOperation({ summary: '获取简历列表', description: '获取所有简历信息，支持分页和筛选' })
+  @ApiQuery({ name: 'page', required: false, description: '页码，从1开始' })
+  @ApiQuery({ name: 'limit', required: false, description: '每页数量' })
+  @ApiQuery({ name: 'search', required: false, description: '搜索关键词' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('search') search?: string,
+  ) {
+    return this.resumeService.findAll(page, limit, search);
   }
 
   @Get('count')
+  @ApiOperation({ summary: '获取简历总数', description: '获取系统中的简历总数' })
+  @ApiResponse({ status: 200, description: '获取成功' })
   async countResumes(): Promise<{ count: number }> {
     const count = await this.resumeService.count();
     return { count };

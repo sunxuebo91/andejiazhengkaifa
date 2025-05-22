@@ -356,8 +356,17 @@ const CreateResume = () => {
             }
 
             if (words_result.住址?.words) {
-              formValues.currentAddress = words_result.住址.words;
-              formValues.hukouAddress = words_result.住址.words;
+              const address = words_result.住址.words;
+              formValues.currentAddress = address;
+              formValues.hukouAddress = address;
+              
+              // 从住址中提取省份信息
+              for (const province of provinces) {
+                if (address.startsWith(province)) {
+                  formValues.nativePlace = province;
+                  break;
+                }
+              }
             }
 
             // Update form with extracted values

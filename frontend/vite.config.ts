@@ -9,7 +9,7 @@ export default defineConfig({
     proxy: {
       // 后端API代理
       '/api': {
-        target: 'http://localhost:3000', // 修改为使用端口3000
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path

@@ -28,7 +28,11 @@ interface AppProps {
 
 const LoadingComponent = () => (
   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-    <Spin size="large" tip="加载中..." />
+    <Spin size="large">
+      <div style={{ padding: '50px', background: 'rgba(0, 0, 0, 0.05)' }}>
+        加载中...
+      </div>
+    </Spin>
   </div>
 );
 

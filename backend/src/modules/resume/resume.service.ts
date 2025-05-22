@@ -1,46 +1,47 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, MongoRepository } from 'typeorm';
 import { ObjectId } from 'mongodb';
 import { ResumeEntity } from './models/resume.entity';  // 修正导入路径
-import { MongoRepository } from 'typeorm';
 
 @Injectable()
 export class ResumeService {
   constructor(
     @InjectRepository(ResumeEntity)
-    private resumeRepository: Repository<ResumeEntity>,
+    private resumeRepository: MongoRepository<ResumeEntity>,
   ) {
     // 自动初始化测试数据
     this.initializeTestData();
   }
 
   async create(resumeData: Partial<ResumeEntity>): Promise<ResumeEntity> {
-    const newResume = this.resumeRepository.create(resumeData);
-    // 确保设置 id 字段为 _id 的字符串形式
-    if (newResume._id) {
-      newResume.id = newResume._id.toString();
-      newResume.databaseId = newResume._id.toString();
+    try {
+      const newResume = this.resumeRepository.create(resumeData);
+      return await this.resumeRepository.save(newResume);
+    } catch (error) {
+      console.error('创建简历失败:', error);
+      throw new Error(`创建简历失败: ${error.message || '未知错误'}`);
     }
-    return this.resumeRepository.save(newResume);
   }
 
-  // 在findAll方法中添加同样的处理逻辑
   async findAll(page = 1, pageSize = 10, search?: string): Promise<{ items: ResumeEntity[]; total: number }> {
     try {
       console.log('开始查询简历列表，页码:', page, '每页数量:', pageSize, '搜索关键词:', search);
       
       const skip = (page - 1) * pageSize;
-      const query: any = {};
       
+      // 构建 MongoDB 查询条件
+      const query: any = {};
       if (search) {
         query.$or = [
           { name: { $regex: search, $options: 'i' } },
           { phone: { $regex: search, $options: 'i' } },
-          { nativePlace: { $regex: search, $options: 'i' } }
+          { nativePlace: { $regex: search, $options: 'i' } },
+          { idNumber: { $regex: search, $options: 'i' } }
         ];
       }
       
+      // 使用 MongoDB 原生查询方法
       const [items, total] = await Promise.all([
         this.resumeRepository.find({
           where: query,
@@ -48,67 +49,64 @@ export class ResumeService {
           take: pageSize,
           order: { createdAt: 'DESC' }
         }),
-        this.resumeRepository.count({ where: query })
+        this.resumeRepository.count(query)
       ]);
-
-      // 确保每个简历对象都有正确的 id 字段
-      const processedItems = items.map(item => {
-        if (item._id) {
-          item.id = item._id.toString();
-          item.databaseId = item._id.toString();
-        }
-        return item;
-      });
-
-      console.log('数据库查询结果:', {
-        itemsCount: processedItems?.length,
+      
+      console.log('查询成功:', {
         total,
-        firstItem: processedItems?.[0] ? {
-          _id: processedItems[0]._id?.toString(),
-          id: processedItems[0].id,
-          databaseId: processedItems[0].databaseId,
-          name: processedItems[0].name,
-          phone: processedItems[0].phone
-        } : null
+        currentPage: page,
+        pageSize,
+        itemsCount: items.length
       });
 
       return {
-        items: processedItems,
-        total: total || 0
+        items,
+        total
       };
     } catch (error) {
       console.error('获取简历列表失败:', error);
-      throw new Error(`获取简历列表失败: ${error.message}`);
+      throw new Error(`获取简历列表失败: ${error.message || '未知错误'}`);
     }
   }
 
   async findOne(id: string): Promise<ResumeEntity> {
     try {
       const resume = await this.resumeRepository.findOne({ where: { _id: new ObjectId(id) } });
+      if (!resume) {
+        throw new Error(`未找到ID为 ${id} 的简历`);
+      }
       return resume;
     } catch (error) {
       console.error('查找简历失败:', error);
-      return null;
+      throw error;
     }
   }
 
   async update(id: string, updateData: Partial<ResumeEntity>): Promise<ResumeEntity> {
     try {
-      await this.resumeRepository.update({ _id: new ObjectId(id) }, updateData);
-      return this.findOne(id);
+      const resume = await this.findOne(id);
+      if (!resume) {
+        throw new Error(`未找到ID为 ${id} 的简历`);
+      }
+      
+      Object.assign(resume, updateData);
+      return await this.resumeRepository.save(resume);
     } catch (error) {
       console.error('更新简历失败:', error);
-      return null;
+      throw error;
     }
   }
 
   async remove(id: string): Promise<boolean> {
     try {
       const result = await this.resumeRepository.delete({ _id: new ObjectId(id) });
-      return result.affected > 0;
+      if (result.affected === 0) {
+        throw new Error(`未找到ID为 ${id} 的简历`);
+      }
+      return true;
     } catch (error) {
       console.error('删除简历失败:', error);
-      return false;
+      throw error;
     }
   }
 

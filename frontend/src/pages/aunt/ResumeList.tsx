@@ -59,13 +59,20 @@ const ResumeList = () => {
           'Pragma': 'no-cache'
         }
       });
-      console.log('获取简历列表响应:', response.data);
       
-      // 使用后端返回的新格式
-      const { success, data } = response.data;
-      if (!success || !data) {
-        console.error('API返回数据格式错误:', response.data);
-        throw new Error('获取数据失败');
+      // 检查响应格式
+      if (!response.data || typeof response.data !== 'object') {
+        throw new Error('服务器返回数据格式错误');
+      }
+      
+      const { success, data, message } = response.data;
+      
+      if (!success) {
+        throw new Error(message || '获取数据失败');
+      }
+      
+      if (!data || !Array.isArray(data.items)) {
+        throw new Error('返回数据格式不正确');
       }
       
       const { items: resumes = [], total: totalCount = 0 } = data;
@@ -88,12 +95,9 @@ const ResumeList = () => {
         };
       });
       
-      console.log('格式化后的数据:', formattedData);
-      
       // 如果有搜索关键词，在前端进行过滤
       if (searchKeyword) {
         formattedData = formattedData.filter(resume => {
-          // 在多个字段中搜索关键词
           return (
             (resume.name && resume.name.toLowerCase().includes(searchKeyword)) ||
             (resume.phone && resume.phone.includes(searchKeyword)) ||
@@ -112,10 +116,33 @@ const ResumeList = () => {
       setTotal(totalCount);
     } catch (error) {
       console.error('获取简历列表失败:', error);
+      let errorMessage = '获取简历列表失败，请稍后重试';
+      
       if (error.response) {
-        console.error('错误响应:', error.response.data);
+        // 服务器返回了错误响应
+        const { data, status } = error.response;
+        console.error('错误响应:', { status, data });
+        
+        if (data && data.message) {
+          errorMessage = data.message;
+        } else if (status === 500) {
+          errorMessage = '服务器内部错误，请联系管理员';
+        } else if (status === 404) {
+          errorMessage = '请求的资源不存在';
+        } else if (status === 403) {
+          errorMessage = '没有权限访问该资源';
+        }
+      } else if (error.request) {
+        // 请求已发出但没有收到响应
+        errorMessage = '服务器无响应，请检查网络连接';
+      } else if (error.message) {
+        // 请求配置出错
+        errorMessage = error.message;
       }
-      messageApi.error('获取简历列表失败，请稍后重试');
+      
+      messageApi.error(errorMessage);
+      setResumeList([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }

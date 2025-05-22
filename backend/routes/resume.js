@@ -75,13 +75,43 @@ router.post('/', async (req, res, next) => {
 router.get('/', async (req, res) => {
   try {
     const Resume = require('../models/Resume');
-    const resumes = await Resume.find().sort({ createdAt: -1 });
-    res.json(resumes);
+    const { page = 1, pageSize = 10, search } = req.query;
+    const skip = (page - 1) * pageSize;
+    
+    // 构建查询条件
+    const query = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { idNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    // 获取总数和分页数据
+    const [total, items] = await Promise.all([
+      Resume.countDocuments(query),
+      Resume.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(pageSize))
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        items,
+        total
+      },
+      message: '获取简历列表成功'
+    });
   } catch (error) {
     console.error('获取简历列表失败:', error);
     res.status(500).json({ 
+      success: false,
       message: '获取简历列表失败', 
-      error: error.message 
+      error: error.message,
+      data: null
     });
   }
 });

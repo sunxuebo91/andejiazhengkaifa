@@ -1,8 +1,8 @@
 export const cosConfig = {
-  SecretId: process.env.COS_SECRET_ID || 'AKIDjNmxrVs53we6JG0VllVzDArIcppZ9UZN',
-  SecretKey: process.env.COS_SECRET_KEY || 'czCML4XrwlJadYDcldFeojOmumPmsiJe',
-  Bucket: process.env.COS_BUCKET || 'housekeeping-1234567890', // 需要替换为实际的存储桶名称
-  Region: process.env.COS_REGION || 'ap-guangzhou', // 需要替换为实际的地域
+  SecretId: process.env.COS_SECRET_ID,
+  SecretKey: process.env.COS_SECRET_KEY,
+  Bucket: process.env.COS_BUCKET,
+  Region: process.env.COS_REGION,
   maxFileSize: 5 * 1024 * 1024, // 5MB
   allowedImageTypes: ['image/jpeg', 'image/png', 'application/json'], // 已扩展支持JSON
   allowedFileTypes: ['image/jpeg', 'image/png', 'application/pdf', 'application/json'], // 已扩展支持JSON

@@ -347,9 +347,11 @@ const ResumeDetail = () => {
     console.log(`渲染文件预览，URL: ${url}, 索引: ${index}`);
     const isPdf = url.toLowerCase().endsWith('.pdf');
     
-    // 使用原始URL，不做任何编码/解码处理
+    // 使用URL的哈希值作为key
+    const uniqueKey = `file-${url.split('/').pop()}-${index}`;
+    
     return (
-      <div key={index} style={{ display: 'inline-block', margin: '0 8px 8px 0' }}>
+      <div key={uniqueKey} style={{ display: 'inline-block', margin: '0 8px 8px 0' }}>
         {isPdf ? (
           <div style={{ 
             width: 100, 
@@ -381,7 +383,6 @@ const ResumeDetail = () => {
               onClick={() => handlePreview(url)}
               onError={(e) => {
                 console.error(`图片加载失败: ${url}`);
-                // 设置为默认占位图
                 e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
               }}
             />
@@ -406,9 +407,12 @@ const ResumeDetail = () => {
       
       console.log(`渲染工作经历 ${index+1}:`, exp);
       
+      // 使用工作经历的描述和时间作为key的一部分，确保唯一性
+      const uniqueKey = `${exp.startDate || ''}-${exp.endDate || ''}-${exp.description?.substring(0, 20) || ''}-${index}`;
+      
       return (
         <Card 
-          key={index} 
+          key={uniqueKey}
           type="inner" 
           title={`工作经历 ${index + 1}`} 
           style={{ marginBottom: 16 }}
@@ -860,7 +864,10 @@ const ResumeDetail = () => {
           <Card title="个人照片" style={{ marginBottom: 24 }}>
             {resume?.photoUrls?.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.photoUrls.map((url: string, index: number) => renderFilePreview(url, index))}
+                {resume.photoUrls.map((url: string, index: number) => {
+                  const uniqueKey = `photo-${url.split('/').pop()}-${index}`;
+                  return renderFilePreview(url, index);
+                })}
               </div>
             ) : (
               '未上传'
@@ -870,7 +877,10 @@ const ResumeDetail = () => {
           <Card title="证书照片" style={{ marginBottom: 24 }}>
             {resume?.certificateUrls?.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.certificateUrls.map((url: string, index: number) => renderFilePreview(url, index))}
+                {resume.certificateUrls.map((url: string, index: number) => {
+                  const uniqueKey = `certificate-${url.split('/').pop()}-${index}`;
+                  return renderFilePreview(url, index);
+                })}
               </div>
             ) : (
               '未上传'
@@ -1194,26 +1204,9 @@ const ResumeDetail = () => {
                     name="file"
                     listType="picture-card"
                     showUploadList={false}
-                    action="/api/upload/id-card/front"
-                    beforeUpload={(file) => {
-                      const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
-                      if (!isJpgOrPng) {
-                        message.error('只能上传JPG/PNG格式的图片!');
-                      }
-                      const isLt2M = file.size / 1024 / 1024 < 2;
-                      if (!isLt2M) {
-                        message.error('图片大小不能超过2MB!');
-                      }
-                      return isJpgOrPng && isLt2M;
-                    }}
-                    onChange={(info) => {
-                      if (info.file.status === 'done') {
-                        message.success('身份证正面上传成功');
-                        form.setFieldsValue({ idCardFrontUrl: info.file.response.url });
-                      } else if (info.file.status === 'error') {
-                        message.error('身份证正面上传失败');
-                      }
-                    }}
+                    beforeUpload={() => false}
+                    onChange={(info) => handleIdCardUpload('front', info)}
+                    accept=".jpg,.jpeg,.png"
                   >
                     {form.getFieldValue('idCardFrontUrl') ? (
                       <img 
@@ -1234,26 +1227,9 @@ const ResumeDetail = () => {
                     name="file"
                     listType="picture-card"
                     showUploadList={false}
-                    action="/api/upload/id-card/back"
-                    beforeUpload={(file) => {
-                      const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
-                      if (!isJpgOrPng) {
-                        message.error('只能上传JPG/PNG格式的图片!');
-                      }
-                      const isLt2M = file.size / 1024 / 1024 < 2;
-                      if (!isLt2M) {
-                        message.error('图片大小不能超过2MB!');
-                      }
-                      return isJpgOrPng && isLt2M;
-                    }}
-                    onChange={(info) => {
-                      if (info.file.status === 'done') {
-                        message.success('身份证反面上传成功');
-                        form.setFieldsValue({ idCardBackUrl: info.file.response.url });
-                      } else if (info.file.status === 'error') {
-                        message.error('身份证反面上传失败');
-                      }
-                    }}
+                    beforeUpload={() => false}
+                    onChange={(info) => handleIdCardUpload('back', info)}
+                    accept=".jpg,.jpeg,.png"
                   >
                     {form.getFieldValue('idCardBackUrl') ? (
                       <img 

@@ -1,15 +1,13 @@
-import { Entity, ObjectIdColumn, Column, ObjectId } from 'typeorm';
+import { Entity, ObjectIdColumn, Column, ObjectId, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('resumes')
 export class ResumeEntity {
   @ObjectIdColumn()
   _id: ObjectId;
 
-  @Column({ type: 'string' })
-  id: string;
-
-  @Column({ type: 'string', nullable: true })
-  databaseId?: string;
+  get id(): string {
+    return this._id?.toString();
+  }
 
   @Column()
   name: string;
@@ -98,15 +96,11 @@ export class ResumeEntity {
   @Column('simple-array', { nullable: true })
   medicalReportUrls?: string[];
 
-  @Column()
+  @CreateDateColumn()
   createdAt: Date;
 
-  @Column()
+  @UpdateDateColumn()
   updatedAt: Date;
-
-  constructor() {
-    // 移除构造函数中的 id 赋值，因为我们不再使用 getter
-  }
 }
 
 export default ResumeEntity;

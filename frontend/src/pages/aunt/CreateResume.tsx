@@ -90,6 +90,63 @@ function debugLog(...args) {
 // console.log('表单值变化: Object'); => debugLog('表单值变化: Object');
 // console.log('Form实例初始化: true'); => debugLog('Form实例初始化: true');
 
+// 添加生肖计算函数
+const getChineseZodiac = (year: number): string => {
+  const zodiacMap = {
+    0: 'rat',    // 鼠
+    1: 'ox',     // 牛
+    2: 'tiger',  // 虎
+    3: 'rabbit', // 兔
+    4: 'dragon', // 龙
+    5: 'snake',  // 蛇
+    6: 'horse',  // 马
+    7: 'goat',   // 羊
+    8: 'monkey', // 猴
+    9: 'rooster',// 鸡
+    10: 'dog',   // 狗
+    11: 'pig'    // 猪
+  };
+  return zodiacMap[(year - 4) % 12];
+};
+
+// 添加星座计算函数
+const getZodiacSign = (month: number, day: number): string => {
+  const dates = [
+    { date: [1, 20], sign: 'aquarius' },    // 水瓶座
+    { date: [2, 19], sign: 'pisces' },      // 双鱼座
+    { date: [3, 21], sign: 'aries' },       // 白羊座
+    { date: [4, 20], sign: 'taurus' },      // 金牛座
+    { date: [5, 21], sign: 'gemini' },      // 双子座
+    { date: [6, 22], sign: 'cancer' },      // 巨蟹座
+    { date: [7, 23], sign: 'leo' },         // 狮子座
+    { date: [8, 23], sign: 'virgo' },       // 处女座
+    { date: [9, 23], sign: 'libra' },       // 天秤座
+    { date: [10, 24], sign: 'scorpio' },    // 天蝎座
+    { date: [11, 23], sign: 'sagittarius' }, // 射手座
+    { date: [12, 22], sign: 'capricorn' }   // 摩羯座
+  ];
+
+  for (let i = 0; i < dates.length; i++) {
+    const nextIndex = (i + 1) % dates.length;
+    const currentDate = dates[i].date;
+    const nextDate = dates[nextIndex].date;
+    
+    if (month === currentDate[0] && day >= currentDate[1] || 
+        month === nextDate[0] && day < nextDate[1]) {
+      return dates[i].sign;
+    }
+  }
+  return 'capricorn'; // 默认返回摩羯座
+};
+
+// 添加籍贯提取函数
+const extractNativePlace = (address: string): string => {
+  // 匹配省级行政区
+  const provinceRegex = /^(北京市|天津市|上海市|重庆市|河北省|山西省|辽宁省|吉林省|黑龙江省|江苏省|浙江省|安徽省|福建省|江西省|山东省|河南省|湖北省|湖南省|广东省|海南省|四川省|贵州省|云南省|陕西省|甘肃省|青海省|台湾省|内蒙古自治区|广西壮族自治区|西藏自治区|宁夏回族自治区|新疆维吾尔自治区|香港特别行政区|澳门特别行政区)/;
+  const match = address.match(provinceRegex);
+  return match ? match[1] : '';
+};
+
 const CreateResume = () => {
   const { message: messageApi } = App.useApp();
   // 检查URL是否包含edit参数，如果不包含，应当是创建新简历
@@ -229,12 +286,14 @@ const CreateResume = () => {
   const handleIdCardUpload = async (type: 'front' | 'back', info: any) => {
     if (!info?.file) {
       console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败: 未获取到文件信息`);
+      messageApi.error('未获取到文件信息');
       return;
     }
 
     const file = info.file.originFileObj || info.file;
     if (!file) {
       console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败: 未获取到文件对象`);
+      messageApi.error('未获取到文件对象');
       return;
     }
 
@@ -251,10 +310,6 @@ const CreateResume = () => {
         setIdCardFrontFile(compressedFile);
       } else {
         setIdCardBackFile(compressedFile);
-        // 身份证背面只上传，不进行识别
-        messageApi.success({ content: '身份证背面处理成功', key: loadingKey });
-        setLoading(false);
-        return;
       }
 
       // Show compressed size
@@ -262,23 +317,27 @@ const CreateResume = () => {
 
       // 创建FormData对象
       const formData = new FormData();
-      formData.append('image', compressedFile);
+      formData.append('image', compressedFile);  // 统一使用 'image' 作为字段名
       formData.append('idCardSide', type);
       
       setLoading(true);
-      messageApi.loading({ content: '正在识别...', key: loadingKey });
+      messageApi.loading({ content: '正在处理...', key: loadingKey });
       
       try {
         // 只对身份证正面进行OCR识别
         if (type === 'front') {
           // 发送OCR请求
-          const response = await axios.post('/api/ocr/idcard', formData, {
+          const ocrResponse = await axios.post('/api/ocr/idcard', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 60000, // Increase timeout to 60 seconds
+            timeout: 60000,
           });
 
+          if (!ocrResponse.data.success) {
+            throw new Error(ocrResponse.data.message || 'OCR识别失败');
+          }
+
           // 腾讯云OCR响应格式处理
-          const ocrResult = response.data.data; // 腾讯云OCR返回的数据在data字段中
+          const ocrResult = ocrResponse.data.data;
           messageApi.success({ content: '身份证正面识别成功', key: loadingKey });
 
           // Process OCR results
@@ -299,136 +358,76 @@ const CreateResume = () => {
               const idCard = words_result.公民身份号码.words;
               formValues.idNumber = idCard;
 
-              // Extract birth date and calculate age
+              // 提取出生日期
               const birthYear = parseInt(idCard.substring(6, 10));
               const birthMonth = parseInt(idCard.substring(10, 12));
               const birthDay = parseInt(idCard.substring(12, 14));
-              
-              if (!isNaN(birthYear) && !isNaN(birthMonth) && !isNaN(birthDay)) {
-                formValues.birthDate = dayjs(`${birthYear}-${birthMonth}-${birthDay}`);
-                
-                // Calculate age
-                const today = dayjs();
-                const age = today.year() - birthYear;
-                formValues.age = age;
+              const birthDate = dayjs(`${birthYear}-${birthMonth}-${birthDay}`);
+              formValues.birthDate = birthDate;
 
-                // 计算生肖
-                const zodiacMap = {
-                  'rat': '鼠',
-                  'ox': '牛',
-                  'tiger': '虎',
-                  'rabbit': '兔',
-                  'dragon': '龙',
-                  'snake': '蛇',
-                  'horse': '马',
-                  'goat': '羊',
-                  'monkey': '猴',
-                  'rooster': '鸡',
-                  'dog': '狗',
-                  'pig': '猪'
-                };
-                const zodiacIndex = (birthYear - 4) % 12;
-                const zodiacKeys = Object.keys(zodiacMap);
-                formValues.zodiac = zodiacKeys[zodiacIndex];
+              // 计算年龄
+              const today = dayjs();
+              const age = today.diff(birthDate, 'year');
+              formValues.age = age;
 
-                // 计算星座
-                const zodiacSignMap = {
-                  'capricorn': '摩羯座',
-                  'aquarius': '水瓶座',
-                  'pisces': '双鱼座',
-                  'aries': '白羊座',
-                  'taurus': '金牛座',
-                  'gemini': '双子座',
-                  'cancer': '巨蟹座',
-                  'leo': '狮子座',
-                  'virgo': '处女座',
-                  'libra': '天秤座',
-                  'scorpio': '天蝎座',
-                  'sagittarius': '射手座'
-                };
-                formValues.zodiacSign = getZodiacSign(birthMonth, birthDay);
-              }
+              // 计算生肖
+              formValues.zodiac = getChineseZodiac(birthYear);
 
-              // Set gender
-              formValues.gender = parseInt(idCard.charAt(16)) % 2 === 1 ? '男' : '女';
-
-              // Set zodiac
-              const zodiacMap = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
-              formValues.zodiac = zodiacMap[(birthYear - 4) % 12];
-
-              // Set zodiac sign
+              // 计算星座
               formValues.zodiacSign = getZodiacSign(birthMonth, birthDay);
-            }
 
+              // 设置性别
+              formValues.gender = parseInt(idCard.charAt(16)) % 2 === 1 ? '男' : '女';
+            }
             if (words_result.住址?.words) {
               const address = words_result.住址.words;
               formValues.currentAddress = address;
               formValues.hukouAddress = address;
               
-              // 从住址中提取省份信息
-              for (const province of provinces) {
-                if (address.startsWith(province)) {
-                  formValues.nativePlace = province;
-                  break;
-                }
+              // 提取籍贯
+              const nativePlace = extractNativePlace(address);
+              if (nativePlace) {
+                formValues.nativePlace = nativePlace;
               }
             }
 
-            // Update form with extracted values
-            console.log('OCR识别结果:', words_result);
-            console.log('准备填充的表单数据:', formValues);
+            // 更新表单
             form.setFieldsValue(formValues);
-          } catch (parseError) {
-            console.error('解析身份证信息出错:', parseError);
-            messageApi.warning('部分身份证信息解析失败，请手动填写');
+          } catch (error) {
+            console.error('处理OCR结果时出错:', error);
+            messageApi.error({ content: '处理识别结果时出错，请手动填写信息', key: loadingKey });
           }
         }
-      } catch (error) {
-        console.error('OCR识别失败:', error);
-        messageApi.error({
-          content: error.response?.status === 400 
-            ? '图片识别失败，请确保图片清晰并重试' 
-            : '识别服务暂时不可用，请稍后重试',
-          key: loadingKey
+
+        // 上传图片到服务器
+        const uploadResponse = await axios.post(`/api/upload/id-card/${type}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        if (!uploadResponse.data.success) {
+          throw new Error(uploadResponse.data.message || '图片上传失败');
+        }
+
+        // 更新表单中的URL字段
+        form.setFieldsValue({
+          [`idCard${type === 'front' ? 'Front' : 'Back'}Url`]: uploadResponse.data.data.url
+        });
+
+        messageApi.success({ content: '图片上传成功', key: loadingKey });
+      } catch (error: any) {
+        console.error('上传或识别失败:', error);
+        messageApi.error({ 
+          content: error.response?.data?.message || error.message || '上传失败', 
+          key: loadingKey 
         });
       } finally {
         setLoading(false);
       }
-    } catch (error) {
-      console.error(`处理${type === 'front' ? '正面' : '背面'}失败:`, error);
-      messageApi.error(`身份证${type === 'front' ? '正面' : '背面'}处理失败`);
+    } catch (error: any) {
+      console.error('处理图片失败:', error);
+      messageApi.error(error.message || '处理图片失败');
       setLoading(false);
     }
-  };
-
-  // 根据月日获取星座
-  const getZodiacSign = (month: number, day: number): string => {
-    const dates = [
-      { date: [1, 20], sign: 'aquarius' },    // 水瓶座
-      { date: [2, 19], sign: 'pisces' },      // 双鱼座
-      { date: [3, 21], sign: 'aries' },       // 白羊座
-      { date: [4, 20], sign: 'taurus' },      // 金牛座
-      { date: [5, 21], sign: 'gemini' },      // 双子座
-      { date: [6, 22], sign: 'cancer' },      // 巨蟹座
-      { date: [7, 23], sign: 'leo' },         // 狮子座
-      { date: [8, 23], sign: 'virgo' },       // 处女座
-      { date: [9, 23], sign: 'libra' },       // 天秤座
-      { date: [10, 24], sign: 'scorpio' },    // 天蝎座
-      { date: [11, 23], sign: 'sagittarius' }, // 射手座
-      { date: [12, 22], sign: 'capricorn' }   // 摩羯座
-    ];
-
-    for (let i = 0; i < dates.length; i++) {
-      const nextIndex = (i + 1) % dates.length;
-      const currentDate = dates[i].date;
-      const nextDate = dates[nextIndex].date;
-      
-      if (month === currentDate[0] && day >= currentDate[1] || 
-          month === nextDate[0] && day < nextDate[1]) {
-        return dates[i].sign;
-      }
-    }
-    return 'capricorn'; // 默认返回摩羯座
   };
 
   // 预览身份证图片
@@ -1770,7 +1769,7 @@ const CreateResume = () => {
                           uid: `-${index}`,
                           name: `${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
                           status: 'done',
-                          url: file.type.includes('image') ? URL.createObjectURL(file) : undefined,
+                          url: URL.createObjectURL(file),
                           originFileObj: file
                         })),
                         // 已有的证书
@@ -1778,8 +1777,7 @@ const CreateResume = () => {
                           uid: `existing-${index}`,
                           name: `已有证书 ${index + 1}`,
                           status: 'done',
-                          url: url.toLowerCase().endsWith('.pdf') ? undefined : url,
-                          thumbUrl: url.toLowerCase().endsWith('.pdf') ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAALrSURBVGiB7ZZNSFRRFMd/980M5lCjUoiNJtqkmR8ItUhcGNRCKKhFuogkXIgfCzcqLdq0KoQIAqEPaCG0CTOJcrJAUHDjB0hqYlKgLHJmnDed865vmWN2Z+a+Nx23//Lg3XPPPff/P+e+d+97FhGYqVGzJRRvACJiA9oAB9AIrI8TLwhMAT5gFLgpIr5oAW0xwm1Ap4i0W8PVbkTkGpAGnBOR0+GxEQFEJBO4ChwVERuiYiJyDfgC9IVLEhoQkZ3AY0BKCPcpd133eywdJ8tybDQSETuGYXSKyIFwPzug1Qp3bNmyZU93d/eEbduxNChLA9d1La35+PETent7jwH7ReQ9VA8hEWkGbgMYhjHS19d3qa+vT0TEmqvJwrIs0eqqVCqq9p6fn19YWVm5FthvA9qAeoALFy70GIYxUtugKok6LfN5AMlAEwBVVVVtdc23cpmmmQLYReQ7wL179/64c+fOdN2TrVS6rvtTq/cDvgCg67pn7dq12yoqKpKL3ZqjdPpwHGdWqz8C8ATwaMr+/v6enJwcc65brKuru+H1epdLpVKB53n3FqrVs4EQKf90PNc9DMwCPykghPx2YFZTdgGngBSt/hR4vsA6KTIgGHQBnwBfnRqIFbwBxBtAvAHEG0C8AcQbQLwBxBtAvAH89wBExG4YRsxvZtOUctrp+/6g4ziD0+OmU36NypIsJY/66RudtLQ0MU3zY0dHx+7FgCkpKaG0tHQWQGZmpgBXqqqquoF7ixmAptm9MJDrurZpmj+AjMbGxsC2bdvWNDc3r9Lpj0qz3t7eD+Xl5ed0XRdgCjisxNdQP5biOI6taVoB0FVUVFTudDpzNE2LailKsizleR4i8sPzvJH5QAM4juPOzMxcAd4qiqI0NDSU7t27NzkaiFDzer3+paWlwcnJyfHFTJ+xVIZh2IHUhoYGbWJiYjwQCCxo+lQqFcvLy30LCgpK9+3bt3MxEMOUoihB0zTdVatW+eLUf9n6C/G3z8hTZStxAAAAAElFTkSuQmCC' : undefined,
+                          url: url,
                           isExisting: true // 标记为已有图片
                         }))
                       ]}
@@ -1799,7 +1797,7 @@ const CreateResume = () => {
                       }}
                       beforeUpload={() => false}
                       onChange={(info) => handleMultiFileUpload('技能证书', info)}
-                      accept=".jpg,.jpeg,.png,.pdf"
+                      accept=".jpg,.jpeg,.png"
                       multiple
                     >
                       {certificateFiles.length + existingCertificateUrls.length >= 5 ? null : uploadButton}

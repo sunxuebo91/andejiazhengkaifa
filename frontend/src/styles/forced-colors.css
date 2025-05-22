@@ -1,0 +1,67 @@
+/* 使用新的 Forced Colors Mode 标准 */
+@media (forced-colors: active) {
+  /* 基础样式 */
+  :root {
+    --forced-colors-text: CanvasText;
+    --forced-colors-background: Canvas;
+    --forced-colors-border: CanvasText;
+    --forced-colors-button: ButtonText;
+    --forced-colors-button-background: ButtonFace;
+  }
+
+  /* 文本颜色 */
+  body {
+    color: var(--forced-colors-text);
+    background-color: var(--forced-colors-background);
+  }
+
+  /* 边框样式 */
+  .ant-card,
+  .ant-input,
+  .ant-btn,
+  .ant-select-selector,
+  .ant-table {
+    border-color: var(--forced-colors-border) !important;
+  }
+
+  /* 按钮样式 */
+  .ant-btn {
+    color: var(--forced-colors-button) !important;
+    background-color: var(--forced-colors-button-background) !important;
+  }
+
+  /* 链接样式 */
+  a {
+    color: var(--forced-colors-text);
+    text-decoration: underline;
+  }
+
+  /* 图片边框 */
+  img {
+    border: 1px solid var(--forced-colors-border);
+  }
+
+  /* 表格样式 */
+  .ant-table {
+    border: 1px solid var(--forced-colors-border);
+  }
+
+  .ant-table-cell {
+    border-color: var(--forced-colors-border) !important;
+  }
+
+  /* 表单控件 */
+  .ant-input,
+  .ant-select-selector,
+  .ant-picker {
+    color: var(--forced-colors-text) !important;
+    background-color: var(--forced-colors-background) !important;
+  }
+
+  /* 禁用状态 */
+  .ant-btn[disabled],
+  .ant-input[disabled],
+  .ant-select-disabled {
+    opacity: 0.5;
+  }
+} 

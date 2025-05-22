@@ -306,6 +306,42 @@ const CreateResume = () => {
                 const today = dayjs();
                 const age = today.year() - birthYear;
                 formValues.age = age;
+
+                // 计算生肖
+                const zodiacMap = {
+                  'rat': '鼠',
+                  'ox': '牛',
+                  'tiger': '虎',
+                  'rabbit': '兔',
+                  'dragon': '龙',
+                  'snake': '蛇',
+                  'horse': '马',
+                  'goat': '羊',
+                  'monkey': '猴',
+                  'rooster': '鸡',
+                  'dog': '狗',
+                  'pig': '猪'
+                };
+                const zodiacIndex = (birthYear - 4) % 12;
+                const zodiacKeys = Object.keys(zodiacMap);
+                formValues.zodiac = zodiacKeys[zodiacIndex];
+
+                // 计算星座
+                const zodiacSignMap = {
+                  'capricorn': '摩羯座',
+                  'aquarius': '水瓶座',
+                  'pisces': '双鱼座',
+                  'aries': '白羊座',
+                  'taurus': '金牛座',
+                  'gemini': '双子座',
+                  'cancer': '巨蟹座',
+                  'leo': '狮子座',
+                  'virgo': '处女座',
+                  'libra': '天秤座',
+                  'scorpio': '天蝎座',
+                  'sagittarius': '射手座'
+                };
+                formValues.zodiacSign = getZodiacSign(birthMonth, birthDay);
               }
 
               // Set gender

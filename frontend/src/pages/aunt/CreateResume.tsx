@@ -251,6 +251,10 @@ const CreateResume = () => {
         setIdCardFrontFile(compressedFile);
       } else {
         setIdCardBackFile(compressedFile);
+        // 身份证背面只上传，不进行识别
+        messageApi.success({ content: '身份证背面处理成功', key: loadingKey });
+        setLoading(false);
+        return;
       }
 
       // Show compressed size
@@ -265,18 +269,19 @@ const CreateResume = () => {
       messageApi.loading({ content: '正在识别...', key: loadingKey });
       
       try {
-        // 发送OCR请求
-        const response = await axios.post('/api/ocr/idcard', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 60000, // Increase timeout to 60 seconds
-        });
-
-        // 腾讯云OCR响应格式处理
-        const ocrResult = response.data.data; // 腾讯云OCR返回的数据在data字段中
-        messageApi.success({ content: `身份证${type === 'front' ? '正面' : '背面'}识别成功`, key: loadingKey });
-
-        // Process OCR results
+        // 只对身份证正面进行OCR识别
         if (type === 'front') {
+          // 发送OCR请求
+          const response = await axios.post('/api/ocr/idcard', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 60000, // Increase timeout to 60 seconds
+          });
+
+          // 腾讯云OCR响应格式处理
+          const ocrResult = response.data.data; // 腾讯云OCR返回的数据在data字段中
+          messageApi.success({ content: '身份证正面识别成功', key: loadingKey });
+
+          // Process OCR results
           const formValues: any = {};
 
           // Extract information with better error handling

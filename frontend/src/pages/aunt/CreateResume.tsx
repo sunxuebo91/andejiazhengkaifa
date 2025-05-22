@@ -1,5 +1,5 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, message, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, Tag } from 'antd';
+import { Card, message, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, Tag, App } from 'antd';
 import { useState, useRef, useEffect } from 'react';
 import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, CheckCircleOutlined, ReloadOutlined, CloseCircleOutlined, DeleteOutlined } from '@ant-design/icons';
 import { FilePdfOutlined } from '@ant-design/icons';
@@ -12,6 +12,7 @@ import imageCompression from 'browser-image-compression';
 // 引入自定义的百度地图地址自动补全组件
 // import BaiduAddressAutocomplete from '../../components/BaiduAddressAutocomplete';
 import BaiduMapCard from '../../components/BaiduMapCard';
+import apiService from '../../services/api';
 
 // 设置 axios 默认配置
 // API请求通过vite代理转发
@@ -20,9 +21,10 @@ axios.defaults.timeout = 10000;
 
 // 定义图片压缩选项
 const compressionOptions = {
-  maxSizeMB: 0.05,      // 50KB = 0.05MB
-  maxWidthOrHeight: 1024,
-  useWebWorker: true
+  maxSizeMB: 0.1,      // Increase to 100KB = 0.1MB
+  maxWidthOrHeight: 800, // Reduce max dimensions
+  useWebWorker: true,
+  initialQuality: 0.8   // Add initial quality setting
 };
 
 // 图片压缩函数
@@ -89,6 +91,7 @@ function debugLog(...args) {
 // console.log('Form实例初始化: true'); => debugLog('Form实例初始化: true');
 
 const CreateResume = () => {
+  const { message: messageApi } = App.useApp();
   // 检查URL是否包含edit参数，如果不包含，应当是创建新简历
   useEffect(() => {
     // 获取当前URL
@@ -173,7 +176,6 @@ const CreateResume = () => {
     debugLog('Form实例初始化:', !!form);
   }, [form]);
 
-  const [messageApi, contextHolder] = message.useMessage();
   const [formValues, setFormValues] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [backendConnected, setBackendConnected] = useState(false);
@@ -225,243 +227,152 @@ const CreateResume = () => {
 
   // 身份证文件上传变更处理
   const handleIdCardUpload = async (type: 'front' | 'back', info: any) => {
-    debugLog(`${type === 'front' ? '身份证正面' : '身份证背面'}上传信息:`, info);
-    
-    if (!info || !info.file) {
+    if (!info?.file) {
       console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败: 未获取到文件信息`);
-        return;
-      }
+      return;
+    }
 
-    // 获取文件对象
     const file = info.file.originFileObj || info.file;
-    
     if (!file) {
       console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败: 未获取到文件对象`);
-        return;
-      }
-    
-    // 显示图片预览
-    try {
-      debugLog(`${type === 'front' ? '身份证正面' : '身份证背面'}文件信息:`, {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-      });
+      return;
+    }
 
+    try {
+      // Show loading message
+      const loadingKey = 'compressing';
+      messageApi.loading({ content: '正在处理图片...', key: loadingKey });
+      
       // 压缩图片
       const compressedFile = await compressImage(file);
-
-      // 设置状态
+      
+      // 设置对应的状态
       if (type === 'front') {
         setIdCardFrontFile(compressedFile);
-        
-        // 创建URL以显示图片
-        try {
-          const url = URL.createObjectURL(compressedFile);
-          debugLog('身份证正面文件URL创建成功:', url);
-        } catch (error) {
-          console.error('身份证正面文件URL创建失败:', error);
-        }
-        
-        // 调用OCR识别API
-        try {
-          setLoading(true);
-          
-          // 创建FormData对象
-          const formData = new FormData();
-          formData.append('idCardImage', compressedFile);
-          formData.append('idCardSide', 'front');
-          
-          // 发送请求到后端
-          const response = await axios.post('/api/ocr/idcard', formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          });
-          
-          if (response.data.success) {
-            message.success('身份证识别成功');
-            
-            // 从OCR结果中获取身份证信息
-            const idCardData = response.data.data;
-            debugLog('身份证OCR识别结果:', idCardData);
-            
-            // 自动填充表单
-            const formValues: any = {};
-            
-            if (idCardData.words_result) {
-              const wordsResult = idCardData.words_result;
-              
-              // 填充姓名
-              if (wordsResult.姓名?.words) {
-                formValues.name = wordsResult.姓名.words;
-              }
-              
-              // 填充民族
-              if (wordsResult.民族?.words) {
-                // 去掉民族字段中的"族"字
-                let ethnicity = wordsResult.民族.words;
-                if (ethnicity.endsWith('族')) {
-                  ethnicity = ethnicity.substring(0, ethnicity.length - 1);
-                }
-                formValues.ethnicity = ethnicity;
-              }
-              
-              // 填充身份证号
-              if (wordsResult.公民身份号码?.words) {
-                formValues.idNumber = wordsResult.公民身份号码.words;
-                
-                // 从身份证号中提取出生日期
-                const idNumber = wordsResult.公民身份号码.words;
-                if (idNumber && idNumber.length === 18) {
-                  // 计算年龄
-                  const birthYear = parseInt(idNumber.substring(6, 10));
-                  const birthMonth = parseInt(idNumber.substring(10, 12)) - 1; // 月份从0开始
-                  const birthDay = parseInt(idNumber.substring(12, 14));
-                  const birthDate = new Date(birthYear, birthMonth, birthDay);
-                  
-                  const today = new Date();
-                  let age = today.getFullYear() - birthDate.getFullYear();
-                  const m = today.getMonth() - birthDate.getMonth();
-                  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-                    age--;
-                  }
-                  
-                  formValues.age = age;
-                  
-                  // 填充出生日期，使用dayjs格式化
-                  formValues.birthDate = dayjs(`${birthYear}-${birthMonth+1}-${birthDay}`);
-                  
-                  // 判断性别: 身份证第17位，奇数为男，偶数为女
-                  const genderCode = parseInt(idNumber.charAt(16));
-                  formValues.gender = genderCode % 2 === 1 ? '男' : '女';
-                }
-              }
-              
-              // 直接从OCR结果中获取出生日期
-              if (wordsResult.出生?.words) {
-                const birthStr = wordsResult.出生.words;
-                if (birthStr && birthStr.length === 8) {
-                  const year = birthStr.substring(0, 4);
-                  const month = birthStr.substring(4, 6);
-                  const day = birthStr.substring(6, 8);
-                  // 使用dayjs创建日期对象
-                  formValues.birthDate = dayjs(`${year}-${month}-${day}`);
-                }
-              }
-              
-              // 填充地址
-              if (wordsResult.住址?.words) {
-                formValues.hukouAddress = wordsResult.住址.words;
-                
-                // 从住址中提取省/自治区/直辖市填充籍贯
-                const address = wordsResult.住址.words;
-                // 遍历provinces数组，查找地址中是否包含某个省份
-                for (const province of provinces) {
-                  if (address.startsWith(province)) {
-                    formValues.nativePlace = province;
-                    break;
-                  }
-                }
-              }
-              
-              // 从出生日期计算生肖和星座
-              if (formValues.birthDate) {
-                // 计算生肖
-                const birthYear = formValues.birthDate.year();
-                const zodiacIndex = (birthYear - 4) % 12; // 从鼠年开始，1900年是鼠年
-                const zodiacValues = ['rat', 'ox', 'tiger', 'rabbit', 'dragon', 'snake', 'horse', 'goat', 'monkey', 'rooster', 'dog', 'pig'];
-                formValues.zodiac = zodiacValues[zodiacIndex];
-                
-                // 计算星座
-                const month = formValues.birthDate.month() + 1; // dayjs月份从0开始
-                const day = formValues.birthDate.date();
-                
-                // 星座日期范围定义
-                if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) {
-                  formValues.zodiacSign = 'aquarius'; // 水瓶座 1.20-2.18
-                } else if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) {
-                  formValues.zodiacSign = 'pisces'; // 双鱼座 2.19-3.20
-                } else if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) {
-                  formValues.zodiacSign = 'aries'; // 白羊座 3.21-4.19
-                } else if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) {
-                  formValues.zodiacSign = 'taurus'; // 金牛座 4.20-5.20
-                } else if ((month === 5 && day >= 21) || (month === 6 && day <= 21)) {
-                  formValues.zodiacSign = 'gemini'; // 双子座 5.21-6.21
-                } else if ((month === 6 && day >= 22) || (month === 7 && day <= 22)) {
-                  formValues.zodiacSign = 'cancer'; // 巨蟹座 6.22-7.22
-                } else if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) {
-                  formValues.zodiacSign = 'leo'; // 狮子座 7.23-8.22
-                } else if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) {
-                  formValues.zodiacSign = 'virgo'; // 处女座 8.23-9.22
-                } else if ((month === 9 && day >= 23) || (month === 10 && day <= 23)) {
-                  formValues.zodiacSign = 'libra'; // 天秤座 9.23-10.23
-                } else if ((month === 10 && day >= 24) || (month === 11 && day <= 22)) {
-                  formValues.zodiacSign = 'scorpio'; // 天蝎座 10.24-11.22
-                } else if ((month === 11 && day >= 23) || (month === 12 && day <= 21)) {
-                  formValues.zodiacSign = 'sagittarius'; // 射手座 11.23-12.21
-      } else {
-                  formValues.zodiacSign = 'capricorn'; // 摩羯座 12.22-1.19
-                }
-              }
-            }
-            
-            // 更新表单
-            debugLog('自动填充表单数据:', formValues);
-            form.setFieldsValue(formValues);
-          } else {
-            message.error(`身份证识别失败: ${response.data.message}`);
-          }
-        } catch (error) {
-          console.error('OCR识别请求出错:', error);
-          message.error('身份证识别服务异常，请手动输入身份证信息');
-        } finally {
-          setLoading(false);
-        }
       } else {
         setIdCardBackFile(compressedFile);
-        
-        try {
-          const url = URL.createObjectURL(compressedFile);
-          debugLog('身份证背面文件URL创建成功:', url);
-        } catch (error) {
-          console.error('身份证背面文件URL创建失败:', error);
+      }
+
+      // Show compressed size
+      console.log(`压缩后文件大小: ${(compressedFile.size / 1024).toFixed(2)} KB`);
+
+      // 创建FormData对象
+      const formData = new FormData();
+      formData.append('image', compressedFile);
+      formData.append('idCardSide', type);
+      
+      setLoading(true);
+      messageApi.loading({ content: '正在识别...', key: loadingKey });
+      
+      try {
+        // 发送OCR请求，增加超时时间
+        const response = await axios.post('/api/ocr/idcard', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 60000, // Increase timeout to 60 seconds
+        });
+
+        if (!response.data.success) {
+          throw new Error(response.data.message || '识别失败');
         }
-        
-        // 调用OCR识别API处理身份证背面
-        try {
-          setLoading(true);
-          
-          // 创建FormData对象
-          const formData = new FormData();
-          formData.append('idCardImage', compressedFile);
-          formData.append('idCardSide', 'back');
-          
-          // 发送请求到后端
-          const response = await axios.post('/api/ocr/idcard', formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
+
+        messageApi.success({ content: `身份证${type === 'front' ? '正面' : '背面'}识别成功`, key: loadingKey });
+
+        // Process OCR results
+        if (type === 'front' && response.data.data.words_result) {
+          const { words_result: result } = response.data.data;
+          const formValues: any = {};
+
+          // Extract information with better error handling
+          try {
+            if (result.姓名?.words) formValues.name = result.姓名.words;
+            if (result.民族?.words) formValues.ethnicity = result.民族.words.replace(/族$/, '');
+            if (result.公民身份号码?.words) {
+              const idCard = result.公民身份号码.words;
+              formValues.idNumber = idCard;
+
+              // Extract birth date and calculate age
+              const birthYear = parseInt(idCard.substring(6, 10));
+              const birthMonth = parseInt(idCard.substring(10, 12));
+              const birthDay = parseInt(idCard.substring(12, 14));
+              
+              if (!isNaN(birthYear) && !isNaN(birthMonth) && !isNaN(birthDay)) {
+                formValues.birthDate = dayjs(`${birthYear}-${birthMonth}-${birthDay}`);
+                
+                // Calculate age
+                const today = dayjs();
+                const age = today.year() - birthYear;
+                formValues.age = age;
+              }
+
+              // Set gender
+              formValues.gender = parseInt(idCard.charAt(16)) % 2 === 1 ? '男' : '女';
+
+              // Set zodiac
+              const zodiacMap = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
+              formValues.zodiac = zodiacMap[(birthYear - 4) % 12];
+
+              // Set zodiac sign
+              formValues.zodiacSign = getZodiacSign(birthMonth, birthDay);
             }
-          });
-          
-          if (response.data.success) {
-            message.success('身份证背面识别成功');
-            debugLog('身份证背面OCR识别结果:', response.data.data);
-            // 背面通常包含签发机关等信息，可以根据需要提取
-          } else {
-            message.error(`身份证背面识别失败: ${response.data.message}`);
+
+            if (result.住址?.words) {
+              formValues.currentAddress = result.住址.words;
+              formValues.hukouAddress = result.住址.words;
+            }
+
+            // Update form with extracted values
+            form.setFieldsValue(formValues);
+          } catch (parseError) {
+            console.error('解析身份证信息出错:', parseError);
+            messageApi.warning('部分身份证信息解析失败，请手动填写');
           }
-        } catch (error) {
-          console.error('OCR识别请求出错:', error);
-          message.error('身份证背面识别服务异常');
-        } finally {
-          setLoading(false);
         }
+      } catch (error) {
+        console.error('OCR识别失败:', error);
+        messageApi.error({
+          content: error.response?.status === 400 
+            ? '图片识别失败，请确保图片清晰并重试' 
+            : '识别服务暂时不可用，请稍后重试',
+          key: loadingKey
+        });
+      } finally {
+        setLoading(false);
       }
     } catch (error) {
-      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}处理错误:`, error);
-      message.error(`${type === 'front' ? '身份证正面' : '身份证背面'}上传失败`);
+      console.error(`处理${type === 'front' ? '正面' : '背面'}失败:`, error);
+      messageApi.error(`身份证${type === 'front' ? '正面' : '背面'}处理失败`);
+      setLoading(false);
     }
+  };
+
+  // 根据月日获取星座
+  const getZodiacSign = (month: number, day: number): string => {
+    const dates = [
+      { date: [1, 20], sign: 'aquarius' },    // 水瓶座
+      { date: [2, 19], sign: 'pisces' },      // 双鱼座
+      { date: [3, 21], sign: 'aries' },       // 白羊座
+      { date: [4, 20], sign: 'taurus' },      // 金牛座
+      { date: [5, 21], sign: 'gemini' },      // 双子座
+      { date: [6, 22], sign: 'cancer' },      // 巨蟹座
+      { date: [7, 23], sign: 'leo' },         // 狮子座
+      { date: [8, 23], sign: 'virgo' },       // 处女座
+      { date: [9, 23], sign: 'libra' },       // 天秤座
+      { date: [10, 24], sign: 'scorpio' },    // 天蝎座
+      { date: [11, 23], sign: 'sagittarius' }, // 射手座
+      { date: [12, 22], sign: 'capricorn' }   // 摩羯座
+    ];
+
+    for (let i = 0; i < dates.length; i++) {
+      const nextIndex = (i + 1) % dates.length;
+      const currentDate = dates[i].date;
+      const nextDate = dates[nextIndex].date;
+      
+      if (month === currentDate[0] && day >= currentDate[1] || 
+          month === nextDate[0] && day < nextDate[1]) {
+        return dates[i].sign;
+      }
+    }
+    return 'capricorn'; // 默认返回摩羯座
   };
 
   // 预览身份证图片
@@ -932,10 +843,8 @@ const CreateResume = () => {
         ],
       }}
     >
-      {/* 渲染message的contextHolder */}
-      {contextHolder}
-      
-        <Card
+      {/* 移除 contextHolder */}
+      <Card
         style={{ marginBottom: 24 }}
         title={
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

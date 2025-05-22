@@ -402,7 +402,6 @@ const ResumeList = () => {
             提交
           </Button>,
         ]}
-        destroyOnClose
       >
         <Form
           form={followUpForm}

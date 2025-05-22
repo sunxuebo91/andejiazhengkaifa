@@ -1,28 +1,36 @@
+import React, { ReactNode, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ConfigProvider, App as AntdApp, Spin } from 'antd';
 import BasicLayout from './layouts/BasicLayout';
-import { ConfigProvider, App as AntdApp } from 'antd';
-import ResumeList from './pages/aunt/ResumeList';
-import CreateResume from './pages/aunt/CreateResume';
-import ResumeDetail from './pages/aunt/ResumeDetail';
-import Dashboard from './pages/Dashboard';
-import NotFound from './pages/NotFound';
-import Login from './pages/Login';
-import Unauthorized from './pages/Unauthorized';
-import UserList from './pages/users/UserList';
-import CreateUser from './pages/users/CreateUser';
-import EditUser from './pages/users/EditUser';
-import RoleList from './pages/roles/RoleList';
-import EditRole from './pages/roles/EditRole';
-import ProfilePage from './pages/profile/ProfilePage';
-import AccountSettings from './pages/settings/AccountSettings';
-import { ReactNode, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { AuthProvider } from './contexts/AuthContext';
 import AuthorizedRoute from './components/AuthorizedRoute';
 
+// Lazy load components
+const Login = React.lazy(() => import('./pages/Login'));
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const ResumeList = React.lazy(() => import('./pages/aunt/ResumeList'));
+const CreateResume = React.lazy(() => import('./pages/aunt/CreateResume'));
+const ResumeDetail = React.lazy(() => import('./pages/aunt/ResumeDetail'));
+const UserList = React.lazy(() => import('./pages/users/UserList'));
+const CreateUser = React.lazy(() => import('./pages/users/CreateUser'));
+const EditUser = React.lazy(() => import('./pages/users/EditUser'));
+const RoleList = React.lazy(() => import('./pages/roles/RoleList'));
+const EditRole = React.lazy(() => import('./pages/roles/EditRole'));
+const ProfilePage = React.lazy(() => import('./pages/profile/ProfilePage'));
+const AccountSettings = React.lazy(() => import('./pages/settings/AccountSettings'));
+const NotFound = React.lazy(() => import('./pages/NotFound'));
+const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
+
 interface AppProps {
   children?: ReactNode;
 }
+
+const LoadingComponent = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+    <Spin size="large" tip="加载中..." />
+  </div>
+);
 
 export default function App({ children }: AppProps) {
   useEffect(() => {
@@ -40,90 +48,92 @@ export default function App({ children }: AppProps) {
       }}
     >
       <AntdApp>
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AuthProvider>
-            <Routes>
-              {/* 登录页面 - 不需要权限 */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/unauthorized" element={<Unauthorized />} />
-              
-              {/* 需要登录的路由 */}
-              <Route
-                path="/"
-                element={
-                  <PageContainer>
-                    <BasicLayout />
-                  </PageContainer>
-                }
-              >
-                {/* 默认首页 */}
-                <Route index element={<Navigate to="/dashboard" replace />} />
+            <Suspense fallback={<LoadingComponent />}>
+              <Routes>
+                {/* 登录页面 - 不需要权限 */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/unauthorized" element={<Unauthorized />} />
                 
-                {/* 驾驶舱页面 - 所有登录用户可访问 */}
-                <Route 
-                  path="dashboard" 
-                  element={<AuthorizedRoute element={<Dashboard />} />} 
-                />
-                
-                {/* 阿姨管理模块 - 需要resume相关权限 */}
-                <Route path="aunt">
+                {/* 需要登录的路由 */}
+                <Route
+                  path="/"
+                  element={
+                    <PageContainer>
+                      <BasicLayout />
+                    </PageContainer>
+                  }
+                >
+                  {/* 默认首页 */}
+                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  
+                  {/* 驾驶舱页面 - 所有登录用户可访问 */}
                   <Route 
-                    path="list" 
-                    element={<AuthorizedRoute element={<ResumeList />} authority="resume:view" />} 
+                    path="dashboard" 
+                    element={<AuthorizedRoute element={<Dashboard />} />} 
                   />
-                  <Route 
-                    path="create-resume" 
-                    element={<AuthorizedRoute element={<CreateResume />} authority="resume:create" />} 
-                  />
-                  <Route 
-                    path="resume/:id" 
-                    element={<AuthorizedRoute element={<ResumeDetail />} authority="resume:view" />} 
-                  />
-                </Route>
-                
-                {/* 用户管理模块 - 需要管理员权限 */}
-                <Route path="users">
-                  <Route 
-                    path="list" 
-                    element={<AuthorizedRoute element={<UserList />} role="admin" />} 
-                  />
-                  <Route 
-                    path="create" 
-                    element={<AuthorizedRoute element={<CreateUser />} role="admin" />} 
-                  />
-                  <Route
-                    path="edit/:id"
-                    element={<AuthorizedRoute element={<EditUser />} role="admin" />}
-                  />
-                </Route>
-                
-                {/* 角色管理模块 - 需要管理员权限 */}
-                <Route path="roles">
-                  <Route 
-                    path="list" 
-                    element={<AuthorizedRoute element={<RoleList />} role="admin" />} 
-                  />
-                  <Route 
-                    path="edit/:id" 
-                    element={<AuthorizedRoute element={<EditRole />} role="admin" />} 
-                  />
-                </Route>
+                  
+                  {/* 阿姨管理模块 - 需要resume相关权限 */}
+                  <Route path="aunt">
+                    <Route 
+                      path="list" 
+                      element={<AuthorizedRoute element={<ResumeList />} authority="resume:view" />} 
+                    />
+                    <Route 
+                      path="create-resume" 
+                      element={<AuthorizedRoute element={<CreateResume />} authority="resume:create" />} 
+                    />
+                    <Route 
+                      path="resume/:id" 
+                      element={<AuthorizedRoute element={<ResumeDetail />} authority="resume:view" />} 
+                    />
+                  </Route>
+                  
+                  {/* 用户管理模块 - 需要管理员权限 */}
+                  <Route path="users">
+                    <Route 
+                      path="list" 
+                      element={<AuthorizedRoute element={<UserList />} role="admin" />} 
+                    />
+                    <Route 
+                      path="create" 
+                      element={<AuthorizedRoute element={<CreateUser />} role="admin" />} 
+                    />
+                    <Route
+                      path="edit/:id"
+                      element={<AuthorizedRoute element={<EditUser />} role="admin" />}
+                    />
+                  </Route>
+                  
+                  {/* 角色管理模块 - 需要管理员权限 */}
+                  <Route path="roles">
+                    <Route 
+                      path="list" 
+                      element={<AuthorizedRoute element={<RoleList />} role="admin" />} 
+                    />
+                    <Route 
+                      path="edit/:id" 
+                      element={<AuthorizedRoute element={<EditRole />} role="admin" />} 
+                    />
+                  </Route>
 
-                {/* 个人信息相关路由 - 所有登录用户可访问 */}
-                <Route 
-                  path="profile" 
-                  element={<AuthorizedRoute element={<ProfilePage />} />} 
-                />
-                <Route 
-                  path="settings/account" 
-                  element={<AuthorizedRoute element={<AccountSettings />} />} 
-                />
-                
-                {/* 404页面 */}
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-            {children}
+                  {/* 个人信息相关路由 - 所有登录用户可访问 */}
+                  <Route 
+                    path="profile" 
+                    element={<AuthorizedRoute element={<ProfilePage />} />} 
+                  />
+                  <Route 
+                    path="settings/account" 
+                    element={<AuthorizedRoute element={<AccountSettings />} />} 
+                  />
+                  
+                  {/* 404页面 */}
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Routes>
+              {children}
+            </Suspense>
           </AuthProvider>
         </BrowserRouter>
       </AntdApp>

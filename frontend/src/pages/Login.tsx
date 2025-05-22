@@ -62,10 +62,10 @@ const LoginPage: React.FC = () => {
 
         <div className={styles.main}>
           <LoginForm
-            containerStyle={{ height: 'auto', resize: 'none', overflow: 'hidden', padding: 0 }}
-            contentStyle={{ minHeight: 'auto', resize: 'none', overflow: 'hidden', width: '100%' }}
-            style={{ resize: 'none', overflow: 'hidden', width: '100%' }}
-            resizeCallbacks={false}
+            onFinish={async (values) => {
+              await handleSubmit(values as { username: string; password: string; remember: boolean });
+            }}
+            className={styles.noResizeBar}
             submitter={{
               searchConfig: {
                 submitText: '登 录'
@@ -81,10 +81,6 @@ const LoginPage: React.FC = () => {
               }
             }}
             loading={loading}
-            onFinish={async (values) => {
-              await handleSubmit(values as { username: string; password: string; remember: boolean });
-            }}
-            className={styles.noResizeBar}
           >
             {loginError && (
               <div style={{ marginBottom: 20 }}>
@@ -123,7 +119,7 @@ const LoginPage: React.FC = () => {
                 ]}
               />
               <div style={{ height: 20 }} />
-              <div className={styles.rememberMe} style={{ marginBottom: 0, marginTop: 0, alignSelf: 'flex-start' }}>
+              <div className={styles.rememberMe}>
                 <ProFormCheckbox noStyle name="remember">
                   记住我
                 </ProFormCheckbox>
@@ -136,4 +132,4 @@ const LoginPage: React.FC = () => {
   );
 };
 
-export default LoginPage; 
+export default LoginPage;

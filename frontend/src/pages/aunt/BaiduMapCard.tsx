@@ -310,7 +310,11 @@ const BaiduMapCard = memo(({ value, onChange }: BaiduMapCardProps) => {
       >
         {loading && (
           <div className={styles.loadingContainer}>
-            <Spin size="large" tip="地图加载中..." />
+            <Spin size="large">
+              <div style={{ padding: '50px', background: 'rgba(0, 0, 0, 0.05)' }}>
+                地图加载中...
+              </div>
+            </Spin>
           </div>
         )}
       </div>

@@ -15,12 +15,12 @@ const BAIDU_OCR_CONFIG = {
 
 let baiduAccessToken = null;
 let tokenExpiryTime = 0;
+let tokenRefreshPromise = null;
 
 // 设置文件上传临时存储
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = path.join(__dirname, '../uploads/temp');
-    // 确保上传目录存在
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -33,48 +33,81 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// 定时刷新access_token
+// 刷新token的函数
 async function refreshBaiduAccessToken() {
-  try {
-    const response = await axios.get(
-      `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${BAIDU_OCR_CONFIG.API_KEY}&client_secret=${BAIDU_OCR_CONFIG.SECRET_KEY}`
-    );
-    
-    if (response.data && response.data.access_token) {
-      baiduAccessToken = response.data.access_token;
-      tokenExpiryTime = Date.now() + (response.data.expires_in - 600) * 1000; // 提前10分钟刷新
-      console.log('Baidu access token refreshed:', baiduAccessToken);
-    } else {
-      throw new Error('Failed to refresh Baidu access token');
-    }
-  } catch (error) {
-    console.error('Error refreshing Baidu access token:', error);
+  if (tokenRefreshPromise) {
+    return tokenRefreshPromise;
   }
+
+  tokenRefreshPromise = (async () => {
+    try {
+      console.log('开始刷新百度 access token...');
+      const response = await axios.get(
+        `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${BAIDU_OCR_CONFIG.API_KEY}&client_secret=${BAIDU_OCR_CONFIG.SECRET_KEY}`
+      );
+      
+      if (response.data && response.data.access_token) {
+        baiduAccessToken = response.data.access_token;
+        tokenExpiryTime = Date.now() + (response.data.expires_in - 1800) * 1000; // 提前30分钟刷新
+        console.log('Baidu access token 刷新成功');
+        return baiduAccessToken;
+      } else {
+        throw new Error('获取 access token 失败：响应中没有 token');
+      }
+    } catch (error) {
+      console.error('刷新 Baidu access token 失败:', error);
+      throw error;
+    } finally {
+      tokenRefreshPromise = null;
+    }
+  })();
+
+  return tokenRefreshPromise;
 }
 
-// 每24小时刷新一次token
-setInterval(refreshBaiduAccessToken, 24 * 60 * 60 * 1000);
+// 每12小时刷新一次token
+setInterval(refreshBaiduAccessToken, 12 * 60 * 60 * 1000);
 
 // 初始化时刷新token
-refreshBaiduAccessToken();
+refreshBaiduAccessToken().catch(console.error);
 
 // 获取百度OCR的access_token
 async function getBaiduAccessToken() {
-  if (!baiduAccessToken || Date.now() >= tokenExpiryTime) {
-    await refreshBaiduAccessToken();
+  try {
+    if (!baiduAccessToken || Date.now() >= tokenExpiryTime) {
+      await refreshBaiduAccessToken();
+    }
+    return baiduAccessToken;
+  } catch (error) {
+    console.error('获取 access token 失败:', error);
+    throw error;
   }
-  return baiduAccessToken;
 }
 
 // 身份证OCR识别API路由
-router.post('/idcard', upload.single('idCardImage'), async (req, res) => {
+router.post('/idcard', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ success: false, message: '没有上传文件' });
+      return res.status(400).json({ 
+        success: false, 
+        message: '没有上传文件' 
+      });
     }
+
+    console.log('收到OCR请求:', {
+      file: req.file.originalname,
+      size: req.file.size,
+      idCardSide: req.body.idCardSide
+    });
 
     // 确定是正面还是反面
     const idCardSide = req.body.idCardSide || 'front';
+    if (!['front', 'back'].includes(idCardSide)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '无效的身份证面类型，必须是 front 或 back' 
+      });
+    }
     
     // 获取access_token
     const accessToken = await getBaiduAccessToken();
@@ -89,20 +122,23 @@ router.post('/idcard', upload.single('idCardImage'), async (req, res) => {
       `https://aip.baidubce.com/rest/2.0/ocr/v1/idcard?access_token=${accessToken}`,
       new URLSearchParams({
         image: imageBase64,
-        id_card_side: idCardSide, // front或back
+        id_card_side: idCardSide,
         detect_direction: 'true',
       }).toString(),
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
+        timeout: 10000, // 10秒超时
       }
     );
 
     // 删除临时文件
     fs.unlinkSync(filePath);
     
+    // 处理OCR响应
     if (response.data.error_code) {
+      console.error('百度OCR返回错误:', response.data);
       return res.status(400).json({
         success: false,
         message: `OCR识别失败: ${response.data.error_msg}`,
@@ -110,6 +146,15 @@ router.post('/idcard', upload.single('idCardImage'), async (req, res) => {
       });
     }
 
+    // 验证识别结果
+    if (!response.data.words_result) {
+      return res.status(400).json({
+        success: false,
+        message: 'OCR识别结果无效',
+        error: response.data
+      });
+    }
+    
     // 返回识别结果给前端
     return res.status(200).json({
       success: true,
@@ -119,6 +164,14 @@ router.post('/idcard', upload.single('idCardImage'), async (req, res) => {
     
   } catch (error) {
     console.error('OCR识别出错:', error);
+    // 删除临时文件（如果存在）
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (e) {
+        console.error('删除临时文件失败:', e);
+      }
+    }
     return res.status(500).json({
       success: false,
       message: '服务器处理OCR请求出错',
@@ -127,4 +180,4 @@ router.post('/idcard', upload.single('idCardImage'), async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

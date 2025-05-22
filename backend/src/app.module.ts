@@ -8,11 +8,13 @@ import { UploadModule } from './modules/upload/upload.module';
 import { HealthModule } from './modules/health/health.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { TasksModule } from './modules/tasks/tasks.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['.env', '.env.development', '.env.production'],
     }),
     TypeOrmModule.forRoot({
       ...dataSourceOptions,
@@ -22,6 +24,7 @@ import { AppService } from './app.service';
     ResumeModule,
     UploadModule,
     HealthModule,
+    TasksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

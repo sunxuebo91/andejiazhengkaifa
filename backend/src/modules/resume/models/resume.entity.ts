@@ -5,7 +5,7 @@ export class ResumeEntity {
   @ObjectIdColumn()
   _id: ObjectId;
 
-  @Column()
+  @Column({ type: 'string' })
   id: string;
 
   @Column({ type: 'string', nullable: true })
@@ -105,9 +105,7 @@ export class ResumeEntity {
   updatedAt: Date;
 
   constructor() {
-    if (this._id && !this.id) {
-      this.id = this._id.toString();
-    }
+    // 移除构造函数中的 id 赋值，因为我们不再使用 getter
   }
 }
 

@@ -1,13 +1,13 @@
 import { Controller, Post, Get, UseInterceptors, UploadedFile, BadRequestException, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { OcrService } from './ocr.service';
+import { TencentOcrService } from './tencent-ocr.service';
 import { ImageProcessor } from '../../utils/image-processor';
 
 @Controller('ocr')
 export class OcrController {
   private readonly logger = new Logger(OcrController.name);
 
-  constructor(private readonly ocrService: OcrService) {}
+  constructor(private readonly ocrService: TencentOcrService) {}
 
   @Post('idcard')
   @UseInterceptors(FileInterceptor('image'))
@@ -47,19 +47,19 @@ export class OcrController {
         throw error;
       }
 
-      if (error.message?.includes('百度OCR API错误')) {
+      if (error.message?.includes('腾讯云OCR API错误')) {
         throw new HttpException({
           success: false,
           message: error.message,
-          error: 'OCR_API_ERROR'
+          error: 'TENCENT_OCR_ERROR'
         }, HttpStatus.BAD_GATEWAY);
       }
 
       throw new HttpException({
         success: false,
-        message: '身份证识别失败',
-        error: error.message
-      }, HttpStatus.INTERNAL_SERVER_ERROR);
+        message: error.message || '身份证识别失败',
+        error: error.response?.data?.Error?.Message || error.message
+      }, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 

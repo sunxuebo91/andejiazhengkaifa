@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ImageCacheService } from '../../utils/image-cache.service';
-import { OcrService } from '../ocr/ocr.service';
+import { TencentOcrService as OcrService } from '../ocr/tencent-ocr.service';
 
 @Injectable()
 export class TasksService {

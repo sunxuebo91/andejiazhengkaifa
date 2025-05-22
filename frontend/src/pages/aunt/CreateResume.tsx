@@ -265,29 +265,26 @@ const CreateResume = () => {
       messageApi.loading({ content: '正在识别...', key: loadingKey });
       
       try {
-        // 发送OCR请求，增加超时时间
+        // 发送OCR请求
         const response = await axios.post('/api/ocr/idcard', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           timeout: 60000, // Increase timeout to 60 seconds
         });
 
-        if (!response.data.success) {
-          throw new Error(response.data.message || '识别失败');
-        }
-
+        // 腾讯云OCR响应格式处理
+        const ocrResult = response.data.data; // 腾讯云OCR返回的数据在data字段中
         messageApi.success({ content: `身份证${type === 'front' ? '正面' : '背面'}识别成功`, key: loadingKey });
 
         // Process OCR results
-        if (type === 'front' && response.data.data.words_result) {
-          const { words_result: result } = response.data.data;
+        if (type === 'front') {
           const formValues: any = {};
 
           // Extract information with better error handling
           try {
-            if (result.姓名?.words) formValues.name = result.姓名.words;
-            if (result.民族?.words) formValues.ethnicity = result.民族.words.replace(/族$/, '');
-            if (result.公民身份号码?.words) {
-              const idCard = result.公民身份号码.words;
+            if (ocrResult.Name) formValues.name = ocrResult.Name;
+            if (ocrResult.Nation) formValues.ethnicity = ocrResult.Nation.replace(/族$/, '');
+            if (ocrResult.IdNum) {
+              const idCard = ocrResult.IdNum;
               formValues.idNumber = idCard;
 
               // Extract birth date and calculate age
@@ -315,9 +312,9 @@ const CreateResume = () => {
               formValues.zodiacSign = getZodiacSign(birthMonth, birthDay);
             }
 
-            if (result.住址?.words) {
-              formValues.currentAddress = result.住址.words;
-              formValues.hukouAddress = result.住址.words;
+            if (ocrResult.Address) {
+              formValues.currentAddress = ocrResult.Address;
+              formValues.hukouAddress = ocrResult.Address;
             }
 
             // Update form with extracted values

@@ -205,7 +205,21 @@ export class ResumeController {
     @Query('limit') limit: number = 10,
     @Query('search') search?: string,
   ) {
-    return this.resumeService.findAll(page, limit, search);
+    try {
+      const result = await this.resumeService.findAll(page, limit, search);
+      return {
+        success: true,
+        data: result,
+        message: '获取简历列表成功'
+      };
+    } catch (error) {
+      this.logger.error(`获取简历列表失败: ${error.message}`);
+      return {
+        success: false,
+        message: error.message || '获取简历列表失败',
+        data: null
+      };
+    }
   }
 
   @Get('count')

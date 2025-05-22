@@ -30,7 +30,9 @@ export class ResumeService {
     try {
       console.log('开始查询简历列表，页码:', page, '每页数量:', pageSize, '搜索关键词:', search);
       
+      const skip = (page - 1) * pageSize;
       const query: any = {};
+      
       if (search) {
         query.$or = [
           { name: { $regex: search, $options: 'i' } },
@@ -39,12 +41,15 @@ export class ResumeService {
         ];
       }
       
-      const [items, total] = await this.resumeRepository.findAndCount({
-        where: query,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        order: { createdAt: 'DESC' },
-      });
+      const [items, total] = await Promise.all([
+        this.resumeRepository.find({
+          where: query,
+          skip,
+          take: pageSize,
+          order: { createdAt: 'DESC' }
+        }),
+        this.resumeRepository.count({ where: query })
+      ]);
 
       // 确保每个简历对象都有正确的 id 字段
       const processedItems = items.map(item => {
@@ -73,10 +78,7 @@ export class ResumeService {
       };
     } catch (error) {
       console.error('获取简历列表失败:', error);
-      return {
-        items: [],
-        total: 0
-      };
+      throw new Error(`获取简历列表失败: ${error.message}`);
     }
   }
 

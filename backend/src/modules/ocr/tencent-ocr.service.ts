@@ -1,29 +1,43 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as TencentCloudSDK from 'tencentcloud-sdk-nodejs-ocr';
 import * as retry from 'retry';
-import { ImageCacheService } from '../../utils/image-cache.service';
 import { OcrMetricsService } from './ocr.metrics.service';
 
+const OcrClient = TencentCloudSDK.ocr.v20181119.Client;
+
 @Injectable()
-export class OcrService {
+export class TencentOcrService {
   private client: any;
-  private readonly logger = new Logger(OcrService.name);
+  private readonly logger = new Logger(TencentOcrService.name);
 
   constructor(
     private configService: ConfigService,
-    private imageCacheService: ImageCacheService,
     private metricsService: OcrMetricsService
   ) {
-    // 正确初始化百度 OCR 客户端
-    const BaiduAip = require('baidu-aip-sdk');
-    const AipOcrClient = BaiduAip.ocr;
+    // 初始化腾讯云OCR客户端
+    const SECRET_ID = this.configService.get('TENCENT_OCR_SECRET_ID');
+    const SECRET_KEY = this.configService.get('TENCENT_OCR_SECRET_KEY');
     
-    const APP_ID = this.configService.get('BAIDU_OCR_APP_ID') || '118332507';
-    const API_KEY = this.configService.get('BAIDU_OCR_API_KEY') || 'y4AniiwpEIsK5qNHnHbm4YDV';
-    const SECRET_KEY = this.configService.get('BAIDU_OCR_SECRET_KEY') || 'ORMoWvctBsi0X8CjmIdMJAgv8UmbE6r2';
-    
-    this.client = new AipOcrClient(APP_ID, API_KEY, SECRET_KEY);
-    this.logger.log('百度 OCR 客户端初始化完成');
+    if (!SECRET_ID || !SECRET_KEY) {
+      throw new Error('腾讯云OCR凭证未配置');
+    }
+
+    const clientConfig = {
+      credential: {
+        secretId: SECRET_ID,
+        secretKey: SECRET_KEY,
+      },
+      region: 'ap-guangzhou',
+      profile: {
+        httpProfile: {
+          endpoint: 'ocr.tencentcloudapi.com',
+        },
+      },
+    };
+
+    this.client = new OcrClient(clientConfig);
+    this.logger.log('腾讯云OCR客户端初始化完成');
   }
 
   private async retryOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -56,49 +70,46 @@ export class OcrService {
 
     try {
       this.logger.log('开始识别身份证正面');
-
-      // 先尝试从缓存获取结果
-      const cachedResult = await this.imageCacheService.getCachedResult(image, 'idcard-front');
-      if (cachedResult) {
-        this.logger.log('使用缓存的识别结果');
-        this.metricsService.recordCacheHit();
-        this.metricsService.recordSuccess();
-        this.metricsService.recordProcessingTime(Date.now() - startTime);
-        return cachedResult;
-      }
-
-      this.metricsService.recordCacheMiss();
       const result = await this.retryOperation(async () => {
         try {
-          if (!this.client?.idcardFront) {
-            throw new Error('OCR客户端未正确初始化');
-          }
+          const params = {
+            ImageBase64: image.toString('base64'),
+            CardSide: 'FRONT',
+          };
 
-          const result = await this.client.idcardFront(image, { detect_risk: 'true' });
+          const response = await this.client.IDCardOCR(params);
           
-          if (result.error_code) {
-            throw new Error(`百度OCR API错误: ${result.error_msg}`);
+          if (response.Error) {
+            throw new Error(`腾讯云OCR API错误: ${response.Error.Message}`);
           }
 
           // 验证必要字段
-          const requiredFields = ['姓名', '民族', '住址', '公民身份号码'];
-          const missingFields = requiredFields.filter(field => !result.words_result?.[field]);
+          const requiredFields = ['Name', 'Nation', 'Address', 'IdNum'];
+          const missingFields = requiredFields.filter(field => !response[field]);
           
           if (missingFields.length > 0) {
             throw new Error(`身份证识别结果缺少必要字段: ${missingFields.join(', ')}`);
           }
 
           // 验证身份证号格式
-          const idNumber = result.words_result.公民身份号码.words;
+          const idNumber = response.IdNum;
           if (!/^\d{17}[\dXx]$/.test(idNumber)) {
             throw new Error('身份证号格式不正确');
           }
 
-          // 缓存识别结果
-          await this.imageCacheService.setCachedResult(image, 'idcard-front', result);
-          
+          // 转换为与百度OCR相同的格式
+          const formattedResult = {
+            words_result: {
+              姓名: { words: response.Name },
+              民族: { words: response.Nation },
+              住址: { words: response.Address },
+              公民身份号码: { words: response.IdNum },
+            },
+            risk_info: response.WarningInfos || [],
+          };
+
           this.logger.log('身份证正面识别成功');
-          return result;
+          return formattedResult;
         } catch (error) {
           this.logger.error('身份证正面识别失败:', error);
           throw error;
@@ -122,43 +133,39 @@ export class OcrService {
 
     try {
       this.logger.log('开始识别身份证背面');
-
-      // 先尝试从缓存获取结果
-      const cachedResult = await this.imageCacheService.getCachedResult(image, 'idcard-back');
-      if (cachedResult) {
-        this.logger.log('使用缓存的识别结果');
-        this.metricsService.recordCacheHit();
-        this.metricsService.recordSuccess();
-        this.metricsService.recordProcessingTime(Date.now() - startTime);
-        return cachedResult;
-      }
-
-      this.metricsService.recordCacheMiss();
       const result = await this.retryOperation(async () => {
         try {
-          if (!this.client?.idcardBack) {
-            throw new Error('OCR客户端未正确初始化');
-          }
+          const params = {
+            ImageBase64: image.toString('base64'),
+            CardSide: 'BACK',
+          };
 
-          const result = await this.client.idcardBack(image, { detect_risk: 'true' });
+          const response = await this.client.IDCardOCR(params);
           
-          if (result.error_code) {
-            throw new Error(`百度OCR API错误: ${result.error_msg}`);
+          if (response.Error) {
+            throw new Error(`腾讯云OCR API错误: ${response.Error.Message}`);
           }
 
           // 验证必要字段
-          const requiredFields = ['签发机关', '签发日期', '失效日期'];
-          const missingFields = requiredFields.filter(field => !result.words_result?.[field]);
+          const requiredFields = ['Authority', 'ValidDate'];
+          const missingFields = requiredFields.filter(field => !response[field]);
           
           if (missingFields.length > 0) {
             throw new Error(`身份证背面识别结果缺少必要字段: ${missingFields.join(', ')}`);
           }
 
-          // 缓存识别结果
-          await this.imageCacheService.setCachedResult(image, 'idcard-back', result);
+          // 转换为与百度OCR相同的格式
+          const formattedResult = {
+            words_result: {
+              签发机关: { words: response.Authority },
+              签发日期: { words: response.ValidDate.split('-')[0] },
+              失效日期: { words: response.ValidDate.split('-')[1] },
+            },
+            risk_info: response.WarningInfos || [],
+          };
 
           this.logger.log('身份证背面识别成功');
-          return result;
+          return formattedResult;
         } catch (error) {
           this.logger.error('身份证背面识别失败:', error);
           throw error;
@@ -174,11 +181,6 @@ export class OcrService {
       this.metricsService.recordProcessingTime(Date.now() - startTime);
       throw error;
     }
-  }
-
-  // 清理过期缓存的方法
-  async clearExpiredCache(): Promise<void> {
-    await this.imageCacheService.clearExpiredCache();
   }
 
   // 获取OCR服务性能报告

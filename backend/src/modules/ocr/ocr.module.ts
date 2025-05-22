@@ -1,14 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { OcrController } from './ocr.controller';
-import { OcrService } from './ocr.service';
-import { ImageCacheModule } from '../image-cache/image-cache.module';
+import { TencentOcrService } from './tencent-ocr.service';
 import { OcrMetricsService } from './ocr.metrics.service';
 
 @Module({
-  imports: [ConfigModule, ImageCacheModule],
+  imports: [ConfigModule],
   controllers: [OcrController],
-  providers: [OcrService, OcrMetricsService],
-  exports: [OcrService]
+  providers: [TencentOcrService, OcrMetricsService],
+  exports: [TencentOcrService]
 })
 export class OcrModule {}

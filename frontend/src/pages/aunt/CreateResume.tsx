@@ -281,10 +281,17 @@ const CreateResume = () => {
 
           // Extract information with better error handling
           try {
-            if (ocrResult.Name) formValues.name = ocrResult.Name;
-            if (ocrResult.Nation) formValues.ethnicity = ocrResult.Nation.replace(/族$/, '');
-            if (ocrResult.IdNum) {
-              const idCard = ocrResult.IdNum;
+            // 处理腾讯云OCR返回的数据格式
+            const words_result = ocrResult.words_result || {};
+            
+            if (words_result.姓名?.words) {
+              formValues.name = words_result.姓名.words;
+            }
+            if (words_result.民族?.words) {
+              formValues.ethnicity = words_result.民族.words.replace(/族$/, '');
+            }
+            if (words_result.公民身份号码?.words) {
+              const idCard = words_result.公民身份号码.words;
               formValues.idNumber = idCard;
 
               // Extract birth date and calculate age
@@ -312,12 +319,14 @@ const CreateResume = () => {
               formValues.zodiacSign = getZodiacSign(birthMonth, birthDay);
             }
 
-            if (ocrResult.Address) {
-              formValues.currentAddress = ocrResult.Address;
-              formValues.hukouAddress = ocrResult.Address;
+            if (words_result.住址?.words) {
+              formValues.currentAddress = words_result.住址.words;
+              formValues.hukouAddress = words_result.住址.words;
             }
 
             // Update form with extracted values
+            console.log('OCR识别结果:', words_result);
+            console.log('准备填充的表单数据:', formValues);
             form.setFieldsValue(formValues);
           } catch (parseError) {
             console.error('解析身份证信息出错:', parseError);

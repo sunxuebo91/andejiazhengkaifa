@@ -56,12 +56,6 @@ export class ImageProcessor {
       if (metadata.width < 300 || metadata.height < 300) {
         throw new BadRequestException('图片尺寸太小，最小尺寸为300x300');
       }
-
-      // 验证长宽比
-      const aspectRatio = metadata.width / metadata.height;
-      if (aspectRatio < 1.4 || aspectRatio > 1.6) {
-        throw new BadRequestException('请上传标准身份证比例的图片');
-      }
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;

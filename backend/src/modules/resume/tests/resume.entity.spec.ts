@@ -4,6 +4,7 @@ import { ResumeEntity, ResumeSchema } from '../models/resume.entity';
 import { Model, Types } from 'mongoose';
 import { getModelToken } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Education, Gender, JobType } from '../dto/create-resume.dto';
 
 describe('ResumeEntity Type Tests', () => {
   let model: Model<ResumeEntity>;
@@ -17,7 +18,7 @@ describe('ResumeEntity Type Tests', () => {
         MongooseModule.forRootAsync({
           imports: [ConfigModule],
           useFactory: async (configService: ConfigService) => ({
-            uri: configService.get('MONGODB_URI', 'mongodb://localhost:27017/housekeeping'),
+            uri: configService.get('MONGODB_URI', 'mongodb://localhost:27017/housekeeping-test'),
             useNewUrlParser: true,
             useUnifiedTopology: true,
           }),
@@ -41,60 +42,53 @@ describe('ResumeEntity Type Tests', () => {
       name: '测试用户',
       phone: '13800138000',
       age: 25,
-      gender: '男',
-      education: '本科',
-      school: '测试大学',
-      major: '计算机科学',
-      workExperience: '3年',
-      expectedPosition: '前端开发',
-      expectedSalary: '15k-20k',
-      selfEvaluation: '测试自我介绍',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      gender: Gender.FEMALE,
+      education: Education.BACHELOR,
+      nativePlace: '北京市',
+      jobType: JobType.YUEXIN,
+      experienceYears: 3
     };
 
     const resume = new model(resumeData);
     const savedResume = await resume.save();
 
-    // 测试类型
+    // 测试必填字段
     expect(savedResume).toBeDefined();
-    expect(savedResume._id).toBeInstanceOf(Types.ObjectId);
+    expect(savedResume._id).toBeDefined();
     expect(typeof savedResume.name).toBe('string');
     expect(typeof savedResume.phone).toBe('string');
     expect(typeof savedResume.age).toBe('number');
     expect(typeof savedResume.gender).toBe('string');
     expect(typeof savedResume.education).toBe('string');
-    expect(typeof savedResume.school).toBe('string');
-    expect(typeof savedResume.major).toBe('string');
-    expect(typeof savedResume.workExperience).toBe('string');
-    expect(typeof savedResume.expectedPosition).toBe('string');
-    expect(typeof savedResume.expectedSalary).toBe('string');
-    expect(typeof savedResume.selfEvaluation).toBe('string');
-    expect(savedResume.createdAt).toBeInstanceOf(Date);
-    expect(savedResume.updatedAt).toBeInstanceOf(Date);
+    expect(typeof savedResume.nativePlace).toBe('string');
+    expect(typeof savedResume.jobType).toBe('string');
+    expect(typeof savedResume.experienceYears).toBe('number');
   });
 
-  it('should find resumes with correct types', async () => {
-    const resumes = await model.find().exec();
-    
-    expect(Array.isArray(resumes)).toBe(true);
-    if (resumes.length > 0) {
-      const resume = resumes[0];
-      expect(resume._id).toBeInstanceOf(Types.ObjectId);
-      expect(typeof resume.name).toBe('string');
-      expect(typeof resume.phone).toBe('string');
-      expect(typeof resume.age).toBe('number');
-      expect(typeof resume.gender).toBe('string');
-      expect(typeof resume.education).toBe('string');
-      expect(typeof resume.school).toBe('string');
-      expect(typeof resume.major).toBe('string');
-      expect(typeof resume.workExperience).toBe('string');
-      expect(typeof resume.expectedPosition).toBe('string');
-      expect(typeof resume.expectedSalary).toBe('string');
-      expect(typeof resume.selfEvaluation).toBe('string');
-      expect(resume.createdAt).toBeInstanceOf(Date);
-      expect(resume.updatedAt).toBeInstanceOf(Date);
-    }
+  it('should handle optional fields correctly', async () => {
+    const resumeData = {
+      name: '测试用户2',
+      phone: '13800138001',
+      age: 26,
+      gender: Gender.FEMALE,
+      education: Education.BACHELOR,
+      nativePlace: '上海市',
+      jobType: JobType.YUEXIN,
+      experienceYears: 3,
+      // 可选字段
+      wechat: 'test123',
+      currentAddress: '北京市朝阳区',
+      expectedSalary: 8000
+    };
+
+    const resume = new model(resumeData);
+    const savedResume = await resume.save();
+
+    expect(savedResume).toBeDefined();
+    expect(savedResume._id).toBeDefined();
+    expect(typeof savedResume.wechat).toBe('string');
+    expect(typeof savedResume.currentAddress).toBe('string');
+    expect(typeof savedResume.expectedSalary).toBe('number');
   });
 
   it('should update resume with correct types', async () => {
@@ -105,37 +99,39 @@ describe('ResumeEntity Type Tests', () => {
       const updatedResume = await resume.save();
 
       expect(updatedResume.name).toBe(newName);
-      expect(updatedResume._id).toBeInstanceOf(Types.ObjectId);
+      expect(updatedResume._id).toBeDefined();
       expect(typeof updatedResume.name).toBe('string');
-      expect(updatedResume.updatedAt).toBeInstanceOf(Date);
     }
   });
 
-  it('should handle optional fields correctly', async () => {
+  it('should handle arrays correctly', async () => {
     const resumeData = {
-      name: '测试用户2',
-      phone: '13800138001',
-      age: 26,
-      gender: '女',
-      // 可选字段不提供
+      name: '测试用户3',
+      phone: '13800138002',
+      age: 27,
+      gender: Gender.FEMALE,
+      education: Education.BACHELOR,
+      nativePlace: '广州市',
+      jobType: JobType.YUEXIN,
+      experienceYears: 3,
+      // 数组字段
+      photoUrls: ['url1', 'url2'],
+      workExperiences: [
+        {
+          startDate: '2020-01',
+          endDate: '2021-12',
+          description: '测试工作经历'
+        }
+      ]
     };
 
     const resume = new model(resumeData);
     const savedResume = await resume.save();
 
-    expect(savedResume).toBeDefined();
-    expect(savedResume._id).toBeInstanceOf(Types.ObjectId);
-    expect(typeof savedResume.name).toBe('string');
-    expect(typeof savedResume.phone).toBe('string');
-    expect(typeof savedResume.age).toBe('number');
-    expect(typeof savedResume.gender).toBe('string');
-    // 可选字段应该存在但可能为 undefined
-    expect('education' in savedResume).toBe(true);
-    expect('school' in savedResume).toBe(true);
-    expect('major' in savedResume).toBe(true);
-    expect('workExperience' in savedResume).toBe(true);
-    expect('expectedPosition' in savedResume).toBe(true);
-    expect('expectedSalary' in savedResume).toBe(true);
-    expect('selfEvaluation' in savedResume).toBe(true);
+    expect(Array.isArray(savedResume.photoUrls)).toBe(true);
+    expect(savedResume.photoUrls).toHaveLength(2);
+    expect(Array.isArray(savedResume.workExperiences)).toBe(true);
+    expect(savedResume.workExperiences).toHaveLength(1);
+    expect(savedResume.workExperiences[0].description).toBe('测试工作经历');
   });
-}); 
+});

@@ -2,7 +2,23 @@ import { Controller, Post, Get, UseInterceptors, UploadedFile, BadRequestExcepti
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TencentOcrService } from './tencent-ocr.service';
 import { ImageProcessor } from '../../utils/image-processor';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 
+const multerOptions: MulterOptions = {
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
+      cb(new BadRequestException('只支持JPG、JPEG和PNG格式的图片'), false);
+      return;
+    }
+    cb(null, true);
+  },
+};
+
+@ApiTags('OCR服务')
 @Controller('ocr')
 export class OcrController {
   private readonly logger = new Logger(OcrController.name);
@@ -10,7 +26,21 @@ export class OcrController {
   constructor(private readonly ocrService: TencentOcrService) {}
 
   @Post('idcard')
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FileInterceptor('image', multerOptions))
+  @ApiOperation({ summary: '身份证识别' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: '身份证图片文件',
+        },
+      },
+    },
+  })
   async idCard(@UploadedFile() file: Express.Multer.File) {
     try {
       if (!file) {
@@ -28,7 +58,7 @@ export class OcrController {
       this.logger.log(`处理${idCardSide === 'front' ? '正面' : '背面'}身份证识别请求`);
 
       // 调用对应的识别方法
-      const result = idCardSide === 'front' 
+      const result = idCardSide === 'front'
         ? await this.ocrService.idCardFront(processedImage)
         : await this.ocrService.idCardBack(processedImage);
 
@@ -39,7 +69,6 @@ export class OcrController {
         data: result,
         message: '识别成功'
       };
-
     } catch (error) {
       this.logger.error('OCR识别失败:', error);
 
@@ -64,6 +93,7 @@ export class OcrController {
   }
 
   @Get('health')
+  @ApiOperation({ summary: '健康检查' })
   async checkHealth() {
     try {
       const report = await this.ocrService.getPerformanceReport();
@@ -83,6 +113,7 @@ export class OcrController {
   }
 
   @Get('metrics')
+  @ApiOperation({ summary: '获取服务指标' })
   async getMetrics() {
     try {
       const report = await this.ocrService.getPerformanceReport();

@@ -1,76 +1,111 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Model, Types } from 'mongoose';
+import { Document, Model } from 'mongoose';
+import { Education, Gender, JobType, LeadSource, MaritalStatus, OrderStatus, Religion, Skill, Zodiac, ZodiacSign } from '../dto/create-resume.dto';
 
-// 定义基础文档类型
-export interface IResume {
-  name: string;
-  phone: string;
-  age: number;
-  wechat?: string;
-  idNumber?: string;
-  education: string;
-  nativePlace: string;
-  experienceYears: number;
-  maritalStatus?: string;
-  religion?: string;
-  currentAddress?: string;
-  hukouAddress?: string;
-  birthDate?: string;
-  ethnicity?: string;
-  gender?: string;
-  zodiac?: string;
-  zodiacSign?: string;
-  jobType: string;
-  expectedSalary?: number;
-  serviceArea?: string;
-  orderStatus?: string;
-  skills?: string[];
-  leadSource?: string;
-  workExperience?: { startDate: string; endDate: string; description: string }[];
-  idCardFrontUrl?: string;
-  idCardBackUrl?: string;
-  photoUrls?: string[];
-  certificateUrls?: string[];
-  medicalReportUrls?: string[];
-  emergencyContactName?: string;
-  emergencyContactPhone?: string;
-  medicalExamDate?: string;
+// 定义工作经历接口
+interface WorkExperience {
+  startDate: string;
+  endDate: string;
+  description: string;
 }
 
 @Schema({ timestamps: true })
-export class ResumeEntity {
+export class ResumeEntity extends Document {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, unique: true })
   phone: string;
 
   @Prop({ required: true })
   age: number;
 
+  @Prop()
+  wechat?: string;
+
+  @Prop({ unique: true, sparse: true })
+  idNumber?: string;
+
+  @Prop({ required: true, enum: Education })
+  education: Education;
+
   @Prop({ required: true })
-  gender: string;
+  nativePlace: string;
+
+  @Prop({ required: true })
+  experienceYears: number;
+
+  @Prop({ enum: MaritalStatus })
+  maritalStatus?: MaritalStatus;
+
+  @Prop({ enum: Religion })
+  religion?: Religion;
 
   @Prop()
-  education: string;
+  currentAddress?: string;
 
   @Prop()
-  school: string;
+  hukouAddress?: string;
 
   @Prop()
-  major: string;
+  birthDate?: string;
 
   @Prop()
-  workExperience: string;
+  ethnicity?: string;
+
+  @Prop({ required: true, enum: Gender })
+  gender: Gender;
+
+  @Prop({ enum: Zodiac })
+  zodiac?: Zodiac;
+
+  @Prop({ enum: ZodiacSign })
+  zodiacSign?: ZodiacSign;
+
+  @Prop({ required: true, enum: JobType })
+  jobType: JobType;
 
   @Prop()
-  expectedPosition: string;
+  expectedSalary?: number;
 
   @Prop()
-  expectedSalary: string;
+  serviceArea?: string;
+
+  @Prop({ enum: OrderStatus })
+  orderStatus?: OrderStatus;
+
+  @Prop({ type: [String], enum: Skill })
+  skills?: Skill[];
+
+  @Prop({ enum: LeadSource })
+  leadSource?: LeadSource;
+
+  @Prop({ type: [{ startDate: String, endDate: String, description: String }] })
+  workExperiences?: WorkExperience[];
 
   @Prop()
-  selfEvaluation: string;
+  idCardFrontUrl?: string;
+
+  @Prop()
+  idCardBackUrl?: string;
+
+  @Prop({ type: [String] })
+  photoUrls?: string[];
+
+  @Prop({ type: [String] })
+  certificateUrls?: string[];
+
+  @Prop({ type: [String] })
+  medicalReportUrls?: string[];
+
+  @Prop()
+  emergencyContactName?: string;
+
+  @Prop()
+  emergencyContactPhone?: string;
+
+  @Prop()
+  medicalExamDate?: string;
 
   @Prop()
   createdAt: Date;

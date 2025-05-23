@@ -76,24 +76,29 @@ const ResumeList = () => {
       }
       
       const { items: resumes = [], total: totalCount = 0 } = data;
-      console.log('解析后的简历数据:', { resumesCount: resumes.length, totalCount });
+      console.log('解析后的简历数据:', { resumesCount: resumes.length, totalCount, sampleResume: resumes[0] });
       
       // 格式化数据
       let formattedData = resumes.map(resume => {
         console.log('处理简历数据:', resume);
         // 确保id存在且为字符串
-        const resumeId = resume._id || resume.id || '';
+        const resumeId = resume.id || resume._id || '';
         console.log('简历ID:', resumeId);
+        
+        // 格式化ID显示
+        const formattedId = resumeId ? 
+          (typeof resumeId === 'string' ? 
+            resumeId.substring(0, 8).padEnd(8, '0') : 
+            String(resumeId).substring(0, 8).padEnd(8, '0')
+          ) : 
+          '未知ID';
+        
+        console.log('格式化后的ID:', formattedId);
         
         return {
           ...resume,
           id: resumeId, // 确保id字段存在
-          formattedId: resumeId ? 
-            (typeof resumeId === 'string' ? 
-              resumeId.substring(0, 8).padEnd(8, '0') : 
-              String(resumeId).substring(0, 8).padEnd(8, '0')
-            ) : 
-            '未知ID',
+          formattedId,
           hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
         };
       });
@@ -101,13 +106,15 @@ const ResumeList = () => {
       // 如果有搜索关键词，在前端进行过滤
       if (searchKeyword) {
         formattedData = formattedData.filter(resume => {
-          return (
-            (resume.name && resume.name.toLowerCase().includes(searchKeyword)) ||
-            (resume.phone && resume.phone.includes(searchKeyword)) ||
-            (resume.idNumber && resume.idNumber.includes(searchKeyword)) ||
-            (resume.id && resume.id.toLowerCase().includes(searchKeyword)) ||
-            (resume.formattedId && resume.formattedId.toLowerCase().includes(searchKeyword))
-          );
+          const searchFields = [
+            resume.name,
+            resume.phone,
+            resume.idNumber,
+            resume.id,
+            resume.formattedId
+          ].map(field => (field || '').toLowerCase());
+          
+          return searchFields.some(field => field.includes(searchKeyword));
         });
         
         if (formattedData.length === 0) {
@@ -115,6 +122,7 @@ const ResumeList = () => {
         }
       }
       
+      console.log('最终处理后的数据:', formattedData.slice(0, 2)); // 只打印前两条记录用于调试
       setResumeList(formattedData);
       setTotal(totalCount);
     } catch (error) {
@@ -273,9 +281,10 @@ const ResumeList = () => {
       width: 120,
       render: (text, record) => {
         console.log('渲染简历ID:', { text, record });
+        const id = record.id || record._id || '';
         return (
-          <Tooltip title={`完整ID: ${record.id || '未知'}`}>
-            <a onClick={() => record.id ? navigate(`/aunt/resume/${record.id}`) : messageApi.warning('简历ID不存在')}>
+          <Tooltip title={`完整ID: ${id || '未知'}`}>
+            <a onClick={() => id ? navigate(`/aunt/resume/${id}`) : messageApi.warning('简历ID不存在')}>
               {text || '未知ID'}
             </a>
           </Tooltip>

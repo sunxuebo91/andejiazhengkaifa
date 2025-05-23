@@ -270,9 +270,7 @@ const ResumeList = () => {
                 return;
               }
               console.log('导航到简历详情:', { formattedId: record.formattedId, fullId: id });
-              navigate(`/aunt/resumes/detail/${record.formattedId}`, { 
-                state: { fullId: id } // 传递完整ID作为状态
-              });
+              navigate(`/aunt/resumes/detail/${id}`); // 使用完整ID
             }}>
               {text || '未知ID'}
             </a>

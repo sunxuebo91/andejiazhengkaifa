@@ -15,6 +15,8 @@ dayjs.extend(isSameOrAfter);
 
 dayjs.extend(customParseFormat);
 import apiService from '../../services/api';
+import type { UploadFile } from 'antd/es/upload/interface';
+import imageCompression from 'browser-image-compression';
 const { Option } = Select;
 
 // 中国省份/地区常量数据
@@ -159,6 +161,52 @@ const leadSourceMap = {
   other: '其他'
 };
 
+// 添加类型定义
+interface WorkExperience {
+  _id?: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+}
+
+interface ResumeData {
+  _id: string;
+  name: string;
+  phone: string;
+  age: number;
+  idNumber: string;
+  education: keyof typeof educationMap;
+  nativePlace: string;
+  experienceYears: number;
+  maritalStatus: keyof typeof maritalStatusMap;
+  religion: keyof typeof religionMap;
+  currentAddress: string;
+  hukouAddress: string;
+  birthDate: string;
+  ethnicity: string;
+  gender: keyof typeof genderMap;
+  zodiac: keyof typeof zodiacMap;
+  zodiacSign: keyof typeof zodiacSignMap;
+  jobType: keyof typeof jobTypeMap;
+  expectedSalary: number;
+  serviceArea: string;
+  orderStatus: keyof typeof orderStatusMap;
+  skills: Array<keyof typeof skillsMap>;
+  leadSource: keyof typeof leadSourceMap;
+  workExperiences: WorkExperience[];
+  photoUrls: (string | null)[];
+  certificateUrls: (string | null)[];
+  medicalReportUrls: (string | null)[];
+  idCardFrontUrl?: string | null;
+  idCardBackUrl?: string | null;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  medicalExamDate: string;
+  createdAt: string;
+  updatedAt: string;
+  __v: number;
+}
+
 const ResumeDetail = () => {
   const { id: shortId } = useParams();
   const navigate = useNavigate();
@@ -179,7 +227,7 @@ const ResumeDetail = () => {
   const [followUpLoading, setFollowUpLoading] = useState(false);
 
   // 在组件内部处理数据前的函数，处理工作经历的日期格式
-  const formatWorkExperiences = (data) => {
+  const formatWorkExperiences = (data: Partial<ResumeData>) => {
     // 获取工作经历数据，支持两种字段名
     const workExps = data.workExperiences || data.workExperience || [];
     
@@ -227,34 +275,10 @@ const ResumeDetail = () => {
     setLoading(true);
     setError(null);
     try {
-      // 从localStorage获取完整的简历ID
-      const resumeList = JSON.parse(localStorage.getItem('resumeList') || '[]');
-      console.log('从localStorage获取的简历列表:', resumeList);
-      
-      const fullResume = resumeList.find(r => r.formattedId === shortId);
-      console.log('查找到的完整简历数据:', fullResume);
-      
-      if (!fullResume) {
-        console.error('未找到简历数据:', { shortId, resumeList });
-        setError('未找到简历数据');
-        setLoading(false);
-        navigate('/aunt/list');
-        return;
-      }
+      console.log('正在获取简历详情，ID:', shortId);
+      const response = await axios.get<{ success: boolean; data: ResumeData; message?: string }>(`/api/resumes/${shortId}`);
+      console.log('原始API响应:', response.data);
 
-      if (!fullResume.id) {
-        console.error('简历数据缺少ID字段:', fullResume);
-        setError('简历数据格式错误');
-        setLoading(false);
-        navigate('/aunt/list');
-        return;
-      }
-
-      console.log('正在获取简历详情，完整ID:', fullResume.id);
-      const response = await axios.get(`/api/resumes/${fullResume.id}`);
-      console.log('原始API响应:', response);
-
-      // 检查响应格式
       if (!response.data.success) {
         console.error('API返回错误:', response.data.message);
         setError(response.data.message || '获取简历详情失败');
@@ -262,91 +286,72 @@ const ResumeDetail = () => {
         return;
       }
 
-      // 获取简历数据
       const resumeData = response.data.data;
-      console.log('获取到的简历数据:', resumeData);
+      console.log('获取到的简历数据:', JSON.stringify(resumeData, null, 2));
 
-      // 确保ID字段存在且格式正确
-      if (!resumeData._id) {
-        console.error('简历数据缺少ID字段');
-        setError('获取简历详情失败：数据格式错误');
-        setLoading(false);
-        return;
-      }
+      // 打印原始图片URL信息
+      console.log('原始图片URL信息:', {
+        idCardFrontUrl: resumeData.idCardFrontUrl,
+        idCardBackUrl: resumeData.idCardBackUrl,
+        photoUrls: resumeData.photoUrls,
+        certificateUrls: resumeData.certificateUrls,
+        medicalReportUrls: resumeData.medicalReportUrls
+      });
 
       // 处理工作经验数据
       const formattedWorkExperience = formatWorkExperiences(resumeData);
-      console.log('格式化后的工作经历:', formattedWorkExperience);
 
-      // 更新简历数据，确保统一使用workExperiences字段
+      // 处理图片URL
+      const processImageUrl = (url: string | null | undefined): string | null => {
+        if (!url) return null;
+        if (typeof url !== 'string') return null;
+        if (url.startsWith('http://') || url.startsWith('https://')) return url;
+        
+        const baseUrl = import.meta.env.VITE_API_BASE_URL;
+        if (!baseUrl) {
+          console.error('未配置基础URL，无法处理相对路径');
+          return null;
+        }
+        
+        return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+      };
+
+      // 更新简历数据
       const updatedResumeData = {
         ...resumeData,
         workExperiences: formattedWorkExperience,
-        // 确保ID字段存在
         id: resumeData._id.toString(),
-        // 确保宗教信仰字段正确
         religion: resumeData.religion || null,
-        // 确保体检时间字段正确格式化
         medicalExamDate: resumeData.medicalExamDate ? dayjs(resumeData.medicalExamDate) : null,
-        // 确保图片和文件 URL 字段正确
-        idCardFrontUrl: resumeData.idCardFrontUrl || null,
-        idCardBackUrl: resumeData.idCardBackUrl || null,
-        photoUrls: Array.isArray(resumeData.photoUrls) ? resumeData.photoUrls.filter(url => url && typeof url === 'string' && url.trim() !== '') : [],
-        certificateUrls: Array.isArray(resumeData.certificateUrls) ? resumeData.certificateUrls.filter(url => url && typeof url === 'string' && url.trim() !== '') : [],
-        medicalReportUrls: Array.isArray(resumeData.medicalReportUrls) ? resumeData.medicalReportUrls.filter(url => url && typeof url === 'string' && url.trim() !== '') : [],
+        // 处理图片URL
+        idCardFrontUrl: processImageUrl(resumeData.idCardFrontUrl),
+        idCardBackUrl: processImageUrl(resumeData.idCardBackUrl),
+        photoUrls: Array.isArray(resumeData.photoUrls) 
+          ? resumeData.photoUrls.map(processImageUrl).filter(Boolean) 
+          : [],
+        certificateUrls: Array.isArray(resumeData.certificateUrls) 
+          ? resumeData.certificateUrls.map(processImageUrl).filter(Boolean) 
+          : [],
+        medicalReportUrls: Array.isArray(resumeData.medicalReportUrls) 
+          ? resumeData.medicalReportUrls.map(processImageUrl).filter(Boolean) 
+          : [],
       };
-      
-      // 确保生日字段格式化
-      if (updatedResumeData.birthDate) {
-        updatedResumeData.birthDate = dayjs(updatedResumeData.birthDate);
+
+      // 打印处理后的图片URL信息
+      console.log('处理后的图片URL信息:', {
+        idCardFrontUrl: updatedResumeData.idCardFrontUrl,
+        idCardBackUrl: updatedResumeData.idCardBackUrl,
+        photoUrls: updatedResumeData.photoUrls,
+        certificateUrls: updatedResumeData.certificateUrls,
+        medicalReportUrls: updatedResumeData.medicalReportUrls,
+        baseUrl: import.meta.env.VITE_API_BASE_URL
+      });
+
+      // 检查环境变量
+      if (!import.meta.env.VITE_API_BASE_URL) {
+        console.warn('警告: 未配置 VITE_API_BASE_URL 环境变量');
       }
 
-      // 添加日志输出，检查体检时间字段
-      console.log('体检时间字段:', {
-        original: resumeData.medicalExamDate,
-        formatted: updatedResumeData.medicalExamDate,
-        type: typeof resumeData.medicalExamDate
-      });
-
-      // 添加处理后的图片和文件 URL 的详细日志
-      console.log('处理后的图片和文件 URL 详情:', {
-        idCardFrontUrl: {
-          value: updatedResumeData.idCardFrontUrl,
-          type: typeof updatedResumeData.idCardFrontUrl,
-          length: updatedResumeData.idCardFrontUrl?.length
-        },
-        idCardBackUrl: {
-          value: updatedResumeData.idCardBackUrl,
-          type: typeof updatedResumeData.idCardBackUrl,
-          length: updatedResumeData.idCardBackUrl?.length
-        },
-        photoUrls: {
-          value: updatedResumeData.photoUrls,
-          type: Array.isArray(updatedResumeData.photoUrls) ? 'array' : typeof updatedResumeData.photoUrls,
-          length: Array.isArray(updatedResumeData.photoUrls) ? updatedResumeData.photoUrls.length : 0,
-          urls: updatedResumeData.photoUrls
-        },
-        certificateUrls: {
-          value: updatedResumeData.certificateUrls,
-          type: Array.isArray(updatedResumeData.certificateUrls) ? 'array' : typeof updatedResumeData.certificateUrls,
-          length: Array.isArray(updatedResumeData.certificateUrls) ? updatedResumeData.certificateUrls.length : 0,
-          urls: updatedResumeData.certificateUrls
-        },
-        medicalReportUrls: {
-          value: updatedResumeData.medicalReportUrls,
-          type: Array.isArray(updatedResumeData.medicalReportUrls) ? 'array' : typeof updatedResumeData.medicalReportUrls,
-          length: Array.isArray(updatedResumeData.medicalReportUrls) ? updatedResumeData.medicalReportUrls.length : 0,
-          urls: updatedResumeData.medicalReportUrls
-        }
-      });
-
-      // 设置简历数据到状态
-      console.log('处理后的简历数据:', updatedResumeData);
-      console.log('处理后的宗教信仰:', {
-        religion: updatedResumeData.religion,
-        religionType: typeof updatedResumeData.religion,
-        religionMap: religionMap[updatedResumeData.religion]
-      });
       setResume(updatedResumeData);
     } catch (error) {
       console.error('获取简历详情失败:', error);
@@ -458,28 +463,50 @@ const ResumeDetail = () => {
 
   // 处理图片预览
   const handlePreview = (url: string) => {
+    console.log(`处理图片预览:`, url);
+    if (!url) {
+      console.warn('预览URL为空');
+      return;
+    }
     setPreviewImage(url);
     setPreviewVisible(true);
   };
 
   // 渲染文件预览
   const renderFilePreview = (url: string | null | undefined, index: number) => {
-    if (!url || typeof url !== 'string') {
-      console.warn(`无效的URL: ${url}, 索引: ${index}`);
+    console.log(`开始渲染文件预览，参数:`, { 
+      url, 
+      index, 
+      urlType: typeof url,
+      baseUrl: import.meta.env.VITE_API_BASE_URL
+    });
+    
+    if (!url) {
+      console.warn(`URL为空，索引: ${index}`);
       return null;
     }
 
-    console.log(`渲染文件预览，URL: ${url}, 索引: ${index}, URL类型: ${typeof url}, URL长度: ${url.length}`);
-    
+    if (typeof url !== 'string') {
+      console.warn(`URL类型错误: ${typeof url}, 值:`, url);
+      return null;
+    }
+
     // 检查 URL 是否以 http 或 https 开头
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       console.warn(`URL格式不正确: ${url}`);
-      return null;
+      const baseUrl = import.meta.env.VITE_API_BASE_URL;
+      if (!baseUrl) {
+        console.error('未配置基础URL，无法处理相对路径');
+        return null;
+      }
+      const newUrl = `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+      console.log(`添加基础URL后的完整URL:`, { oldUrl: url, newUrl, baseUrl });
+      url = newUrl;
     }
 
     const isPdf = url.toLowerCase().endsWith('.pdf');
+    console.log(`文件类型判断:`, { url, isPdf });
     
-    // 使用URL的哈希值作为key
     const uniqueKey = `file-${url.split('/').pop() || index}-${index}`;
     
     return (
@@ -495,7 +522,17 @@ const ResumeDetail = () => {
             alignItems: 'center',
             background: '#f5f5f5'
           }}>
-            <a href={url} target="_blank" rel="noopener noreferrer">
+            <a 
+              href={url} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('打开PDF文件:', url);
+                window.open(url, '_blank');
+              }}
+            >
               <FilePdfOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
             </a>
           </div>
@@ -512,10 +549,18 @@ const ResumeDetail = () => {
               src={url} 
               alt={`文件预览-${index}`} 
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onClick={() => handlePreview(url)}
+              onClick={() => {
+                console.log('点击预览图片:', url);
+                handlePreview(url);
+              }}
               onError={(e) => {
                 console.error(`图片加载失败: ${url}, 错误信息:`, e);
-                e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+                const target = e.target as HTMLImageElement;
+                target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+                message.error(`图片加载失败: ${url}`);
+              }}
+              onLoad={() => {
+                console.log(`图片加载成功: ${url}`);
               }}
             />
           </div>
@@ -833,6 +878,19 @@ const ResumeDetail = () => {
       setLoading(false);
     }
   };
+
+  // 在组件加载时打印图片URL信息
+  useEffect(() => {
+    if (resume) {
+      console.log('简历图片URL信息:', {
+        idCardFrontUrl: resume.idCardFrontUrl,
+        idCardBackUrl: resume.idCardBackUrl,
+        photoUrls: resume.photoUrls,
+        certificateUrls: resume.certificateUrls,
+        medicalReportUrls: resume.medicalReportUrls
+      });
+    }
+  }, [resume]);
 
   if (error) {
     return (

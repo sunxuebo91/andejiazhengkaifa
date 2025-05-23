@@ -52,15 +52,26 @@ export class ResumeService {
         this.resumeRepository.count(query)
       ]);
       
+      // 确保每个简历对象都有正确的ID字段
+      const processedItems = items.map(item => {
+        const resume = item.toObject ? item.toObject() : item;
+        // 确保id字段存在
+        if (!resume.id && resume._id) {
+          resume.id = resume._id.toString();
+        }
+        return resume;
+      });
+      
       console.log('查询成功:', {
         total,
         currentPage: page,
         pageSize,
-        itemsCount: items.length
+        itemsCount: processedItems.length,
+        sampleItem: processedItems[0] // 记录第一个项目的数据结构
       });
 
       return {
-        items,
+        items: processedItems,
         total
       };
     } catch (error) {

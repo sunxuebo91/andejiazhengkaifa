@@ -81,16 +81,19 @@ const ResumeList = () => {
       // 格式化数据
       let formattedData = resumes.map(resume => {
         console.log('处理简历数据:', resume);
+        // 确保id存在且为字符串
+        const resumeId = resume._id || resume.id || '';
+        console.log('简历ID:', resumeId);
+        
         return {
           ...resume,
-          // 修改ID格式化逻辑
-          formattedId: resume.id ? 
-            (typeof resume.id === 'string' ? 
-              resume.id.substring(0, 8).padEnd(8, '0') : 
-              String(resume.id).substring(0, 8).padEnd(8, '0')
+          id: resumeId, // 确保id字段存在
+          formattedId: resumeId ? 
+            (typeof resumeId === 'string' ? 
+              resumeId.substring(0, 8).padEnd(8, '0') : 
+              String(resumeId).substring(0, 8).padEnd(8, '0')
             ) : 
             '未知ID',
-          // 检查是否有体检报告
           hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
         };
       });
@@ -268,11 +271,16 @@ const ResumeList = () => {
       dataIndex: 'formattedId',
       key: 'formattedId',
       width: 120,
-      render: (text, record) => (
-        <Tooltip title={`完整ID: ${record.id}`}>
-          <a onClick={() => navigate(`/aunt/resume/${record.id}`)}>{text}</a>
-        </Tooltip>
-      ),
+      render: (text, record) => {
+        console.log('渲染简历ID:', { text, record });
+        return (
+          <Tooltip title={`完整ID: ${record.id || '未知'}`}>
+            <a onClick={() => record.id ? navigate(`/aunt/resume/${record.id}`) : messageApi.warning('简历ID不存在')}>
+              {text || '未知ID'}
+            </a>
+          </Tooltip>
+        );
+      },
     },
     {
       title: '姓名',

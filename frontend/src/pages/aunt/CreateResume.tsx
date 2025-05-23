@@ -16,8 +16,8 @@ import apiService from '../../services/api';
 
 // 设置 axios 默认配置
 // API请求通过vite代理转发
-axios.defaults.withCredentials = true;
-axios.defaults.timeout = 10000;
+// axios.defaults.withCredentials = true;
+// axios.defaults.timeout = 10000;
 
 // 定义图片压缩选项
 const compressionOptions = {
@@ -168,24 +168,13 @@ const CreateResume = () => {
     try {
       messageApi.loading('正在连接后端服务...');
       debugLog('尝试连接后端服务...');
-      // 使用相对路径，Vite代理会自动处理
-      const response = await axios.get('/api/resumes', {
-        timeout: 8000 // 增加超时时间
-      });
-      debugLog('后端连接正常:', response.data);
+      const response = await apiService.get('/health');
+      debugLog('后端连接正常:', response);
       messageApi.success('后端服务连接成功');
       setBackendConnected(true);
       setConnectionError('');
     } catch (error) {
       console.error('后端连接失败:', error);
-      console.error('错误详情:', {
-        message: error.message,
-        code: error.code,
-        response: error.response,
-        request: error.request
-      });
-      
-      // 显示友好的错误信息
       messageApi.error('后端服务暂时无法连接，请检查后端服务是否启动');
       setBackendConnected(false);
       setConnectionError(`连接后端失败: ${error.response?.status || error.message}`);
@@ -632,11 +621,11 @@ const CreateResume = () => {
         if (idCardFrontFile) {
           const formData = new FormData();
           formData.append('file', idCardFrontFile);
-          const response = await axios.post(`/api/upload/id-card/front`, formData);
-          if (!response.data.success) {
+          const response = await apiService.upload('/upload/id-card/front', formData);
+          if (!response.success) {
             throw new Error('身份证正面上传失败');
           }
-          fileUrls.idCardFrontUrl = response.data.data.url;
+          fileUrls.idCardFrontUrl = response.data.url;
         } else if (hasExistingIdCardFront) {
           fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
         }
@@ -645,11 +634,11 @@ const CreateResume = () => {
         if (idCardBackFile) {
           const formData = new FormData();
           formData.append('file', idCardBackFile);
-          const response = await axios.post(`/api/upload/id-card/back`, formData);
-          if (!response.data.success) {
+          const response = await apiService.upload('/upload/id-card/back', formData);
+          if (!response.success) {
             throw new Error('身份证背面上传失败');
           }
-          fileUrls.idCardBackUrl = response.data.data.url;
+          fileUrls.idCardBackUrl = response.data.url;
         } else if (hasExistingIdCardBack) {
           fileUrls.idCardBackUrl = existingIdCardBackUrl;
         }
@@ -659,8 +648,12 @@ const CreateResume = () => {
           for (const file of photoFiles) {
             const formData = new FormData();
             formData.append('file', file);
-            const response = await axios.post(`/api/upload/file/photo`, formData);
-            fileUrls.photoUrls.push(response.data.url);
+            const response = await apiService.upload('/upload/file/photo', formData);
+            if (response.success) {
+              fileUrls.photoUrls.push(response.data.url);
+            } else {
+              throw new Error('个人照片上传失败');
+            }
           }
         }
         
@@ -669,8 +662,12 @@ const CreateResume = () => {
           for (const file of certificateFiles) {
             const formData = new FormData();
             formData.append('file', file);
-            const response = await axios.post(`/api/upload/file/certificate`, formData);
-            fileUrls.certificateUrls.push(response.data.url);
+            const response = await apiService.upload('/upload/file/certificate', formData);
+            if (response.success) {
+              fileUrls.certificateUrls.push(response.data.url);
+            } else {
+              throw new Error('技能证书上传失败');
+            }
           }
         }
         
@@ -679,8 +676,12 @@ const CreateResume = () => {
           for (const file of medicalReportFiles) {
             const formData = new FormData();
             formData.append('file', file);
-            const response = await axios.post(`/api/upload/file/medical-report`, formData);
-            fileUrls.medicalReportUrls.push(response.data.url);
+            const response = await apiService.upload('/upload/file/medical-report', formData);
+            if (response.success) {
+              fileUrls.medicalReportUrls.push(response.data.url);
+            } else {
+              throw new Error('体检报告上传失败');
+            }
           }
         }
         

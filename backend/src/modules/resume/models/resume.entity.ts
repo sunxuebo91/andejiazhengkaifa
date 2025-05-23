@@ -9,6 +9,15 @@ interface WorkExperience {
   description: string;
 }
 
+// 定义文件信息接口
+interface FileInfo {
+  fileId: string;      // GridFS 文件ID
+  filename: string;    // 原始文件名
+  mimeType: string;    // 文件类型
+  size: number;        // 文件大小
+  uploadTime: Date;    // 上传时间
+}
+
 @Schema({ timestamps: true })
 export class ResumeEntity extends Document {
   @Prop({ required: true })
@@ -83,11 +92,20 @@ export class ResumeEntity extends Document {
   @Prop({ type: [{ startDate: String, endDate: String, description: String }] })
   workExperiences?: WorkExperience[];
 
-  @Prop()
-  idCardFrontUrl?: string;
+  @Prop({ type: Object })
+  idCardFront?: FileInfo;
 
-  @Prop()
-  idCardBackUrl?: string;
+  @Prop({ type: Object })
+  idCardBack?: FileInfo;
+
+  @Prop({ type: Object })
+  personalPhoto?: FileInfo;
+
+  @Prop({ type: [Object] })
+  certificates?: FileInfo[];
+
+  @Prop({ type: [Object] })
+  reports?: FileInfo[];
 
   @Prop({ type: [String] })
   photoUrls?: string[];

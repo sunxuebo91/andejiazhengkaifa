@@ -169,6 +169,15 @@ interface WorkExperience {
   description: string;
 }
 
+// 定义文件信息接口
+interface FileInfo {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  uploadTime: Date;
+}
+
 interface ResumeData {
   _id: string;
   name: string;
@@ -194,9 +203,16 @@ interface ResumeData {
   skills: Array<keyof typeof skillsMap>;
   leadSource: keyof typeof leadSourceMap;
   workExperiences: WorkExperience[];
-  photoUrls: (string | null)[];
-  certificateUrls: (string | null)[];
-  medicalReportUrls: (string | null)[];
+  // 新的文件信息结构
+  idCardFront?: FileInfo;
+  idCardBack?: FileInfo;
+  personalPhoto?: FileInfo;
+  certificates?: FileInfo[];
+  reports?: FileInfo[];
+  // 保持向后兼容的旧字段
+  photoUrls?: (string | null)[];
+  certificateUrls?: (string | null)[];
+  medicalReportUrls?: (string | null)[];
   idCardFrontUrl?: string | null;
   idCardBackUrl?: string | null;
   emergencyContactName: string;
@@ -307,13 +323,8 @@ const ResumeDetail = () => {
         if (typeof url !== 'string') return null;
         if (url.startsWith('http://') || url.startsWith('https://')) return url;
         
-        const baseUrl = import.meta.env.VITE_API_BASE_URL;
-        if (!baseUrl) {
-          console.error('未配置基础URL，无法处理相对路径');
-          return null;
-        }
-        
-        return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+        // 使用相对路径，让 Vite 代理处理
+        return url.startsWith('/') ? url : `/${url}`;
       };
 
       // 更新简历数据
@@ -472,42 +483,99 @@ const ResumeDetail = () => {
     setPreviewVisible(true);
   };
 
-  // 渲染文件预览
-  const renderFilePreview = (url: string | null | undefined, index: number) => {
-    console.log(`开始渲染文件预览，参数:`, { 
-      url, 
-      index, 
-      urlType: typeof url,
-      baseUrl: import.meta.env.VITE_API_BASE_URL
-    });
-    
-    if (!url) {
-      console.warn(`URL为空，索引: ${index}`);
-      return null;
+  // 修改文件预览渲染函数
+  const renderFilePreview = (file: FileInfo | string | null | undefined, index: number) => {
+    if (!file) return null;
+
+    // 处理旧的数据结构（字符串URL）
+    if (typeof file === 'string') {
+      const url = processImageUrl(file);
+      if (!url) return null;
+      return renderLegacyFilePreview(url, index);
     }
 
-    if (typeof url !== 'string') {
-      console.warn(`URL类型错误: ${typeof url}, 值:`, url);
-      return null;
-    }
+    // 处理新的数据结构（FileInfo对象）
+    const fileUrl = processImageUrl(`/upload/file/${file.fileId}`);
+    const isPdf = file.mimeType === 'application/pdf';
+    const uniqueKey = `file-${file.fileId}-${index}`;
 
-    // 检查 URL 是否以 http 或 https 开头
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      console.warn(`URL格式不正确: ${url}`);
-      const baseUrl = import.meta.env.VITE_API_BASE_URL;
-      if (!baseUrl) {
-        console.error('未配置基础URL，无法处理相对路径');
-        return null;
-      }
-      const newUrl = `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
-      console.log(`添加基础URL后的完整URL:`, { oldUrl: url, newUrl, baseUrl });
-      url = newUrl;
-    }
+    return (
+      <div key={uniqueKey} style={{ display: 'inline-block', margin: '0 8px 8px 0' }}>
+        {isPdf ? (
+          <div style={{ 
+            width: 100, 
+            height: 100, 
+            border: '1px solid #d9d9d9', 
+            borderRadius: 2, 
+            display: 'flex', 
+            flexDirection: 'column',
+            justifyContent: 'center', 
+            alignItems: 'center',
+            background: '#f5f5f5',
+            padding: '8px'
+          }}>
+            <a 
+              href={fileUrl} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(fileUrl, '_blank');
+              }}
+            >
+              <FilePdfOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
+              <div style={{ fontSize: '12px', marginTop: '4px', color: '#666' }}>
+                {file.filename}
+              </div>
+            </a>
+          </div>
+        ) : (
+          <div style={{ 
+            width: 100, 
+            height: 100, 
+            border: '1px solid #d9d9d9', 
+            borderRadius: 2, 
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <img 
+              src={fileUrl} 
+              alt={file.filename} 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onClick={() => handlePreview(fileUrl)}
+              onError={(e) => {
+                console.error(`图片加载失败: ${fileUrl}, 错误信息:`, e);
+                const target = e.target as HTMLImageElement;
+                target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+                message.error(`图片加载失败: ${file.filename}`);
+              }}
+            />
+            <div style={{ 
+              position: 'absolute', 
+              bottom: 0, 
+              left: 0, 
+              right: 0, 
+              background: 'rgba(0,0,0,0.5)', 
+              color: 'white', 
+              fontSize: '10px', 
+              padding: '2px 4px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {file.filename}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
+  // 处理旧的文件预览（向后兼容）
+  const renderLegacyFilePreview = (url: string, index: number) => {
     const isPdf = url.toLowerCase().endsWith('.pdf');
-    console.log(`文件类型判断:`, { url, isPdf });
-    
-    const uniqueKey = `file-${url.split('/').pop() || index}-${index}`;
+    const uniqueKey = `legacy-file-${url}-${index}`;
     
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '0 8px 8px 0' }}>
@@ -529,7 +597,6 @@ const ResumeDetail = () => {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('打开PDF文件:', url);
                 window.open(url, '_blank');
               }}
             >
@@ -549,18 +616,12 @@ const ResumeDetail = () => {
               src={url} 
               alt={`文件预览-${index}`} 
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onClick={() => {
-                console.log('点击预览图片:', url);
-                handlePreview(url);
-              }}
+              onClick={() => handlePreview(url)}
               onError={(e) => {
                 console.error(`图片加载失败: ${url}, 错误信息:`, e);
                 const target = e.target as HTMLImageElement;
                 target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
                 message.error(`图片加载失败: ${url}`);
-              }}
-              onLoad={() => {
-                console.log(`图片加载成功: ${url}`);
               }}
             />
           </div>
@@ -1084,14 +1145,22 @@ const ResumeDetail = () => {
           <Card title="身份证照片" style={{ marginBottom: 24 }}>
             <Descriptions bordered column={2}>
               <Descriptions.Item label="身份证正面" span={1}>
-                {resume?.idCardFrontUrl ? (
+                {resume?.idCardFront ? (
+                  <div style={{ display: 'inline-block', margin: '8px' }}>
+                    {renderFilePreview(resume.idCardFront, 0)}
+                  </div>
+                ) : resume?.idCardFrontUrl ? (
                   <div style={{ display: 'inline-block', margin: '8px' }}>
                     {renderFilePreview(resume.idCardFrontUrl, 0)}
                   </div>
                 ) : '未上传'}
               </Descriptions.Item>
               <Descriptions.Item label="身份证反面" span={1}>
-                {resume?.idCardBackUrl ? (
+                {resume?.idCardBack ? (
+                  <div style={{ display: 'inline-block', margin: '8px' }}>
+                    {renderFilePreview(resume.idCardBack, 1)}
+                  </div>
+                ) : resume?.idCardBackUrl ? (
                   <div style={{ display: 'inline-block', margin: '8px' }}>
                     {renderFilePreview(resume.idCardBackUrl, 1)}
                   </div>
@@ -1101,7 +1170,11 @@ const ResumeDetail = () => {
           </Card>
 
           <Card title="个人照片" style={{ marginBottom: 24 }}>
-            {resume?.photoUrls?.filter(Boolean).length > 0 ? (
+            {resume?.personalPhoto ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                {renderFilePreview(resume.personalPhoto, 0)}
+              </div>
+            ) : resume?.photoUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 {resume.photoUrls.filter(Boolean).map((url: string, index: number) => (
                   <div key={`photo-${index}`}>
@@ -1115,7 +1188,15 @@ const ResumeDetail = () => {
           </Card>
 
           <Card title="证书照片" style={{ marginBottom: 24 }}>
-            {resume?.certificateUrls?.filter(Boolean).length > 0 ? (
+            {resume?.certificates?.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                {resume.certificates.map((cert: FileInfo, index: number) => (
+                  <div key={`certificate-${cert.fileId}`}>
+                    {renderFilePreview(cert, index)}
+                  </div>
+                ))}
+              </div>
+            ) : resume?.certificateUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 {resume.certificateUrls.filter(Boolean).map((url: string, index: number) => (
                   <div key={`certificate-${index}`}>
@@ -1129,10 +1210,18 @@ const ResumeDetail = () => {
           </Card>
 
           <Card title="体检报告" style={{ marginBottom: 24 }}>
-            {resume?.medicalReportUrls?.filter(Boolean).length > 0 ? (
+            {resume?.reports?.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                {resume.reports.map((report: FileInfo, index: number) => (
+                  <div key={`report-${report.fileId}`}>
+                    {renderFilePreview(report, index)}
+                  </div>
+                ))}
+              </div>
+            ) : resume?.medicalReportUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 {resume.medicalReportUrls.filter(Boolean).map((url: string, index: number) => (
-                  <div key={`medical-${index}`}>
+                  <div key={`report-${index}`}>
                     {renderFilePreview(url, index)}
                   </div>
                 ))}

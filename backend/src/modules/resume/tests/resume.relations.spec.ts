@@ -147,16 +147,16 @@ describe('Resume Relations', () => {
         nativePlace: '北京市',
         jobType: JobType.YUEXIN,
         experienceYears: 3,
-        idCardFrontUrl: 'https://example.com/idcard-front.jpg',
-        idCardBackUrl: 'https://example.com/idcard-back.jpg',
+        idCardFront: 'https://example.com/idcard-front.jpg',
+        idCardBack: 'https://example.com/idcard-back.jpg',
         photoUrls: ['https://example.com/photo1.jpg', 'https://example.com/photo2.jpg'],
         certificateUrls: ['https://example.com/cert1.jpg'],
         medicalReportUrls: ['https://example.com/medical1.pdf'],
       };
 
       const resume = await service.create(createResumeDto);
-      expect(resume.idCardFrontUrl).toBeDefined();
-      expect(resume.idCardBackUrl).toBeDefined();
+      expect(resume.idCardFront).toBeDefined();
+      expect(resume.idCardBack).toBeDefined();
       expect(resume.photoUrls).toHaveLength(2);
       expect(resume.certificateUrls).toHaveLength(1);
       expect(resume.medicalReportUrls).toHaveLength(1);

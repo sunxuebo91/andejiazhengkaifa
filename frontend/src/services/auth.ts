@@ -93,16 +93,14 @@ export const hasRole = (role: string): boolean => {
 // 登录API
 export const login = async (username: string, password: string): Promise<any> => {
   try {
-    // 这里调用实际的登录API
-    // 在开发环境下模拟登录逻辑，生产环境替换为实际API调用
-    if (process.env.NODE_ENV === 'development') {
-      // 开发环境模拟登录
-      return mockLogin(username, password);
-    } else {
-      // 生产环境调用实际API
-      const response = await axios.post('/api/auth/login', { username, password });
-      return response.data;
-    }
+    const response = await axios.post('/api/auth/login', { username, password });
+    const { token, user } = response.data;
+    
+    // 存储token和用户信息
+    setToken(token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    
+    return response.data;
   } catch (error) {
     console.error('登录失败:', error);
     throw error;
@@ -112,31 +110,20 @@ export const login = async (username: string, password: string): Promise<any> =>
 // 登出API
 export const logout = async (): Promise<void> => {
   try {
-    if (process.env.NODE_ENV !== 'development') {
-      // 生产环境调用实际API
-      await axios.post('/api/auth/logout');
-    }
-    // 无论成功与否，都清除本地token
-    removeToken();
+    await axios.post('/api/auth/logout');
   } catch (error) {
     console.error('登出失败:', error);
-    // 仍然清除本地token
+  } finally {
+    // 无论成功与否，都清除本地token
     removeToken();
-    throw error;
   }
 };
 
 // 获取用户权限
 export const getUserPermissions = async (): Promise<string[]> => {
   try {
-    if (process.env.NODE_ENV === 'development') {
-      // 开发环境返回模拟权限
-      return mockGetPermissions();
-    } else {
-      // 生产环境调用实际API
-      const response = await axios.get('/api/auth/permissions');
-      return response.data.permissions || [];
-    }
+    const response = await axios.get('/api/auth/permissions');
+    return response.data.permissions || [];
   } catch (error) {
     console.error('获取权限失败:', error);
     return [];

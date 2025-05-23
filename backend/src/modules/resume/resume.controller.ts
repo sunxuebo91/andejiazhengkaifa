@@ -1,14 +1,17 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody, ApiParam } from '@nestjs/swagger';
 import { ResumeService } from './resume.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { ResumeEntity } from './models/resume.entity';
 import { UploadService } from '../upload/upload.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UseGuards } from '@nestjs/common';
 
 @ApiTags('简历管理')
 @Controller('resumes')
+@UseGuards(JwtAuthGuard)
 export class ResumeController {
   private readonly logger = new Logger(ResumeController.name);
 
@@ -131,79 +134,84 @@ export class ResumeController {
   }
 
   @Post(':id/upload')
-  @UseInterceptors(FilesInterceptor('files'))
-  @ApiOperation({ summary: '上传简历相关文件' })
+  @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        files: {
-          type: 'array',
-          items: {
-            type: 'string',
-            format: 'binary',
-          },
+        file: {
+          type: 'string',
+          format: 'binary',
         },
         type: {
           type: 'string',
-          enum: ['photo', 'certificate', 'medical'],
-          description: '文件类型：照片、证书、体检报告',
+          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report'],
+          description: '文件类型',
         },
       },
     },
   })
-  async uploadFiles(
+  async uploadFile(
     @Param('id') id: string,
-    @UploadedFiles() files: Express.Multer.File[],
-    @Body('type') type: 'photo' | 'certificate' | 'medical',
-  ): Promise<{ success: boolean; data?: { urls: string[] }; message: string }> {
-    this.logger.log(`上传文件: id=${id}, type=${type}, files=${files.length}`);
+    @UploadedFile() file: Express.Multer.File,
+    @Body('type') type: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('请选择要上传的文件');
+    }
+
+    // 验证文件类型
+    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (!allowedTypes.includes(file.mimetype)) {
+      throw new BadRequestException('不支持的文件类型，仅支持 JPG、PNG 和 PDF');
+    }
+
+    // 验证文件大小（5MB）
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new BadRequestException('文件大小不能超过 5MB');
+    }
+
     try {
-      if (!files || files.length === 0) {
-        throw new Error('请选择要上传的文件');
-      }
-
-      // 获取当前简历
-      const resume = await this.resumeService.findOne(id);
-      if (!resume) {
-        throw new Error('简历不存在');
-      }
-
-      // 上传文件到COS
-      const uploadPromises = files.map(file => 
-        this.uploadService.uploadFile(file, type)
-      );
-      const urls = await Promise.all(uploadPromises);
-
-      // 根据文件类型更新简历
-      const updateData: any = {};
-      switch (type) {
-        case 'photo':
-          updateData.photoUrls = [...(resume.photoUrls || []), ...urls];
-          break;
-        case 'certificate':
-          updateData.certificateUrls = [...(resume.certificateUrls || []), ...urls];
-          break;
-        case 'medical':
-          updateData.medicalReportUrls = [...(resume.medicalReportUrls || []), ...urls];
-          break;
-      }
-
-      // 更新简历
-      await this.resumeService.update(id, updateData);
-
+      const resume = await this.resumeService.uploadFile(id, file, type);
       return {
         success: true,
-        data: { urls },
-        message: '文件上传成功'
+        data: resume
       };
     } catch (error) {
-      this.logger.error(`文件上传失败: ${error.message}`);
+      throw new BadRequestException(`文件上传失败: ${error.message}`);
+    }
+  }
+
+  @Delete(':id/files/:fileId')
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiParam({ name: 'fileId', description: '文件ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report'],
+          description: '文件类型',
+        },
+      },
+    },
+  })
+  async deleteFile(
+    @Param('id') id: string,
+    @Param('fileId') fileId: string,
+    @Body('type') type: string,
+  ) {
+    try {
+      const resume = await this.resumeService.deleteFile(id, fileId, type);
       return {
-        success: false,
-        message: `文件上传失败: ${error.message}`
+        success: true,
+        data: resume
       };
+    } catch (error) {
+      throw new BadRequestException(`文件删除失败: ${error.message}`);
     }
   }
 }

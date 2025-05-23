@@ -1,99 +1,97 @@
-import { Controller, Post, Get, UploadedFile, UseInterceptors, Param, BadRequestException } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFile, BadRequestException, Get, Param, Res, Delete, Body } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import { UploadService } from './upload.service';
-import { cosConfig } from '../../config/cos.config';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
 
 @ApiTags('文件上传')
-@ApiBearerAuth()
 @Controller('upload')
+// @UseGuards(JwtAuthGuard)
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
-  @Get('test-connection')
-  @ApiOperation({ summary: '测试COS连接', description: '测试与腾讯云对象存储的连接状态' })
-  @ApiResponse({ status: 200, description: '连接成功' })
-  @ApiResponse({ status: 400, description: '连接失败' })
-  async testCOSConnection() {
+  @Post('file')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+        type: {
+          type: 'string',
+          description: '文件类型（idCardFront/idCardBack/personalPhoto/certificate/report）',
+        },
+      },
+    },
+  })
+  async uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('type') type: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('请选择要上传的文件');
+    }
+
+    // 验证文件类型
+    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (!allowedTypes.includes(file.mimetype)) {
+      throw new BadRequestException('不支持的文件类型，仅支持 JPG、PNG 和 PDF');
+    }
+
+    // 验证文件大小（5MB）
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new BadRequestException('文件大小不能超过 5MB');
+    }
+
     try {
-      await this.uploadService.testConnection();
+      const fileId = await this.uploadService.uploadFile(file, { type });
       return {
-        status: 'success',
-        message: 'COS连接成功',
-        config: {
-          region: cosConfig.Region,
-          bucket: cosConfig.Bucket
+        success: true,
+        data: {
+          fileId,
+          filename: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size
         }
       };
     } catch (error) {
-      throw new BadRequestException(`COS连接失败: ${error.message}`);
+      throw new BadRequestException(`文件上传失败: ${error.message}`);
     }
   }
 
-  @Post('id-card/:type')
-  @ApiOperation({ summary: '上传身份证照片', description: '上传身份证正面或背面照片' })
-  @ApiParam({ name: 'type', description: '照片类型', enum: ['front', 'back'] })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-          description: '身份证照片文件'
-        }
-      }
-    }
-  })
-  @ApiResponse({ status: 201, description: '上传成功' })
-  @ApiResponse({ status: 400, description: '上传失败' })
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadIdCard(
-    @UploadedFile() file: Express.Multer.File,
-    @Param('type') type: 'front' | 'back'
+  @Get('file/:fileId')
+  async getFile(
+    @Param('fileId') fileId: string,
+    @Res() res: Response
   ) {
-    if (!file) {
-      throw new BadRequestException('请上传文件');
+    try {
+      const { stream, metadata } = await this.uploadService.getFile(fileId);
+      
+      res.setHeader('Content-Type', metadata.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${metadata.filename}"`);
+      
+      stream.pipe(res);
+    } catch (error) {
+      throw new BadRequestException(`获取文件失败: ${error.message}`);
     }
-    return this.uploadService.uploadIdCard(file, type);
   }
 
-  @Post('file/:category')
-  @ApiOperation({ summary: '上传其他文件', description: '上传其他类型的文件（如证书、体检报告等）' })
-  @ApiParam({ name: 'category', description: '文件类别', example: 'certificate' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-          description: '要上传的文件'
-        }
-      }
+  @Delete('file/:fileId')
+  async deleteFile(@Param('fileId') fileId: string) {
+    try {
+      await this.uploadService.deleteFile(fileId);
+      return {
+        success: true,
+        message: '文件删除成功'
+      };
+    } catch (error) {
+      throw new BadRequestException(`删除文件失败: ${error.message}`);
     }
-  })
-  @ApiResponse({ status: 201, description: '上传成功' })
-  @ApiResponse({ status: 400, description: '上传失败' })
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(
-    @UploadedFile() file: Express.Multer.File,
-    @Param('category') category: string
-  ) {
-    if (!file) {
-      throw new BadRequestException('请上传文件');
-    }
-    return this.uploadService.uploadFile(file, category);
-  }
-
-  @Get('preview/:key')
-  @ApiOperation({ summary: '获取文件预览URL', description: '获取已上传文件的预览URL' })
-  @ApiParam({ name: 'key', description: '文件在COS中的键值' })
-  @ApiResponse({ status: 200, description: '获取成功' })
-  @ApiResponse({ status: 404, description: '文件不存在' })
-  async getPreviewUrl(@Param('key') key: string) {
-    return this.uploadService.getFileUrl(key);
   }
 }

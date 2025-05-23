@@ -5,6 +5,7 @@ import { ResumeEntity, ResumeModel } from './models/resume.entity';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Logger } from '@nestjs/common';
+import { UploadService } from '../upload/upload.service';
 
 @Injectable()
 export class ResumeService {
@@ -13,6 +14,7 @@ export class ResumeService {
   constructor(
     @InjectModel(ResumeEntity.name)
     private readonly resumeModel: ResumeModel,
+    private uploadService: UploadService
   ) {}
 
   async create(createResumeDto: CreateResumeDto): Promise<ResumeEntity> {
@@ -82,5 +84,96 @@ export class ResumeService {
       this.logger.warn(`简历未找到: id=${id}`);
       throw new NotFoundException(`简历未找到: ${id}`);
     }
+  }
+
+  async uploadFile(resumeId: string, file: Express.Multer.File, type: string): Promise<ResumeEntity> {
+    const resume = await this.findOne(resumeId);
+    
+    // 上传文件到 GridFS
+    const fileId = await this.uploadService.uploadFile(file, { type });
+    
+    // 准备文件信息
+    const fileInfo = {
+      fileId,
+      filename: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      uploadTime: new Date()
+    };
+
+    // 根据文件类型更新简历
+    let updateQuery: any = {};
+    switch (type) {
+      case 'idCardFront':
+        updateQuery = { 'idCardFront': fileInfo };
+        break;
+      case 'idCardBack':
+        updateQuery = { 'idCardBack': fileInfo };
+        break;
+      case 'personalPhoto':
+        updateQuery = { 'personalPhoto': fileInfo };
+        break;
+      case 'certificate':
+        updateQuery = { $push: { 'certificates': fileInfo } };
+        break;
+      case 'report':
+        updateQuery = { $push: { 'reports': fileInfo } };
+        break;
+      default:
+        throw new Error('不支持的文件类型');
+    }
+
+    const updatedResume = await this.resumeModel.findByIdAndUpdate(
+      resumeId,
+      updateQuery,
+      { new: true }
+    ).exec();
+
+    if (!updatedResume) {
+      throw new NotFoundException(`简历未找到: ${resumeId}`);
+    }
+
+    return updatedResume;
+  }
+
+  async deleteFile(resumeId: string, fileId: string, type: string): Promise<ResumeEntity> {
+    const resume = await this.findOne(resumeId);
+    
+    // 从 GridFS 删除文件
+    await this.uploadService.deleteFile(fileId);
+    
+    // 根据文件类型更新简历
+    let updateQuery: any = {};
+    switch (type) {
+      case 'idCardFront':
+        updateQuery = { $unset: { 'idCardFront': 1 } };
+        break;
+      case 'idCardBack':
+        updateQuery = { $unset: { 'idCardBack': 1 } };
+        break;
+      case 'personalPhoto':
+        updateQuery = { $unset: { 'personalPhoto': 1 } };
+        break;
+      case 'certificate':
+        updateQuery = { $pull: { 'certificates': { fileId } } };
+        break;
+      case 'report':
+        updateQuery = { $pull: { 'reports': { fileId } } };
+        break;
+      default:
+        throw new Error('不支持的文件类型');
+    }
+
+    const updatedResume = await this.resumeModel.findByIdAndUpdate(
+      resumeId,
+      updateQuery,
+      { new: true }
+    ).exec();
+
+    if (!updatedResume) {
+      throw new NotFoundException(`简历未找到: ${resumeId}`);
+    }
+
+    return updatedResume;
   }
 }

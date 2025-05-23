@@ -83,26 +83,26 @@ const ResumeList = () => {
       let formattedData = resumes.map(resume => {
         console.log('处理简历数据:', resume);
         // 确保id存在且为字符串
-        const resumeId = resume.id || resume._id || '';
+        if (!resume._id) {
+          console.error('简历数据缺少ID字段:', resume);
+          return null;
+        }
+        
+        const resumeId = resume._id.toString();
         console.log('简历ID:', resumeId);
         
         // 格式化ID显示
-        const formattedId = resumeId ? 
-          (typeof resumeId === 'string' ? 
-            resumeId.substring(0, 8).padEnd(8, '0') : 
-            String(resumeId).substring(0, 8).padEnd(8, '0')
-          ) : 
-          '未知ID';
+        const formattedId = resumeId.substring(0, 8).padEnd(8, '0');
         
         console.log('格式化后的ID:', formattedId);
         
         return {
           ...resume,
-          id: resumeId, // 确保id字段存在
+          id: resumeId, // 使用 _id 作为 id
           formattedId,
           hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
         };
-      });
+      }).filter(Boolean); // 过滤掉无效数据
       
       // 如果有搜索关键词，在前端进行过滤
       if (searchKeyword) {

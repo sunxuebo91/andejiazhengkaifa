@@ -5,13 +5,17 @@ import { ResumeService } from './resume.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { ResumeEntity } from './models/resume.entity';
+import { UploadService } from '../upload/upload.service';
 
 @ApiTags('简历管理')
 @Controller('resumes')
 export class ResumeController {
   private readonly logger = new Logger(ResumeController.name);
 
-  constructor(private readonly resumeService: ResumeService) {}
+  constructor(
+    private readonly resumeService: ResumeService,
+    private readonly uploadService: UploadService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: '创建简历' })
@@ -156,8 +160,39 @@ export class ResumeController {
   ): Promise<{ success: boolean; data?: { urls: string[] }; message: string }> {
     this.logger.log(`上传文件: id=${id}, type=${type}, files=${files.length}`);
     try {
-      // TODO: 实现文件上传逻辑
-      const urls = files.map(file => `/uploads/${file.filename}`);
+      if (!files || files.length === 0) {
+        throw new Error('请选择要上传的文件');
+      }
+
+      // 获取当前简历
+      const resume = await this.resumeService.findOne(id);
+      if (!resume) {
+        throw new Error('简历不存在');
+      }
+
+      // 上传文件到COS
+      const uploadPromises = files.map(file => 
+        this.uploadService.uploadFile(file, type)
+      );
+      const urls = await Promise.all(uploadPromises);
+
+      // 根据文件类型更新简历
+      const updateData: any = {};
+      switch (type) {
+        case 'photo':
+          updateData.photoUrls = [...(resume.photoUrls || []), ...urls];
+          break;
+        case 'certificate':
+          updateData.certificateUrls = [...(resume.certificateUrls || []), ...urls];
+          break;
+        case 'medical':
+          updateData.medicalReportUrls = [...(resume.medicalReportUrls || []), ...urls];
+          break;
+      }
+
+      // 更新简历
+      await this.resumeService.update(id, updateData);
+
       return {
         success: true,
         data: { urls },

@@ -2,7 +2,8 @@ import apiService from './api';
 
 // 简历数据接口
 export interface Resume {
-  id?: string;
+  _id?: string; // MongoDB 的 _id 字段
+  id?: string; // 前端使用的 id 字段（由 _id 转换而来）
   name: string;
   phone: string;
   age: number;
@@ -49,16 +50,25 @@ export interface ResumeFormData extends Omit<Resume, 'id' | 'createdAt' | 'updat
   medicalReportFiles?: File[];
 }
 
+// API 响应接口
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message: string;
+}
+
 // 简历服务
 export const resumeService = {
   // 获取所有简历
   getAll: async () => {
-    return apiService.get<Resume[]>('/resumes');
+    const response = await apiService.get<ApiResponse<Resume[]>>('/resumes');
+    return response.data;
   },
   
   // 获取单个简历
   getById: async (id: string) => {
-    return apiService.get<Resume>(`/resumes/${id}`);
+    const response = await apiService.get<ApiResponse<Resume>>(`/resumes/${id}`);
+    return response.data;
   },
   
   // 创建简历
@@ -114,7 +124,8 @@ export const resumeService = {
       }
     }
     
-    return apiService.upload<Resume>('/resumes', formData);
+    const response = await apiService.upload<ApiResponse<Resume>>('/resumes', formData);
+    return response.data;
   },
   
   // 更新简历
@@ -170,7 +181,8 @@ export const resumeService = {
       }
     }
     
-    return apiService.upload<Resume>(`/resumes/${id}`, formData);
+    const response = await apiService.upload<ApiResponse<Resume>>(`/resumes/${id}`, formData);
+    return response.data;
   },
   
   // 删除简历

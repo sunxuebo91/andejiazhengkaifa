@@ -234,40 +234,12 @@ const ResumeDetail = () => {
       const resumeData = response.data.data;
       console.log('获取到的简历数据:', resumeData);
 
-      // 添加图片和文件 URL 的详细日志
-      console.log('图片和文件 URL 详情:', {
-        idCardFrontUrl: {
-          value: resumeData.idCardFrontUrl,
-          type: typeof resumeData.idCardFrontUrl,
-          length: resumeData.idCardFrontUrl?.length
-        },
-        idCardBackUrl: {
-          value: resumeData.idCardBackUrl,
-          type: typeof resumeData.idCardBackUrl,
-          length: resumeData.idCardBackUrl?.length
-        },
-        photoUrls: {
-          value: resumeData.photoUrls,
-          type: Array.isArray(resumeData.photoUrls) ? 'array' : typeof resumeData.photoUrls,
-          length: Array.isArray(resumeData.photoUrls) ? resumeData.photoUrls.length : 0
-        },
-        certificateUrls: {
-          value: resumeData.certificateUrls,
-          type: Array.isArray(resumeData.certificateUrls) ? 'array' : typeof resumeData.certificateUrls,
-          length: Array.isArray(resumeData.certificateUrls) ? resumeData.certificateUrls.length : 0
-        },
-        medicalReportUrls: {
-          value: resumeData.medicalReportUrls,
-          type: Array.isArray(resumeData.medicalReportUrls) ? 'array' : typeof resumeData.medicalReportUrls,
-          length: Array.isArray(resumeData.medicalReportUrls) ? resumeData.medicalReportUrls.length : 0
-        }
-      });
-
       // 确保ID字段存在且格式正确
-      if (!resumeData.id && resumeData._id) {
-        resumeData.id = resumeData._id.toString();
+      if (!resumeData._id) {
+        console.error('简历数据缺少ID字段');
+        message.error('获取简历详情失败：数据格式错误');
+        return;
       }
-      console.log('处理后的简历ID:', resumeData.id);
 
       // 处理工作经验数据
       const formattedWorkExperience = formatWorkExperiences(resumeData);
@@ -278,7 +250,7 @@ const ResumeDetail = () => {
         ...resumeData,
         workExperiences: formattedWorkExperience,
         // 确保ID字段存在
-        id: resumeData.id || resumeData._id?.toString() || id,
+        id: resumeData._id.toString(),
         // 确保宗教信仰字段正确
         religion: resumeData.religion || null,
         // 确保体检时间字段正确格式化

@@ -788,11 +788,11 @@ const CreateResume = () => {
         debugLog('提交响应:', response.data);
         
         // 检查响应是否成功
-        if (!response.data || !response.data.id) {
-          throw new Error('创建简历失败：未获取到简历ID');
+        if (!response.data || !response.data.success) {
+          throw new Error(response.data?.message || '创建简历失败');
         }
         
-        // 显示成功消息并导航到简历详情页
+        // 显示成功消息
         messageApi.success(isEditing ? '简历更新成功' : '简历创建成功');
         
         // 清除编辑状态
@@ -802,10 +802,11 @@ const CreateResume = () => {
           setEditingResumeId(null);
         }
         
-        // 表单重置和跳转
+        // 表单重置
         form.resetFields();
-        // 跳转到简历详情页
-        navigate(`/aunt/resumes/detail/${response.data.id}`);
+        
+        // 修改这里：使用正确的简历列表页路径
+        navigate('/aunt/list');
       } catch (error) {
         // 错误处理
         setLoading(false);
@@ -1287,7 +1288,7 @@ const CreateResume = () => {
                     name="name"
                     rules={[{ required: true, message: '请输入姓名' }]}
                   >
-                    <Input placeholder="请输入姓名" />
+                    <Input placeholder="请输入姓名" autoComplete="name" />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
@@ -1323,7 +1324,7 @@ const CreateResume = () => {
                       { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号码' }
                     ]}
                   >
-                    <Input placeholder="请输入手机号码" />
+                    <Input placeholder="请输入手机号码" autoComplete="tel" />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
@@ -1331,7 +1332,7 @@ const CreateResume = () => {
                     label="微信号"
                     name="wechat"
                   >
-                    <Input placeholder="请输入微信号" />
+                    <Input placeholder="请输入微信号" autoComplete="off" />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
@@ -1350,7 +1351,7 @@ const CreateResume = () => {
                     label="现居住地址"
                     name="currentAddress"
                   >
-                    <Input placeholder="请输入现居住地址" />
+                    <Input placeholder="请输入现居住地址" autoComplete="street-address" />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
@@ -1371,7 +1372,7 @@ const CreateResume = () => {
                     label="户籍地址"
                     name="hukouAddress"
                   >
-                    <Input placeholder="请输入户籍地址" />
+                    <Input placeholder="请输入户籍地址" autoComplete="street-address" />
                   </Form.Item>
                 </Col>
               </Row>
@@ -1385,7 +1386,7 @@ const CreateResume = () => {
                       { pattern: /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/, message: '请输入正确的身份证号' }
                     ]}
                   >
-                    <Input placeholder="请输入身份证号" />
+                    <Input placeholder="请输入身份证号" autoComplete="off" />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
@@ -1515,7 +1516,7 @@ const CreateResume = () => {
                     label="紧急联系人姓名"
                     name="emergencyContactName"
                   >
-                    <Input placeholder="请输入紧急联系人姓名" />
+                    <Input placeholder="请输入紧急联系人姓名" autoComplete="name" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
@@ -1523,7 +1524,7 @@ const CreateResume = () => {
                     label="紧急联系人电话"
                     name="emergencyContactPhone"
                   >
-                    <Input placeholder="请输入紧急联系人电话" />
+                    <Input placeholder="请输入紧急联系人电话" autoComplete="tel" />
                   </Form.Item>
                 </Col>
               </Row>

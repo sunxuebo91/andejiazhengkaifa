@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
 import { OcrModule } from './modules/ocr/ocr.module';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config';
-import { dataSourceOptions } from './typeorm.config';
+import { MongooseModule } from '@nestjs/mongoose';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ResumeModule } from './modules/resume/resume.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { HealthModule } from './modules/health/health.module';
@@ -16,9 +15,16 @@ import { TasksModule } from './modules/tasks/tasks.module';
       isGlobal: true,
       envFilePath: ['.env', '.env.development', '.env.production'],
     }),
-    TypeOrmModule.forRoot({
-      ...dataSourceOptions,
-      autoLoadEntities: true,
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        uri: configService.get('MONGODB_URI', 'mongodb://localhost:27017/housekeeping'),
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        retryWrites: true,
+        w: 'majority',
+      }),
+      inject: [ConfigService],
     }),
     OcrModule,
     ResumeModule,

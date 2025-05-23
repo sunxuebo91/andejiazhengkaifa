@@ -1,106 +1,86 @@
-import { Entity, ObjectIdColumn, Column, ObjectId, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Model, Types } from 'mongoose';
 
-@Entity('resumes')
+// 定义基础文档类型
+export interface IResume {
+  name: string;
+  phone: string;
+  age: number;
+  wechat?: string;
+  idNumber?: string;
+  education: string;
+  nativePlace: string;
+  experienceYears: number;
+  maritalStatus?: string;
+  religion?: string;
+  currentAddress?: string;
+  hukouAddress?: string;
+  birthDate?: string;
+  ethnicity?: string;
+  gender?: string;
+  zodiac?: string;
+  zodiacSign?: string;
+  jobType: string;
+  expectedSalary?: number;
+  serviceArea?: string;
+  orderStatus?: string;
+  skills?: string[];
+  leadSource?: string;
+  workExperience?: { startDate: string; endDate: string; description: string }[];
+  idCardFrontUrl?: string;
+  idCardBackUrl?: string;
+  photoUrls?: string[];
+  certificateUrls?: string[];
+  medicalReportUrls?: string[];
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  medicalExamDate?: string;
+}
+
+@Schema({ timestamps: true })
 export class ResumeEntity {
-  @ObjectIdColumn()
-  _id: ObjectId;
-
-  get id(): string {
-    return this._id?.toString();
-  }
-
-  @Column()
+  @Prop({ required: true })
   name: string;
 
-  @Column()
+  @Prop({ required: true })
   phone: string;
 
-  @Column()
+  @Prop({ required: true })
   age: number;
 
-  @Column({ nullable: true })
-  wechat?: string;
+  @Prop({ required: true })
+  gender: string;
 
-  @Column({ nullable: true })
-  idNumber?: string;
-
-  @Column()
+  @Prop()
   education: string;
 
-  @Column()
-  nativePlace: string;
+  @Prop()
+  school: string;
 
-  @Column()
-  experienceYears: number;
+  @Prop()
+  major: string;
 
-  @Column({ nullable: true })
-  maritalStatus?: string;
+  @Prop()
+  workExperience: string;
 
-  @Column({ nullable: true })
-  religion?: string;
+  @Prop()
+  expectedPosition: string;
 
-  @Column({ nullable: true })
-  currentAddress?: string;
+  @Prop()
+  expectedSalary: string;
 
-  @Column({ nullable: true })
-  hukouAddress?: string;
+  @Prop()
+  selfEvaluation: string;
 
-  @Column({ nullable: true })
-  birthDate?: string;
-
-  @Column({ nullable: true })
-  ethnicity?: string;
-
-  @Column({ nullable: true })
-  gender?: string;
-
-  @Column({ nullable: true })
-  zodiac?: string;
-
-  @Column({ nullable: true })
-  zodiacSign?: string;
-
-  @Column()
-  jobType: string;
-
-  @Column({ nullable: true })
-  expectedSalary?: number;
-
-  @Column({ nullable: true })
-  serviceArea?: string;
-
-  @Column({ nullable: true })
-  orderStatus?: string;
-
-  @Column('simple-array', { nullable: true })
-  skills?: string[];
-
-  @Column({ nullable: true })
-  leadSource?: string;
-
-  @Column('json', { nullable: true })
-  workExperience?: { startDate: string; endDate: string; description: string }[];
-
-  @Column({ nullable: true })
-  idCardFrontUrl?: string;
-
-  @Column({ nullable: true })
-  idCardBackUrl?: string;
-
-  @Column('simple-array', { nullable: true })
-  photoUrls?: string[];
-
-  @Column('simple-array', { nullable: true })
-  certificateUrls?: string[];
-
-  @Column('simple-array', { nullable: true })
-  medicalReportUrls?: string[];
-
-  @CreateDateColumn()
+  @Prop()
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @Prop()
   updatedAt: Date;
 }
 
-export default ResumeEntity;
+export type ResumeDocument = Document & ResumeEntity;
+export const ResumeSchema = SchemaFactory.createForClass(ResumeEntity);
+
+// 定义模型类型
+export type ResumeModel = Model<ResumeEntity>;

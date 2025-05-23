@@ -1,55 +1,43 @@
-import dataSource from '../typeorm.config';
-import ResumeEntity from '../modules/resume/models/resume.entity';  // 使用默认导出
+import { connect, model } from 'mongoose';
+import { ResumeEntity, ResumeSchema } from '../modules/resume/models/resume.entity';
 import * as dotenv from 'dotenv';
 
 // 加载环境变量
 dotenv.config();
 
-async function queryDatabase() {
+async function main() {
   try {
-    // 初始化 TypeORM 数据源
-    await dataSource.initialize();
+    // 连接到 MongoDB
+    const uri = `mongodb://${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '27017'}/${process.env.DB_NAME || 'housekeeping'}`;
+    await connect(uri);
     console.log('成功连接到数据库');
+
+    // 创建模型
+    const ResumeModel = model<ResumeEntity>('Resume', ResumeSchema);
+
+    // 查询所有简历
+    const resumes = await ResumeModel.find()
+      .sort({ createdAt: -1 })
+      .exec();
+
+    console.log(`找到 ${resumes.length} 条简历记录：`);
     
-    // 使用 TypeORM Repository 查询数据
-    const resumeRepository = dataSource.getRepository(ResumeEntity);
-    const resumes = await resumeRepository.find({
-      order: { createdAt: 'DESC' },
-      take: 10
-    });
-    
-    console.log(`找到 ${resumes.length} 条简历记录:`);
+    // 打印每条简历的基本信息
     resumes.forEach((resume, index) => {
-      console.log(`\n[${index + 1}] 简历ID: ${resume.id}`);
-      console.log(`姓名: ${resume.name || '未提供'}`);
-      console.log(`电话: ${resume.phone || '未提供'}`);
-      console.log(`身份证正面: ${resume.idCardFrontUrl || '未提供'}`);
-      console.log(`身份证反面: ${resume.idCardBackUrl || '未提供'}`);
-      console.log(`照片数量: ${resume.photoUrls ? resume.photoUrls.length : 0}`);
-      console.log(`证书数量: ${resume.certificateUrls ? resume.certificateUrls.length : 0}`);
-      console.log(`体检报告数量: ${resume.medicalReportUrls ? resume.medicalReportUrls.length : 0}`);
-      console.log(`工作经历数量: ${resume.workExperience ? resume.workExperience.length : 0}`);
-      if (resume.workExperience && resume.workExperience.length > 0) {
-        console.log('工作经历详情:');
-        resume.workExperience.forEach((exp, i) => {
-          console.log(`  经历 ${i + 1}:`);
-          console.log(`    开始时间: ${exp.startDate || '未提供'}`);
-          console.log(`    结束时间: ${exp.endDate || '未提供'}`);
-          console.log(`    工作描述: ${exp.description || '未提供'}`);
-        });
-      }
+      console.log(`\n简历 #${index + 1}:`);
+      console.log(`ID: ${resume._id}`);
+      console.log(`姓名: ${resume.name}`);
+      console.log(`电话: ${resume.phone}`);
       console.log(`创建时间: ${resume.createdAt}`);
+      console.log('------------------------');
     });
+
   } catch (error) {
-    console.error('查询数据库出错:', error);
+    console.error('查询失败:', error);
   } finally {
     // 关闭数据库连接
-    if (dataSource.isInitialized) {
-      await dataSource.destroy();
-      console.log('数据库连接已关闭');
-    }
+    process.exit(0);
   }
 }
 
-// 执行查询
-queryDatabase(); 
+main(); 

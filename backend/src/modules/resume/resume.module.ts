@@ -1,13 +1,15 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { MongooseModule } from '@nestjs/mongoose';
 import { ResumeController } from './resume.controller';
 import { ResumeService } from './resume.service';
-import { ResumeEntity } from './models/resume.entity';
+import { ResumeEntity, ResumeSchema } from './models/resume.entity';
 import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ResumeEntity], 'default'),
+    MongooseModule.forFeature([
+      { name: ResumeEntity.name, schema: ResumeSchema }
+    ]),
     UploadModule,
   ],
   controllers: [ResumeController],

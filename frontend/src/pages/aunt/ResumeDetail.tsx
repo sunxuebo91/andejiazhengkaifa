@@ -66,13 +66,11 @@ const maritalStatusMap = {
 const religionMap = {
   none: '无',
   buddhism: '佛教',
-  christianity: '基督教',
-  islam: '伊斯兰教',
-  catholicism: '天主教',
-  hinduism: '印度教',
   taoism: '道教',
-  protestantism: '新教',
-  orthodoxy: '东正教'
+  christianity: '基督教',
+  catholicism: '天主教',
+  islam: '伊斯兰教',
+  other: '其他'
 };
 
 // 性别映射
@@ -235,6 +233,17 @@ const ResumeDetail = () => {
       // 获取简历数据
       const resumeData = response.data.data;
       console.log('获取到的简历数据:', resumeData);
+      console.log('宗教信仰字段:', {
+        religion: resumeData.religion,
+        religionType: typeof resumeData.religion,
+        religionMap: religionMap[resumeData.religion]
+      });
+
+      // 确保ID字段存在且格式正确
+      if (!resumeData.id && resumeData._id) {
+        resumeData.id = resumeData._id.toString();
+      }
+      console.log('处理后的简历ID:', resumeData.id);
 
       // 处理工作经验数据
       const formattedWorkExperience = formatWorkExperiences(resumeData);
@@ -243,7 +252,11 @@ const ResumeDetail = () => {
       // 更新简历数据，确保统一使用workExperiences字段
       const updatedResumeData = {
         ...resumeData,
-        workExperiences: formattedWorkExperience
+        workExperiences: formattedWorkExperience,
+        // 确保ID字段存在
+        id: resumeData.id || resumeData._id?.toString() || id,
+        // 确保宗教信仰字段正确
+        religion: resumeData.religion || null
       };
       
       // 确保生日字段格式化
@@ -253,6 +266,11 @@ const ResumeDetail = () => {
 
       // 设置简历数据到状态
       console.log('处理后的简历数据:', updatedResumeData);
+      console.log('处理后的宗教信仰:', {
+        religion: updatedResumeData.religion,
+        religionType: typeof updatedResumeData.religion,
+        religionMap: religionMap[updatedResumeData.religion]
+      });
       setResume(updatedResumeData);
     } catch (error) {
       console.error('获取简历详情失败:', error);
@@ -769,7 +787,11 @@ const ResumeDetail = () => {
         >
           <Card title="基本信息" style={{ marginBottom: 24 }}>
             <Descriptions bordered column={3}>
-              <Descriptions.Item label="简历ID">{resume?.id || '-'}</Descriptions.Item>
+              <Descriptions.Item label="简历ID">
+                <Tooltip title={`完整ID: ${resume?.id || '未知'}`}>
+                  <span>{resume?.id ? resume.id.substring(0, 8).padEnd(8, '0') : '-'}</span>
+                </Tooltip>
+              </Descriptions.Item>
               <Descriptions.Item label="姓名">{resume?.name || '-'}</Descriptions.Item>
               <Descriptions.Item label="年龄">{resume?.age || '-'}</Descriptions.Item>
               <Descriptions.Item label="体检时间">{resume?.medicalExamDate ? dayjs(resume.medicalExamDate).format('YYYY-MM-DD') : '-'}</Descriptions.Item>
@@ -778,7 +800,11 @@ const ResumeDetail = () => {
               <Descriptions.Item label="身份证号">{resume?.idNumber || '-'}</Descriptions.Item>
               <Descriptions.Item label="学历">{resume?.education ? educationMap[resume.education] : '-'}</Descriptions.Item>
               <Descriptions.Item label="婚姻状况">{resume?.maritalStatus ? maritalStatusMap[resume.maritalStatus] : '-'}</Descriptions.Item>
-              <Descriptions.Item label="宗教信仰">{resume?.religion ? religionMap[resume.religion] : '-'}</Descriptions.Item>
+              <Descriptions.Item label="宗教信仰">
+                {resume?.religion ? (
+                  <span>{religionMap[resume.religion] || resume.religion}</span>
+                ) : '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="现居住地址">{resume?.currentAddress || '-'}</Descriptions.Item>
               <Descriptions.Item label="籍贯">{resume?.nativePlace || '-'}</Descriptions.Item>
               <Descriptions.Item label="户籍地址">{resume?.hukouAddress || '-'}</Descriptions.Item>

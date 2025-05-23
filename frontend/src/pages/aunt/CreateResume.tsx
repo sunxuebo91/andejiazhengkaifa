@@ -503,8 +503,8 @@ const CreateResume = () => {
         { key: 'gender', label: '性别' },
         { key: 'nativePlace', label: '籍贯' },
         { key: 'jobType', label: '工种' },
-        { key: 'expectedSalary', label: '期望薪资' },
-        // 移除了currentAddress, ethnicity, education, serviceArea的必填验证
+        { key: 'education', label: '学历' },
+        { key: 'experienceYears', label: '工作经验年限' }
       ];
       
       // 检查是否有未填写的必填字段
@@ -1253,8 +1253,8 @@ const CreateResume = () => {
                     rules={[{ required: true, message: '请选择性别' }]}
                   >
                     <Select placeholder="请选择性别">
-                      <Option value="男">男</Option>
-                      <Option value="女">女</Option>
+                      <Option value="male">男</Option>
+                      <Option value="female">女</Option>
                     </Select>
                   </Form.Item>
                 </Col>
@@ -1265,7 +1265,10 @@ const CreateResume = () => {
                   <Form.Item
                     label="手机号码"
                     name="phone"
-                    rules={[{ required: true, message: '请输入手机号码' }]}
+                    rules={[
+                      { required: true, message: '请输入手机号码' },
+                      { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号码' }
+                    ]}
                   >
                     <Input placeholder="请输入手机号码" />
                   </Form.Item>
@@ -1325,6 +1328,9 @@ const CreateResume = () => {
                   <Form.Item
                     label="身份证号"
                     name="idNumber"
+                    rules={[
+                      { pattern: /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/, message: '请输入正确的身份证号' }
+                    ]}
                   >
                     <Input placeholder="请输入身份证号" />
                   </Form.Item>
@@ -1333,6 +1339,7 @@ const CreateResume = () => {
                   <Form.Item
                     label="学历"
                     name="education"
+                    rules={[{ required: true, message: '请选择学历' }]}
                   >
                     <Select placeholder="请选择学历">
                       <Option value="no">无学历</Option>
@@ -1511,8 +1518,9 @@ const CreateResume = () => {
                 </Col>
                 <Col span={8}>
                   <Form.Item
-                    label="工作经验"
+                    label="工作经验年限"
                     name="experienceYears"
+                    rules={[{ required: true, message: '请输入工作经验年限' }]}
                   >
                     <InputNumber min={0} max={50} placeholder="请输入工作经验年限" style={{ width: '100%' }} />
                   </Form.Item>
@@ -1521,7 +1529,6 @@ const CreateResume = () => {
                       <Form.Item
                         label="期望薪资"
                         name="expectedSalary"
-                        rules={[{ required: true, message: '请输入期望薪资' }]}
                       >
                     <InputNumber 
                       min={0} 

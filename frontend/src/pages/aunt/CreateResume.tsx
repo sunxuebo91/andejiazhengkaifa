@@ -317,7 +317,7 @@ const CreateResume = () => {
 
       // 创建FormData对象
       const formData = new FormData();
-      formData.append('image', compressedFile);  // 统一使用 'image' 作为字段名
+      formData.append('file', compressedFile);  // 修改为 file
       formData.append('idCardSide', type);
       
       setLoading(true);
@@ -327,7 +327,11 @@ const CreateResume = () => {
         // 只对身份证正面进行OCR识别
         if (type === 'front') {
           // 发送OCR请求
-          const ocrResponse = await axios.post('/api/ocr/idcard', formData, {
+          const ocrFormData = new FormData();
+          ocrFormData.append('file', compressedFile);  // 修改为 file
+          ocrFormData.append('idCardSide', type);
+          
+          const ocrResponse = await axios.post('/api/ocr/idcard', ocrFormData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 60000,
           });
@@ -723,6 +727,43 @@ const CreateResume = () => {
         workExperiences,
         ...fileUrls
       };
+      
+      // 添加详细的日志
+      console.log('提交的完整数据:', {
+        基本信息: {
+          姓名: requestData.name,
+          年龄: requestData.age,
+          手机号: requestData.phone,
+          性别: requestData.gender,
+          籍贯: requestData.nativePlace,
+          工种: requestData.jobType,
+          学历: requestData.education,
+          工作经验年限: requestData.experienceYears
+        },
+        可选信息: {
+          身份证号: requestData.idNumber,
+          微信号: requestData.wechat,
+          现居地址: requestData.currentAddress,
+          户籍地址: requestData.hukouAddress,
+          出生日期: requestData.birthDate,
+          民族: requestData.ethnicity,
+          生肖: requestData.zodiac,
+          星座: requestData.zodiacSign,
+          期望薪资: requestData.expectedSalary,
+          服务区域: requestData.serviceArea,
+          接单状态: requestData.orderStatus,
+          技能标签: requestData.skills,
+          来源渠道: requestData.leadSource
+        },
+        工作经历: requestData.workExperiences,
+        文件URL: {
+          身份证正面: requestData.idCardFrontUrl,
+          身份证背面: requestData.idCardBackUrl,
+          个人照片: requestData.photoUrls,
+          技能证书: requestData.certificateUrls,
+          体检报告: requestData.medicalReportUrls
+        }
+      });
       
       debugLog('最终提交的完整数据:', requestData);
       

@@ -243,7 +243,7 @@ export class CreateResumeDto {
   })
   @IsOptional()
   @IsArray()
-  workExperience?: Array<{
+  workExperiences?: Array<{
     startDate: string;
     endDate: string;
     description: string;

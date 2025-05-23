@@ -639,7 +639,7 @@ const ResumeDetail = () => {
 
       // 创建FormData对象
       const formData = new FormData();
-      formData.append('image', compressedFile);
+      formData.append('file', compressedFile);
       formData.append('idCardSide', type);
 
       // 1. 先进行OCR识别
@@ -968,7 +968,7 @@ const ResumeDetail = () => {
               layout="vertical"
               initialValues={{
                 ...resume,
-                workExperience: resume?.workExperiences?.map((exp: any) => ({
+                workExperiences: resume?.workExperiences?.map((exp: any) => ({
                   ...exp,
                   startDate: exp.startDate && exp.startDate !== '-' ? dayjs(exp.startDate) : null,
                   endDate: exp.endDate && exp.endDate !== '-' ? dayjs(exp.endDate) : null,
@@ -1146,7 +1146,7 @@ const ResumeDetail = () => {
 
               {/* 工作经历编辑区域 */}
               <h3 style={{ marginTop: 24 }}>工作经历</h3>
-              <Form.List name="workExperience">
+              <Form.List name="workExperiences">
                 {(fields, { add, remove }) => (
                   <>
                     {fields.map(({ key, name, ...restField }) => (

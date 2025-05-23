@@ -26,14 +26,14 @@ export class OcrController {
   constructor(private readonly ocrService: TencentOcrService) {}
 
   @Post('idcard')
-  @UseInterceptors(FileInterceptor('image', multerOptions))
+  @UseInterceptors(FileInterceptor('file', multerOptions))
   @ApiOperation({ summary: '身份证识别' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        image: {
+        file: {
           type: 'string',
           format: 'binary',
           description: '身份证图片文件',

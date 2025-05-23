@@ -519,6 +519,13 @@ const CreateResume = () => {
         return;
       }
 
+      // 转换性别字段为英文枚举值
+      if (values.gender === '男') {
+        values.gender = 'male';
+      } else if (values.gender === '女') {
+        values.gender = 'female';
+      }
+      
       // 查重检查 - 在提交前检查手机号和身份证号是否已存在
       try {
         messageApi.loading('正在检查数据...');
@@ -780,6 +787,11 @@ const CreateResume = () => {
         
         debugLog('提交响应:', response.data);
         
+        // 检查响应是否成功
+        if (!response.data || !response.data.id) {
+          throw new Error('创建简历失败：未获取到简历ID');
+        }
+        
         // 显示成功消息并导航到简历详情页
         messageApi.success(isEditing ? '简历更新成功' : '简历创建成功');
         
@@ -793,7 +805,7 @@ const CreateResume = () => {
         // 表单重置和跳转
         form.resetFields();
         // 跳转到简历详情页
-        navigate(`/aunt/resume/${response.data.id}`);
+        navigate(`/aunt/resumes/detail/${response.data.id}`);
       } catch (error) {
         // 错误处理
         setLoading(false);

@@ -233,10 +233,34 @@ const ResumeDetail = () => {
       // 获取简历数据
       const resumeData = response.data.data;
       console.log('获取到的简历数据:', resumeData);
-      console.log('宗教信仰字段:', {
-        religion: resumeData.religion,
-        religionType: typeof resumeData.religion,
-        religionMap: religionMap[resumeData.religion]
+
+      // 添加图片和文件 URL 的详细日志
+      console.log('图片和文件 URL 详情:', {
+        idCardFrontUrl: {
+          value: resumeData.idCardFrontUrl,
+          type: typeof resumeData.idCardFrontUrl,
+          length: resumeData.idCardFrontUrl?.length
+        },
+        idCardBackUrl: {
+          value: resumeData.idCardBackUrl,
+          type: typeof resumeData.idCardBackUrl,
+          length: resumeData.idCardBackUrl?.length
+        },
+        photoUrls: {
+          value: resumeData.photoUrls,
+          type: Array.isArray(resumeData.photoUrls) ? 'array' : typeof resumeData.photoUrls,
+          length: Array.isArray(resumeData.photoUrls) ? resumeData.photoUrls.length : 0
+        },
+        certificateUrls: {
+          value: resumeData.certificateUrls,
+          type: Array.isArray(resumeData.certificateUrls) ? 'array' : typeof resumeData.certificateUrls,
+          length: Array.isArray(resumeData.certificateUrls) ? resumeData.certificateUrls.length : 0
+        },
+        medicalReportUrls: {
+          value: resumeData.medicalReportUrls,
+          type: Array.isArray(resumeData.medicalReportUrls) ? 'array' : typeof resumeData.medicalReportUrls,
+          length: Array.isArray(resumeData.medicalReportUrls) ? resumeData.medicalReportUrls.length : 0
+        }
       });
 
       // 确保ID字段存在且格式正确
@@ -256,13 +280,60 @@ const ResumeDetail = () => {
         // 确保ID字段存在
         id: resumeData.id || resumeData._id?.toString() || id,
         // 确保宗教信仰字段正确
-        religion: resumeData.religion || null
+        religion: resumeData.religion || null,
+        // 确保体检时间字段正确格式化
+        medicalExamDate: resumeData.medicalExamDate ? dayjs(resumeData.medicalExamDate) : null,
+        // 确保图片和文件 URL 字段正确
+        idCardFrontUrl: resumeData.idCardFrontUrl || null,
+        idCardBackUrl: resumeData.idCardBackUrl || null,
+        photoUrls: Array.isArray(resumeData.photoUrls) ? resumeData.photoUrls.filter(url => url && typeof url === 'string' && url.trim() !== '') : [],
+        certificateUrls: Array.isArray(resumeData.certificateUrls) ? resumeData.certificateUrls.filter(url => url && typeof url === 'string' && url.trim() !== '') : [],
+        medicalReportUrls: Array.isArray(resumeData.medicalReportUrls) ? resumeData.medicalReportUrls.filter(url => url && typeof url === 'string' && url.trim() !== '') : [],
       };
       
       // 确保生日字段格式化
       if (updatedResumeData.birthDate) {
         updatedResumeData.birthDate = dayjs(updatedResumeData.birthDate);
       }
+
+      // 添加日志输出，检查体检时间字段
+      console.log('体检时间字段:', {
+        original: resumeData.medicalExamDate,
+        formatted: updatedResumeData.medicalExamDate,
+        type: typeof resumeData.medicalExamDate
+      });
+
+      // 添加处理后的图片和文件 URL 的详细日志
+      console.log('处理后的图片和文件 URL 详情:', {
+        idCardFrontUrl: {
+          value: updatedResumeData.idCardFrontUrl,
+          type: typeof updatedResumeData.idCardFrontUrl,
+          length: updatedResumeData.idCardFrontUrl?.length
+        },
+        idCardBackUrl: {
+          value: updatedResumeData.idCardBackUrl,
+          type: typeof updatedResumeData.idCardBackUrl,
+          length: updatedResumeData.idCardBackUrl?.length
+        },
+        photoUrls: {
+          value: updatedResumeData.photoUrls,
+          type: Array.isArray(updatedResumeData.photoUrls) ? 'array' : typeof updatedResumeData.photoUrls,
+          length: Array.isArray(updatedResumeData.photoUrls) ? updatedResumeData.photoUrls.length : 0,
+          urls: updatedResumeData.photoUrls
+        },
+        certificateUrls: {
+          value: updatedResumeData.certificateUrls,
+          type: Array.isArray(updatedResumeData.certificateUrls) ? 'array' : typeof updatedResumeData.certificateUrls,
+          length: Array.isArray(updatedResumeData.certificateUrls) ? updatedResumeData.certificateUrls.length : 0,
+          urls: updatedResumeData.certificateUrls
+        },
+        medicalReportUrls: {
+          value: updatedResumeData.medicalReportUrls,
+          type: Array.isArray(updatedResumeData.medicalReportUrls) ? 'array' : typeof updatedResumeData.medicalReportUrls,
+          length: Array.isArray(updatedResumeData.medicalReportUrls) ? updatedResumeData.medicalReportUrls.length : 0,
+          urls: updatedResumeData.medicalReportUrls
+        }
+      });
 
       // 设置简历数据到状态
       console.log('处理后的简历数据:', updatedResumeData);
@@ -305,6 +376,33 @@ const ResumeDetail = () => {
     try {
       const values = await form.validateFields();
       console.log('验证通过，表单数据:', values);
+      
+      // 检查必填字段是否已填写
+      const requiredFields = [
+        { key: 'name', label: '姓名' },
+        { key: 'age', label: '年龄' },
+        { key: 'phone', label: '手机号码' },
+        { key: 'gender', label: '性别' },
+        { key: 'nativePlace', label: '籍贯' },
+        { key: 'jobType', label: '工种' },
+        { key: 'education', label: '学历' },
+        { key: 'experienceYears', label: '工作经验年限' }
+      ];
+      
+      // 检查是否有未填写的必填字段
+      const missingFields = requiredFields.filter(field => !values[field.key]);
+      if (missingFields.length > 0) {
+        const missingLabels = missingFields.map(field => field.label).join(', ');
+        messageApi.error(`请填写以下必填字段: ${missingLabels}`);
+        return;
+      }
+
+      // 转换性别字段为英文枚举值
+      if (values.gender === '男') {
+        values.gender = 'male';
+      } else if (values.gender === '女') {
+        values.gender = 'female';
+      }
       
       // 准备提交数据：处理日期字段
       const formData = {
@@ -359,14 +457,24 @@ const ResumeDetail = () => {
   };
 
   // 渲染文件预览
-  const renderFilePreview = (url: string, index: number) => {
-    if (!url) return null;
+  const renderFilePreview = (url: string | null | undefined, index: number) => {
+    if (!url || typeof url !== 'string') {
+      console.warn(`无效的URL: ${url}, 索引: ${index}`);
+      return null;
+    }
 
-    console.log(`渲染文件预览，URL: ${url}, 索引: ${index}`);
+    console.log(`渲染文件预览，URL: ${url}, 索引: ${index}, URL类型: ${typeof url}, URL长度: ${url.length}`);
+    
+    // 检查 URL 是否以 http 或 https 开头
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      console.warn(`URL格式不正确: ${url}`);
+      return null;
+    }
+
     const isPdf = url.toLowerCase().endsWith('.pdf');
     
     // 使用URL的哈希值作为key
-    const uniqueKey = `file-${url.split('/').pop()}-${index}`;
+    const uniqueKey = `file-${url.split('/').pop() || index}-${index}`;
     
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '0 8px 8px 0' }}>
@@ -400,7 +508,7 @@ const ResumeDetail = () => {
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               onClick={() => handlePreview(url)}
               onError={(e) => {
-                console.error(`图片加载失败: ${url}`);
+                console.error(`图片加载失败: ${url}, 错误信息:`, e);
                 e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
               }}
             />
@@ -855,32 +963,14 @@ const ResumeDetail = () => {
               <Descriptions.Item label="身份证正面" span={1}>
                 {resume?.idCardFrontUrl ? (
                   <div style={{ display: 'inline-block', margin: '8px' }}>
-                    <img 
-                      src={resume.idCardFrontUrl} 
-                      alt="身份证正面" 
-                      style={{ maxWidth: '100%', maxHeight: '200px', border: '1px solid #d9d9d9', borderRadius: '4px' }}
-                      onClick={() => handlePreview(resume.idCardFrontUrl)}
-                      onError={(e) => {
-                        console.error(`图片加载失败: ${resume.idCardFrontUrl}`);
-                        e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-                      }}
-                    />
+                    {renderFilePreview(resume.idCardFrontUrl, 0)}
                   </div>
                 ) : '未上传'}
               </Descriptions.Item>
               <Descriptions.Item label="身份证反面" span={1}>
                 {resume?.idCardBackUrl ? (
                   <div style={{ display: 'inline-block', margin: '8px' }}>
-                    <img 
-                      src={resume.idCardBackUrl} 
-                      alt="身份证反面" 
-                      style={{ maxWidth: '100%', maxHeight: '200px', border: '1px solid #d9d9d9', borderRadius: '4px' }}
-                      onClick={() => handlePreview(resume.idCardBackUrl)}
-                      onError={(e) => {
-                        console.error(`图片加载失败: ${resume.idCardBackUrl}`);
-                        e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-                      }}
-                    />
+                    {renderFilePreview(resume.idCardBackUrl, 1)}
                   </div>
                 ) : '未上传'}
               </Descriptions.Item>
@@ -888,12 +978,13 @@ const ResumeDetail = () => {
           </Card>
 
           <Card title="个人照片" style={{ marginBottom: 24 }}>
-            {resume?.photoUrls?.length > 0 ? (
+            {resume?.photoUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.photoUrls.map((url: string, index: number) => {
-                  const uniqueKey = `photo-${url.split('/').pop()}-${index}`;
-                  return renderFilePreview(url, index);
-                })}
+                {resume.photoUrls.filter(Boolean).map((url: string, index: number) => (
+                  <div key={`photo-${index}`}>
+                    {renderFilePreview(url, index)}
+                  </div>
+                ))}
               </div>
             ) : (
               '未上传'
@@ -901,12 +992,13 @@ const ResumeDetail = () => {
           </Card>
 
           <Card title="证书照片" style={{ marginBottom: 24 }}>
-            {resume?.certificateUrls?.length > 0 ? (
+            {resume?.certificateUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.certificateUrls.map((url: string, index: number) => {
-                  const uniqueKey = `certificate-${url.split('/').pop()}-${index}`;
-                  return renderFilePreview(url, index);
-                })}
+                {resume.certificateUrls.filter(Boolean).map((url: string, index: number) => (
+                  <div key={`certificate-${index}`}>
+                    {renderFilePreview(url, index)}
+                  </div>
+                ))}
               </div>
             ) : (
               '未上传'
@@ -914,9 +1006,13 @@ const ResumeDetail = () => {
           </Card>
 
           <Card title="体检报告" style={{ marginBottom: 24 }}>
-            {resume?.medicalReportUrls?.length > 0 ? (
+            {resume?.medicalReportUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.medicalReportUrls.map((url: string, index: number) => renderFilePreview(url, index))}
+                {resume.medicalReportUrls.filter(Boolean).map((url: string, index: number) => (
+                  <div key={`medical-${index}`}>
+                    {renderFilePreview(url, index)}
+                  </div>
+                ))}
               </div>
             ) : (
               '未上传'

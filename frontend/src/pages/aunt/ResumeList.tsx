@@ -60,22 +60,23 @@ const ResumeList = () => {
         }
       });
       
+      console.log('API响应数据:', response.data);
+      
       // 检查响应格式
-      if (!response.data || typeof response.data !== 'object') {
-        throw new Error('服务器返回数据格式错误');
+      if (!response.data) {
+        throw new Error('服务器返回数据为空');
       }
       
-      const { success, data, message } = response.data;
+      // 如果响应直接是数组，说明是旧格式，直接使用
+      let resumes = Array.isArray(response.data) ? response.data : [];
+      let totalCount = resumes.length;
       
-      if (!success) {
-        throw new Error(message || '获取数据失败');
+      // 如果是新格式，从data.items中获取数据
+      if (response.data.data && Array.isArray(response.data.data.items)) {
+        resumes = response.data.data.items;
+        totalCount = response.data.data.total || resumes.length;
       }
       
-      if (!data || !Array.isArray(data.items)) {
-        throw new Error('返回数据格式不正确');
-      }
-      
-      const { items: resumes = [], total: totalCount = 0 } = data;
       console.log('解析后的简历数据:', { resumesCount: resumes.length, totalCount, sampleResume: resumes[0] });
       
       // 格式化数据
@@ -127,31 +128,7 @@ const ResumeList = () => {
       setTotal(totalCount);
     } catch (error) {
       console.error('获取简历列表失败:', error);
-      let errorMessage = '获取简历列表失败，请稍后重试';
-      
-      if (error.response) {
-        // 服务器返回了错误响应
-        const { data, status } = error.response;
-        console.error('错误响应:', { status, data });
-        
-        if (data && data.message) {
-          errorMessage = data.message;
-        } else if (status === 500) {
-          errorMessage = '服务器内部错误，请联系管理员';
-        } else if (status === 404) {
-          errorMessage = '请求的资源不存在';
-        } else if (status === 403) {
-          errorMessage = '没有权限访问该资源';
-        }
-      } else if (error.request) {
-        // 请求已发出但没有收到响应
-        errorMessage = '服务器无响应，请检查网络连接';
-      } else if (error.message) {
-        // 请求配置出错
-        errorMessage = error.message;
-      }
-      
-      messageApi.error(errorMessage);
+      messageApi.error('获取简历列表失败，请稍后重试');
       setResumeList([]);
       setTotal(0);
     } finally {

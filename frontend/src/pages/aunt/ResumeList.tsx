@@ -284,7 +284,7 @@ const ResumeList = () => {
         const id = record.id || record._id || '';
         return (
           <Tooltip title={`完整ID: ${id || '未知'}`}>
-            <a onClick={() => id ? navigate(`/aunt/resume/${id}`) : messageApi.warning('简历ID不存在')}>
+            <a onClick={() => id ? navigate(`/aunt/resumes/detail/${id}`) : messageApi.warning('简历ID不存在')}>
               {text || '未知ID'}
             </a>
           </Tooltip>

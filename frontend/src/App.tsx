@@ -89,7 +89,7 @@ export default function App({ children }: AppProps) {
                       element={<AuthorizedRoute element={<CreateResume />} authority="resume:create" />} 
                     />
                     <Route 
-                      path="resume/:id" 
+                      path="resumes/detail/:id" 
                       element={<AuthorizedRoute element={<ResumeDetail />} authority="resume:view" />} 
                     />
                   </Route>

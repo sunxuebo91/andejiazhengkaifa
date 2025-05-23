@@ -126,6 +126,9 @@ const ResumeList = () => {
       console.log('最终处理后的数据:', formattedData.slice(0, 2)); // 只打印前两条记录用于调试
       setResumeList(formattedData);
       setTotal(totalCount);
+      
+      // 保存完整的简历列表到localStorage
+      localStorage.setItem('resumeList', JSON.stringify(formattedData));
     } catch (error) {
       console.error('获取简历列表失败:', error);
       messageApi.error('获取简历列表失败，请稍后重试');
@@ -261,7 +264,16 @@ const ResumeList = () => {
         const id = record.id || record._id || '';
         return (
           <Tooltip title={`完整ID: ${id || '未知'}`}>
-            <a onClick={() => id ? navigate(`/aunt/resumes/detail/${id}`) : messageApi.warning('简历ID不存在')}>
+            <a onClick={() => {
+              if (!id) {
+                messageApi.warning('简历ID不存在');
+                return;
+              }
+              console.log('导航到简历详情:', { formattedId: record.formattedId, fullId: id });
+              navigate(`/aunt/resumes/detail/${record.formattedId}`, { 
+                state: { fullId: id } // 传递完整ID作为状态
+              });
+            }}>
               {text || '未知ID'}
             </a>
           </Tooltip>

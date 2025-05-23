@@ -160,10 +160,11 @@ const leadSourceMap = {
 };
 
 const ResumeDetail = () => {
-  const { id } = useParams();
+  const { id: shortId } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [resume, setResume] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -217,16 +218,47 @@ const ResumeDetail = () => {
 
   // 获取简历详情
   const fetchResumeDetail = async () => {
+    if (!shortId) {
+      setError('简历ID不存在');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setError(null);
     try {
-      console.log('正在获取简历详情，ID:', id);
-      const response = await axios.get(`/api/resumes/${id}`);
+      // 从localStorage获取完整的简历ID
+      const resumeList = JSON.parse(localStorage.getItem('resumeList') || '[]');
+      console.log('从localStorage获取的简历列表:', resumeList);
+      
+      const fullResume = resumeList.find(r => r.formattedId === shortId);
+      console.log('查找到的完整简历数据:', fullResume);
+      
+      if (!fullResume) {
+        console.error('未找到简历数据:', { shortId, resumeList });
+        setError('未找到简历数据');
+        setLoading(false);
+        navigate('/aunt/list');
+        return;
+      }
+
+      if (!fullResume.id) {
+        console.error('简历数据缺少ID字段:', fullResume);
+        setError('简历数据格式错误');
+        setLoading(false);
+        navigate('/aunt/list');
+        return;
+      }
+
+      console.log('正在获取简历详情，完整ID:', fullResume.id);
+      const response = await axios.get(`/api/resumes/${fullResume.id}`);
       console.log('原始API响应:', response);
 
       // 检查响应格式
       if (!response.data.success) {
         console.error('API返回错误:', response.data.message);
-        message.error(response.data.message || '获取简历详情失败');
+        setError(response.data.message || '获取简历详情失败');
+        setLoading(false);
         return;
       }
 
@@ -237,7 +269,8 @@ const ResumeDetail = () => {
       // 确保ID字段存在且格式正确
       if (!resumeData._id) {
         console.error('简历数据缺少ID字段');
-        message.error('获取简历详情失败：数据格式错误');
+        setError('获取简历详情失败：数据格式错误');
+        setLoading(false);
         return;
       }
 
@@ -317,6 +350,7 @@ const ResumeDetail = () => {
       setResume(updatedResumeData);
     } catch (error) {
       console.error('获取简历详情失败:', error);
+      setError('获取简历详情失败');
       message.error('获取简历详情失败');
     } finally {
       setLoading(false);
@@ -324,10 +358,10 @@ const ResumeDetail = () => {
   };
 
   useEffect(() => {
-    if (id) {
+    if (shortId) {
       fetchResumeDetail();
     }
-  }, [id]);
+  }, [shortId]);
 
   // 处理编辑操作 - 将数据存储到localStorage并跳转到创建页面
   const handleEdit = () => {
@@ -402,7 +436,7 @@ const ResumeDetail = () => {
       console.log('准备提交的数据:', formData);
       
       // 提交更新的简历数据
-      await axios.put(`/api/resumes/${id}`, formData);
+      await axios.put(`/api/resumes/${resume.id}`, formData);
       message.success('简历更新成功');
       
       // 刷新数据
@@ -533,12 +567,17 @@ const ResumeDetail = () => {
 
   // 获取跟进记录
   const fetchFollowUpRecords = async () => {
+    if (!resume?.id) {
+      console.log('简历ID不存在，跳过获取跟进记录');
+      return;
+    }
+
     try {
       // 从localStorage获取所有跟进记录
       const allRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
       
       // 筛选出当前简历的跟进记录
-      const resumeRecords = allRecords.filter(record => record.resumeId === id);
+      const resumeRecords = allRecords.filter(record => record.resumeId === resume.id);
       
       console.log('从localStorage获取跟进记录:', resumeRecords);
       setFollowUpRecords(resumeRecords);
@@ -550,10 +589,10 @@ const ResumeDetail = () => {
   
   // 组件加载时获取跟进记录
   useEffect(() => {
-    if (id) {
+    if (resume?.id) {
       fetchFollowUpRecords();
     }
-  }, [id]);
+  }, [resume?.id]);
   
   // 添加跟进记录
   const handleAddFollowUp = async (values: any) => {
@@ -563,7 +602,7 @@ const ResumeDetail = () => {
       // 创建新的跟进记录
       const followUpData = {
         id: Date.now().toString(), // 生成临时ID
-        resumeId: id,
+        resumeId: resume.id,
         type: values.type,
         content: values.content,
         createdAt: new Date().toISOString(),
@@ -795,6 +834,33 @@ const ResumeDetail = () => {
     }
   };
 
+  if (error) {
+    return (
+      <PageContainer
+        header={{
+          title: '简历详情',
+          breadcrumb: {
+            routes: [
+              { path: '/aunt/list', breadcrumbName: '阿姨简历库' },
+              { breadcrumbName: '简历详情' },
+            ],
+          },
+        }}
+      >
+        <Card>
+          <div style={{ textAlign: 'center', padding: '50px' }}>
+            <Typography.Title level={4} type="danger">
+              {error}
+            </Typography.Title>
+            <Button type="primary" onClick={() => navigate('/aunt/list')}>
+              返回列表
+            </Button>
+          </div>
+        </Card>
+      </PageContainer>
+    );
+  }
+
   if (loading) {
     return (
       <PageContainer
@@ -836,6 +902,33 @@ const ResumeDetail = () => {
             </div>
           </Spin>
         </div>
+      </PageContainer>
+    );
+  }
+
+  if (!resume) {
+    return (
+      <PageContainer
+        header={{
+          title: '简历详情',
+          breadcrumb: {
+            routes: [
+              { path: '/aunt/list', breadcrumbName: '阿姨简历库' },
+              { breadcrumbName: '简历详情' },
+            ],
+          },
+        }}
+      >
+        <Card>
+          <div style={{ textAlign: 'center', padding: '50px' }}>
+            <Typography.Title level={4}>
+              未找到简历数据
+            </Typography.Title>
+            <Button type="primary" onClick={() => navigate('/aunt/list')}>
+              返回列表
+            </Button>
+          </div>
+        </Card>
       </PageContainer>
     );
   }

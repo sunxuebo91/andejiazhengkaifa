@@ -519,6 +519,31 @@ const CreateResume = () => {
         return;
       }
 
+      // 检查身份证照片是否上传
+      if (!idCardFrontFile && !hasExistingIdCardFront) {
+        messageApi.error('请上传身份证正面照片');
+        return;
+      }
+      if (!idCardBackFile && !hasExistingIdCardBack) {
+        messageApi.error('请上传身份证背面照片');
+        return;
+      }
+
+      // 检查工作经历日期
+      if (values.workExperiences && values.workExperiences.length > 0) {
+        const now = dayjs();
+        const invalidExperiences = values.workExperiences.filter(exp => {
+          const startDate = dayjs(exp.startDate);
+          const endDate = dayjs(exp.endDate);
+          return startDate.isAfter(now) || endDate.isAfter(now) || endDate.isBefore(startDate);
+        });
+
+        if (invalidExperiences.length > 0) {
+          messageApi.error('工作经历的开始日期和结束日期不能是未来时间，且结束日期不能早于开始日期');
+          return;
+        }
+      }
+
       // 转换性别字段为英文枚举值
       if (values.gender === '男') {
         values.gender = 'male';
@@ -608,15 +633,25 @@ const CreateResume = () => {
           const formData = new FormData();
           formData.append('file', idCardFrontFile);
           const response = await axios.post(`/api/upload/id-card/front`, formData);
-          fileUrls.idCardFrontUrl = response.data.url;
-        } 
+          if (!response.data.success) {
+            throw new Error('身份证正面上传失败');
+          }
+          fileUrls.idCardFrontUrl = response.data.data.url;
+        } else if (hasExistingIdCardFront) {
+          fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
+        }
         
         // 上传身份证背面
         if (idCardBackFile) {
           const formData = new FormData();
           formData.append('file', idCardBackFile);
           const response = await axios.post(`/api/upload/id-card/back`, formData);
-          fileUrls.idCardBackUrl = response.data.url;
+          if (!response.data.success) {
+            throw new Error('身份证背面上传失败');
+          }
+          fileUrls.idCardBackUrl = response.data.data.url;
+        } else if (hasExistingIdCardBack) {
+          fileUrls.idCardBackUrl = existingIdCardBackUrl;
         }
         
         // 上传个人照片
@@ -675,63 +710,19 @@ const CreateResume = () => {
       
       // 合并所有表单数据
       const allFormData = { ...values };
-      debugLog('表单数据:', allFormData);
       
       // 处理工作经验中的日期格式
       if (allFormData.workExperiences && allFormData.workExperiences.length > 0) {
-        debugLog('处理前的工作经历数据:', JSON.stringify(allFormData.workExperiences));
-        
-        // 获取当前表单的原始值，确保能拿到正确的日期对象
-        const formWorkExps = form.getFieldValue('workExperiences');
-        debugLog('Form中的工作经历数据:', formWorkExps);
-        
-        // 直接使用表单实例中的数据，并过滤掉空值
-        const validWorkExps = formWorkExps.filter(exp => exp && (exp.startDate || exp.endDate || exp.description));
-        debugLog('有效的工作经历数据:', validWorkExps);
-        
-        // 处理日期格式
-        allFormData.workExperiences = validWorkExps.map((exp, index) => {
-          debugLog(`处理工作经历[${index}]`);
-          
-          // 处理开始日期
-          let startDateStr = '';
-          if (exp.startDate) {
-            if (typeof exp.startDate.format === 'function') {
-              startDateStr = exp.startDate.format('YYYY-MM');
-              debugLog(`工作经历[${index}]开始时间格式化为:`, startDateStr);
-            } else if (typeof exp.startDate === 'string') {
-              startDateStr = exp.startDate;
-            }
-          }
-          
-          // 处理结束日期
-          let endDateStr = '';
-          if (exp.endDate) {
-            if (typeof exp.endDate.format === 'function') {
-              endDateStr = exp.endDate.format('YYYY-MM');
-              debugLog(`工作经历[${index}]结束时间格式化为:`, endDateStr);
-            } else if (typeof exp.endDate === 'string') {
-              endDateStr = exp.endDate;
-            }
-          }
-          
-          return {
-            startDate: startDateStr,
-            endDate: endDateStr,
-            description: exp.description || ''
-          };
-        });
-        
-        debugLog('处理后的工作经历数据:', JSON.stringify(allFormData.workExperiences));
+        allFormData.workExperiences = allFormData.workExperiences.map(exp => ({
+          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : '',
+          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : '',
+          description: exp.description || ''
+        })).filter(exp => exp.startDate || exp.endDate || exp.description);
       }
-      
-      // 准备工作经历数据
-      const workExperiences = allFormData.workExperiences || [];
       
       // 准备提交的数据
       const requestData = {
         ...allFormData,
-        workExperiences,
         ...fileUrls
       };
       
@@ -772,59 +763,50 @@ const CreateResume = () => {
         }
       });
       
-      debugLog('最终提交的完整数据:', requestData);
-      
       // 判断是编辑还是创建
       const apiUrl = isEditing ? `/api/resumes/${editingResumeId}` : '/api/resumes';
       const method = isEditing ? 'PUT' : 'POST';
       
       // 提交表单数据到后端
-      try {
-        // 使用axios发送请求
-        const response = isEditing
-          ? await axios.put(apiUrl, requestData)
-          : await axios.post(apiUrl, requestData);
-        
-        debugLog('提交响应:', response.data);
-        
-        // 检查响应是否成功
-        if (!response.data || !response.data.success) {
-          throw new Error(response.data?.message || '创建简历失败');
-        }
-        
-        // 显示成功消息
-        messageApi.success(isEditing ? '简历更新成功' : '简历创建成功');
-        
-        // 清除编辑状态
-        if (isEditing) {
-          localStorage.removeItem('editingResume');
-          setIsEditing(false);
-          setEditingResumeId(null);
-        }
-        
-        // 表单重置
-        form.resetFields();
-        
-        // 修改这里：使用正确的简历列表页路径
-        navigate('/aunt/list');
-      } catch (error) {
-        // 错误处理
-        setLoading(false);
-        setSubmitting(false);
-        
-        if (error.response) {
-          messageApi.error(`${isEditing ? '更新' : '创建'}失败: ${error.response.data?.message || '未知错误'}`);
-          } else {
-          messageApi.error(`${isEditing ? '更新' : '创建'}失败，请检查网络连接`);
-        }
-        console.error('提交失败:', error);
+      const response = isEditing
+        ? await axios.put(apiUrl, requestData)
+        : await axios.post(apiUrl, requestData);
+      
+      debugLog('提交响应:', response.data);
+      
+      // 检查响应是否成功
+      if (!response.data || !response.data.success) {
+        throw new Error(response.data?.message || '创建简历失败');
       }
+      
+      // 显示成功消息
+      messageApi.success(isEditing ? '简历更新成功' : '简历创建成功');
+      
+      // 清除编辑状态
+      if (isEditing) {
+        localStorage.removeItem('editingResume');
+        setIsEditing(false);
+        setEditingResumeId(null);
+      }
+      
+      // 表单重置
+      form.resetFields();
+      
+      // 修改这里：使用正确的简历列表页路径
+      navigate('/aunt/list');
     } catch (error) {
-      console.error('表单提交错误:', error);
-      messageApi.error(`${isEditing ? '更新' : '创建'}失败，请检查表单`);
-    } finally {
+      // 错误处理
       setLoading(false);
       setSubmitting(false);
+      
+      if (error.response) {
+        const errorMessage = error.response.data?.message || '未知错误';
+        messageApi.error(`${isEditing ? '更新' : '创建'}失败: ${errorMessage}`);
+        console.error('提交失败:', error.response.data);
+      } else {
+        messageApi.error(`${isEditing ? '更新' : '创建'}失败，请检查网络连接`);
+        console.error('提交失败:', error);
+      }
     }
   };
 

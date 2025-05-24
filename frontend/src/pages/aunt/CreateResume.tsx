@@ -1,53 +1,30 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, message, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, Tag, App } from 'antd';
-import { useState, useRef, useEffect } from 'react';
-import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, CheckCircleOutlined, ReloadOutlined, CloseCircleOutlined, DeleteOutlined } from '@ant-design/icons';
-import { FilePdfOutlined } from '@ant-design/icons';
+import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App } from 'antd';
+import { useState, useEffect } from 'react';
+import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import type { UploadFile } from 'antd/es/upload/interface';
+import type { UploadFile, UploadChangeParam } from 'antd/es/upload/interface';
 import type { RcFile } from 'antd/es/upload';
 import dayjs from 'dayjs';
-import imageCompression from 'browser-image-compression';
-// 引入自定义的百度地图地址自动补全组件
-// import BaiduAddressAutocomplete from '../../components/BaiduAddressAutocomplete';
 import BaiduMapCard from '../../components/BaiduMapCard';
 import apiService from '../../services/api';
+import { ImageService } from '../../services/imageService';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+import type { Dayjs } from 'dayjs';
+import type { DatePickerProps } from 'antd';
+
+// 扩展 dayjs 功能
+dayjs.extend(customParseFormat);
+dayjs.extend(isSameOrBefore);
+dayjs.extend(isSameOrAfter);
 
 // 设置 axios 默认配置
 // API请求通过vite代理转发
 // axios.defaults.withCredentials = true;
 // axios.defaults.timeout = 10000;
-
-// 定义图片压缩选项
-const compressionOptions = {
-  maxSizeMB: 0.1,      // Increase to 100KB = 0.1MB
-  maxWidthOrHeight: 800, // Reduce max dimensions
-  useWebWorker: true,
-  initialQuality: 0.8   // Add initial quality setting
-};
-
-// 图片压缩函数
-const compressImage = async (file) => {
-  try {
-    console.log(`压缩前文件大小: ${(file.size / 1024).toFixed(2)} KB`);
-    
-    // 检查文件类型，只压缩图片
-    if (!file.type.includes('image')) {
-      console.log('非图片文件，不进行压缩:', file.type);
-      return file;
-    }
-    
-    // 压缩图片
-    const compressedFile = await imageCompression(file, compressionOptions);
-    console.log(`压缩后文件大小: ${(compressedFile.size / 1024).toFixed(2)} KB`);
-    
-    return compressedFile;
-  } catch (error) {
-    console.error('图片压缩失败:', error);
-    return file; // 压缩失败则返回原文件
-  }
-};
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -80,75 +57,159 @@ const ethnicities = [
 // 调试模式开关，生产环境设为false
 const DEBUG_MODE = false;
 
-// 调试日志函数
-function debugLog(...args) {
+// 添加类型定义
+interface WorkExperience {
+  startDate: string;
+  endDate: string;
+  description: string;
+}
+
+interface FormValues {
+  name: string;
+  gender: GenderType;
+  age: number;
+  idNumber: string;
+  phone: string;
+  address: string;
+  workExperiences: WorkExperience[];
+  experienceYears?: number;
+  nativePlace?: string;
+  jobType?: string;
+  education?: string;
+  wechat?: string;
+  currentAddress?: string;
+  hukouAddress?: string;
+  birthDate?: string;
+  ethnicity?: string;
+  zodiac?: string;
+  zodiacSign?: string;
+  expectedSalary?: number;
+  serviceArea?: string;
+  orderStatus?: string;
+  skills?: string[];
+  leadSource?: string;
+  [key: string]: any;
+}
+
+// 添加更多类型定义
+type GenderType = 'male' | 'female';
+
+// Define a base type for file properties
+type BaseFileProps = {
+  uid: string;
+  name: string;
+  url?: string;
+  thumbUrl?: string;
+  originFileObj?: RcFile;
+  size?: number;
+  type?: string;
+};
+
+// Define types for new and existing files
+type NewFile = BaseFileProps & {
+  status: UploadFileStatus;
+  isExisting: false;
+};
+
+type ExistingFile = BaseFileProps & {
+  status: 'done';
+  isExisting: true;
+};
+
+// Union type for all file types
+type CustomUploadFile = NewFile | ExistingFile;
+
+// Add type for API error response
+interface ApiErrorResponse {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+    };
+  };
+  message?: string;
+}
+
+// Add processGender function
+const processGender = (gender: string): GenderType => {
+  return gender === '男' ? 'male' : 'female';
+};
+
+// Add UploadFileStatus type
+type UploadFileStatus = 'uploading' | 'done' | 'error' | 'removed';
+
+// Add new interfaces and type definitions after the existing ones
+interface WorkExperienceItem {
+  startDate?: string;
+  endDate?: string;
+  description?: string;
+}
+
+// Restore utility functions
+function debugLog(...args: unknown[]): void {
   if (DEBUG_MODE) console.log(...args);
 }
 
-// 将组件内的console.log替换为debugLog
-// 例如：
-// console.log('表单值变化: Object'); => debugLog('表单值变化: Object');
-// console.log('Form实例初始化: true'); => debugLog('Form实例初始化: true');
-
-// 添加生肖计算函数
-const getChineseZodiac = (year: number): string => {
-  const zodiacMap = {
-    0: 'rat',    // 鼠
-    1: 'ox',     // 牛
-    2: 'tiger',  // 虎
-    3: 'rabbit', // 兔
-    4: 'dragon', // 龙
-    5: 'snake',  // 蛇
-    6: 'horse',  // 马
-    7: 'goat',   // 羊
-    8: 'monkey', // 猴
-    9: 'rooster',// 鸡
-    10: 'dog',   // 狗
-    11: 'pig'    // 猪
-  };
-  return zodiacMap[(year - 4) % 12];
-};
-
-// 添加星座计算函数
-const getZodiacSign = (month: number, day: number): string => {
-  const dates = [
-    { date: [1, 20], sign: 'aquarius' },    // 水瓶座
-    { date: [2, 19], sign: 'pisces' },      // 双鱼座
-    { date: [3, 21], sign: 'aries' },       // 白羊座
-    { date: [4, 20], sign: 'taurus' },      // 金牛座
-    { date: [5, 21], sign: 'gemini' },      // 双子座
-    { date: [6, 22], sign: 'cancer' },      // 巨蟹座
-    { date: [7, 23], sign: 'leo' },         // 狮子座
-    { date: [8, 23], sign: 'virgo' },       // 处女座
-    { date: [9, 23], sign: 'libra' },       // 天秤座
-    { date: [10, 24], sign: 'scorpio' },    // 天蝎座
-    { date: [11, 23], sign: 'sagittarius' }, // 射手座
-    { date: [12, 22], sign: 'capricorn' }   // 摩羯座
-  ];
-
-  for (let i = 0; i < dates.length; i++) {
-    const nextIndex = (i + 1) % dates.length;
-    const currentDate = dates[i].date;
-    const nextDate = dates[nextIndex].date;
-    
-    if (month === currentDate[0] && day >= currentDate[1] || 
-        month === nextDate[0] && day < nextDate[1]) {
-      return dates[i].sign;
-    }
+const handleError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
   }
-  return 'capricorn'; // 默认返回摩羯座
+  if (typeof error === 'string') {
+    return error;
+  }
+  return '发生未知错误';
 };
 
-// 添加籍贯提取函数
-const extractNativePlace = (address: string): string => {
-  // 匹配省级行政区
-  const provinceRegex = /^(北京市|天津市|上海市|重庆市|河北省|山西省|辽宁省|吉林省|黑龙江省|江苏省|浙江省|安徽省|福建省|江西省|山东省|河南省|湖北省|湖南省|广东省|海南省|四川省|贵州省|云南省|陕西省|甘肃省|青海省|台湾省|内蒙古自治区|广西壮族自治区|西藏自治区|宁夏回族自治区|新疆维吾尔自治区|香港特别行政区|澳门特别行政区)/;
-  const match = address.match(provinceRegex);
-  return match ? match[1] : '';
+// 添加日期验证工具函数
+const isValidDate = (date: any): date is Dayjs => {
+  return date && typeof date === 'object' && 'isValid' in date && date.isValid();
+};
+
+const toDayjs = (date: any): Dayjs | undefined => {
+  if (!date) return undefined;
+  if (isValidDate(date)) return date;
+  const parsed = dayjs(date);
+  return parsed.isValid() ? parsed : undefined;
 };
 
 const CreateResume = () => {
   const { message: messageApi } = App.useApp();
+  const [form] = Form.useForm<FormValues>();
+  const navigate = useNavigate();
+  const [editingResumeId] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [idCardFiles, setIdCardFiles] = useState<{
+    front: CustomUploadFile[];
+    back: CustomUploadFile[];
+  }>({ front: [], back: [] });
+  const [photoFiles, setPhotoFiles] = useState<CustomUploadFile[]>([]);
+  const [certificateFiles, setCertificateFiles] = useState<CustomUploadFile[]>([]);
+  const [medicalReportFiles, setMedicalReportFiles] = useState<CustomUploadFile[]>([]);
+  const [previewState, setPreviewState] = useState<{
+    visible: boolean;
+    image: string;
+    title: string;
+  }>({
+    visible: false,
+    image: '',
+    title: ''
+  });
+  const [existingIdCardFrontUrl, setExistingIdCardFrontUrl] = useState<string>('');
+  const [existingIdCardBackUrl, setExistingIdCardBackUrl] = useState<string>('');
+  const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
+  const [existingCertificateUrls, setExistingCertificateUrls] = useState<string[]>([]);
+  const [existingMedicalReportUrls, setExistingMedicalReportUrls] = useState<string[]>([]);
+  const [hasExistingIdCardFront, setHasExistingIdCardFront] = useState<boolean>(false);
+  const [hasExistingIdCardBack, setHasExistingIdCardBack] = useState<boolean>(false);
+  const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
+
+  // 性别选择处理函数，确保 form 可用
+  const handleGenderChange = (value: GenderType) => {
+    form.setFieldsValue({ gender: value });
+  };
+
   // 检查URL是否包含edit参数，如果不包含，应当是创建新简历
   useEffect(() => {
     // 获取当前URL
@@ -166,18 +227,12 @@ const CreateResume = () => {
   // 定义检查后端连接的函数
   const checkBackendConnection = async () => {
     try {
-      messageApi.loading('正在连接后端服务...');
-      debugLog('尝试连接后端服务...');
-      const response = await apiService.get('/health');
-      debugLog('后端连接正常:', response);
-      messageApi.success('后端服务连接成功');
-      setBackendConnected(true);
-      setConnectionError('');
-    } catch (error) {
-      console.error('后端连接失败:', error);
+      await apiService.get('/health');
+      messageApi.success('后端连接正常');
+    } catch (error: unknown) {
+      const apiError = error as ApiErrorResponse;
       messageApi.error('后端服务暂时无法连接，请检查后端服务是否启动');
-      setBackendConnected(false);
-      setConnectionError(`连接后端失败: ${error.response?.status || error.message}`);
+      console.error(`连接后端失败: ${apiError.response?.status || apiError.message || '未知错误'}`);
     }
   };
 
@@ -192,76 +247,8 @@ const CreateResume = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // 文件上传相关state
-  const [idCardFrontFile, setIdCardFrontFile] = useState<File | null>(null);
-  const [idCardBackFile, setIdCardBackFile] = useState<File | null>(null);
-  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
-  const [certificateFiles, setCertificateFiles] = useState<File[]>([]);
-  const [medicalReportFiles, setMedicalReportFiles] = useState<File[]>([]);
-
-  // 已有图片URL状态
-  const [existingIdCardFrontUrl, setExistingIdCardFrontUrl] = useState<string>('');
-  const [existingIdCardBackUrl, setExistingIdCardBackUrl] = useState<string>('');
-  const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
-  const [existingCertificateUrls, setExistingCertificateUrls] = useState<string[]>([]);
-  const [existingMedicalReportUrls, setExistingMedicalReportUrls] = useState<string[]>([]);
-  
-  // 判断是否有已存在的图片
-  const [hasExistingIdCardFront, setHasExistingIdCardFront] = useState<boolean>(false);
-  const [hasExistingIdCardBack, setHasExistingIdCardBack] = useState<boolean>(false);
-
-  // 预览状态管理
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState('');
-  const [previewTitle, setPreviewTitle] = useState('');
-
-  // 创建Form实例并确保它在整个组件生命周期中是稳定的
-  const [form] = Form.useForm();
-  // 确保表单实例在组件挂载后可用
-  useEffect(() => {
-    debugLog('Form实例初始化:', !!form);
-  }, [form]);
-
-  const [formValues, setFormValues] = useState<any>({});
-  const [loading, setLoading] = useState(false);
-  const [backendConnected, setBackendConnected] = useState(false);
-  const [connectionError, setConnectionError] = useState('');
-
-  const navigate = useNavigate();
-  
-  // API基础URL，这里使用相对路径
-  const baseUrl = '';
-
-  // 状态定义
-  const [submitting, setSubmitting] = useState(false); // 提交状态
-  const [isEditing, setIsEditing] = useState(false); // 是否为编辑模式
-  const [editingResumeId, setEditingResumeId] = useState<string | null>(null); // 正在编辑的简历ID
-
   // 页面标题
   const pageTitle = isEditing ? '编辑简历' : '创建简历';
-
-  // 处理表单值变化
-  const handleFormChange = (changedValues: any, allValues: any) => {
-    debugLog('表单值变化:', changedValues);
-    // 将新值合并到formValues中，而不是替换
-    setFormValues(prev => ({
-      ...prev,
-      ...changedValues
-    }));
-  };
-
-  // 处理图片预览
-  const handlePreview = async (file: UploadFile) => {
-    if (!file.url && !file.preview) {
-      file.preview = URL.createObjectURL(file.originFileObj as Blob);
-    }
-
-    setPreviewImage(file.url || (file.preview as string));
-    setPreviewOpen(true);
-    setPreviewTitle(file.name || file.url!.substring(file.url!.lastIndexOf('/') + 1));
-  };
-
-  const handleCancel = () => setPreviewOpen(false);
 
   // 身份证上传组件的自定义渲染
   const uploadButton = (
@@ -272,429 +259,488 @@ const CreateResume = () => {
   );
 
   // 身份证文件上传变更处理
-  const handleIdCardUpload = async (type: 'front' | 'back', info: any) => {
-    if (!info?.file) {
-      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败: 未获取到文件信息`);
-      messageApi.error('未获取到文件信息');
+  const handleIdCardUpload = async (type: 'front' | 'back', info: UploadChangeParam<UploadFile<any>>) => {
+    debugLog('开始处理身份证上传:', { type, info });
+    
+    // 检查是否正在处理OCR
+    if (isOcrProcessing) {
+      debugLog('OCR处理正在进行中，忽略新的上传请求');
       return;
     }
 
-    const file = info.file.originFileObj || info.file;
+    // 检查文件对象是否存在
+    if (!info.file) {
+      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}上传失败: 未获取到文件信息`);
+      messageApi.error('文件上传失败，请重试');
+      return;
+    }
+
+    // 检查文件对象
+    const file = info.file.originFileObj;
     if (!file) {
-      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败: 未获取到文件对象`);
-      messageApi.error('未获取到文件对象');
+      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败:`, {
+        status: info.file.status,
+        name: info.file.name,
+        size: info.file.size,
+        type: info.file.type,
+        uid: info.file.uid
+      });
+      messageApi.error('文件上传失败，请重试');
+      return;
+    }
+
+    // 检查文件类型
+    if (!file.type.startsWith('image/')) {
+      console.error('不支持的文件类型:', file.type);
+      messageApi.error('请上传图片文件（JPG、JPEG、PNG）');
       return;
     }
 
     try {
-      // Show loading message
-      const loadingKey = 'compressing';
-      messageApi.loading({ content: '正在处理图片...', key: loadingKey });
-      
-      // 压缩图片
-      const compressedFile = await compressImage(file);
-      
-      // 设置对应的状态
-      if (type === 'front') {
-        setIdCardFrontFile(compressedFile);
-      } else {
-        setIdCardBackFile(compressedFile);
-      }
+      debugLog('开始处理文件:', { 
+        fileName: file.name, 
+        fileSize: file.size, 
+        fileType: file.type,
+        lastModified: file.lastModified 
+      });
 
-      // Show compressed size
-      console.log(`压缩后文件大小: ${(compressedFile.size / 1024).toFixed(2)} KB`);
+      // 创建文件预览URL
+      const previewUrl = URL.createObjectURL(file);
 
-      // 创建FormData对象
-      const formData = new FormData();
-      formData.append('file', compressedFile);  // 修改为 file
-      formData.append('idCardSide', type);
+      // 保存文件信息
+      const uploadFileInfo: CustomUploadFile = {
+        uid: info.file.uid || `${Date.now()}`,
+        name: file.name,
+        status: 'done' as UploadFileStatus,
+        url: previewUrl,
+        thumbUrl: previewUrl,
+        originFileObj: file as RcFile,
+        size: file.size,
+        type: file.type,
+        isExisting: false
+      };
       
-      setLoading(true);
-      messageApi.loading({ content: '正在处理...', key: loadingKey });
+      // 更新状态前先清理旧的预览URL
+      setIdCardFiles(prev => {
+        // 清理旧的预览URL
+        if (prev[type].length > 0) {
+          const oldFile = prev[type][0];
+          if (oldFile.url && oldFile.url.startsWith('blob:')) {
+            URL.revokeObjectURL(oldFile.url);
+          }
+        }
+        return {
+          ...prev,
+          [type]: [uploadFileInfo]
+        };
+      });
       
+      messageApi.success(`${type === 'front' ? '身份证正面' : '身份证背面'}上传成功`);
+      debugLog('文件上传处理完成:', { type, fileInfo: uploadFileInfo });
+
+      // 尝试进行OCR识别
       try {
-        // 只对身份证正面进行OCR识别
-        if (type === 'front') {
-          // 发送OCR请求
-          const ocrFormData = new FormData();
-          ocrFormData.append('file', compressedFile);  // 修改为 file
-          ocrFormData.append('idCardSide', type);
-          
-          const ocrResponse = await axios.post('/api/ocr/idcard', ocrFormData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 60000,
-          });
+        setIsOcrProcessing(true); // 设置OCR处理状态
+        debugLog('开始OCR识别:', { 
+          type, 
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type
+        });
+        
+        // 创建新的FormData对象
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('side', type);
+        
+        // 打印FormData内容（仅用于调试）
+        debugLog('OCR请求FormData内容:');
+        for (const pair of formData.entries()) {
+          debugLog(`- ${pair[0]}: ${pair[1] instanceof File ? `File(${pair[1].name}, ${pair[1].size} bytes)` : pair[1]}`);
+        }
 
-          if (!ocrResponse.data.success) {
-            throw new Error(ocrResponse.data.message || 'OCR识别失败');
+        // 发送OCR请求
+        debugLog('发送OCR请求到:', '/api/ocr/idcard');
+        const response = await axios.post('/api/ocr/idcard', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Accept': 'application/json'
+          },
+          timeout: 30000,
+          validateStatus: function (status) {
+            return status < 500; // 允许处理所有非500错误
           }
+        });
 
-          // 腾讯云OCR响应格式处理
-          const ocrResult = ocrResponse.data.data;
-          messageApi.success({ content: '身份证正面识别成功', key: loadingKey });
+        debugLog('OCR响应状态:', response.status);
+        debugLog('OCR响应头:', response.headers);
+        debugLog('OCR响应数据:', response.data);
 
-          // Process OCR results
-          const formValues: any = {};
-
-          // Extract information with better error handling
-          try {
-            // 处理腾讯云OCR返回的数据格式
-            const words_result = ocrResult.words_result || {};
+        // 检查响应状态
+        if (response.status === 201 || response.status === 200) {
+          if (response.data && response.data.success) {
+            debugLog('OCR识别成功，数据:', response.data.data);
             
-            if (words_result.姓名?.words) {
-              formValues.name = words_result.姓名.words;
+            // 使用 ImageService 的 extractIdCardInfo 方法处理 OCR 结果
+            const formValues = ImageService.extractIdCardInfo(response.data.data);
+            debugLog('提取的表单数据:', formValues);
+            
+            // 更新表单数据
+            if (Object.keys(formValues).length > 0) {
+              form.setFieldsValue(formValues);
+              messageApi.success('身份证信息识别成功');
+            } else {
+              debugLog('未能从OCR结果中提取到有效信息');
+              messageApi.warning('未能识别到身份证信息，请手动填写');
             }
-            if (words_result.民族?.words) {
-              formValues.ethnicity = words_result.民族.words.replace(/族$/, '');
-            }
-            if (words_result.公民身份号码?.words) {
-              const idCard = words_result.公民身份号码.words;
-              formValues.idNumber = idCard;
-
-              // 提取出生日期
-              const birthYear = parseInt(idCard.substring(6, 10));
-              const birthMonth = parseInt(idCard.substring(10, 12));
-              const birthDay = parseInt(idCard.substring(12, 14));
-              const birthDate = dayjs(`${birthYear}-${birthMonth}-${birthDay}`);
-              formValues.birthDate = birthDate;
-
-              // 计算年龄
-              const today = dayjs();
-              const age = today.diff(birthDate, 'year');
-              formValues.age = age;
-
-              // 计算生肖
-              formValues.zodiac = getChineseZodiac(birthYear);
-
-              // 计算星座
-              formValues.zodiacSign = getZodiacSign(birthMonth, birthDay);
-
-              // 设置性别
-              formValues.gender = parseInt(idCard.charAt(16)) % 2 === 1 ? '男' : '女';
-            }
-            if (words_result.住址?.words) {
-              const address = words_result.住址.words;
-              formValues.currentAddress = address;
-              formValues.hukouAddress = address;
-              
-              // 提取籍贯
-              const nativePlace = extractNativePlace(address);
-              if (nativePlace) {
-                formValues.nativePlace = nativePlace;
-              }
-            }
-
-            // 更新表单
-            form.setFieldsValue(formValues);
-          } catch (error) {
-            console.error('处理OCR结果时出错:', error);
-            messageApi.error({ content: '处理识别结果时出错，请手动填写信息', key: loadingKey });
+          } else {
+            console.warn('OCR识别返回数据格式不正确:', response.data);
+            messageApi.warning(response.data?.message || '身份证信息识别失败，请手动填写信息');
           }
+        } else {
+          console.warn('OCR识别请求失败:', {
+            status: response.status,
+            statusText: response.statusText,
+            data: response.data
+          });
+          messageApi.warning(response.data?.message || '身份证信息识别失败，请手动填写信息');
         }
-
-        // 上传图片到服务器
-        const uploadResponse = await axios.post(`/api/upload/id-card/${type}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-
-        if (!uploadResponse.data.success) {
-          throw new Error(uploadResponse.data.message || '图片上传失败');
+      } catch (error) {
+        console.error('OCR识别失败:', error);
+        if (axios.isAxiosError(error)) {
+          console.error('OCR请求错误详情:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            message: error.message,
+            config: {
+              url: error.config?.url,
+              method: error.config?.method,
+              headers: error.config?.headers,
+              data: error.config?.data
+            }
+          });
         }
-
-        // 更新表单中的URL字段
-        form.setFieldsValue({
-          [`idCard${type === 'front' ? 'Front' : 'Back'}Url`]: uploadResponse.data.data.url
-        });
-
-        messageApi.success({ content: '图片上传成功', key: loadingKey });
-      } catch (error: any) {
-        console.error('上传或识别失败:', error);
-        messageApi.error({ 
-          content: error.response?.data?.message || error.message || '上传失败', 
-          key: loadingKey 
-        });
+        messageApi.warning('身份证信息识别失败，请手动填写信息');
       } finally {
-        setLoading(false);
+        setIsOcrProcessing(false); // 重置OCR处理状态
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('处理图片失败:', error);
-      messageApi.error(error.message || '处理图片失败');
-      setLoading(false);
+      messageApi.error(handleError(error));
     }
   };
 
+  // 创建身份证上传组件的配置生成函数
+  const createIdCardUploadProps = (type: 'front' | 'back') => ({
+    listType: "picture" as const,
+    showUploadList: false,
+    beforeUpload: (file: RcFile) => {
+      // 检查是否正在处理OCR
+      if (isOcrProcessing) {
+        messageApi.warning('正在处理身份证识别，请稍候...');
+        return false;
+      }
+
+      // 检查文件类型
+      const isImage = file.type.startsWith('image/');
+      if (!isImage) {
+        messageApi.error('只能上传图片文件！');
+        return false;
+      }
+      
+      // 检查文件大小（限制为5MB）
+      const isLt5M = file.size / 1024 / 1024 < 5;
+      if (!isLt5M) {
+        messageApi.error('图片大小不能超过5MB！');
+        return false;
+      }
+
+      // 直接处理文件上传
+      const uploadInfo: UploadChangeParam<UploadFile<any>> = {
+        file: {
+          uid: file.uid || `rc-upload-${Date.now()}`,
+          name: file.name,
+          status: 'done',
+          originFileObj: file,
+          size: file.size,
+          type: file.type,
+          lastModified: file.lastModified,
+          lastModifiedDate: file.lastModifiedDate
+        },
+        fileList: [{
+          uid: file.uid || `rc-upload-${Date.now()}`,
+          name: file.name,
+          status: 'done',
+          originFileObj: file,
+          size: file.size,
+          type: file.type,
+          lastModified: file.lastModified,
+          lastModifiedDate: file.lastModifiedDate
+        }]
+      };
+
+      handleIdCardUpload(type, uploadInfo);
+      
+      return false; // 阻止自动上传
+    },
+    accept: '.jpg,.jpeg,.png',
+    maxCount: 1,
+    onChange: (info: UploadChangeParam<UploadFile<any>>) => {
+      debugLog('文件上传状态变更:', {
+        uploadType: type,
+        status: info.file.status,
+        name: info.file.name,
+        size: info.file.size,
+        fileType: info.file.type,
+        hasOriginFileObj: !!info.file.originFileObj
+      });
+    }
+  });
+
   // 预览身份证图片
-  const previewIdCard = (file: File) => {
+  const previewIdCard = (file: File | undefined) => {
+    if (!file) {
+      console.error('预览失败: 文件未定义');
+      return;
+    }
     debugLog('预览身份证图片:', file.name);
     const objectUrl = URL.createObjectURL(file);
     debugLog('创建的图片URL:', objectUrl);
-    setPreviewImage(objectUrl);
-    setPreviewTitle(file.name);
-    setPreviewOpen(true);
+    setPreviewState({
+      visible: true,
+      image: objectUrl,
+      title: file.name
+    });
   };
 
-  // 多文件上传处理
-  const handleMultiFileUpload = async (type, info) => {
-    try {
-      const { fileList } = info;
-      
-      // 获取新上传的文件
-      const newFiles = fileList
-        .filter(fileInfo => fileInfo.originFileObj)
-        .map(fileInfo => fileInfo.originFileObj);
-      
-      if (newFiles.length === 0) return;
-      
-      // 显示压缩中的提示
-      const compressingKey = messageApi.loading('正在处理文件...');
-      
-      // 获取原始文件
-      const rawFiles = [...newFiles];
-      
-      // 压缩所有文件
-      const compressPromises = rawFiles.map(file => compressImage(file));
-      const compressedFiles = await Promise.all(compressPromises);
-      
-      // 根据类型设置文件
-      if (type === '个人照片') {
-        setPhotoFiles(compressedFiles);
-      } else if (type === '技能证书') {
-        setCertificateFiles(compressedFiles);
-      } else if (type === '体检报告') {
-        setMedicalReportFiles(compressedFiles);
-      }
-      
-      // 关闭压缩中提示
-      messageApi.destroy(compressingKey);
-      
-      // 计算总大小
-      const totalOriginalSize = rawFiles.reduce((sum, file) => sum + file.size, 0);
-      const totalCompressedSize = compressedFiles.reduce((sum, file) => sum + file.size, 0);
-      
-      // 显示处理结果
-      const originalSizeKB = (totalOriginalSize / 1024).toFixed(2);
-      const compressedSizeKB = (totalCompressedSize / 1024).toFixed(2);
-      
-      messageApi.success(`${type}上传成功: ${originalSizeKB} KB → ${compressedSizeKB} KB`);
-    } catch (error) {
-      messageApi.error(`${type}处理失败，请重试`);
-      console.error(`${type}上传失败:`, error);
-    }
+  // 组件卸载时清理预览URL
+  useEffect(() => {
+    return () => {
+      // 清理所有预览URL
+      Object.values(idCardFiles).forEach(files => {
+        files.forEach(file => {
+          if (file.url && file.url.startsWith('blob:')) {
+            URL.revokeObjectURL(file.url);
+          }
+        });
+      });
+    };
+  }, []);
+
+  // 更新身份证图片预览组件
+  const renderIdCardPreview = (type: 'front' | 'back', file: CustomUploadFile | undefined) => {
+    if (!file) return null;
+
+    return (
+      <div style={{ 
+        border: '1px solid #d9d9d9', 
+        borderRadius: 8, 
+        padding: 8, 
+        position: 'relative',
+        height: 160
+      }}>
+        <img 
+          src={file.url}
+          alt={`身份证${type === 'front' ? '正面' : '背面'}`}
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'contain' 
+          }}
+          onLoad={() => debugLog(`身份证${type === 'front' ? '正面' : '背面'}图片加载成功`)}
+          onError={(e) => {
+            console.error(`身份证${type === 'front' ? '正面' : '背面'}图片加载失败`);
+            e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFeAJmv2G12QAAAABJRU5ErkJggg==';
+          }}
+        />
+        <div style={{ 
+          position: 'absolute', 
+          bottom: 8, 
+          left: 8, 
+          background: 'rgba(0,0,0,0.6)', 
+          color: 'white', 
+          padding: '2px 8px', 
+          borderRadius: 4,
+          fontSize: 12
+        }}>
+          {(file.size ? (file.size / 1024).toFixed(2) : '0.00')} KB
+        </div>
+        <div style={{ 
+          position: 'absolute', 
+          top: 8, 
+          right: 8, 
+          display: 'flex', 
+          gap: 8 
+        }}>
+          <Button
+            size="small"
+            shape="circle"
+            icon={<EyeOutlined />}
+            onClick={() => previewIdCard(file.originFileObj)}
+          />
+          <Button
+            size="small"
+            shape="circle"
+            danger
+            icon={<CloseOutlined />}
+            onClick={() => {
+              setIdCardFiles(prev => {
+                if (file.url && file.url.startsWith('blob:')) {
+                  URL.revokeObjectURL(file.url);
+                }
+                return {
+                  ...prev,
+                  [type]: []
+                };
+              });
+            }}
+          />
+        </div>
+      </div>
+    );
   };
 
-  // 修改handleSubmit函数，支持更新操作
-  const handleSubmit = async (values: any) => {
+  // 修改 handleSubmit
+  const handleSubmit = async (values: FormValues) => {
     try {
-      const values = await form.validateFields();
-      debugLog('表单值:', values);
-      
-      // 检查必填字段是否已填写
-      const requiredFields = [
-        { key: 'name', label: '姓名' },
-        { key: 'age', label: '年龄' },
-        { key: 'phone', label: '手机号码' },
-        { key: 'gender', label: '性别' },
-        { key: 'nativePlace', label: '籍贯' },
-        { key: 'jobType', label: '工种' },
-        { key: 'education', label: '学历' },
-        { key: 'experienceYears', label: '工作经验年限' }
-      ];
-      
-      // 检查是否有未填写的必填字段
-      const missingFields = requiredFields.filter(field => !values[field.key]);
-      if (missingFields.length > 0) {
-        const missingLabels = missingFields.map(field => field.label).join(', ');
-        messageApi.error(`请填写以下必填字段: ${missingLabels}`);
-        return;
-      }
-
-      setSubmitting(true);
-      setLoading(true);
-
-      // 初始化文件URL对象，设置默认空值
-      const fileUrls = {
-        idCardFrontUrl: '',
-        idCardBackUrl: '',
-        photoUrls: [],
-        certificateUrls: [],
-        medicalReportUrls: []
-      };
-
-      // 检查是否有任何文件需要上传
-      const hasFilesToUpload = idCardFrontFile || idCardBackFile || 
-                             photoFiles.length > 0 || 
-                             certificateFiles.length > 0 || 
-                             medicalReportFiles.length > 0 ||
-                             hasExistingIdCardFront || 
-                             hasExistingIdCardBack || 
-                             existingPhotoUrls.length > 0 || 
-                             existingCertificateUrls.length > 0 || 
-                             existingMedicalReportUrls.length > 0;
-
-      // 只有在有文件需要上传时才进行文件处理
-      if (hasFilesToUpload) {
-        try {
-          // 上传身份证正面
-          if (idCardFrontFile) {
-            const formData = new FormData();
-            formData.append('file', idCardFrontFile);
-            const response = await apiService.upload('/upload/id-card/front', formData);
-            if (!response.success) {
-              throw new Error('身份证正面上传失败');
-            }
-            fileUrls.idCardFrontUrl = response.data.url;
-          } else if (hasExistingIdCardFront) {
-            fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
-          }
-          
-          // 上传身份证背面
-          if (idCardBackFile) {
-            const formData = new FormData();
-            formData.append('file', idCardBackFile);
-            const response = await apiService.upload('/upload/id-card/back', formData);
-            if (!response.success) {
-              throw new Error('身份证背面上传失败');
-            }
-            fileUrls.idCardBackUrl = response.data.url;
-          } else if (hasExistingIdCardBack) {
-            fileUrls.idCardBackUrl = existingIdCardBackUrl;
-          }
-          
-          // 上传个人照片
-          if (photoFiles.length > 0) {
-            for (const file of photoFiles) {
-              const formData = new FormData();
-              formData.append('file', file);
-              const response = await apiService.upload('/upload/file/photo', formData);
-              if (response.success) {
-                fileUrls.photoUrls.push(response.data.url);
-              } else {
-                throw new Error('个人照片上传失败');
-              }
-            }
-          }
-          
-          // 上传技能证书
-          if (certificateFiles.length > 0) {
-            for (const file of certificateFiles) {
-              const formData = new FormData();
-              formData.append('file', file);
-              const response = await apiService.upload('/upload/file/certificate', formData);
-              if (response.success) {
-                fileUrls.certificateUrls.push(response.data.url);
-              } else {
-                throw new Error('技能证书上传失败');
-              }
-            }
-          }
-          
-          // 上传体检报告
-          if (medicalReportFiles.length > 0) {
-            for (const file of medicalReportFiles) {
-              const formData = new FormData();
-              formData.append('file', file);
-              const response = await apiService.upload('/upload/file/medical-report', formData);
-              if (response.success) {
-                fileUrls.medicalReportUrls.push(response.data.url);
-              } else {
-                throw new Error('体检报告上传失败');
-              }
-            }
-          }
-          
-          // 如果是编辑模式，且有可用的URL，合并现有和新上传的URL
-          if (isEditing) {
-            // 只有当用户没有删除已有图片时，才保留它们
-            if (hasExistingIdCardFront && !idCardFrontFile) {
-              fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
-            }
-            
-            if (hasExistingIdCardBack && !idCardBackFile) {
-              fileUrls.idCardBackUrl = existingIdCardBackUrl;
-            }
-            
-            // 合并所有已有的照片URL和新上传的照片URL
-            fileUrls.photoUrls = [...fileUrls.photoUrls, ...existingPhotoUrls];
-            fileUrls.certificateUrls = [...fileUrls.certificateUrls, ...existingCertificateUrls];
-            fileUrls.medicalReportUrls = [...fileUrls.medicalReportUrls, ...existingMedicalReportUrls];
-          }
-        } catch (error) {
-          console.error('上传文件失败:', error);
-          messageApi.error('上传文件失败，请重试');
-          setLoading(false);
-          setSubmitting(false);
+      // Validate experience years if present
+      if (values.experienceYears !== undefined) {
+        if (values.experienceYears < 0 || values.experienceYears > 50) {
+          messageApi.error('工作经验年限必须在0-50年之间');
           return;
         }
       }
-      
-      // 合并所有表单数据
-      const allFormData = { ...values };
-      
-      // 处理工作经验中的日期格式，如果没有工作经验则不处理
-      if (allFormData.workExperiences && Array.isArray(allFormData.workExperiences) && allFormData.workExperiences.length > 0) {
-        allFormData.workExperiences = allFormData.workExperiences
-          .map(exp => ({
-            startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : '',
-            endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : '',
-            description: exp.description || ''
-          }))
-          .filter(exp => exp.startDate || exp.endDate || exp.description);
-      } else {
-        // 如果没有工作经验，设置为空数组
-        allFormData.workExperiences = [];
+
+      // Process gender
+      if (typeof values.gender === 'string') {
+        values.gender = processGender(values.gender);
       }
-      
-      // 准备提交的数据，只有在有文件时才添加文件URL
-      const requestData = {
-        ...allFormData,
-        ...(hasFilesToUpload ? fileUrls : {})
+
+      // Process work experiences and dates
+      const processedValues = {
+        ...values,
+        birthDate: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : undefined,
+        medicalExamDate: values.medicalExamDate ? dayjs(values.medicalExamDate).format('YYYY-MM-DD') : undefined,
+        workExperiences: values.workExperiences?.map(exp => {
+          if (!exp) return null;
+          
+          const startDate = exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : '';
+          const endDate = exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : '';
+          
+          if (!startDate && !endDate && !exp.description) {
+            return null;
+          }
+          
+          return {
+            startDate,
+            endDate,
+            description: exp.description || ''
+          };
+        }).filter((exp): exp is WorkExperience => exp !== null) || []
       };
+
+      // Create FormData
+      const formData = new FormData();
       
-      // 添加详细的日志
+      // Add form data
+      Object.entries(processedValues).forEach(([key, value]) => {
+        if (key === 'workExperiences') {
+          formData.append(key, JSON.stringify(value));
+        } else if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+
+      // Add files with proper type checking
+      const addFilesToFormData = (files: CustomUploadFile[], fileType: string) => {
+        files.forEach(file => {
+          if (file.originFileObj) {
+            formData.append('files', file.originFileObj as Blob);
+            formData.append('fileTypes', fileType);
+          }
+        });
+      };
+
+      addFilesToFormData(idCardFiles.front, 'idCardFront');
+      addFilesToFormData(idCardFiles.back, 'idCardBack');
+      addFilesToFormData(photoFiles, 'photo');
+      addFilesToFormData(certificateFiles, 'certificate');
+      addFilesToFormData(medicalReportFiles, 'medicalReport');
+
+      // Add existing file URLs
+      if (hasExistingIdCardFront && existingIdCardFrontUrl) {
+        formData.append('idCardFrontUrl', existingIdCardFrontUrl);
+      }
+      if (hasExistingIdCardBack && existingIdCardBackUrl) {
+        formData.append('idCardBackUrl', existingIdCardBackUrl);
+      }
+      if (existingPhotoUrls.length > 0) {
+        formData.append('photoUrls', JSON.stringify(existingPhotoUrls));
+      }
+      if (existingCertificateUrls.length > 0) {
+        formData.append('certificateUrls', JSON.stringify(existingCertificateUrls));
+      }
+      if (existingMedicalReportUrls.length > 0) {
+        formData.append('medicalReportUrls', JSON.stringify(existingMedicalReportUrls));
+      }
+
+      // Log form data for debugging
       console.log('提交的完整数据:', {
         基本信息: {
-          姓名: requestData.name,
-          年龄: requestData.age,
-          手机号: requestData.phone,
-          性别: requestData.gender,
-          籍贯: requestData.nativePlace,
-          工种: requestData.jobType,
-          学历: requestData.education,
-          工作经验年限: requestData.experienceYears
+          姓名: processedValues.name,
+          年龄: processedValues.age,
+          手机号: processedValues.phone,
+          性别: processedValues.gender,
+          籍贯: processedValues.nativePlace,
+          工种: processedValues.jobType,
+          学历: processedValues.education,
+          工作经验年限: processedValues.experienceYears
         },
         可选信息: {
-          身份证号: requestData.idNumber || '',
-          微信号: requestData.wechat || '',
-          现居地址: requestData.currentAddress || '',
-          户籍地址: requestData.hukouAddress || '',
-          出生日期: requestData.birthDate || '',
-          民族: requestData.ethnicity || '',
-          生肖: requestData.zodiac || '',
-          星座: requestData.zodiacSign || '',
-          期望薪资: requestData.expectedSalary || '',
-          服务区域: requestData.serviceArea || '',
-          接单状态: requestData.orderStatus || '',
-          技能标签: requestData.skills || [],
-          来源渠道: requestData.leadSource || ''
+          身份证号: processedValues.idNumber || '',
+          微信号: processedValues.wechat || '',
+          现居地址: processedValues.currentAddress || '',
+          户籍地址: processedValues.hukouAddress || '',
+          出生日期: processedValues.birthDate || '',
+          民族: processedValues.ethnicity || '',
+          生肖: processedValues.zodiac || '',
+          星座: processedValues.zodiacSign || '',
+          期望薪资: processedValues.expectedSalary || '',
+          服务区域: processedValues.serviceArea || '',
+          接单状态: processedValues.orderStatus || '',
+          技能标签: processedValues.skills || [],
+          来源渠道: processedValues.leadSource || ''
         },
-        工作经历: requestData.workExperiences || [],
-        文件URL: hasFilesToUpload ? {
-          身份证正面: requestData.idCardFrontUrl || '',
-          身份证背面: requestData.idCardBackUrl || '',
-          个人照片: requestData.photoUrls || [],
-          技能证书: requestData.certificateUrls || [],
-          体检报告: requestData.medicalReportUrls || []
-        } : {}
+        工作经历: processedValues.workExperiences || [],
+        文件信息: {
+          新上传文件: {
+            身份证正面: idCardFiles.front.length > 0,
+            身份证背面: idCardFiles.back.length > 0,
+            个人照片数量: photoFiles.length,
+            技能证书数量: certificateFiles.length,
+            体检报告数量: medicalReportFiles.length
+          },
+          已存在文件: {
+            身份证正面: hasExistingIdCardFront,
+            身份证背面: hasExistingIdCardBack,
+            个人照片数量: existingPhotoUrls.length,
+            技能证书数量: existingCertificateUrls.length,
+            体检报告数量: existingMedicalReportUrls.length
+          }
+        }
       });
-      
+
       // 判断是编辑还是创建
       const apiUrl = isEditing ? `/api/resumes/${editingResumeId}` : '/api/resumes';
-      const method = isEditing ? 'PUT' : 'POST';
+      const method = isEditing ? 'put' : 'post';
       
       // 提交表单数据到后端
-      const response = isEditing
-        ? await axios.put(apiUrl, requestData)
-        : await axios.post(apiUrl, requestData);
+      const response = await axios[method](apiUrl, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
       
       debugLog('提交响应:', response.data);
       
@@ -710,20 +756,18 @@ const CreateResume = () => {
       if (isEditing) {
         localStorage.removeItem('editingResume');
         setIsEditing(false);
-        setEditingResumeId(null);
       }
       
       // 表单重置
       form.resetFields();
       
-      // 修改这里：使用正确的简历列表页路径
+      // 导航到简历列表页
       navigate('/aunt/list');
-    } catch (error) {
-      // 错误处理
+    } catch (error: unknown) {
       setLoading(false);
       setSubmitting(false);
       
-      if (error.response) {
+      if (axios.isAxiosError(error) && error.response) {
         const errorMessage = error.response.data?.message || '未知错误';
         messageApi.error(`${isEditing ? '更新' : '创建'}失败: ${errorMessage}`);
         console.error('提交失败:', error.response.data);
@@ -780,59 +824,25 @@ const CreateResume = () => {
         const editingResume = JSON.parse(editingResumeJSON);
         debugLog('从localStorage加载简历数据进行编辑:', editingResume);
         
+        // 处理日期字段，确保所有日期值都是有效的 dayjs 对象
+        const formData = {
+          ...editingResume,
+          birthDate: toDayjs(editingResume.birthDate),
+          medicalExamDate: toDayjs(editingResume.medicalExamDate),
+          workExperiences: (editingResume.workExperiences || []).map((exp: WorkExperienceItem) => {
+            if (!exp) return null;
+            return {
+              ...exp,
+              startDate: toDayjs(exp.startDate),
+              endDate: toDayjs(exp.endDate),
+              description: exp.description || ''
+            };
+          }).filter(Boolean)
+        };
+        
         // 设置表单数据
-        form.setFieldsValue({
-          name: editingResume.name,
-          phone: editingResume.phone,
-          age: editingResume.age,
-          gender: editingResume.gender,
-          wechat: editingResume.wechat,
-          maritalStatus: editingResume.maritalStatus,
-          religion: editingResume.religion,
-          currentAddress: editingResume.currentAddress,
-          nativePlace: editingResume.nativePlace,
-          hukouAddress: editingResume.hukouAddress,
-          ethnicity: editingResume.ethnicity,
-          idNumber: editingResume.idNumber,
-          birthPlace: editingResume.birthPlace,
-          education: editingResume.education,
-          birthDate: editingResume.birthDate ? dayjs(editingResume.birthDate) : undefined,
-          zodiac: editingResume.zodiac,
-          zodiacSign: editingResume.zodiacSign,
-          jobType: editingResume.jobType,
-          workYears: editingResume.workYears,
-          experienceYears: editingResume.experienceYears,
-          specialty: editingResume.specialty,
-          description: editingResume.description,
-          height: editingResume.height,
-          weight: editingResume.weight,
-          expectedSalary: editingResume.expectedSalary,
-          serviceArea: editingResume.serviceArea,
-          orderStatus: editingResume.orderStatus,
-          leadSource: editingResume.leadSource,
-          skills: editingResume.skills
-        });
-        
-        // 设置页面标题和提交按钮文本
+        form.setFieldsValue(formData);
         setIsEditing(true);
-        setEditingResumeId(editingResume.id);
-        
-        // 加载工作经历
-        if (editingResume.workExperiences && Array.isArray(editingResume.workExperiences)) {
-          const formattedWorkExps = editingResume.workExperiences.map(exp => ({
-            startDate: exp.startDate && exp.startDate !== '-' ? dayjs(exp.startDate) : undefined,
-            endDate: exp.endDate && exp.endDate !== '-' ? dayjs(exp.endDate) : undefined,
-            description: exp.description
-          }));
-          
-          // 清空现有的工作经历并添加新的工作经历
-          form.setFieldsValue({ workExperiences: [] });
-          
-          // 然后设置整个数组
-          setTimeout(() => {
-            form.setFieldsValue({ workExperiences: formattedWorkExps });
-          }, 100);
-        }
       } catch (error) {
         console.error('解析编辑数据出错:', error);
         messageApi.error('加载编辑数据失败');
@@ -840,6 +850,112 @@ const CreateResume = () => {
       }
     }
   }, [form, messageApi]);
+
+  // Update the file handling functions
+  const handleFileChange = (type: 'photo' | 'certificate' | 'medical') => (info: UploadChangeParam<UploadFile<any>>) => {
+    const fileList = info.fileList.map(file => {
+      const baseProps: BaseFileProps = {
+        uid: file.uid || `${Date.now()}`,
+        name: file.name || '未命名文件',
+        url: file.url,
+        thumbUrl: file.thumbUrl,
+        originFileObj: file.originFileObj,
+        size: file.size,
+        type: file.type
+      };
+
+      // Check if this is an existing file
+      if ((file as any).isExisting) {
+        return {
+          ...baseProps,
+          status: 'done' as const,
+          isExisting: true
+        } as ExistingFile;
+      }
+
+      // Otherwise it's a new file
+      return {
+        ...baseProps,
+        status: (file.status || 'done') as UploadFileStatus,
+        isExisting: false
+      } as NewFile;
+    });
+
+    switch (type) {
+      case 'photo':
+        setPhotoFiles(fileList);
+        break;
+      case 'certificate':
+        setCertificateFiles(fileList);
+        break;
+      case 'medical':
+        setMedicalReportFiles(fileList);
+        break;
+    }
+  };
+
+  // Update the handleFileRemove function
+  const handleFileRemove = (type: 'photo' | 'certificate' | 'medical') => (file: UploadFile<any>) => {
+    // Convert UploadFile to CustomUploadFile by checking if it's an existing file
+    const isExisting = (file as any).isExisting === true;
+    
+    if (isExisting) {
+      switch (type) {
+        case 'photo':
+          setExistingPhotoUrls(prev => prev.filter(url => url !== file.url));
+          break;
+        case 'certificate':
+          setExistingCertificateUrls(prev => prev.filter(url => url !== file.url));
+          break;
+        case 'medical':
+          setExistingMedicalReportUrls(prev => prev.filter(url => url !== file.url));
+          break;
+      }
+      return true;
+    }
+    
+    switch (type) {
+      case 'photo':
+        setPhotoFiles(prev => prev.filter(item => item.originFileObj !== file.originFileObj));
+        break;
+      case 'certificate':
+        setCertificateFiles(prev => prev.filter(item => item.originFileObj !== file.originFileObj));
+        break;
+      case 'medical':
+        setMedicalReportFiles(prev => prev.filter(item => item.originFileObj !== file.originFileObj));
+        break;
+    }
+    return true;
+  };
+
+  // 修改 DatePicker 组件的配置
+  const datePickerProps = {
+    format: 'YYYY-MM-DD',
+    allowClear: true,
+    style: { width: '100%' },
+    getPopupContainer: (trigger: HTMLElement) => trigger.parentElement || document.body
+  } as const;
+
+  // 修改工作经历 DatePicker 的配置
+  const workExperienceDatePickerProps = {
+    format: 'YYYY-MM',
+    picker: 'month' as DatePickerProps['picker'],
+    allowClear: true,
+    style: { width: '100%' },
+    getPopupContainer: (trigger: HTMLElement) => trigger.parentElement || document.body
+  } as const;
+
+  // 修改工作经历 DatePicker 的 onChange 处理
+  const handleWorkExperienceDateChange = (name: number, field: 'startDate' | 'endDate') => (date: Dayjs | null) => {
+    debugLog(`${field}被选择:`, date);
+    const workExperiences = form.getFieldValue('workExperiences') || [];
+    const updatedExperiences = [...workExperiences];
+    updatedExperiences[name] = {
+      ...updatedExperiences[name],
+      [field]: date ? toDayjs(date) : undefined
+    };
+    form.setFieldsValue({ workExperiences: updatedExperiences });
+  };
 
   return (
     <PageContainer
@@ -858,7 +974,6 @@ const CreateResume = () => {
         ],
       }}
     >
-      {/* 移除 contextHolder */}
       <Card
         style={{ marginBottom: 24 }}
         title={
@@ -868,12 +983,10 @@ const CreateResume = () => {
         }
         >
           <Form
+            form={form}
             layout="vertical"
-          form={form}
-            onValuesChange={handleFormChange}
-          initialValues={formValues}
-          style={{ maxWidth: '100%' }}
-        >
+            onFinish={handleSubmit}
+          >
           {/* 身份证信息区域 */}
           <Divider orientation="left">
             <Title level={5}>
@@ -892,141 +1005,14 @@ const CreateResume = () => {
               >
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <Upload
-                    listType="picture"
-                    showUploadList={false}
-                    beforeUpload={() => false}
-                    onChange={(info) => handleIdCardUpload('front', info)}
-                    accept=".jpg,.jpeg,.png"
+                    {...createIdCardUploadProps('front')}
                   >
                     <Button icon={<UploadOutlined />} style={{ marginBottom: 8 }}>
                       上传身份证正面
-        </Button>
+                    </Button>
                   </Upload>
                   
-                  {/* 显示新上传的图片 */}
-                  {idCardFrontFile && (
-                    <div style={{ 
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: 8, 
-                      padding: 8, 
-                      position: 'relative',
-                      height: 160
-                    }}>
-                      <img 
-                        src={URL.createObjectURL(idCardFrontFile)}
-                        alt="身份证正面"
-          style={{
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'contain' 
-                        }}
-                        onLoad={() => debugLog('身份证正面图片加载成功')}
-                        onError={(e) => {
-                          console.error('身份证正面图片加载失败');
-                          e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFeAJmv2G12QAAAABJRU5ErkJggg==';
-                        }}
-                      />
-                      <div style={{ 
-                        position: 'absolute', 
-                        bottom: 8, 
-                        left: 8, 
-                        background: 'rgba(0,0,0,0.6)', 
-                        color: 'white', 
-                        padding: '2px 8px', 
-                        borderRadius: 4,
-                        fontSize: 12
-                      }}>
-                        {(idCardFrontFile.size / 1024).toFixed(2)} KB
-                      </div>
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: 8, 
-                        right: 8, 
-                        display: 'flex', 
-                        gap: 8 
-                      }}>
-                        <Button
-                          size="small"
-                          shape="circle"
-                          icon={<EyeOutlined />}
-                          onClick={() => previewIdCard(idCardFrontFile)}
-                        />
-                        <Button
-                          size="small"
-                          shape="circle"
-                          danger
-                          icon={<CloseOutlined />}
-                          onClick={() => setIdCardFrontFile(null)}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* 显示已有的图片（仅在编辑模式且没有新上传图片时） */}
-                  {!idCardFrontFile && hasExistingIdCardFront && (
-                    <div style={{ 
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: 8, 
-                      padding: 8, 
-                      position: 'relative',
-                      height: 160
-                    }}>
-                      <img 
-                        src={existingIdCardFrontUrl}
-                        alt="身份证正面(已上传)"
-          style={{
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'contain' 
-                        }}
-                        onLoad={() => debugLog('已有身份证正面图片加载成功')}
-                        onError={(e) => {
-                          console.error('已有身份证正面图片加载失败');
-                          e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFeAJmv2G12QAAAABJRU5ErkJggg==';
-                        }}
-                      />
-                      <div style={{ 
-                        position: 'absolute', 
-                        bottom: 8, 
-                        left: 8, 
-                        background: 'rgba(0,0,0,0.6)', 
-                        color: 'white', 
-                        padding: '2px 8px', 
-                        borderRadius: 4,
-                        fontSize: 12
-                      }}>
-                        已上传图片
-                      </div>
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: 8, 
-                        right: 8, 
-                        display: 'flex', 
-                        gap: 8 
-                      }}>
-                        <Button
-                          size="small"
-                          shape="circle"
-                          icon={<EyeOutlined />}
-                          onClick={() => {
-                            setPreviewImage(existingIdCardFrontUrl);
-                            setPreviewTitle('身份证正面(已上传)');
-                            setPreviewOpen(true);
-                          }}
-                        />
-                        <Button
-                          size="small"
-                          shape="circle"
-                          danger
-                          icon={<CloseOutlined />}
-                          onClick={() => {
-                            setHasExistingIdCardFront(false);
-                            setExistingIdCardFrontUrl('');
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                  {renderIdCardPreview('front', idCardFiles.front[0])}
                 </div>
               </Card>
             </Col>
@@ -1040,141 +1026,14 @@ const CreateResume = () => {
               >
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <Upload
-                    listType="picture"
-                    showUploadList={false}
-                    beforeUpload={() => false}
-                    onChange={(info) => handleIdCardUpload('back', info)}
-                    accept=".jpg,.jpeg,.png"
+                    {...createIdCardUploadProps('back')}
                   >
                     <Button icon={<UploadOutlined />} style={{ marginBottom: 8 }}>
                       上传身份证背面
                     </Button>
                   </Upload>
                   
-                  {/* 显示新上传的图片 */}
-                  {idCardBackFile && (
-                    <div style={{ 
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: 8, 
-                      padding: 8, 
-                      position: 'relative',
-                      height: 160
-                    }}>
-                      <img 
-                        src={URL.createObjectURL(idCardBackFile)}
-                        alt="身份证背面"
-                        style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'contain' 
-                        }}
-                        onLoad={() => debugLog('身份证背面图片加载成功')}
-                        onError={(e) => {
-                          console.error('身份证背面图片加载失败');
-                          e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFeAJmv2G12QAAAABJRU5ErkJggg==';
-                        }}
-                      />
-                      <div style={{ 
-                        position: 'absolute', 
-                        bottom: 8, 
-                        left: 8, 
-                        background: 'rgba(0,0,0,0.6)', 
-                        color: 'white', 
-                        padding: '2px 8px', 
-                        borderRadius: 4,
-                        fontSize: 12
-                      }}>
-                        {(idCardBackFile.size / 1024).toFixed(2)} KB
-                      </div>
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: 8, 
-                        right: 8, 
-                        display: 'flex', 
-                        gap: 8 
-                      }}>
-                        <Button
-                          size="small"
-                          shape="circle"
-                          icon={<EyeOutlined />}
-                          onClick={() => previewIdCard(idCardBackFile)}
-                        />
-                        <Button
-                          size="small"
-                          shape="circle"
-                          danger
-                          icon={<CloseOutlined />}
-                          onClick={() => setIdCardBackFile(null)}
-                        />
-                      </div>
-              </div>
-            )}
-                  
-                  {/* 显示已有的图片（仅在编辑模式且没有新上传图片时） */}
-                  {!idCardBackFile && hasExistingIdCardBack && (
-                    <div style={{ 
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: 8, 
-                      padding: 8, 
-                      position: 'relative',
-                      height: 160
-                    }}>
-                      <img 
-                        src={existingIdCardBackUrl}
-                        alt="身份证背面(已上传)"
-                        style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'contain' 
-                        }}
-                        onLoad={() => debugLog('已有身份证背面图片加载成功')}
-                        onError={(e) => {
-                          console.error('已有身份证背面图片加载失败');
-                          e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFeAJmv2G12QAAAABJRU5ErkJggg==';
-                        }}
-                      />
-                      <div style={{ 
-                        position: 'absolute', 
-                        bottom: 8, 
-                        left: 8, 
-                        background: 'rgba(0,0,0,0.6)', 
-                        color: 'white', 
-                        padding: '2px 8px', 
-                        borderRadius: 4,
-                        fontSize: 12
-                      }}>
-                        已上传图片
-                      </div>
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: 8, 
-                        right: 8, 
-                        display: 'flex', 
-                        gap: 8 
-                      }}>
-                        <Button
-                          size="small"
-                          shape="circle"
-                          icon={<EyeOutlined />}
-                          onClick={() => {
-                            setPreviewImage(existingIdCardBackUrl);
-                            setPreviewTitle('身份证背面(已上传)');
-                            setPreviewOpen(true);
-                          }}
-                        />
-                        <Button
-                          size="small"
-                          shape="circle"
-                          danger
-                          icon={<CloseOutlined />}
-                          onClick={() => {
-                            setHasExistingIdCardBack(false);
-                            setExistingIdCardBackUrl('');
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                  {renderIdCardPreview('back', idCardFiles.back[0])}
                 </div>
               </Card>
             </Col>
@@ -1212,7 +1071,7 @@ const CreateResume = () => {
                     name="gender"
                     rules={[{ required: true, message: '请选择性别' }]}
                   >
-                    <Select placeholder="请选择性别">
+                    <Select<GenderType> placeholder="请选择性别" onChange={handleGenderChange}>
                       <Option value="male">男</Option>
                       <Option value="female">女</Option>
                     </Select>
@@ -1245,8 +1104,9 @@ const CreateResume = () => {
                   <Form.Item
                     label="生日"
                     name="birthDate"
+                    getValueProps={(value) => ({ value: toDayjs(value) })}
                   >
-                    <DatePicker style={{ width: '100%' }} placeholder="请选择出生日期" />
+                    <DatePicker {...datePickerProps} placeholder="请选择出生日期" />
                   </Form.Item>
                 </Col>
               </Row>
@@ -1448,33 +1308,33 @@ const CreateResume = () => {
               <div style={{ marginBottom: "24px" }}>
                 <div style={{ marginBottom: "8px" }}>
                   <span style={{ fontWeight: 600 }}>服务区域</span>
-                    </div>
+                </div>
                 <Form.Item
                   name="serviceArea"
                   noStyle
                 >
                   <BaiduMapCard />
                 </Form.Item>
-                  </div>
+              </div>
               
               <Row gutter={24}>
                 <Col span={8}>
-                      <Form.Item
-                        label="工种"
-                        name="jobType"
-                        rules={[{ required: true, message: '请选择工种' }]}
-                      >
-                        <Select placeholder="请选择工种">
-                          <Option value="yuexin">月嫂</Option>
-                          <Option value="zhujia-yuer">住家育儿嫂</Option>
-                          <Option value="baiban-yuer">白班育儿</Option>
-                          <Option value="baojie">保洁</Option>
-                          <Option value="baiban-baomu">白班保姆</Option>
-                          <Option value="zhujia-baomu">住家保姆</Option>
-                          <Option value="yangchong">养宠</Option>
-                          <Option value="xiaoshi">小时工</Option>
-                        </Select>
-                      </Form.Item>
+                  <Form.Item
+                    label="工种"
+                    name="jobType"
+                    rules={[{ required: true, message: '请选择工种' }]}
+                  >
+                    <Select placeholder="请选择工种">
+                      <Option value="yuexin">月嫂</Option>
+                      <Option value="zhujia-yuer">住家育儿嫂</Option>
+                      <Option value="baiban-yuer">白班育儿</Option>
+                      <Option value="baojie">保洁</Option>
+                      <Option value="baiban-baomu">白班保姆</Option>
+                      <Option value="zhujia-baomu">住家保姆</Option>
+                      <Option value="yangchong">养宠</Option>
+                      <Option value="xiaoshi">小时工</Option>
+                    </Select>
+                  </Form.Item>
                 </Col>
                 <Col span={8}>
                   <Form.Item
@@ -1486,33 +1346,33 @@ const CreateResume = () => {
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                      <Form.Item
-                        label="期望薪资"
-                        name="expectedSalary"
-                      >
+                  <Form.Item
+                    label="期望薪资"
+                    name="expectedSalary"
+                  >
                     <InputNumber 
                       min={0} 
                       placeholder="请输入期望薪资" 
                       style={{ width: '100%' }}
-                      formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                      parser={value => value!.replace(/\¥\s?|(,*)/g, '')}
+                      addonBefore="¥"
+                      precision={0}
                     />
-                      </Form.Item>
+                  </Form.Item>
                 </Col>
               </Row>
               
               <Row gutter={24}>
                 <Col span={8}>
-                      <Form.Item
-                        label="接单状态"
-                        name="orderStatus"
-                      >
-                        <Select placeholder="请选择接单状态">
-                          <Option value="accepting">想接单</Option>
-                          <Option value="not-accepting">不接单</Option>
-                          <Option value="on-service">已上户</Option>
-                        </Select>
-                      </Form.Item>
+                  <Form.Item
+                    label="接单状态"
+                    name="orderStatus"
+                  >
+                    <Select placeholder="请选择接单状态">
+                      <Option value="accepting">想接单</Option>
+                      <Option value="not-accepting">不接单</Option>
+                      <Option value="on-service">已上户</Option>
+                    </Select>
+                  </Form.Item>
                 </Col>
                 <Col span={8}>
                   <Form.Item
@@ -1536,30 +1396,30 @@ const CreateResume = () => {
               
               <Row gutter={24}>
                 <Col span={24}>
-                      <Form.Item
-                        label="技能标签"
-                        name="skills"
+                  <Form.Item
+                    label="技能标签"
+                    name="skills"
                   >
                     <Select 
                       mode="multiple" 
                       placeholder="请选择技能标签"
                       style={{ width: '100%' }}
                     >
-                          <Option value="chanhou">产后修复</Option>
-                          <Option value="teshu-yinger">特殊婴儿护理</Option>
-                          <Option value="yiliaobackground">医疗背景</Option>
-                          <Option value="yuying">育婴师</Option>
-                          <Option value="zaojiao">早教</Option>
-                          <Option value="fushi">辅食</Option>
-                          <Option value="ertui">儿推</Option>
-                          <Option value="waiyu">外语</Option>
-                          <Option value="zhongcan">中餐</Option>
-                          <Option value="xican">西餐</Option>
-                          <Option value="mianshi">面食</Option>
-                          <Option value="jiashi">驾驶</Option>
-                          <Option value="shouyi">整理收纳</Option>
-                        </Select>
-                      </Form.Item>
+                      <Option value="chanhou">产后修复</Option>
+                      <Option value="teshu-yinger">特殊婴儿护理</Option>
+                      <Option value="yiliaobackground">医疗背景</Option>
+                      <Option value="yuying">育婴师</Option>
+                      <Option value="zaojiao">早教</Option>
+                      <Option value="fushi">辅食</Option>
+                      <Option value="ertui">儿推</Option>
+                      <Option value="waiyu">外语</Option>
+                      <Option value="zhongcan">中餐</Option>
+                      <Option value="xican">西餐</Option>
+                      <Option value="mianshi">面食</Option>
+                      <Option value="jiashi">驾驶</Option>
+                      <Option value="shouyi">整理收纳</Option>
+                    </Select>
+                  </Form.Item>
                 </Col>
               </Row>
             </Card>
@@ -1594,73 +1454,63 @@ const CreateResume = () => {
                             }
                           >
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <Form.Item
-                              {...restField}
-                              name={[name, 'startDate']}
-                                  label="开始时间"
-                            >
-                              <DatePicker 
-                                format="YYYY-MM" 
-                                picker="month" 
-                                placeholder="选择开始时间" 
-                                style={{ width: '100%' }}
-                                onChange={(date) => {
-                                  debugLog('开始时间被选择:', date);
-                                  // 使用Form API直接设置字段值，这是更可靠的方式
-                                  form.setFieldValue(['workExperiences', name, 'startDate'], date);
-                                }}
-                              />
-                                </Form.Item>
-                                <Form.Item
-                              {...restField}
-                              name={[name, 'endDate']}
-                                  label="结束时间"
-                            >
-                              <DatePicker 
-                                format="YYYY-MM" 
-                                picker="month" 
-                                placeholder="选择结束时间" 
-                                style={{ width: '100%' }}
-                                onChange={(date) => {
-                                  debugLog('结束时间被选择:', date);
-                                  // 使用Form API直接设置字段值，这是更可靠的方式
-                                  form.setFieldValue(['workExperiences', name, 'endDate'], date);
-                                }}
-                              />
-                                </Form.Item>
                               <Form.Item
-                              {...restField}
-                              name={[name, 'description']}
-                                label="工作描述"
-                              style={{ gridColumn: 'span 2' }}
+                                {...restField}
+                                name={[name, 'startDate']}
+                                label="开始时间"
+                                getValueProps={(value) => ({ value: toDayjs(value) })}
                               >
-                              <Input.TextArea rows={4} placeholder="请描述工作内容和职责" />
+                                <DatePicker 
+                                  {...workExperienceDatePickerProps}
+                                  placeholder="选择开始时间"
+                                  onChange={handleWorkExperienceDateChange(name, 'startDate')}
+                                />
+                              </Form.Item>
+                              <Form.Item
+                                {...restField}
+                                name={[name, 'endDate']}
+                                label="结束时间"
+                                getValueProps={(value) => ({ value: toDayjs(value) })}
+                              >
+                                <DatePicker 
+                                  {...workExperienceDatePickerProps}
+                                  placeholder="选择结束时间"
+                                  onChange={handleWorkExperienceDateChange(name, 'endDate')}
+                                />
+                              </Form.Item>
+                              <Form.Item
+                                {...restField}
+                                name={[name, 'description']}
+                                label="工作描述"
+                                style={{ gridColumn: 'span 2' }}
+                              >
+                                <Input.TextArea rows={4} placeholder="请描述工作内容和职责" />
                               </Form.Item>
                             </div>
-                        </Card>
-                      ))}
-                      <Form.Item>
-                        <Button 
-                          type="dashed" 
-                          onClick={() => {
-                            debugLog('添加新工作经历');
-                            add({
-                              startDate: dayjs(),  // 使用当前日期作为初始值
-                              endDate: dayjs(),    // 使用当前日期作为初始值
-                              description: ''
-                            });
-                          }} 
-                          block 
-                          icon={<PlusOutlined />}
-                        >
+                          </Card>
+                        ))}
+                        <Form.Item>
+                          <Button 
+                            type="dashed" 
+                            onClick={() => {
+                              debugLog('添加新工作经历');
+                              add({
+                                startDate: undefined,
+                                endDate: undefined,
+                                description: ''
+                              });
+                            }} 
+                            block 
+                            icon={<PlusOutlined />}
+                          >
                             添加工作经历
                           </Button>
-              </Form.Item>
-                        </>
-                          )}
-                        </Form.List>
-                  </Col>
-                </Row>
+                        </Form.Item>
+                      </>
+                    )}
+                  </Form.List>
+                </Col>
+              </Row>
             </Card>
           </Form.Item>
 
@@ -1681,39 +1531,19 @@ const CreateResume = () => {
                     <Upload
                       listType="picture-card"
                       fileList={[
-                        // 新上传的照片
-                        ...photoFiles.map((file, index) => ({
-                          uid: `-${index}`,
-                          name: `${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
-                          status: 'done',
-                          url: URL.createObjectURL(file),
-                          originFileObj: file
-                        })),
-                        // 已有的照片
+                        ...photoFiles,
                         ...existingPhotoUrls.map((url, index) => ({
                           uid: `existing-${index}`,
                           name: `已有图片 ${index + 1}`,
-                          status: 'done',
+                          status: 'done' as const,
                           url: url,
-                          isExisting: true // 标记为已有图片
+                          isExisting: true,
+                          type: 'image/jpeg'
                         }))
                       ]}
-                      onRemove={(file: any) => {
-                        // 如果是已有图片，从existingPhotoUrls中移除
-                        if (file.isExisting) {
-                          const newUrls = existingPhotoUrls.filter(url => url !== file.url);
-                          setExistingPhotoUrls(newUrls);
-                          return true;
-                        }
-                        // 如果是新上传的图片，从photoFiles中移除
-                        const index = photoFiles.findIndex(item => item === file.originFileObj);
-                        const newFileList = [...photoFiles];
-                        newFileList.splice(index, 1);
-                        setPhotoFiles(newFileList);
-                        return true;
-                      }}
+                      onRemove={handleFileRemove('photo')}
                       beforeUpload={() => false}
-                      onChange={(info) => handleMultiFileUpload('个人照片', info)}
+                      onChange={handleFileChange('photo')}
                       accept=".jpg,.jpeg,.png"
                       multiple
                     >
@@ -1731,39 +1561,19 @@ const CreateResume = () => {
                     <Upload
                       listType="picture-card"
                       fileList={[
-                        // 新上传的证书
-                        ...certificateFiles.map((file, index) => ({
-                          uid: `-${index}`,
-                          name: `${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
-                          status: 'done',
-                          url: URL.createObjectURL(file),
-                          originFileObj: file
-                        })),
-                        // 已有的证书
+                        ...certificateFiles,
                         ...existingCertificateUrls.map((url, index) => ({
                           uid: `existing-${index}`,
                           name: `已有证书 ${index + 1}`,
-                          status: 'done',
+                          status: 'done' as const,
                           url: url,
-                          isExisting: true // 标记为已有图片
+                          isExisting: true,
+                          type: 'application/pdf'
                         }))
                       ]}
-                      onRemove={(file: any) => {
-                        // 如果是已有图片，从existingCertificateUrls中移除
-                        if (file.isExisting) {
-                          const newUrls = existingCertificateUrls.filter(url => url !== file.url);
-                          setExistingCertificateUrls(newUrls);
-                          return true;
-                        }
-                        // 如果是新上传的图片，从certificateFiles中移除
-                        const index = certificateFiles.findIndex(item => item === file.originFileObj);
-                        const newFileList = [...certificateFiles];
-                        newFileList.splice(index, 1);
-                        setCertificateFiles(newFileList);
-                        return true;
-                      }}
+                      onRemove={handleFileRemove('certificate')}
                       beforeUpload={() => false}
-                      onChange={(info) => handleMultiFileUpload('技能证书', info)}
+                      onChange={handleFileChange('certificate')}
                       accept=".jpg,.jpeg,.png"
                       multiple
                     >
@@ -1781,7 +1591,7 @@ const CreateResume = () => {
                     <Form.Item
                       label="体检时间"
                       name="medicalExamDate"
-                      rules={[{ required: false, message: '请选择体检时间' }]}
+                      getValueProps={(value) => ({ value: toDayjs(value) })}
                     >
                       <DatePicker 
                         placeholder="请选择体检时间" 
@@ -1792,40 +1602,20 @@ const CreateResume = () => {
                     <Upload
                       listType="picture-card"
                       fileList={[
-                        // 新上传的报告
-                        ...medicalReportFiles.map((file, index) => ({
-                          uid: `-${index}`,
-                          name: `${file.name} (${(file.size / 1024).toFixed(2)} KB)`,
-                          status: 'done',
-                          url: file.type.includes('image') ? URL.createObjectURL(file) : undefined,
-                          originFileObj: file
-                        })),
-                        // 已有的报告
+                        ...medicalReportFiles,
                         ...existingMedicalReportUrls.map((url, index) => ({
                           uid: `existing-${index}`,
                           name: `已有报告 ${index + 1}`,
-                          status: 'done',
+                          status: 'done' as const,
                           url: url.toLowerCase().endsWith('.pdf') ? undefined : url,
-                          thumbUrl: url.toLowerCase().endsWith('.pdf') ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAALrSURBVGiB7ZZNSFRRFMd/980M5lCjUoiNJtqkmR8ItUhcGNRCKKhFuogkXIgfCzcqLdq0KoQIAqEPaCG0CTOJcrJAUHDjB0hqYlKgLHJmnDed865vmWN2Z+a+Nx23//Lg3XPPPff/P+e+d+97FhGYqVGzJRRvACJiA9oAB9AIrI8TLwhMAT5gFLgpIr5oAW0xwm1Ap4i0W8PVbkTkGpAGnBOR0+GxEQFEJBO4ChwVERuiYiJyDfgC9IVLEhoQkZ3AY0BKCPcpd133eywdJ8tybDQSETuGYXSKyIFwPzug1Qp3bNmyZU93d/eEbduxNChLA9d1La35+PETent7jwH7ReQ9VA8hEWkGbgMYhjHS19d3qa+vT0TEmqvJwrIs0eqqVCqq9p6fn19YWVm5FthvA9qAeoALFy70GIYxUtugKok6LfN5AMlAEwBVVVVtdc23cpmmmQLYReQ7wL179/64c+fOdN2TrVS6rvtTq/cDvgCg67pn7dq12yoqKpKL3ZqjdPpwHGdWqz8C8ATwaMr+/v6enJwcc65brKuru+H1epdLpVKB53n3FqrVs4EQKf90PNc9DMwCPykghPx2YFZTdgGngBSt/hR4vsA6KTIgGHQBnwBfnRqIFbwBxBtAvAHEG0C8AcQbQLwBxBtAvAH89wBExG4YRsxvZtOUctrp+/6g4ziD0+OmU36NypIsJY/66RudtLQ0MU3zY0dHx+7FgCkpKaG0tHQWQGZmpgBXqqqquoF7ixmAptm9MJDrurZpmj+AjMbGxsC2bdvWNDc3r9Lpj0qz3t7eD+Xl5ed0XRdgCjisxNdQP5biOI6taVoB0FVUVFTudDpzNE2LailKsizleR4i8sPzvJH5QAM4juPOzMxcAd4qiqI0NDSU7t27NzkaiFDzer3+paWlwcnJyfHFTJ+xVIZh2IHUhoYGbWJiYjwQCCxo+lQqFcvLy30LCgpK9+3bt3MxEMOUoihB0zTdVatW+eLUf9n6C/G3z8hTZStxAAAAAElFTkSuQmCC' : undefined,
-                          isExisting: true // 标记为已有图片
-                        }))
-                      ]}
-                      onRemove={(file: any) => {
-                        // 如果是已有图片，从existingMedicalReportUrls中移除
-                        if (file.isExisting) {
-                          const newUrls = existingMedicalReportUrls.filter(url => url !== file.url);
-                          setExistingMedicalReportUrls(newUrls);
-                          return true;
-                        }
-                        // 如果是新上传的图片，从medicalReportFiles中移除
-                        const index = medicalReportFiles.findIndex(item => item === file.originFileObj);
-                        const newFileList = [...medicalReportFiles];
-                        newFileList.splice(index, 1);
-                        setMedicalReportFiles(newFileList);
-                        return true;
-                      }}
+                          thumbUrl: url.toLowerCase().endsWith('.pdf') ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAALrSURBVGiB7ZZNSFRRFMd/980M5lCjUoiNJtqkmR8ItUhcGNRCKKhFuogkXIgfCzcqLdq0KoQIAqEPaCG0CTOJcrJAUHDjB0hqYlKgLHJmnDed865vmWN2Z+a+Nx23//Lg3XPPf/f/P+e+d+97FhGYqVGzJRRvACJiA9oAB9AIrI8TLwhMAT5gFLgpIr5oAW0xwm1Ap4i0W8PVbkTkGpAGnBOR0+GxEQFEJBO4ChwVERuiYiJyDfgC9IVLEhoQkZ3AY0BKCPcpd133eywdJ8tybDQSETuGYXSKyIFwPzug1Qp3bNmyZU93d/eEbduxNChLA9d1La35+PETent7jwH7ReQ9VA8hEWkGbgMYhjHS19d3qa+vT0TEmqvJwrIs0eqqVCqq9p6fn19YWVm5FthvA9qAeoALFy70GIYxUtugKok6LfN5AMlAEwBVVVVtdc23cpmmmQLYReQ7wL179/64c+fOdN2TrVS6rvtTq/cDvgCg67pn7dq12yoqKpKL3ZqjdPpwHGdWqz8C8ATwaMr+/v6enJwcc65brKuru+H1epdLpVKB53n3FqrVs4EQKf90PNc9DMwCPykghPx2YFZTdgGngBSt/hR4vsA6KTIgGHQBnwBfnRqIFbwBxBtAvAHEG0C8AcQbQLwBxBtAvAH89wBExG4YRsxvZtOUctrp+/6g4ziD0+OmU36NypIsJY/66RudtLQ0MU3zY0dHx+7FgCkpKaG0tHQWQGZmpgBXqqqquoF7ixmAptm9MJDrurZpmj+AjMbGxsC2bdvWNDc3r9Lpj0qz3t7eD+Xl5ed0XRdgCjisxNdQP5biOI6taVoB0FVUVFTudDpzNE2LailKsizleR4i8sPzvJH5QAM4juPOzMxcAd4qiqI0NDSU7t27NzkaiFDzer3+paWlwcnJyfHFTJ+xVIZh2IHUhoYGbWJiYjwQCCxo+lQqFcvLy30LCgpK9+3bt3MxEMOUoihB0zTdVatW+eLUf9n6C/G3z8hTZStxAAAAAElFTkSuQmCC' : undefined,
+                        isExisting: true,
+                        type: 'image/jpeg'
+                      }))
+                    ]}
+                      onRemove={handleFileRemove('medical')}
                       beforeUpload={() => false}
-                      onChange={(info) => handleMultiFileUpload('体检报告', info)}
+                      onChange={handleFileChange('medical')}
                       accept=".jpg,.jpeg,.png,.pdf"
                       multiple
                     >
@@ -1838,26 +1628,26 @@ const CreateResume = () => {
           </Form.Item>
 
           <div style={{ marginTop: 24, textAlign: 'center' }}>
-                <Button
-                  type="primary"
-                  onClick={handleSubmit} 
-                  loading={loading || submitting}
-                  style={{ marginRight: '16px' }}
-                >
-                  {isEditing ? '保存更新' : '创建简历'}
-                </Button>
-                <Button onClick={() => navigate(-1)}>取消</Button>
-              </div>
+            <Button
+              type="primary"
+              onClick={() => form.validateFields().then(handleSubmit)}
+              loading={loading || submitting}
+              style={{ marginRight: '16px' }}
+            >
+              提交
+            </Button>
+            <Button onClick={() => navigate(-1)}>取消</Button>
+          </div>
           </Form>
         </Card>
       
       <Modal
-        open={previewOpen}
-        title={previewTitle}
+        open={previewState.visible}
+        title={previewState.title}
         footer={null}
-        onCancel={handleCancel}
+        onCancel={() => setPreviewState(prev => ({ ...prev, visible: false }))}
       >
-        <img alt="预览" style={{ width: '100%' }} src={previewImage} />
+        <img alt="预览图片" style={{ width: '100%' }} src={previewState.image} />
       </Modal>
     </PageContainer>
   );

@@ -22,7 +22,7 @@ interface FileInfo {
   size: number;
 }
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'resumes' })
 export class Resume extends Document {
   @Prop()
   title: string;

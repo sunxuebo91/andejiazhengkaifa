@@ -65,6 +65,33 @@ export class ResumeController {
     }
   }
 
+  @Post('json')
+  @ApiOperation({ summary: '创建简历（JSON格式）' })
+  @ApiBody({ type: CreateResumeDto })
+  async createJson(
+    @Body() dto: CreateResumeDto,
+    @Req() req,
+  ) {
+    try {
+      const resume = await this.resumeService.create({
+        ...dto,
+        userId: req.user.userId
+      });
+      return {
+        success: true,
+        data: resume,
+        message: '创建简历成功'
+      };
+    } catch (error) {
+      this.logger.error(`创建简历失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `创建简历失败: ${error.message}`
+      };
+    }
+  }
+
   @Get()
   @ApiOperation({ summary: '获取简历列表' })
   @ApiResponse({ status: 200, description: '获取成功' })

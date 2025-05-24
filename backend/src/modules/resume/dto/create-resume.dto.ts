@@ -109,6 +109,11 @@ export enum LeadSource {
 }
 
 export class CreateResumeDto {
+  @ApiProperty({ description: '用户ID' })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
   @ApiProperty({ description: '姓名', example: '张三' })
   @IsNotEmpty({ message: '姓名不能为空' })
   @IsString({ message: '姓名必须是字符串' })

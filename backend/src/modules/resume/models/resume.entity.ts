@@ -1,6 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Model } from 'mongoose';
+import { Document, Types } from 'mongoose';
+import { User } from '../../users/models/user.entity';
 import { Education, Gender, JobType, LeadSource, MaritalStatus, OrderStatus, Religion, Skill, Zodiac, ZodiacSign } from '../dto/create-resume.dto';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsEnum, IsNumber, IsOptional, IsArray } from 'class-validator';
+import { WorkExperienceSchema } from './work-experience.schema';
+import { FileInfoSchema } from './file-info.schema';
 
 // 定义工作经历接口
 interface WorkExperience {
@@ -11,129 +16,201 @@ interface WorkExperience {
 
 // 定义文件信息接口
 interface FileInfo {
-  fileId: string;      // GridFS 文件ID
-  filename: string;    // 原始文件名
-  mimeType: string;    // 文件类型
-  size: number;        // 文件大小
-  uploadTime: Date;    // 上传时间
+  url: string;
+  filename: string;
+  mimetype: string;
+  size: number;
 }
 
 @Schema({ timestamps: true })
-export class ResumeEntity extends Document {
-  @Prop({ required: true })
+export class Resume extends Document {
+  @Prop()
+  title: string;
+
+  @Prop()
+  content: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  userId: Types.ObjectId;
+
+  @Prop({ type: [{ type: Types.ObjectId }] })
+  fileIds: Types.ObjectId[];
+
+  @ApiProperty({ description: '姓名' })
+  @Prop()
+  @IsString()
   name: string;
 
-  @Prop({ required: true, unique: true })
-  phone: string;
-
-  @Prop({ required: true })
-  age: number;
-
-  @Prop()
-  wechat?: string;
-
-  @Prop({ unique: true, sparse: true })
-  idNumber?: string;
-
-  @Prop({ required: true, enum: Education })
-  education: Education;
-
-  @Prop({ required: true })
-  nativePlace: string;
-
-  @Prop({ required: true })
-  experienceYears: number;
-
-  @Prop({ enum: MaritalStatus })
-  maritalStatus?: MaritalStatus;
-
-  @Prop({ enum: Religion })
-  religion?: Religion;
-
-  @Prop()
-  currentAddress?: string;
-
-  @Prop()
-  hukouAddress?: string;
-
-  @Prop()
-  birthDate?: string;
-
-  @Prop()
-  ethnicity?: string;
-
-  @Prop({ required: true, enum: Gender })
+  @ApiProperty({ description: '性别', enum: Gender })
+  @Prop({ type: String, enum: Gender })
+  @IsEnum(Gender)
   gender: Gender;
 
-  @Prop({ enum: Zodiac })
-  zodiac?: Zodiac;
+  @ApiProperty({ description: '年龄' })
+  @Prop()
+  @IsNumber()
+  age: number;
 
-  @Prop({ enum: ZodiacSign })
-  zodiacSign?: ZodiacSign;
+  @ApiProperty({ description: '手机号' })
+  @Prop()
+  @IsString()
+  phone: string;
 
-  @Prop({ required: true, enum: JobType })
+  @ApiProperty({ description: '微信' })
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  wechat?: string;
+
+  @ApiProperty({ description: '身份证号' })
+  @Prop({ unique: true, nullable: true })
+  @IsString()
+  @IsOptional()
+  idNumber?: string;
+
+  @ApiProperty({ description: '期望职位' })
+  @Prop()
+  @IsString()
+  expectedPosition: string;
+
+  @ApiProperty({ description: '工作类型', enum: JobType })
+  @Prop({ type: String, enum: JobType })
+  @IsEnum(JobType)
   jobType: JobType;
 
+  @ApiProperty({ description: '期望薪资' })
   @Prop()
-  expectedSalary?: number;
+  @IsNumber()
+  expectedSalary: number;
+
+  @ApiProperty({ description: '工作经验（年）' })
+  @Prop()
+  @IsNumber()
+  workExperience: number;
+
+  @ApiProperty({ description: '学历', enum: Education })
+  @Prop({ type: String, enum: Education })
+  @IsEnum(Education)
+  education: Education;
+
+  @ApiProperty({ description: '毕业院校' })
+  @Prop()
+  @IsString()
+  school: string;
+
+  @ApiProperty({ description: '专业' })
+  @Prop()
+  @IsString()
+  major: string;
+
+  @ApiProperty({ description: '工作经历' })
+  @Prop({ type: [WorkExperienceSchema], default: [] })
+  @IsArray()
+  workHistory: WorkExperience[];
+
+  @ApiProperty({ description: '技能特长' })
+  @Prop({ type: [String], default: [] })
+  @IsArray()
+  @IsString({ each: true })
+  skills: string[];
+
+  @ApiProperty({ description: '自我介绍' })
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  selfIntroduction?: string;
+
+  @ApiProperty({ description: '状态' })
+  @Prop({ type: String, default: 'pending' })
+  @IsString()
+  status: string;
+
+  @ApiProperty({ description: '备注' })
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+
+  @ApiProperty({ description: '民族' })
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  ethnicity?: string;
+
+  @ApiProperty({ description: '星座' })
+  @Prop({ type: String, enum: ZodiacSign, nullable: true })
+  @IsEnum(ZodiacSign)
+  @IsOptional()
+  zodiacSign?: ZodiacSign;
 
   @Prop()
+  nativePlace: string;
+
+  @Prop()
+  experienceYears: number;
+
+  @Prop({ type: String, enum: MaritalStatus, nullable: true })
+  maritalStatus?: MaritalStatus;
+
+  @Prop({ type: String, enum: Religion, nullable: true })
+  religion?: Religion;
+
+  @Prop({ nullable: true })
+  currentAddress?: string;
+
+  @Prop({ nullable: true })
+  hukouAddress?: string;
+
+  @Prop({ nullable: true })
+  birthDate?: string;
+
+  @Prop({ type: String, enum: Zodiac, nullable: true })
+  zodiac?: Zodiac;
+
+  @Prop({ nullable: true })
   serviceArea?: string;
 
-  @Prop({ enum: OrderStatus })
+  @Prop({ type: String, enum: OrderStatus, nullable: true })
   orderStatus?: OrderStatus;
 
-  @Prop({ type: [String], enum: Skill })
-  skills?: Skill[];
-
-  @Prop({ enum: LeadSource })
+  @Prop({ type: String, enum: LeadSource, nullable: true })
   leadSource?: LeadSource;
 
-  @Prop({ type: [{ startDate: String, endDate: String, description: String }] })
+  @Prop({ type: [WorkExperienceSchema], default: [] })
   workExperiences?: WorkExperience[];
 
-  @Prop({ type: Object })
+  @Prop({ type: FileInfoSchema, nullable: true })
   idCardFront?: FileInfo;
 
-  @Prop({ type: Object })
+  @Prop({ type: FileInfoSchema, nullable: true })
   idCardBack?: FileInfo;
 
-  @Prop({ type: Object })
+  @Prop({ type: FileInfoSchema, nullable: true })
   personalPhoto?: FileInfo;
 
-  @Prop({ type: [Object] })
+  @Prop({ type: [FileInfoSchema], default: [] })
   certificates?: FileInfo[];
 
-  @Prop({ type: [Object] })
+  @Prop({ type: [FileInfoSchema], default: [] })
   reports?: FileInfo[];
 
-  @Prop({ type: [String] })
+  @Prop({ type: [String], default: [] })
   photoUrls?: string[];
 
-  @Prop({ type: [String] })
+  @Prop({ type: [String], default: [] })
   certificateUrls?: string[];
 
-  @Prop({ type: [String] })
+  @Prop({ type: [String], default: [] })
   medicalReportUrls?: string[];
 
-  @Prop()
+  @Prop({ nullable: true })
   emergencyContactName?: string;
 
-  @Prop()
+  @Prop({ nullable: true })
   emergencyContactPhone?: string;
 
-  @Prop()
+  @Prop({ nullable: true })
   medicalExamDate?: string;
-
-  @Prop()
-  createdAt: Date;
-
-  @Prop()
-  updatedAt: Date;
 }
 
-export type ResumeDocument = Document & ResumeEntity;
-export const ResumeSchema = SchemaFactory.createForClass(ResumeEntity);
-
-// 定义模型类型
-export type ResumeModel = Model<ResumeEntity>;
+export const ResumeSchema = SchemaFactory.createForClass(Resume);

@@ -1,5 +1,5 @@
 import { connect, model } from 'mongoose';
-import { ResumeEntity, ResumeSchema } from '../modules/resume/models/resume.entity';
+import { Resume, ResumeSchema } from '../modules/resume/models/resume.entity';
 import * as dotenv from 'dotenv';
 
 // 加载环境变量
@@ -13,7 +13,7 @@ async function main() {
     console.log('成功连接到数据库');
 
     // 创建模型
-    const ResumeModel = model<ResumeEntity>('Resume', ResumeSchema);
+    const ResumeModel = model<Resume>('Resume', ResumeSchema);
 
     // 查询所有简历
     const resumes = await ResumeModel.find()
@@ -28,7 +28,7 @@ async function main() {
       console.log(`ID: ${resume._id}`);
       console.log(`姓名: ${resume.name}`);
       console.log(`电话: ${resume.phone}`);
-      console.log(`创建时间: ${resume.createdAt}`);
+      console.log(`创建时间: ${(resume as any).createdAt}`);
       console.log('------------------------');
     });
 

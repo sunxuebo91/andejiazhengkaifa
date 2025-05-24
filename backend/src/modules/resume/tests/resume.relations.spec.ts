@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ResumeService } from '../resume.service';
-import { ResumeEntity, ResumeSchema } from '../models/resume.entity';
+import { Resume, ResumeSchema } from '../models/resume.entity';
 import { Education, Gender, JobType, OrderStatus, Skill } from '../dto/create-resume.dto';
 import * as mongoose from 'mongoose';
 
@@ -26,7 +26,7 @@ describe('Resume Relations', () => {
           inject: [ConfigService],
         }),
         MongooseModule.forFeature([
-          { name: ResumeEntity.name, schema: ResumeSchema },
+          { name: Resume.name, schema: ResumeSchema },
         ]),
       ],
       providers: [ResumeService],

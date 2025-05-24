@@ -1,10 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger, UploadedFile, BadRequestException, Req } from '@nestjs/common';
 import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody, ApiParam } from '@nestjs/swagger';
 import { ResumeService } from './resume.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
-import { ResumeEntity } from './models/resume.entity';
+import { Resume } from './models/resume.entity';
 import { UploadService } from '../upload/upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UseGuards } from '@nestjs/common';
@@ -21,12 +21,35 @@ export class ResumeController {
   ) {}
 
   @Post()
+  @UseInterceptors(FilesInterceptor('files'))
   @ApiOperation({ summary: '创建简历' })
-  @ApiResponse({ status: 201, description: '创建成功' })
-  async create(@Body() createResumeDto: CreateResumeDto) {
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+        title: { type: 'string' },
+        content: { type: 'string' },
+      },
+    },
+  })
+  async create(
+    @Body() dto: CreateResumeDto,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Req() req,
+  ) {
     try {
-      this.logger.log(`创建简历: ${JSON.stringify(createResumeDto)}`);
-      const resume = await this.resumeService.create(createResumeDto);
+      const resume = await this.resumeService.createWithFiles(
+        { ...dto, userId: req.user.userId },
+        files
+      );
       return {
         success: true,
         data: resume,
@@ -49,11 +72,10 @@ export class ResumeController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe) pageSize: number,
     @Query('search') search?: string,
-  ): Promise<{ success: boolean; data: { items: any[]; total: number }; message?: string }> {
+  ) {
     try {
       this.logger.log(`获取简历列表: page=${page}, pageSize=${pageSize}, search=${search}`);
       const result = await this.resumeService.findAll(page, pageSize, search);
-      
       return {
         success: true,
         data: result,
@@ -133,8 +155,43 @@ export class ResumeController {
     }
   }
 
+  @Post(':id/files')
+  @UseInterceptors(FilesInterceptor('files'))
+  @ApiOperation({ summary: '上传简历文件' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+      },
+    },
+  })
+  async uploadFiles(
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.resumeService.addFiles(id, files);
+  }
+
+  @Delete(':id/files/:fileId')
+  @ApiOperation({ summary: '删除简历文件' })
+  async removeFile(
+    @Param('id') id: string,
+    @Param('fileId') fileId: string,
+  ) {
+    return this.resumeService.removeFile(id, fileId);
+  }
+
   @Post(':id/upload')
   @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: '上传简历文件' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -144,11 +201,7 @@ export class ResumeController {
           type: 'string',
           format: 'binary',
         },
-        type: {
-          type: 'string',
-          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report'],
-          description: '文件类型',
-        },
+        type: { type: 'string' },
       },
     },
   })
@@ -157,61 +210,44 @@ export class ResumeController {
     @UploadedFile() file: Express.Multer.File,
     @Body('type') type: string,
   ) {
-    if (!file) {
-      throw new BadRequestException('请选择要上传的文件');
-    }
-
-    // 验证文件类型
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-    if (!allowedTypes.includes(file.mimetype)) {
-      throw new BadRequestException('不支持的文件类型，仅支持 JPG、PNG 和 PDF');
-    }
-
-    // 验证文件大小（5MB）
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      throw new BadRequestException('文件大小不能超过 5MB');
-    }
-
     try {
-      const resume = await this.resumeService.uploadFile(id, file, type);
+      const resume = await this.resumeService.addFiles(id, [file]);
       return {
         success: true,
-        data: resume
+        data: resume,
+        message: '上传文件成功'
       };
     } catch (error) {
-      throw new BadRequestException(`文件上传失败: ${error.message}`);
+      this.logger.error(`上传文件失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `上传文件失败: ${error.message}`
+      };
     }
   }
 
   @Delete(':id/files/:fileId')
-  @ApiParam({ name: 'id', description: '简历ID' })
-  @ApiParam({ name: 'fileId', description: '文件ID' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        type: {
-          type: 'string',
-          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report'],
-          description: '文件类型',
-        },
-      },
-    },
-  })
+  @ApiOperation({ summary: '删除简历文件' })
   async deleteFile(
     @Param('id') id: string,
     @Param('fileId') fileId: string,
     @Body('type') type: string,
   ) {
     try {
-      const resume = await this.resumeService.deleteFile(id, fileId, type);
+      const result = await this.resumeService.removeFile(id, fileId);
       return {
         success: true,
-        data: resume
+        data: result,
+        message: '删除文件成功'
       };
     } catch (error) {
-      throw new BadRequestException(`文件删除失败: ${error.message}`);
+      this.logger.error(`删除文件失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `删除文件失败: ${error.message}`
+      };
     }
   }
 }

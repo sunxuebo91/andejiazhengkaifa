@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ResumeEntity, ResumeSchema } from '../models/resume.entity';
+import { Resume, ResumeSchema } from '../models/resume.entity';
 import { Model, Types } from 'mongoose';
 import { getModelToken } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Education, Gender, JobType } from '../dto/create-resume.dto';
 
-describe('ResumeEntity Type Tests', () => {
-  let model: Model<ResumeEntity>;
+describe('Resume Type Tests', () => {
+  let model: Model<Resume>;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -25,12 +25,12 @@ describe('ResumeEntity Type Tests', () => {
           inject: [ConfigService],
         }),
         MongooseModule.forFeature([
-          { name: ResumeEntity.name, schema: ResumeSchema },
+          { name: Resume.name, schema: ResumeSchema },
         ]),
       ],
     }).compile();
 
-    model = module.get<Model<ResumeEntity>>(getModelToken(ResumeEntity.name));
+    model = module.get<Model<Resume>>(getModelToken(Resume.name));
   });
 
   afterAll(async () => {

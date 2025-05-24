@@ -174,4 +174,74 @@
   margin: 0 !important;
   padding: 0 !important;
   border: none !important;
+}
+
+.loginCard {
+  width: 100%;
+  background: white;
+  border-radius: 8px;
+  padding: 32px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+}
+
+/* 隐藏登录表单容器的滚动条 */
+.loginCard :global(.ant-pro-form-login-container) {
+  overflow: hidden !important;
+}
+
+.loginCard :global(.ant-pro-form-login-main) {
+  overflow: hidden !important;
+}
+
+.loginCard :global(.ant-form) {
+  overflow: hidden !important;
+}
+
+/* 确保所有可能的滚动条都被隐藏 */
+.loginCard :global(*) {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE and Edge */
+}
+
+.loginCard :global(*)::-webkit-scrollbar {
+  display: none !important; /* Chrome, Safari, Opera */
+}
+
+/* 统一登录表单内部元素的间距 */
+.loginCard :global(.ant-pro-form-login-container) {
+  padding: 0 !important;
+}
+
+.loginCard :global(.ant-pro-form-login-main) {
+  padding: 0 !important;
+}
+
+.loginCard :global(.ant-form) {
+  padding: 0 !important;
+}
+
+.loginCard :global(.ant-form-item) {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.loginCard :global(.ant-form-item-control-input) {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.loginCard :global(.ant-form-item-control-input-content) {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.loginCard :global(.ant-checkbox-wrapper) {
+  margin-left: 0 !important;
+}
+
+.loginCard :global(.ant-btn) {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 } 

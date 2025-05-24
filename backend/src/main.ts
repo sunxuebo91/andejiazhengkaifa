@@ -62,7 +62,7 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
 
     // 启动服务器
-    const port = process.env.PORT || 50659;
+    const port = 3000;  // 使用固定的 3000 端口
     await app.listen(port);
     console.log(`应用已启动，监听端口：${port}`);
     console.log(`API文档地址：http://localhost:${port}/api/docs`);

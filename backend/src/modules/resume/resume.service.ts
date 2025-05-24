@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { ResumeEntity, ResumeModel } from './models/resume.entity';
+import { Model, Types } from 'mongoose';
+import { Resume } from './models/resume.entity';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Logger } from '@nestjs/common';
@@ -12,168 +12,151 @@ export class ResumeService {
   private readonly logger = new Logger(ResumeService.name);
 
   constructor(
-    @InjectModel(ResumeEntity.name)
-    private readonly resumeModel: ResumeModel,
+    @InjectModel(Resume.name)
+    private readonly resumeModel: Model<Resume>,
     private uploadService: UploadService
   ) {}
 
-  async create(createResumeDto: CreateResumeDto): Promise<ResumeEntity> {
-    this.logger.log(`创建新简历: ${JSON.stringify(createResumeDto)}`);
-    const createdResume = new this.resumeModel(createResumeDto);
-    const savedResume = await createdResume.save();
-    this.logger.log(`简历创建成功: ${savedResume._id}`);
-    return savedResume;
-  }
-
-  async findAll(page: number = 1, pageSize: number = 10, search?: string): Promise<{ items: ResumeEntity[]; total: number }> {
-    this.logger.log(`查询简历列表: page=${page}, pageSize=${pageSize}, search=${search}`);
-    
-    const query: any = {};
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { nativePlace: { $regex: search, $options: 'i' } },
-      ];
+  async createWithFiles(createResumeDto: CreateResumeDto & { userId: string }, files: Express.Multer.File[]) {
+    if (!createResumeDto.userId) {
+      throw new BadRequestException('用户ID不能为空');
     }
 
+    const fileIds: Types.ObjectId[] = [];
+    
+    // 上传文件
+    for (const file of files) {
+      const fileId = await this.uploadService.uploadFile(file);
+      fileIds.push(new Types.ObjectId(fileId));
+    }
+
+    // 创建简历
+    const resume = new this.resumeModel({
+      ...createResumeDto,
+      fileIds,
+      userId: new Types.ObjectId(createResumeDto.userId)
+    });
+
+    return resume.save();
+  }
+
+  async findAll(page: number, pageSize: number, search?: string) {
+    const query = search
+      ? {
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+            { expectedPosition: { $regex: search, $options: 'i' } }
+          ]
+        }
+      : {};
+
     const [items, total] = await Promise.all([
-      this.resumeModel.find(query)
+      this.resumeModel
+        .find(query)
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .sort({ createdAt: -1 })
+        .populate('userId', 'username name')
         .exec(),
-      this.resumeModel.countDocuments(query).exec(),
+      this.resumeModel.countDocuments(query)
     ]);
-
-    this.logger.log(`查询成功: 总数=${total}, 当前页=${page}, 每页=${pageSize}, 返回数量=${items.length}`);
-    this.logger.debug(`示例数据: ${JSON.stringify(items[0])}`);
 
     return {
       items,
       total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize)
     };
   }
 
-  async findOne(id: string): Promise<ResumeEntity> {
-    this.logger.log(`查询单个简历: id=${id}`);
-    const resume = await this.resumeModel.findById(id).exec();
+  async findOne(id: string) {
+    const resume = await this.resumeModel
+      .findById(new Types.ObjectId(id))
+      .populate('userId', 'username name')
+      .exec();
+
     if (!resume) {
-      this.logger.warn(`简历未找到: id=${id}`);
-      throw new NotFoundException(`简历未找到: ${id}`);
+      throw new NotFoundException('简历不存在');
     }
+
     return resume;
   }
 
-  async update(id: string, updateResumeDto: UpdateResumeDto): Promise<ResumeEntity> {
-    this.logger.log(`更新简历: id=${id}, data=${JSON.stringify(updateResumeDto)}`);
-    const updatedResume = await this.resumeModel
-      .findByIdAndUpdate(id, updateResumeDto, { new: true })
+  async update(id: string, updateResumeDto: UpdateResumeDto) {
+    const resume = await this.resumeModel
+      .findByIdAndUpdate(new Types.ObjectId(id), updateResumeDto, { new: true })
+      .populate('userId', 'username name')
       .exec();
-    if (!updatedResume) {
-      this.logger.warn(`简历未找到: id=${id}`);
-      throw new NotFoundException(`简历未找到: ${id}`);
+
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
     }
-    return updatedResume;
+
+    return resume;
   }
 
-  async remove(id: string): Promise<void> {
-    this.logger.log(`删除简历: id=${id}`);
-    const result = await this.resumeModel.findByIdAndDelete(id).exec();
-    if (!result) {
-      this.logger.warn(`简历未找到: id=${id}`);
-      throw new NotFoundException(`简历未找到: ${id}`);
+  async remove(id: string) {
+    const resume = await this.resumeModel.findById(new Types.ObjectId(id));
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
     }
+
+    // 删除关联的文件
+    for (const fileId of resume.fileIds) {
+      await this.uploadService.deleteFile(fileId.toString());
+    }
+
+    await resume.deleteOne();
+    return { message: '删除成功' };
   }
 
-  async uploadFile(resumeId: string, file: Express.Multer.File, type: string): Promise<ResumeEntity> {
-    const resume = await this.findOne(resumeId);
-    
-    // 上传文件到 GridFS
-    const fileId = await this.uploadService.uploadFile(file, { type });
-    
-    // 准备文件信息
-    const fileInfo = {
-      fileId,
-      filename: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      uploadTime: new Date()
-    };
-
-    // 根据文件类型更新简历
-    let updateQuery: any = {};
-    switch (type) {
-      case 'idCardFront':
-        updateQuery = { 'idCardFront': fileInfo };
-        break;
-      case 'idCardBack':
-        updateQuery = { 'idCardBack': fileInfo };
-        break;
-      case 'personalPhoto':
-        updateQuery = { 'personalPhoto': fileInfo };
-        break;
-      case 'certificate':
-        updateQuery = { $push: { 'certificates': fileInfo } };
-        break;
-      case 'report':
-        updateQuery = { $push: { 'reports': fileInfo } };
-        break;
-      default:
-        throw new Error('不支持的文件类型');
+  async addFiles(id: string, files: Express.Multer.File[]) {
+    const resume = await this.resumeModel.findById(new Types.ObjectId(id));
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
     }
 
-    const updatedResume = await this.resumeModel.findByIdAndUpdate(
-      resumeId,
-      updateQuery,
-      { new: true }
-    ).exec();
-
-    if (!updatedResume) {
-      throw new NotFoundException(`简历未找到: ${resumeId}`);
+    const fileIds = [...resume.fileIds];
+    
+    // 上传新文件
+    for (const file of files) {
+      const fileId = await this.uploadService.uploadFile(file);
+      fileIds.push(new Types.ObjectId(fileId));
     }
 
-    return updatedResume;
+    // 更新简历
+    resume.fileIds = fileIds;
+    return resume.save();
   }
 
-  async deleteFile(resumeId: string, fileId: string, type: string): Promise<ResumeEntity> {
-    const resume = await this.findOne(resumeId);
-    
-    // 从 GridFS 删除文件
+  async removeFile(id: string, fileId: string) {
+    const resume = await this.resumeModel.findById(new Types.ObjectId(id));
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    // 从简历中移除文件ID
+    resume.fileIds = resume.fileIds.filter(id => id.toString() !== fileId);
+    await resume.save();
+
+    // 删除文件
     await this.uploadService.deleteFile(fileId);
     
-    // 根据文件类型更新简历
-    let updateQuery: any = {};
-    switch (type) {
-      case 'idCardFront':
-        updateQuery = { $unset: { 'idCardFront': 1 } };
-        break;
-      case 'idCardBack':
-        updateQuery = { $unset: { 'idCardBack': 1 } };
-        break;
-      case 'personalPhoto':
-        updateQuery = { $unset: { 'personalPhoto': 1 } };
-        break;
-      case 'certificate':
-        updateQuery = { $pull: { 'certificates': { fileId } } };
-        break;
-      case 'report':
-        updateQuery = { $pull: { 'reports': { fileId } } };
-        break;
-      default:
-        throw new Error('不支持的文件类型');
+    return { message: '文件删除成功' };
+  }
+
+  /**
+   * 兼容测试用例的 create 方法
+   */
+  async create(createResumeDto: CreateResumeDto) {
+    // 检查手机号唯一性
+    const exist = await this.resumeModel.findOne({ phone: createResumeDto.phone });
+    if (exist) {
+      throw new BadRequestException('手机号已存在');
     }
-
-    const updatedResume = await this.resumeModel.findByIdAndUpdate(
-      resumeId,
-      updateQuery,
-      { new: true }
-    ).exec();
-
-    if (!updatedResume) {
-      throw new NotFoundException(`简历未找到: ${resumeId}`);
-    }
-
-    return updatedResume;
+    const resume = new this.resumeModel(createResumeDto);
+    return resume.save();
   }
 }

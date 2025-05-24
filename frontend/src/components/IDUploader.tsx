@@ -1,23 +1,25 @@
 // @ts-ignore
-import React, { useState } from 'react';
+import React, { useState, ChangeEvent } from 'react';
 // @ts-ignore
 import { Card, Button } from '@/components/ui';
 // @ts-ignore
 import { UploadCloud, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 
+type IdCardSide = 'front' | 'back';
+
 export default function IDUploader() {
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
-  const [frontPreview, setFrontPreview] = useState(null);
-  const [backPreview, setBackPreview] = useState(null);
+  const [frontPreview, setFrontPreview] = useState<string | null>(null);
+  const [backPreview, setBackPreview] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState({
     front: '未上传',
     back: '未上传'
   });
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleFileUpload = (side) => (e) => {
-    const file = e.target.files[0];
+  const handleFileUpload = (side: IdCardSide) => (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     
     if (!file) return;
     
@@ -53,19 +55,25 @@ export default function IDUploader() {
     setErrorMessage('');
   };
 
-  const removeFile = (side) => () => {
+  const removeFile = (side: IdCardSide) => () => {
     if (side === 'front') {
+      if (frontPreview) {
+        URL.revokeObjectURL(frontPreview);
+      }
       setFrontFile(null);
       setFrontPreview(null);
       setUploadStatus(prev => ({ ...prev, front: '未上传' }));
     } else {
+      if (backPreview) {
+        URL.revokeObjectURL(backPreview);
+      }
       setBackFile(null);
       setBackPreview(null);
       setUploadStatus(prev => ({ ...prev, back: '未上传' }));
     }
   };
 
-  const isFormValid = frontFile && backFile;
+  const isFormValid = true;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4 sm:px-6 lg:px-8">
@@ -183,7 +191,7 @@ export default function IDUploader() {
                     <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 text-blue-600 mb-3">
                       <FileText className="h-6 w-6" />
                     </div>
-                    <p className="text-sm font-medium text-gray-900 mb-1">上传身份证反面</p>
+                    <p className="text-sm font-medium text-gray-900 mb-1">上传身份证反面（可选）</p>
                     <p className="text-xs text-gray-500 mb-3">JPG/PNG格式，最大5MB</p>
                     <input
                       type="file"
@@ -208,12 +216,7 @@ export default function IDUploader() {
         {/* 提交按钮 */}
         <div className="mt-8">
           <Button
-            className={`w-full py-3 text-base font-medium rounded-lg transition-colors ${
-              isFormValid
-                ? 'bg-primary hover:bg-primary-dark text-white'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-            disabled={!isFormValid}
+            className="w-full py-3 text-base font-medium rounded-lg transition-colors bg-primary hover:bg-primary-dark text-white"
           >
             <CheckCircle className="mr-2 h-5 w-5" />
             确认提交

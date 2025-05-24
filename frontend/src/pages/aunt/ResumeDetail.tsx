@@ -1533,7 +1533,7 @@ const ResumeDetail = () => {
               {/* 身份证照片 */}
               <h3 style={{ marginTop: 24 }}>身份证照片</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <Form.Item name="idCardFrontUrl" label="身份证正面" rules={[{ required: true, message: '请上传身份证正面照片' }]}>
+                <Form.Item name="idCardFrontUrl" label="身份证正面">
                   <Upload
                     name="file"
                     listType="picture-card"
@@ -1556,7 +1556,7 @@ const ResumeDetail = () => {
                     )}
                   </Upload>
                 </Form.Item>
-                <Form.Item name="idCardBackUrl" label="身份证反面" rules={[{ required: true, message: '请上传身份证反面照片' }]}>
+                <Form.Item name="idCardBackUrl" label="身份证反面">
                   <Upload
                     name="file"
                     listType="picture-card"

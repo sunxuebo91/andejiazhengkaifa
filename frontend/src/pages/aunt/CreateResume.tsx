@@ -508,223 +508,146 @@ const CreateResume = () => {
         return;
       }
 
-      // 检查身份证照片是否上传
-      if (!idCardFrontFile && !hasExistingIdCardFront) {
-        messageApi.error('请上传身份证正面照片');
-        return;
-      }
-      if (!idCardBackFile && !hasExistingIdCardBack) {
-        messageApi.error('请上传身份证背面照片');
-        return;
-      }
-
-      // 检查工作经历日期
-      if (values.workExperiences && values.workExperiences.length > 0) {
-        const now = dayjs();
-        const invalidExperiences = values.workExperiences.filter(exp => {
-          const startDate = dayjs(exp.startDate);
-          const endDate = dayjs(exp.endDate);
-          return startDate.isAfter(now) || endDate.isAfter(now) || endDate.isBefore(startDate);
-        });
-
-        if (invalidExperiences.length > 0) {
-          messageApi.error('工作经历的开始日期和结束日期不能是未来时间，且结束日期不能早于开始日期');
-          return;
-        }
-      }
-
-      // 转换性别字段为英文枚举值
-      if (values.gender === '男') {
-        values.gender = 'male';
-      } else if (values.gender === '女') {
-        values.gender = 'female';
-      }
-      
-      // 查重检查 - 在提交前检查手机号和身份证号是否已存在
-      try {
-        messageApi.loading('正在检查数据...');
-        // 只有创建新简历时才检查重复
-        if (!isEditing && (values.phone || values.idNumber)) {
-          console.log('检查手机号和身份证号是否重复');
-          
-          // 从本地存储获取所有简历
-          let localResumeList = [];
-          try {
-            const storedResumeList = localStorage.getItem('resumeList');
-            if (storedResumeList) {
-              localResumeList = JSON.parse(storedResumeList);
-            }
-          } catch (e) {
-            console.error('无法解析本地简历列表:', e);
-          }
-          
-          // 从API获取简历列表
-          try {
-            const response = await axios.get('/api/resumes');
-            if (response.data && Array.isArray(response.data)) {
-              // 合并API和本地数据
-              localResumeList = [...localResumeList, ...response.data];
-            }
-          } catch (e) {
-            console.error('无法从API获取简历列表:', e);
-          }
-          
-          // 检查手机号是否重复
-          const duplicatePhone = localResumeList.some(resume => 
-            resume.phone && resume.phone === values.phone
-          );
-          
-          // 检查身份证号是否重复
-          const duplicateIdNumber = values.idNumber && localResumeList.some(resume => 
-            resume.idNumber && resume.idNumber === values.idNumber
-          );
-          
-          console.log('查重结果:', { duplicatePhone, duplicateIdNumber });
-          
-          // 如果存在重复数据
-          if (duplicatePhone || duplicateIdNumber) {
-            const duplicateFields = [];
-            if (duplicatePhone) duplicateFields.push('手机号');
-            if (duplicateIdNumber) duplicateFields.push('身份证号');
-            
-            // 显示错误信息并停止提交
-            Modal.error({
-              title: '已存在相同信息的简历',
-              content: `系统中已存在使用相同${duplicateFields.join('或')}的简历，请勿重复创建。`,
-              okText: '我知道了'
-            });
-            messageApi.destroy(); // 清除loading消息
-            return;
-          }
-        }
-      } catch (error) {
-        console.error('查重检查失败:', error);
-        // 查重失败不阻止提交，但记录错误
-        messageApi.warning('简历查重检查失败，将继续提交');
-      }
-
       setSubmitting(true);
       setLoading(true);
-      messageApi.loading('正在处理文件，请稍候...');
-      
-      // 先上传所有文件
-      const fileUrls: any = {
+
+      // 初始化文件URL对象，设置默认空值
+      const fileUrls = {
         idCardFrontUrl: '',
         idCardBackUrl: '',
         photoUrls: [],
         certificateUrls: [],
         medicalReportUrls: []
       };
-      
-      try {
-        // 上传身份证正面
-        if (idCardFrontFile) {
-          const formData = new FormData();
-          formData.append('file', idCardFrontFile);
-          const response = await apiService.upload('/upload/id-card/front', formData);
-          if (!response.success) {
-            throw new Error('身份证正面上传失败');
-          }
-          fileUrls.idCardFrontUrl = response.data.url;
-        } else if (hasExistingIdCardFront) {
-          fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
-        }
-        
-        // 上传身份证背面
-        if (idCardBackFile) {
-          const formData = new FormData();
-          formData.append('file', idCardBackFile);
-          const response = await apiService.upload('/upload/id-card/back', formData);
-          if (!response.success) {
-            throw new Error('身份证背面上传失败');
-          }
-          fileUrls.idCardBackUrl = response.data.url;
-        } else if (hasExistingIdCardBack) {
-          fileUrls.idCardBackUrl = existingIdCardBackUrl;
-        }
-        
-        // 上传个人照片
-        if (photoFiles.length > 0) {
-          for (const file of photoFiles) {
+
+      // 检查是否有任何文件需要上传
+      const hasFilesToUpload = idCardFrontFile || idCardBackFile || 
+                             photoFiles.length > 0 || 
+                             certificateFiles.length > 0 || 
+                             medicalReportFiles.length > 0 ||
+                             hasExistingIdCardFront || 
+                             hasExistingIdCardBack || 
+                             existingPhotoUrls.length > 0 || 
+                             existingCertificateUrls.length > 0 || 
+                             existingMedicalReportUrls.length > 0;
+
+      // 只有在有文件需要上传时才进行文件处理
+      if (hasFilesToUpload) {
+        try {
+          // 上传身份证正面
+          if (idCardFrontFile) {
             const formData = new FormData();
-            formData.append('file', file);
-            const response = await apiService.upload('/upload/file/photo', formData);
-            if (response.success) {
-              fileUrls.photoUrls.push(response.data.url);
-            } else {
-              throw new Error('个人照片上传失败');
+            formData.append('file', idCardFrontFile);
+            const response = await apiService.upload('/upload/id-card/front', formData);
+            if (!response.success) {
+              throw new Error('身份证正面上传失败');
             }
-          }
-        }
-        
-        // 上传技能证书
-        if (certificateFiles.length > 0) {
-          for (const file of certificateFiles) {
-            const formData = new FormData();
-            formData.append('file', file);
-            const response = await apiService.upload('/upload/file/certificate', formData);
-            if (response.success) {
-              fileUrls.certificateUrls.push(response.data.url);
-            } else {
-              throw new Error('技能证书上传失败');
-            }
-          }
-        }
-        
-        // 上传体检报告
-        if (medicalReportFiles.length > 0) {
-          for (const file of medicalReportFiles) {
-            const formData = new FormData();
-            formData.append('file', file);
-            const response = await apiService.upload('/upload/file/medical-report', formData);
-            if (response.success) {
-              fileUrls.medicalReportUrls.push(response.data.url);
-            } else {
-              throw new Error('体检报告上传失败');
-            }
-          }
-        }
-        
-        // 如果是编辑模式，且有可用的URL，合并现有和新上传的URL
-        if (isEditing) {
-          // 只有当用户没有删除已有图片时，才保留它们
-          if (hasExistingIdCardFront && !idCardFrontFile) {
+            fileUrls.idCardFrontUrl = response.data.url;
+          } else if (hasExistingIdCardFront) {
             fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
           }
           
-          if (hasExistingIdCardBack && !idCardBackFile) {
+          // 上传身份证背面
+          if (idCardBackFile) {
+            const formData = new FormData();
+            formData.append('file', idCardBackFile);
+            const response = await apiService.upload('/upload/id-card/back', formData);
+            if (!response.success) {
+              throw new Error('身份证背面上传失败');
+            }
+            fileUrls.idCardBackUrl = response.data.url;
+          } else if (hasExistingIdCardBack) {
             fileUrls.idCardBackUrl = existingIdCardBackUrl;
           }
           
-          // 合并所有已有的照片URL和新上传的照片URL
-          fileUrls.photoUrls = [...fileUrls.photoUrls, ...existingPhotoUrls];
-          fileUrls.certificateUrls = [...fileUrls.certificateUrls, ...existingCertificateUrls];
-          fileUrls.medicalReportUrls = [...fileUrls.medicalReportUrls, ...existingMedicalReportUrls];
+          // 上传个人照片
+          if (photoFiles.length > 0) {
+            for (const file of photoFiles) {
+              const formData = new FormData();
+              formData.append('file', file);
+              const response = await apiService.upload('/upload/file/photo', formData);
+              if (response.success) {
+                fileUrls.photoUrls.push(response.data.url);
+              } else {
+                throw new Error('个人照片上传失败');
+              }
+            }
+          }
+          
+          // 上传技能证书
+          if (certificateFiles.length > 0) {
+            for (const file of certificateFiles) {
+              const formData = new FormData();
+              formData.append('file', file);
+              const response = await apiService.upload('/upload/file/certificate', formData);
+              if (response.success) {
+                fileUrls.certificateUrls.push(response.data.url);
+              } else {
+                throw new Error('技能证书上传失败');
+              }
+            }
+          }
+          
+          // 上传体检报告
+          if (medicalReportFiles.length > 0) {
+            for (const file of medicalReportFiles) {
+              const formData = new FormData();
+              formData.append('file', file);
+              const response = await apiService.upload('/upload/file/medical-report', formData);
+              if (response.success) {
+                fileUrls.medicalReportUrls.push(response.data.url);
+              } else {
+                throw new Error('体检报告上传失败');
+              }
+            }
+          }
+          
+          // 如果是编辑模式，且有可用的URL，合并现有和新上传的URL
+          if (isEditing) {
+            // 只有当用户没有删除已有图片时，才保留它们
+            if (hasExistingIdCardFront && !idCardFrontFile) {
+              fileUrls.idCardFrontUrl = existingIdCardFrontUrl;
+            }
+            
+            if (hasExistingIdCardBack && !idCardBackFile) {
+              fileUrls.idCardBackUrl = existingIdCardBackUrl;
+            }
+            
+            // 合并所有已有的照片URL和新上传的照片URL
+            fileUrls.photoUrls = [...fileUrls.photoUrls, ...existingPhotoUrls];
+            fileUrls.certificateUrls = [...fileUrls.certificateUrls, ...existingCertificateUrls];
+            fileUrls.medicalReportUrls = [...fileUrls.medicalReportUrls, ...existingMedicalReportUrls];
+          }
+        } catch (error) {
+          console.error('上传文件失败:', error);
+          messageApi.error('上传文件失败，请重试');
+          setLoading(false);
+          setSubmitting(false);
+          return;
         }
-      } catch (error) {
-        console.error('上传文件失败:', error);
-        messageApi.error('上传文件失败，请重试');
-        setLoading(false);
-        setSubmitting(false);
-        return;
       }
       
       // 合并所有表单数据
       const allFormData = { ...values };
       
-      // 处理工作经验中的日期格式
-      if (allFormData.workExperiences && allFormData.workExperiences.length > 0) {
-        allFormData.workExperiences = allFormData.workExperiences.map(exp => ({
-          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : '',
-          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : '',
-          description: exp.description || ''
-        })).filter(exp => exp.startDate || exp.endDate || exp.description);
+      // 处理工作经验中的日期格式，如果没有工作经验则不处理
+      if (allFormData.workExperiences && Array.isArray(allFormData.workExperiences) && allFormData.workExperiences.length > 0) {
+        allFormData.workExperiences = allFormData.workExperiences
+          .map(exp => ({
+            startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : '',
+            endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : '',
+            description: exp.description || ''
+          }))
+          .filter(exp => exp.startDate || exp.endDate || exp.description);
+      } else {
+        // 如果没有工作经验，设置为空数组
+        allFormData.workExperiences = [];
       }
       
-      // 准备提交的数据
+      // 准备提交的数据，只有在有文件时才添加文件URL
       const requestData = {
         ...allFormData,
-        ...fileUrls
+        ...(hasFilesToUpload ? fileUrls : {})
       };
       
       // 添加详细的日志
@@ -740,28 +663,28 @@ const CreateResume = () => {
           工作经验年限: requestData.experienceYears
         },
         可选信息: {
-          身份证号: requestData.idNumber,
-          微信号: requestData.wechat,
-          现居地址: requestData.currentAddress,
-          户籍地址: requestData.hukouAddress,
-          出生日期: requestData.birthDate,
-          民族: requestData.ethnicity,
-          生肖: requestData.zodiac,
-          星座: requestData.zodiacSign,
-          期望薪资: requestData.expectedSalary,
-          服务区域: requestData.serviceArea,
-          接单状态: requestData.orderStatus,
-          技能标签: requestData.skills,
-          来源渠道: requestData.leadSource
+          身份证号: requestData.idNumber || '',
+          微信号: requestData.wechat || '',
+          现居地址: requestData.currentAddress || '',
+          户籍地址: requestData.hukouAddress || '',
+          出生日期: requestData.birthDate || '',
+          民族: requestData.ethnicity || '',
+          生肖: requestData.zodiac || '',
+          星座: requestData.zodiacSign || '',
+          期望薪资: requestData.expectedSalary || '',
+          服务区域: requestData.serviceArea || '',
+          接单状态: requestData.orderStatus || '',
+          技能标签: requestData.skills || [],
+          来源渠道: requestData.leadSource || ''
         },
-        工作经历: requestData.workExperiences,
-        文件URL: {
-          身份证正面: requestData.idCardFrontUrl,
-          身份证背面: requestData.idCardBackUrl,
-          个人照片: requestData.photoUrls,
-          技能证书: requestData.certificateUrls,
-          体检报告: requestData.medicalReportUrls
-        }
+        工作经历: requestData.workExperiences || [],
+        文件URL: hasFilesToUpload ? {
+          身份证正面: requestData.idCardFrontUrl || '',
+          身份证背面: requestData.idCardBackUrl || '',
+          个人照片: requestData.photoUrls || [],
+          技能证书: requestData.certificateUrls || [],
+          体检报告: requestData.medicalReportUrls || []
+        } : {}
       });
       
       // 判断是编辑还是创建
@@ -964,8 +887,8 @@ const CreateResume = () => {
               <Card 
                 size="small" 
                 title="身份证正面" 
-          style={{ marginBottom: 16 }}
-                extra={<Text type="secondary">必须上传</Text>}
+                style={{ marginBottom: 16 }}
+                extra={<Text type="secondary">可选上传</Text>}
               >
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <Upload
@@ -1113,7 +1036,7 @@ const CreateResume = () => {
                 size="small" 
                 title="身份证背面" 
                 style={{ marginBottom: 16 }}
-                extra={<Text type="secondary">必须上传</Text>}
+                extra={<Text type="secondary">可选上传</Text>}
               >
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <Upload

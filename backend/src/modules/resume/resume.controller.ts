@@ -42,13 +42,15 @@ export class ResumeController {
   })
   async create(
     @Body() dto: CreateResumeDto,
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles() files: Express.Multer.File[] = [],
     @Req() req,
   ) {
     try {
+      const filesArray = files || [];
+      
       const resume = await this.resumeService.createWithFiles(
         { ...dto, userId: req.user.userId },
-        files
+        filesArray
       );
       return {
         success: true,

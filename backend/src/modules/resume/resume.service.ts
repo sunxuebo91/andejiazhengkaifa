@@ -17,23 +17,37 @@ export class ResumeService {
     private uploadService: UploadService
   ) {}
 
-  async createWithFiles(createResumeDto: CreateResumeDto & { userId: string }, files: Express.Multer.File[]) {
+  async createWithFiles(createResumeDto: CreateResumeDto & { userId: string }, files: Express.Multer.File[] = []) {
     if (!createResumeDto.userId) {
       throw new BadRequestException('用户ID不能为空');
     }
 
+    // 确保files是数组
+    const filesArray = Array.isArray(files) ? files : [];
     const fileIds: Types.ObjectId[] = [];
     
-    // 上传文件
-    for (const file of files) {
-      const fileId = await this.uploadService.uploadFile(file);
-      fileIds.push(new Types.ObjectId(fileId));
+    // 只有在有文件时才处理文件上传
+    if (filesArray.length > 0) {
+      // 上传文件
+      for (const file of filesArray) {
+        if (file) {  // 确保文件存在
+          try {
+            const fileId = await this.uploadService.uploadFile(file);
+            if (fileId) {
+              fileIds.push(new Types.ObjectId(fileId));
+            }
+          } catch (error) {
+            this.logger.error(`文件上传失败: ${error.message}`);
+            // 继续处理其他文件，不中断整个流程
+          }
+        }
+      }
     }
 
-    // 创建简历
+    // 创建简历，确保fileIds始终是数组
     const resume = new this.resumeModel({
       ...createResumeDto,
-      fileIds,
+      fileIds: fileIds,
       userId: new Types.ObjectId(createResumeDto.userId)
     });
 

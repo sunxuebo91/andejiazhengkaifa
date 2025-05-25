@@ -93,8 +93,9 @@ const createResume = async (req, res) => {
 
     // 返回成功响应
     res.status(201).json({ 
+      success: true,
       message: '简历提交成功', 
-      resume: savedResume
+      data: savedResume
     });
 
     console.log('================简历处理完成================');

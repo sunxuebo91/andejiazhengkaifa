@@ -2,7 +2,6 @@ import { PageContainer } from '@ant-design/pro-components';
 import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App } from 'antd';
 import { useState, useEffect } from 'react';
 import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import type { UploadFile, UploadChangeParam } from 'antd/es/upload/interface';
 import type { RcFile } from 'antd/es/upload';
@@ -15,16 +14,15 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import type { Dayjs } from 'dayjs';
 import type { DatePickerProps } from 'antd';
+import { GenderType, JobType, Education } from '@/types/resume';
+import { Gender } from '@/types/resume';
 
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
-// 设置 axios 默认配置
-// API请求通过vite代理转发
-// axios.defaults.withCredentials = true;
-// axios.defaults.timeout = 10000;
+// 删除 axios 相关配置，因为使用 apiService 替代
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -91,9 +89,6 @@ interface FormValues {
   [key: string]: any;
 }
 
-// 添加更多类型定义
-type GenderType = 'male' | 'female';
-
 // Define a base type for file properties
 type BaseFileProps = {
   uid: string;
@@ -130,11 +125,6 @@ interface ApiErrorResponse {
   message?: string;
 }
 
-// Add processGender function
-const processGender = (gender: string): GenderType => {
-  return gender === '男' ? 'male' : 'female';
-};
-
 // Add UploadFileStatus type
 type UploadFileStatus = 'uploading' | 'done' | 'error' | 'removed';
 
@@ -150,16 +140,6 @@ function debugLog(...args: unknown[]): void {
   if (DEBUG_MODE) console.log(...args);
 }
 
-const handleError = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  return '发生未知错误';
-};
-
 // 添加日期验证工具函数
 const isValidDate = (date: any): date is Dayjs => {
   return date && typeof date === 'object' && 'isValid' in date && date.isValid();
@@ -172,12 +152,23 @@ const toDayjs = (date: any): Dayjs | undefined => {
   return parsed.isValid() ? parsed : undefined;
 };
 
+// 添加工种映射常量
+const JOB_TYPE_MAP = {
+  [JobType.YUEXIN]: '月薪',
+  [JobType.ZHUJIA_YUER]: '住家育儿',
+  [JobType.BAIBAN_YUER]: '白班育儿',
+  [JobType.BAOJIE]: '保洁',
+  [JobType.BAIBAN_BAOMU]: '白班保姆',
+  [JobType.ZHUJIA_BAOMU]: '住家保姆',
+  [JobType.YANGCHONG]: '养宠',
+  [JobType.XIAOSHI]: '小时工'
+} as const;
+
 const CreateResume = () => {
   const { message: messageApi } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const navigate = useNavigate();
-  const [editingResumeId] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [idCardFiles, setIdCardFiles] = useState<{
@@ -528,71 +519,106 @@ const CreateResume = () => {
   // 修改 handleSubmit
   const handleSubmit = async (values: FormValues) => {
     try {
-      // Validate experience years if present
-      if (values.experienceYears !== undefined) {
-        if (values.experienceYears < 0 || values.experienceYears > 50) {
-          messageApi.error('工作经验年限必须在0-50年之间');
-          return;
-        }
+      setSubmitting(true);
+
+      // 检查必填字段
+      const requiredFields = [
+        { key: 'name', label: '姓名' },
+        { key: 'age', label: '年龄' },
+        { key: 'phone', label: '手机号码' },
+        { key: 'gender', label: '性别' },
+        { key: 'nativePlace', label: '籍贯' },
+        { key: 'jobType', label: '工种' },
+        { key: 'education', label: '学历' },
+        { key: 'experienceYears', label: '工作经验年限' }
+      ];
+
+      // 检查是否有未填写的必填字段
+      const missingFields = requiredFields.filter(field => {
+        const value = values[field.key];
+        return value === undefined || value === null || value === '';
+      });
+
+      if (missingFields.length > 0) {
+        const missingLabels = missingFields.map(field => field.label).join(', ');
+        messageApi.error(`请填写以下必填字段: ${missingLabels}`);
+        setSubmitting(false);
+        return;
       }
 
-      // Process gender
-      if (typeof values.gender === 'string') {
-        values.gender = processGender(values.gender);
-      }
-
-      // Process work experiences and dates
+      // 处理表单数据，确保枚举值正确
       const processedValues = {
         ...values,
+        // 确保枚举值正确
+        gender: values.gender as GenderType,
+        jobType: values.jobType,
+        education: values.education as keyof typeof Education,
+        // 处理日期
         birthDate: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : undefined,
         medicalExamDate: values.medicalExamDate ? dayjs(values.medicalExamDate).format('YYYY-MM-DD') : undefined,
-        workExperiences: values.workExperiences?.map(exp => {
-          if (!exp) return null;
-          
-          const startDate = exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : '';
-          const endDate = exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : '';
-          
-          if (!startDate && !endDate && !exp.description) {
-            return null;
-          }
-          
-          return {
-            startDate,
-            endDate,
-            description: exp.description || ''
-          };
-        }).filter((exp): exp is WorkExperience => exp !== null) || []
+        // 处理工作经历
+        workExperiences: values.workExperiences?.map(exp => ({
+          ...exp,
+          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
+          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
+        })),
+        // 确保数字类型正确
+        age: Number(values.age),
+        experienceYears: Number(values.experienceYears),
+        expectedSalary: values.expectedSalary ? Math.floor(Number(values.expectedSalary)) : undefined
       };
 
-      // Create FormData
+      // 创建 FormData 并添加基本字段
       const formData = new FormData();
-      
-      // Add form data
       Object.entries(processedValues).forEach(([key, value]) => {
-        if (key === 'workExperiences') {
-          formData.append(key, JSON.stringify(value));
-        } else if (value !== undefined && value !== null) {
-          formData.append(key, String(value));
+        // 对于必填字段，确保它们被添加到 formData 中
+        if (requiredFields.some(field => field.key === key)) {
+          if (value === undefined || value === null || value === '') {
+            messageApi.error(`${requiredFields.find(field => field.key === key)?.label}不能为空`);
+            setSubmitting(false);
+            return;
+          }
+        }
+
+        // 处理值的添加
+        if (value !== undefined && value !== null && value !== '') {
+          if (key === 'expectedSalary' || key === 'age' || key === 'experienceYears') {
+            formData.append(key, Math.floor(Number(value)).toString());
+          } else if (Array.isArray(value)) {
+            formData.append(key, JSON.stringify(value));
+          } else if (typeof value === 'object') {
+            formData.append(key, JSON.stringify(value));
+          } else {
+            // 对于枚举值，直接使用字符串值
+            formData.append(key, String(value));
+          }
         }
       });
 
-      // Add files with proper type checking
-      const addFilesToFormData = (files: CustomUploadFile[], fileType: string) => {
+      // 添加文件类型数组
+      const fileTypes: string[] = [];
+
+      // 定义添加文件的函数
+      const addFilesToFormData = (files: CustomUploadFile[], type: string) => {
         files.forEach(file => {
           if (file.originFileObj) {
             formData.append('files', file.originFileObj as Blob);
-            formData.append('fileTypes', fileType);
+            fileTypes.push(type);
           }
         });
       };
 
+      // 添加新文件及其类型
       addFilesToFormData(idCardFiles.front, 'idCardFront');
       addFilesToFormData(idCardFiles.back, 'idCardBack');
-      addFilesToFormData(photoFiles, 'photo');
-      addFilesToFormData(certificateFiles, 'certificate');
-      addFilesToFormData(medicalReportFiles, 'medicalReport');
+      addFilesToFormData(photoFiles, 'other');
+      addFilesToFormData(certificateFiles, 'other');
+      addFilesToFormData(medicalReportFiles, 'other');
 
-      // Add existing file URLs
+      // 添加文件类型数组
+      formData.append('fileTypes', JSON.stringify(fileTypes));
+
+      // 添加已存在的文件 URL
       if (hasExistingIdCardFront && existingIdCardFrontUrl) {
         formData.append('idCardFrontUrl', existingIdCardFrontUrl);
       }
@@ -609,15 +635,19 @@ const CreateResume = () => {
         formData.append('medicalReportUrls', JSON.stringify(existingMedicalReportUrls));
       }
 
-      // Log form data for debugging
-      console.log('提交的完整数据:', {
+      // 记录完整的提交数据
+      console.log('提交表单 - 完整数据:', {
         基本信息: {
           姓名: processedValues.name,
           年龄: processedValues.age,
           手机号: processedValues.phone,
           性别: processedValues.gender,
           籍贯: processedValues.nativePlace,
-          工种: processedValues.jobType,
+          工种: {
+            value: processedValues.jobType,
+            type: typeof processedValues.jobType,
+            formDataValue: formData.get('jobType')
+          },
           学历: processedValues.education,
           工作经验年限: processedValues.experienceYears
         },
@@ -651,54 +681,44 @@ const CreateResume = () => {
             个人照片数量: existingPhotoUrls.length,
             技能证书数量: existingCertificateUrls.length,
             体检报告数量: existingMedicalReportUrls.length
-          }
+          },
+          文件类型: fileTypes
         }
       });
 
-      // 判断是编辑还是创建
-      const apiUrl = isEditing ? `/api/resumes/${editingResumeId}` : '/api/resumes';
-      const method = isEditing ? 'put' : 'post';
-      
-      // 提交表单数据到后端
-      const response = await axios[method](apiUrl, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      // 发送请求
+      const response = await apiService.upload('/resumes', formData);
+
+      // 记录响应数据
+      console.log('提交表单 - 响应数据:', {
+        success: response.success,
+        message: response.message,
+        data: response.data
       });
-      
-      debugLog('提交响应:', response.data);
-      
-      // 检查响应是否成功
-      if (!response.data || !response.data.success) {
-        throw new Error(response.data?.message || '创建简历失败');
-      }
-      
-      // 显示成功消息
-      messageApi.success(isEditing ? '简历更新成功' : '简历创建成功');
-      
-      // 清除编辑状态
-      if (isEditing) {
-        localStorage.removeItem('editingResume');
-        setIsEditing(false);
-      }
-      
-      // 表单重置
-      form.resetFields();
-      
-      // 导航到简历列表页
-      navigate('/aunt/list');
-    } catch (error: unknown) {
-      setLoading(false);
-      setSubmitting(false);
-      
-      if (axios.isAxiosError(error) && error.response) {
-        const errorMessage = error.response.data?.message || '未知错误';
-        messageApi.error(`${isEditing ? '更新' : '创建'}失败: ${errorMessage}`);
-        console.error('提交失败:', error.response.data);
+
+      if (response.success) {
+        messageApi.success('创建简历成功');
+        // 跳转到简历列表页面
+        console.log('准备导航到简历列表页面');
+        navigate('/aunt/list');
+        console.log('导航指令已发送');
       } else {
-        messageApi.error(`${isEditing ? '更新' : '创建'}失败，请检查网络连接`);
-        console.error('提交失败:', error);
+        messageApi.error(response.message || '创建简历失败');
       }
+    } catch (error: unknown) {
+      // 记录错误信息
+      console.error('提交表单 - 错误:', {
+        error,
+        message: error instanceof Error ? error.message : '未知错误',
+        response: error instanceof Error && 'response' in error ? (error as any).response?.data : undefined
+      });
+      messageApi.error(
+        error instanceof Error && 'response' in error 
+          ? (error as any).response?.data?.message || '创建简历失败'
+          : '创建简历失败'
+      );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -909,7 +929,18 @@ const CreateResume = () => {
           <Form
             form={form}
             layout="vertical"
-            onFinish={handleSubmit}
+            onFinish={async (values) => {
+              try {
+                setSubmitting(true);
+                console.log('表单验证通过，准备提交:', values);
+                await handleSubmit(values);
+              } catch (error) {
+                console.error('表单提交失败:', error);
+                messageApi.error('表单提交失败，请检查填写是否正确');
+              } finally {
+                setSubmitting(false);
+              }
+            }}
           >
           {/* 身份证信息区域 */}
           <Divider orientation="left">
@@ -996,8 +1027,8 @@ const CreateResume = () => {
                     rules={[{ required: true, message: '请选择性别' }]}
                   >
                     <Select<GenderType> placeholder="请选择性别" onChange={handleGenderChange}>
-                      <Option value="male">男</Option>
-                      <Option value="female">女</Option>
+                      <Option value={Gender.MALE}>男</Option>
+                      <Option value={Gender.FEMALE}>女</Option>
                     </Select>
                   </Form.Item>
                 </Col>
@@ -1086,15 +1117,15 @@ const CreateResume = () => {
                     rules={[{ required: true, message: '请选择学历' }]}
                   >
                     <Select placeholder="请选择学历">
-                      <Option value="no">无学历</Option>
-                      <Option value="primary">小学</Option>
-                      <Option value="middle">初中</Option>
-                      <Option value="secondary">中专</Option>
-                      <Option value="vocational">职高</Option>
-                      <Option value="high">高中</Option>
-                      <Option value="college">大专</Option>
-                      <Option value="bachelor">本科</Option>
-                      <Option value="graduate">研究生及以上</Option>
+                      <Option value={Education.NO}>无学历</Option>
+                      <Option value={Education.PRIMARY}>小学</Option>
+                      <Option value={Education.MIDDLE}>初中</Option>
+                      <Option value={Education.SECONDARY}>中专</Option>
+                      <Option value={Education.VOCATIONAL}>职高</Option>
+                      <Option value={Education.HIGH}>高中</Option>
+                      <Option value={Education.COLLEGE}>大专</Option>
+                      <Option value={Education.BACHELOR}>本科</Option>
+                      <Option value={Education.GRADUATE}>研究生</Option>
                     </Select>
                   </Form.Item>
                 </Col>
@@ -1249,14 +1280,9 @@ const CreateResume = () => {
                     rules={[{ required: true, message: '请选择工种' }]}
                   >
                     <Select placeholder="请选择工种">
-                      <Option value="yuexin">月嫂</Option>
-                      <Option value="zhujia-yuer">住家育儿嫂</Option>
-                      <Option value="baiban-yuer">白班育儿</Option>
-                      <Option value="baojie">保洁</Option>
-                      <Option value="baiban-baomu">白班保姆</Option>
-                      <Option value="zhujia-baomu">住家保姆</Option>
-                      <Option value="yangchong">养宠</Option>
-                      <Option value="xiaoshi">小时工</Option>
+                      {Object.entries(JOB_TYPE_MAP).map(([value, label]) => (
+                        <Option key={value} value={value}>{label}</Option>
+                      ))}
                     </Select>
                   </Form.Item>
                 </Col>
@@ -1273,13 +1299,17 @@ const CreateResume = () => {
                   <Form.Item
                     label="期望薪资"
                     name="expectedSalary"
+                    rules={[
+                      { required: true, message: '请输入期望薪资' },
+                      { type: 'number', min: 0, message: '期望薪资不能为负数' }
+                    ]}
                   >
-                    <InputNumber 
-                      min={0} 
-                      placeholder="请输入期望薪资" 
+                    <InputNumber
+                      min={0}
+                      placeholder="请输入期望薪资"
                       style={{ width: '100%' }}
-                      addonBefore="¥"
                       precision={0}
+                      parser={value => value ? Number(String(value).replace(/[^\d]/g, '')) : 0}
                     />
                   </Form.Item>
                 </Col>
@@ -1554,7 +1584,7 @@ const CreateResume = () => {
           <div style={{ marginTop: 24, textAlign: 'center' }}>
             <Button
               type="primary"
-              onClick={() => form.validateFields().then(handleSubmit)}
+              htmlType="submit"
               loading={loading || submitting}
               style={{ marginRight: '16px' }}
             >

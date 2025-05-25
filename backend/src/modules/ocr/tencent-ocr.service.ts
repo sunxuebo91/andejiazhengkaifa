@@ -84,7 +84,7 @@ export class TencentOcrService {
           }
 
           // 验证必要字段
-          const requiredFields = ['Name', 'Nation', 'Address', 'IdNum'];
+          const requiredFields = ['Name', 'Nation', 'Address', 'IdNum', 'Sex', 'Birth'];
           const missingFields = requiredFields.filter(field => !response[field]);
           
           if (missingFields.length > 0) {
@@ -101,7 +101,9 @@ export class TencentOcrService {
           const formattedResult = {
             words_result: {
               姓名: { words: response.Name },
+              性别: { words: response.Sex },
               民族: { words: response.Nation },
+              出生: { words: response.Birth },
               住址: { words: response.Address },
               公民身份号码: { words: response.IdNum },
             },

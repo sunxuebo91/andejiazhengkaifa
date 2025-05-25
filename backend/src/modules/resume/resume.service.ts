@@ -17,7 +17,11 @@ export class ResumeService {
     private uploadService: UploadService
   ) {}
 
-  async createWithFiles(createResumeDto: CreateResumeDto & { userId: string }, files: Express.Multer.File[] = []) {
+  async createWithFiles(
+    createResumeDto: CreateResumeDto & { userId: string }, 
+    files: Express.Multer.File[] = [],
+    fileTypes: string[] = []
+  ) {
     if (!createResumeDto.userId) {
       throw new BadRequestException('用户ID不能为空');
     }
@@ -25,16 +29,31 @@ export class ResumeService {
     // 确保files是数组
     const filesArray = Array.isArray(files) ? files : [];
     const fileIds: Types.ObjectId[] = [];
+    const fileInfoMap = new Map<string, { fileId: string; filename: string; mimetype: string; size: number }>();
     
     // 只有在有文件时才处理文件上传
     if (filesArray.length > 0) {
       // 上传文件
-      for (const file of filesArray) {
+      for (let i = 0; i < filesArray.length; i++) {
+        const file = filesArray[i];
+        const fileType = fileTypes[i] || 'other';  // 使用传入的文件类型，如果没有则默认为other
+        
         if (file) {  // 确保文件存在
           try {
             const fileId = await this.uploadService.uploadFile(file);
             if (fileId) {
-              fileIds.push(new Types.ObjectId(fileId));
+              const objectId = new Types.ObjectId(fileId);
+              fileIds.push(objectId);
+              
+              // 只处理身份证正反面照片
+              if (fileType === 'idCardFront' || fileType === 'idCardBack') {
+                fileInfoMap.set(fileType, {
+                  fileId,
+                  filename: file.originalname,
+                  mimetype: file.mimetype,
+                  size: file.size
+                });
+              }
             }
           } catch (error) {
             this.logger.error(`文件上传失败: ${error.message}`);
@@ -44,9 +63,27 @@ export class ResumeService {
       }
     }
 
+    // 构建文件URL信息
+    const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+    const fileInfo = {
+      idCardFront: fileInfoMap.get('idCardFront') ? {
+        url: `${baseUrl}/api/upload/file/${fileInfoMap.get('idCardFront').fileId}`,
+        filename: fileInfoMap.get('idCardFront').filename,
+        mimetype: fileInfoMap.get('idCardFront').mimetype,
+        size: fileInfoMap.get('idCardFront').size
+      } : undefined,
+      idCardBack: fileInfoMap.get('idCardBack') ? {
+        url: `${baseUrl}/api/upload/file/${fileInfoMap.get('idCardBack').fileId}`,
+        filename: fileInfoMap.get('idCardBack').filename,
+        mimetype: fileInfoMap.get('idCardBack').mimetype,
+        size: fileInfoMap.get('idCardBack').size
+      } : undefined
+    };
+
     // 创建简历，确保fileIds始终是数组
     const resume = new this.resumeModel({
       ...createResumeDto,
+      ...fileInfo,
       fileIds: fileIds,
       userId: new Types.ObjectId(createResumeDto.userId)
     });

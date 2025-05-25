@@ -35,6 +35,14 @@ export class ResumeController {
             format: 'binary',
           },
         },
+        fileTypes: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['idCardFront', 'idCardBack', 'other'],
+            description: '文件类型：idCardFront(身份证正面)、idCardBack(身份证背面)、other(其他)'
+          }
+        },
         title: { type: 'string' },
         content: { type: 'string' },
       },
@@ -43,14 +51,29 @@ export class ResumeController {
   async create(
     @Body() dto: CreateResumeDto,
     @UploadedFiles() files: Express.Multer.File[] = [],
+    @Body('fileTypes') fileTypes: string[] = [],
     @Req() req,
   ) {
     try {
+      this.logger.debug('接收到的原始请求数据:', {
+        jobType: dto.jobType,
+        rawBody: req.body,
+        contentType: req.headers['content-type'],
+        fileTypes
+      });
+
       const filesArray = files || [];
       
+      this.logger.debug('解析后的 DTO 对象:', {
+        jobType: dto.jobType,
+        jobTypeType: typeof dto.jobType,
+        dtoKeys: Object.keys(dto)
+      });
+
       const resume = await this.resumeService.createWithFiles(
         { ...dto, userId: req.user.userId },
-        filesArray
+        filesArray,
+        fileTypes
       );
       return {
         success: true,

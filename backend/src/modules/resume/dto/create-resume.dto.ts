@@ -1,5 +1,6 @@
 import { IsNotEmpty, IsString, IsNumber, IsArray, IsOptional, IsDateString, IsEnum, Matches, Min, Max } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 // 定义枚举类型
 export enum Education {
@@ -130,6 +131,13 @@ export class CreateResumeDto {
   @IsNumber({}, { message: '年龄必须是数字' })
   @Min(18, { message: '年龄必须大于等于18岁' })
   @Max(80, { message: '年龄必须小于等于80岁' })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const num = Number(value);
+      return isNaN(num) ? value : num;
+    }
+    return value;
+  })
   age: number;
 
   @ApiProperty({ description: '微信号', example: 'wxid_123456' })
@@ -229,6 +237,13 @@ export class CreateResumeDto {
   @IsNumber({}, { message: '工作经验年限必须是数字' })
   @Min(0, { message: '工作经验年限必须大于等于0' })
   @Max(50, { message: '工作经验年限必须小于等于50' })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const num = Number(value);
+      return isNaN(num) ? value : num;
+    }
+    return value;
+  })
   experienceYears: number;
 
   @ApiProperty({ description: '来源渠道', enum: LeadSource })
@@ -248,6 +263,17 @@ export class CreateResumeDto {
   })
   @IsOptional()
   @IsArray()
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return [];
+      }
+    }
+    return Array.isArray(value) ? value : [];
+  })
   workExperiences?: Array<{
     startDate: string;
     endDate: string;

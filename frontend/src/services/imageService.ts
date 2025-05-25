@@ -64,6 +64,15 @@ export class ImageService {
         type
       });
 
+      // 如果是身份证反面，直接返回成功
+      if (type === 'back') {
+        console.log('身份证反面不需要OCR识别，直接返回成功');
+        return {
+          words_result: {},
+          risk_info: []
+        };
+      }
+
       const formData = new FormData();
       formData.append('file', file);
       
@@ -108,44 +117,127 @@ export class ImageService {
     }
   }
 
-  static extractIdCardInfo(ocrResult: any) {
-    try {
-      const formValues: any = {};
+  // 计算年龄
+  static calculateAge(birthDate: string): number {
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    
+    return age;
+  }
+
+  // 计算生肖
+  static calculateZodiac(birthDate: string): string {
+    const zodiacMap: Record<number, string> = {
+      0: 'rat',    // 鼠
+      1: 'ox',     // 牛
+      2: 'tiger',  // 虎
+      3: 'rabbit', // 兔
+      4: 'dragon', // 龙
+      5: 'snake',  // 蛇
+      6: 'horse',  // 马
+      7: 'goat',   // 羊
+      8: 'monkey', // 猴
+      9: 'rooster',// 鸡
+      10: 'dog',   // 狗
+      11: 'pig'    // 猪
+    };
+    
+    const year = new Date(birthDate).getFullYear();
+    const zodiacIndex = (year - 4) % 12;
+    return zodiacMap[zodiacIndex] || 'rat'; // 添加默认值以防万一
+  }
+
+  // 计算星座
+  static calculateZodiacSign(birthDate: string): string {
+    const date = new Date(birthDate);
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    
+    if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'aquarius';    // 水瓶座
+    if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) return 'pisces';      // 双鱼座
+    if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'aries';       // 白羊座
+    if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'taurus';      // 金牛座
+    if ((month === 5 && day >= 21) || (month === 6 && day <= 21)) return 'gemini';      // 双子座
+    if ((month === 6 && day >= 22) || (month === 7 && day <= 22)) return 'cancer';      // 巨蟹座
+    if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'leo';         // 狮子座
+    if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'virgo';       // 处女座
+    if ((month === 9 && day >= 23) || (month === 10 && day <= 23)) return 'libra';      // 天秤座
+    if ((month === 10 && day >= 24) || (month === 11 && day <= 22)) return 'scorpio';   // 天蝎座
+    if ((month === 11 && day >= 23) || (month === 12 && day <= 21)) return 'sagittarius';// 射手座
+    return 'capricorn';                                                                  // 摩羯座
+  }
+
+  // 从地址中提取省份/直辖市
+  static extractProvince(address: string): string | null {
+    const provinces = [
+      '北京市', '天津市', '上海市', '重庆市',
+      '河北省', '山西省', '辽宁省', '吉林省', '黑龙江省',
+      '江苏省', '浙江省', '安徽省', '福建省', '江西省',
+      '山东省', '河南省', '湖北省', '湖南省', '广东省',
+      '海南省', '四川省', '贵州省', '云南省', '陕西省',
+      '甘肃省', '青海省', '台湾省',
+      '广西壮族自治区', '内蒙古自治区', '西藏自治区',
+      '宁夏回族自治区', '新疆维吾尔自治区',
+      '香港特别行政区', '澳门特别行政区'
+    ];
+
+    for (const province of provinces) {
+      if (address.includes(province)) {
+        return province;
+      }
+    }
+    return null;
+  }
+
+  // 修改提取身份证信息的函数
+  static extractIdCardInfo(ocrResult: any): Record<string, any> {
+    const formValues: Record<string, any> = {};
+    
+    if (ocrResult?.words_result) {
+      const words = ocrResult.words_result;
       
-      if (ocrResult.words_result) {
-        const result = ocrResult.words_result;
-        
-        // 提取基本信息
-        if (result.姓名?.words) {
-          formValues.name = result.姓名.words;
-        }
-        if (result.民族?.words) {
-          formValues.ethnicity = result.民族.words.replace(/族$/, '');
-        }
-        if (result.公民身份号码?.words) {
-          const idCard = result.公民身份号码.words;
-          formValues.idNumber = idCard;
-          
-          // 提取出生日期
-          const birthYear = parseInt(idCard.substring(6, 10));
-          const birthMonth = parseInt(idCard.substring(10, 12));
-          const birthDay = parseInt(idCard.substring(12, 14));
-          formValues.birthDate = `${birthYear}-${birthMonth.toString().padStart(2, '0')}-${birthDay.toString().padStart(2, '0')}`;
-          
-          // 设置性别
-          formValues.gender = parseInt(idCard.charAt(16)) % 2 === 1 ? '男' : '女';
-        }
-        if (result.住址?.words) {
-          formValues.currentAddress = result.住址.words;
-          formValues.hukouAddress = result.住址.words;
-        }
+      // 提取基本信息
+      if (words.姓名?.words) formValues.name = words.姓名.words;
+      if (words.公民身份号码?.words) formValues.idNumber = words.公民身份号码.words;
+      
+      // 直接使用OCR识别的性别
+      if (words.性别?.words) {
+        formValues.gender = words.性别.words === '男' ? 'male' : 'female';
       }
       
-      return formValues;
-    } catch (error: unknown) {
-      console.error('提取身份证信息失败:', error);
-      return {};
+      // 直接使用OCR识别的出生日期
+      if (words.出生?.words) {
+        const birthDate = words.出生.words.replace(/[年月]/g, '-').replace('日', '');
+        formValues.birthDate = birthDate;
+        
+        // 根据出生日期计算年龄、生肖、星座
+        formValues.age = this.calculateAge(birthDate);
+        formValues.zodiac = this.calculateZodiac(birthDate);
+        formValues.zodiacSign = this.calculateZodiacSign(birthDate);
+      }
+      
+      if (words.民族?.words) formValues.ethnicity = words.民族.words;
+      
+      // 处理地址信息
+      if (words.住址?.words) {
+        const address = words.住址.words;
+        formValues.hukouAddress = address;
+        
+        // 提取并填充籍贯
+        const province = this.extractProvince(address);
+        if (province) {
+          formValues.nativePlace = province;
+        }
+      }
     }
+    
+    return formValues;
   }
 }
 

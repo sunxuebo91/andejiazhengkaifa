@@ -3,7 +3,7 @@ import { getToken } from './auth';
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: 'http://localhost:3000/api',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

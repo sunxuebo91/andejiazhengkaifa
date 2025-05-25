@@ -20,9 +20,7 @@ import { AuthModule } from './modules/auth/auth.module';
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        uri: configService.get('MONGODB_URI', 'mongodb://localhost:27017/housekeeping'),
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
+        uri: configService.get('MONGODB_URI', 'mongodb://127.0.0.1:27017/housekeeping'),
         retryWrites: true,
         w: 'majority',
         socketTimeoutMS: 30000,

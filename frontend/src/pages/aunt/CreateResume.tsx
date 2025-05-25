@@ -297,137 +297,61 @@ const CreateResume = () => {
     }
 
     try {
-      debugLog('开始处理文件:', { 
-        fileName: file.name, 
-        fileSize: file.size, 
-        fileType: file.type,
-        lastModified: file.lastModified 
+      setIsOcrProcessing(true);
+      debugLog('开始OCR识别:', { 
+        type, 
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
       });
 
-      // 创建文件预览URL
-      const previewUrl = URL.createObjectURL(file);
+      // 使用 ImageService 进行 OCR 识别
+      const ocrResult = await ImageService.ocrIdCard(file, type);
+      debugLog('OCR识别结果:', ocrResult);
 
-      // 保存文件信息
-      const uploadFileInfo: CustomUploadFile = {
-        uid: info.file.uid || `${Date.now()}`,
+      // 提取并填充表单数据
+      const formValues = ImageService.extractIdCardInfo(ocrResult);
+      debugLog('提取的表单数据:', formValues);
+
+      if (Object.keys(formValues).length > 0) {
+        form.setFieldsValue(formValues);
+        messageApi.success('身份证信息识别成功');
+      } else {
+        debugLog('未能从OCR结果中提取到有效信息');
+        messageApi.warning('未能识别到身份证信息，请手动填写');
+      }
+
+      // 更新文件状态
+      const newFile = {
+        uid: file.uid || `-1`,
         name: file.name,
-        status: 'done' as UploadFileStatus,
-        url: previewUrl,
-        thumbUrl: previewUrl,
-        originFileObj: file as RcFile,
-        size: file.size,
-        type: file.type,
+        status: 'done' as const,
+        url: URL.createObjectURL(file),
+        originFileObj: file,
         isExisting: false
       };
-      
-      // 更新状态前先清理旧的预览URL
-      setIdCardFiles(prev => {
-        // 清理旧的预览URL
-        if (prev[type].length > 0) {
-          const oldFile = prev[type][0];
-          if (oldFile.url && oldFile.url.startsWith('blob:')) {
-            URL.revokeObjectURL(oldFile.url);
-          }
-        }
-        return {
+
+      if (type === 'front') {
+        setIdCardFiles(prev => ({
           ...prev,
-          [type]: [uploadFileInfo]
-        };
-      });
-      
-      messageApi.success(`${type === 'front' ? '身份证正面' : '身份证背面'}上传成功`);
-      debugLog('文件上传处理完成:', { type, fileInfo: uploadFileInfo });
-
-      // 尝试进行OCR识别
-      try {
-        setIsOcrProcessing(true); // 设置OCR处理状态
-        debugLog('开始OCR识别:', { 
-          type, 
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type
-        });
-        
-        // 创建新的FormData对象
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('side', type);
-        
-        // 打印FormData内容（仅用于调试）
-        debugLog('OCR请求FormData内容:');
-        for (const pair of formData.entries()) {
-          debugLog(`- ${pair[0]}: ${pair[1] instanceof File ? `File(${pair[1].name}, ${pair[1].size} bytes)` : pair[1]}`);
-        }
-
-        // 发送OCR请求
-        debugLog('发送OCR请求到:', '/api/ocr/idcard');
-        const response = await axios.post('/api/ocr/idcard', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Accept': 'application/json'
-          },
-          timeout: 30000,
-          validateStatus: function (status) {
-            return status < 500; // 允许处理所有非500错误
-          }
-        });
-
-        debugLog('OCR响应状态:', response.status);
-        debugLog('OCR响应头:', response.headers);
-        debugLog('OCR响应数据:', response.data);
-
-        // 检查响应状态
-        if (response.status === 201 || response.status === 200) {
-          if (response.data && response.data.success) {
-            debugLog('OCR识别成功，数据:', response.data.data);
-            
-            // 使用 ImageService 的 extractIdCardInfo 方法处理 OCR 结果
-            const formValues = ImageService.extractIdCardInfo(response.data.data);
-            debugLog('提取的表单数据:', formValues);
-            
-            // 更新表单数据
-            if (Object.keys(formValues).length > 0) {
-              form.setFieldsValue(formValues);
-              messageApi.success('身份证信息识别成功');
-            } else {
-              debugLog('未能从OCR结果中提取到有效信息');
-              messageApi.warning('未能识别到身份证信息，请手动填写');
-            }
-          } else {
-            console.warn('OCR识别返回数据格式不正确:', response.data);
-            messageApi.warning(response.data?.message || '身份证信息识别失败，请手动填写信息');
-          }
-        } else {
-          console.warn('OCR识别请求失败:', {
-            status: response.status,
-            statusText: response.statusText,
-            data: response.data
-          });
-          messageApi.warning(response.data?.message || '身份证信息识别失败，请手动填写信息');
-        }
-      } catch (error) {
-        console.error('OCR识别失败:', error);
-        if (axios.isAxiosError(error)) {
-          console.error('OCR请求错误详情:', {
-            status: error.response?.status,
-            statusText: error.response?.statusText,
-            data: error.response?.data,
-            message: error.message,
-            config: {
-              url: error.config?.url,
-              method: error.config?.method,
-              headers: error.config?.headers,
-              data: error.config?.data
-            }
-          });
-        }
-        messageApi.warning('身份证信息识别失败，请手动填写信息');
-      } finally {
-        setIsOcrProcessing(false); // 重置OCR处理状态
+          front: [newFile]
+        }));
+      } else {
+        setIdCardFiles(prev => ({
+          ...prev,
+          back: [newFile]
+        }));
       }
-    } catch (error: unknown) {
-      console.error('处理图片失败:', error);
-      messageApi.error(handleError(error));
+
+    } catch (error) {
+      console.error('OCR识别失败:', error);
+      if (error instanceof Error) {
+        messageApi.error(`身份证识别失败: ${error.message}`);
+      } else {
+        messageApi.error('身份证识别失败，请手动填写信息');
+      }
+    } finally {
+      setIsOcrProcessing(false);
     }
   };
 

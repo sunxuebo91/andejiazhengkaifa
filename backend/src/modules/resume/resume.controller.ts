@@ -51,15 +51,29 @@ export class ResumeController {
   async create(
     @Body() dto: CreateResumeDto,
     @UploadedFiles() files: Express.Multer.File[] = [],
-    @Body('fileTypes') fileTypes: string[] = [],
     @Req() req,
   ) {
     try {
+      // 从请求体中提取文件类型数组
+      let fileTypes: string[] = [];
+      if (req.body.fileTypes) {
+        if (Array.isArray(req.body.fileTypes)) {
+          fileTypes = req.body.fileTypes;
+        } else if (typeof req.body.fileTypes === 'string') {
+          try {
+            fileTypes = JSON.parse(req.body.fileTypes);
+          } catch {
+            fileTypes = [req.body.fileTypes];
+          }
+        }
+      }
+
       this.logger.debug('接收到的原始请求数据:', {
         jobType: dto.jobType,
         rawBody: req.body,
         contentType: req.headers['content-type'],
-        fileTypes
+        fileTypes,
+        filesCount: files?.length || 0
       });
 
       const filesArray = files || [];
@@ -67,7 +81,9 @@ export class ResumeController {
       this.logger.debug('解析后的 DTO 对象:', {
         jobType: dto.jobType,
         jobTypeType: typeof dto.jobType,
-        dtoKeys: Object.keys(dto)
+        dtoKeys: Object.keys(dto),
+        fileTypesLength: fileTypes.length,
+        filesLength: filesArray.length
       });
 
       const resume = await this.resumeService.createWithFiles(
@@ -253,7 +269,10 @@ export class ResumeController {
           type: 'string',
           format: 'binary',
         },
-        type: { type: 'string' },
+        type: { 
+          type: 'string',
+          description: '文件类型：idCardFront/idCardBack/personalPhoto/certificate/medicalReport'
+        },
       },
     },
   })
@@ -263,7 +282,7 @@ export class ResumeController {
     @Body('type') type: string,
   ) {
     try {
-      const resume = await this.resumeService.addFiles(id, [file]);
+      const resume = await this.resumeService.addFileWithType(id, file, type);
       return {
         success: true,
         data: resume,

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsNumber, IsArray, IsOptional, IsDateString, IsEnum, Matches, Min, Max } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsArray, IsOptional, IsDateString, IsEnum, Matches, Min, Max, Allow } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import dayjs from 'dayjs';
@@ -158,14 +158,22 @@ export class CreateResumeDto {
 
   @ApiProperty({ description: '婚姻状况', enum: MaritalStatus })
   @IsOptional()
-  @IsEnum(MaritalStatus)
+  @IsEnum(MaritalStatus, { message: '请选择有效的婚姻状况' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    // 如果值不在枚举中，返回undefined
+    if (!Object.values(MaritalStatus).includes(value as MaritalStatus)) {
+      return undefined;
+    }
+    return value;
+  })
   maritalStatus?: MaritalStatus;
 
   @ApiProperty({ description: '宗教信仰', enum: Religion })
   @IsOptional()
   @IsEnum(Religion, { message: '请选择有效的宗教信仰' })
   @Transform(({ value }) => {
-    if (!value) return undefined;
+    if (!value || value === '' || value === null || value === undefined) return undefined;
     // 处理前端可能传入的中文值
     const religionMap = {
       '无': Religion.NONE,
@@ -176,7 +184,12 @@ export class CreateResumeDto {
       '道教': Religion.TAOISM,
       '其他': Religion.OTHER
     };
-    return religionMap[value] || value;
+    const mappedValue = religionMap[value] || value;
+    // 如果映射后的值不在枚举中，返回undefined
+    if (!Object.values(Religion).includes(mappedValue as Religion)) {
+      return undefined;
+    }
+    return mappedValue;
   })
   religion?: Religion;
 
@@ -217,12 +230,26 @@ export class CreateResumeDto {
 
   @ApiProperty({ description: '生肖', enum: Zodiac })
   @IsOptional()
-  @IsEnum(Zodiac)
+  @IsEnum(Zodiac, { message: '请选择有效的生肖' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    if (!Object.values(Zodiac).includes(value as Zodiac)) {
+      return undefined;
+    }
+    return value;
+  })
   zodiac?: Zodiac;
 
   @ApiProperty({ description: '星座', enum: ZodiacSign })
   @IsOptional()
-  @IsEnum(ZodiacSign)
+  @IsEnum(ZodiacSign, { message: '请选择有效的星座' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    if (!Object.values(ZodiacSign).includes(value as ZodiacSign)) {
+      return undefined;
+    }
+    return value;
+  })
   zodiacSign?: ZodiacSign;
 
   @ApiProperty({ description: '工作类型', enum: JobType })
@@ -270,7 +297,14 @@ export class CreateResumeDto {
 
   @ApiProperty({ description: '接单状态', enum: OrderStatus })
   @IsOptional()
-  @IsEnum(OrderStatus)
+  @IsEnum(OrderStatus, { message: '请选择有效的接单状态' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    if (!Object.values(OrderStatus).includes(value as OrderStatus)) {
+      return undefined;
+    }
+    return value;
+  })
   orderStatus?: OrderStatus;
 
   @ApiProperty({ description: '技能列表', enum: Skill, isArray: true })
@@ -307,7 +341,14 @@ export class CreateResumeDto {
 
   @ApiProperty({ description: '来源渠道', enum: LeadSource })
   @IsOptional()
-  @IsEnum(LeadSource)
+  @IsEnum(LeadSource, { message: '请选择有效的来源渠道' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    if (!Object.values(LeadSource).includes(value as LeadSource)) {
+      return undefined;
+    }
+    return value;
+  })
   leadSource?: LeadSource;
 
   @ApiProperty({ 
@@ -388,4 +429,9 @@ export class CreateResumeDto {
   @IsOptional()
   @IsDateString()
   medicalExamDate?: string;
+
+  @ApiProperty({ description: '文件类型数组', example: ['idCardFront', 'idCardBack', 'personalPhoto'] })
+  @IsOptional()
+  @Allow()
+  fileTypes?: string[];
 }

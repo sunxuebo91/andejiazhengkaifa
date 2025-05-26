@@ -22,7 +22,8 @@ export class UploadService {
           ...metadata,
           mimeType: file.mimetype,
           size: file.size,
-          uploadTime: new Date()
+          uploadTime: new Date(),
+          type: metadata.type || 'other' // 添加文件类型分类
         }
       });
 

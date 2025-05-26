@@ -286,7 +286,8 @@ interface WorkExperience {
 interface FileInfo {
   fileId: string;
   filename: string;  // 保持与后端一致的命名
-  mimeType: string;
+  mimeType?: string;
+  mimetype?: string;  // 兼容后端返回的字段名
   size: number;
   uploadTime: Date;
   url?: string;
@@ -323,6 +324,8 @@ interface ResumeData {
   skills: Array<keyof typeof skillsMap>;
   leadSource: keyof typeof leadSourceMap;
   workExperiences: WorkExperience[];
+  // 文件ID数组
+  fileIds?: string[];
   // 新的文件信息结构
   idCardFront?: FileInfo;
   idCardBack?: FileInfo;
@@ -434,8 +437,17 @@ const ResumeDetail = () => {
         if (typeof url !== 'string') return null;
         if (url.startsWith('http://') || url.startsWith('https://')) return url;
         
-        // 使用相对路径，让 Vite 代理处理
-        return url.startsWith('/') ? url : `/${url}`;
+        // 如果已经是完整的API路径，直接返回
+        if (url.startsWith('/api/upload/file/')) return url;
+        
+        // 否则构建完整的API路径
+        return `/api/upload/file/${url}`;
+      };
+
+      // 处理fileIds生成图片URL
+      const generateImageUrls = (fileIds: string[]): string[] => {
+        if (!Array.isArray(fileIds)) return [];
+        return fileIds.map(fileId => fileId);
       };
 
       // 更新简历数据
@@ -445,16 +457,16 @@ const ResumeDetail = () => {
         id: resumeData._id.toString(),
         religion: resumeData.religion || null,
         medicalExamDate: resumeData.medicalExamDate ? dayjs(resumeData.medicalExamDate) : null,
-        // 处理图片URL
+        // 处理图片URL - 优先使用现有的URL，如果没有则从fileIds生成
         idCardFrontUrl: processImageUrl(resumeData.idCardFrontUrl),
         idCardBackUrl: processImageUrl(resumeData.idCardBackUrl),
-        photoUrls: Array.isArray(resumeData.photoUrls) 
+        photoUrls: Array.isArray(resumeData.photoUrls) && resumeData.photoUrls.length > 0
           ? resumeData.photoUrls.map(processImageUrl).filter(Boolean) 
           : [],
-        certificateUrls: Array.isArray(resumeData.certificateUrls) 
+        certificateUrls: Array.isArray(resumeData.certificateUrls) && resumeData.certificateUrls.length > 0
           ? resumeData.certificateUrls.map(processImageUrl).filter(Boolean) 
           : [],
-        medicalReportUrls: Array.isArray(resumeData.medicalReportUrls) 
+        medicalReportUrls: Array.isArray(resumeData.medicalReportUrls) && resumeData.medicalReportUrls.length > 0
           ? resumeData.medicalReportUrls.map(processImageUrl).filter(Boolean) 
           : [],
       };
@@ -542,7 +554,7 @@ const ResumeDetail = () => {
         ...values,
         birthDate: values.birthDate ? values.birthDate.format('YYYY-MM-DD') : undefined,
         // 处理工作经验的日期格式化
-        workExperiences: values.workExperience?.map(item => {
+        workExperiences: values.workExperience?.map((item: any) => {
           console.log('处理工作经历项:', item);
           // 确保每个对象都是有效的
           if (!item) return null;
@@ -557,7 +569,7 @@ const ResumeDetail = () => {
               ? item.endDate.format('YYYY-MM') 
               : (item.endDate || ''),
           };
-        }).filter(item => item !== null) || [],
+        }).filter((item: any) => item !== null) || [],
       };
       
       console.log('准备提交的数据:', formData);
@@ -600,9 +612,19 @@ const ResumeDetail = () => {
       return renderLegacyFilePreview(file, index);
     }
 
-    const fileUrl = processImageUrl(file.fileId);
-    const isPdf = file.mimeType === 'application/pdf';
-    const uniqueKey = `file-${file.fileId}-${index}`;
+    // 处理FileInfo对象，使用url字段而不是fileId
+    const fileUrl = file.url || `/api/upload/file/${file.fileId}`;
+    // 兼容两种字段名：mimeType 和 mimetype
+    const mimeType = file.mimeType || file.mimetype || '';
+    const isPdf = mimeType === 'application/pdf';
+    const uniqueKey = `file-${file.fileId || index}-${index}`;
+
+    console.log('渲染文件预览:', {
+      filename: file.filename,
+      mimeType: mimeType,
+      isPdf: isPdf,
+      fileUrl: fileUrl
+    });
 
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px' }}>
@@ -611,6 +633,7 @@ const ResumeDetail = () => {
             type="primary"
             icon={<FilePdfOutlined />}
             onClick={() => window.open(fileUrl, '_blank')}
+            style={{ height: '60px', width: '120px' }}
           >
             查看PDF
           </Button>
@@ -639,28 +662,46 @@ const ResumeDetail = () => {
 
   // 更新渲染旧版文件预览的函数
   const renderLegacyFilePreview = (url: string, index: number) => {
-    const fileUrl = processImageUrl(url);
+    const fileUrl = url.startsWith('/api/upload/file/') ? url : `/api/upload/file/${url}`;
     const uniqueKey = `legacy-file-${index}`;
+    
+    // 检查是否为PDF文件（通过URL或文件扩展名判断）
+    const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
     
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px' }}>
-        <Image
-          src={fileUrl}
-          alt={`文件 ${index + 1}`}
-          style={{ maxWidth: '200px', maxHeight: '200px' }}
-          placeholder={(
-            <div style={{ 
-              background: '#f5f5f5', 
-              width: '200px', 
-              height: '200px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center' 
-            }}>
-              加载中...
-            </div>
-          )}
-        />
+        {isPdf ? (
+          <Button
+            type="primary"
+            icon={<FilePdfOutlined />}
+            onClick={() => window.open(fileUrl, '_blank')}
+            style={{ height: '60px', width: '120px' }}
+          >
+            查看PDF
+          </Button>
+        ) : (
+          <Image
+            src={fileUrl}
+            alt={`文件 ${index + 1}`}
+            style={{ maxWidth: '200px', maxHeight: '200px' }}
+            placeholder={(
+              <div style={{ 
+                background: '#f5f5f5', 
+                width: '200px', 
+                height: '200px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                加载中...
+              </div>
+            )}
+            onError={() => {
+              // 如果图片加载失败，可能是PDF文件，显示PDF按钮
+              console.log('图片加载失败，可能是PDF文件:', fileUrl);
+            }}
+          />
+        )}
       </div>
     );
   };
@@ -717,7 +758,7 @@ const ResumeDetail = () => {
       const allRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
       
       // 筛选出当前简历的跟进记录
-      const resumeRecords = allRecords.filter(record => record.resumeId === resume.id);
+      const resumeRecords = allRecords.filter((record: any) => record.resumeId === resume.id);
       
       console.log('从localStorage获取跟进记录:', resumeRecords);
       setFollowUpRecords(resumeRecords);
@@ -1225,7 +1266,7 @@ const ResumeDetail = () => {
             {resume?.certificates?.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 {resume.certificates.map((cert: FileInfo, index: number) => (
-                  <div key={`certificate-${cert.fileId}`}>
+                  <div key={`certificate-${cert.fileId || index}`}>
                     {renderFilePreview(cert, index)}
                   </div>
                 ))}
@@ -1233,7 +1274,7 @@ const ResumeDetail = () => {
             ) : resume?.certificateUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 {resume.certificateUrls.filter(Boolean).map((url: string, index: number) => (
-                  <div key={`certificate-${index}`}>
+                  <div key={`certificate-legacy-${index}`}>
                     {renderFilePreview(url, index)}
                   </div>
                 ))}
@@ -1247,7 +1288,7 @@ const ResumeDetail = () => {
             {resume?.reports?.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 {resume.reports.map((report: FileInfo, index: number) => (
-                  <div key={`report-${report.fileId}`}>
+                  <div key={`report-${report.fileId || index}`}>
                     {renderFilePreview(report, index)}
                   </div>
                 ))}
@@ -1255,7 +1296,7 @@ const ResumeDetail = () => {
             ) : resume?.medicalReportUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 {resume.medicalReportUrls.filter(Boolean).map((url: string, index: number) => (
-                  <div key={`report-${index}`}>
+                  <div key={`report-legacy-${index}`}>
                     {renderFilePreview(url, index)}
                   </div>
                 ))}
@@ -1627,7 +1668,8 @@ const ResumeDetail = () => {
                     status: 'done',
                     url: url
                   }))}
-                  action="/api/upload/file/photo"
+                  action="/api/upload/file"
+                  data={{ type: 'personalPhoto' }}
                   beforeUpload={(file) => {
                     const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
                     if (!isJpgOrPng) {
@@ -1686,7 +1728,8 @@ const ResumeDetail = () => {
                     status: 'done',
                     url: url
                   }))}
-                  action="/api/upload/file/certificate"
+                  action="/api/upload/file"
+                  data={{ type: 'certificate' }}
                   beforeUpload={(file) => {
                     const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
                     if (!isJpgOrPng) {
@@ -1749,7 +1792,8 @@ const ResumeDetail = () => {
                       type: isPdf ? 'application/pdf' : 'image/jpeg'
                     };
                   })}
-                  action="/api/upload/file/medical-report"
+                  action="/api/upload/file"
+                  data={{ type: 'medicalReport' }}
                   beforeUpload={(file) => {
                     const isValidType = 
                       file.type === 'image/jpeg' || 

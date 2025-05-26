@@ -733,9 +733,14 @@ const CreateResume = () => {
       // 添加新文件及其类型
       addFilesToFormData(idCardFiles.front, 'idCardFront');
       addFilesToFormData(idCardFiles.back, 'idCardBack');
-      addFilesToFormData(photoFiles, 'other');
-      addFilesToFormData(certificateFiles, 'other');
-      addFilesToFormData(medicalReportFiles, 'other');
+      addFilesToFormData(photoFiles, 'personalPhoto');
+      addFilesToFormData(certificateFiles, 'certificate');
+      addFilesToFormData(medicalReportFiles, 'medicalReport');
+
+      // 添加文件类型数组到FormData
+      if (formData && fileTypes.length > 0) {
+        formData.append('fileTypes', JSON.stringify(fileTypes));
+      }
 
       // 添加已存在的文件 URL
       if (formData) {

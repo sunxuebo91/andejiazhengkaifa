@@ -29,7 +29,18 @@ export class ResumeService {
     // 确保files是数组
     const filesArray = Array.isArray(files) ? files : [];
     const fileIds: Types.ObjectId[] = [];
-    const fileInfoMap = new Map<string, { fileId: string; filename: string; mimetype: string; size: number }>();
+    
+    // 分类存储文件信息
+    const categorizedFiles = {
+      idCardFront: null,
+      idCardBack: null,
+      personalPhoto: null,
+      certificates: [],
+      reports: [],
+      photoUrls: [],
+      certificateUrls: [],
+      medicalReportUrls: []
+    };
     
     // 只有在有文件时才处理文件上传
     if (filesArray.length > 0) {
@@ -40,19 +51,42 @@ export class ResumeService {
         
         if (file) {  // 确保文件存在
           try {
-            const fileId = await this.uploadService.uploadFile(file);
+            const fileId = await this.uploadService.uploadFile(file, { type: fileType });
             if (fileId) {
               const objectId = new Types.ObjectId(fileId);
               fileIds.push(objectId);
               
-              // 只处理身份证正反面照片
-              if (fileType === 'idCardFront' || fileType === 'idCardBack') {
-                fileInfoMap.set(fileType, {
-                  fileId,
-                  filename: file.originalname,
-                  mimetype: file.mimetype,
-                  size: file.size
-                });
+              const fileInfo = {
+                url: `/api/upload/file/${fileId}`,
+                filename: file.originalname,
+                mimetype: file.mimetype,
+                size: file.size
+              };
+              
+              // 根据文件类型分类存储
+              switch (fileType) {
+                case 'idCardFront':
+                  categorizedFiles.idCardFront = fileInfo;
+                  break;
+                case 'idCardBack':
+                  categorizedFiles.idCardBack = fileInfo;
+                  break;
+                case 'personalPhoto':
+                  categorizedFiles.personalPhoto = fileInfo;
+                  categorizedFiles.photoUrls.push(`/api/upload/file/${fileId}`);
+                  break;
+                case 'certificate':
+                  categorizedFiles.certificates.push(fileInfo);
+                  categorizedFiles.certificateUrls.push(`/api/upload/file/${fileId}`);
+                  break;
+                case 'medicalReport':
+                  categorizedFiles.reports.push(fileInfo);
+                  categorizedFiles.medicalReportUrls.push(`/api/upload/file/${fileId}`);
+                  break;
+                default:
+                  // 默认归类为个人照片
+                  categorizedFiles.photoUrls.push(`/api/upload/file/${fileId}`);
+                  break;
               }
             }
           } catch (error) {
@@ -63,27 +97,10 @@ export class ResumeService {
       }
     }
 
-    // 构建文件URL信息
-    const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
-    const fileInfo = {
-      idCardFront: fileInfoMap.get('idCardFront') ? {
-        url: `${baseUrl}/api/upload/file/${fileInfoMap.get('idCardFront').fileId}`,
-        filename: fileInfoMap.get('idCardFront').filename,
-        mimetype: fileInfoMap.get('idCardFront').mimetype,
-        size: fileInfoMap.get('idCardFront').size
-      } : undefined,
-      idCardBack: fileInfoMap.get('idCardBack') ? {
-        url: `${baseUrl}/api/upload/file/${fileInfoMap.get('idCardBack').fileId}`,
-        filename: fileInfoMap.get('idCardBack').filename,
-        mimetype: fileInfoMap.get('idCardBack').mimetype,
-        size: fileInfoMap.get('idCardBack').size
-      } : undefined
-    };
-
-    // 创建简历，确保fileIds始终是数组
+    // 创建简历，确保fileIds始终是数组，并包含分类文件信息
     const resume = new this.resumeModel({
       ...createResumeDto,
-      ...fileInfo,
+      ...categorizedFiles,
       fileIds: fileIds,
       userId: new Types.ObjectId(createResumeDto.userId)
     });
@@ -179,6 +196,61 @@ export class ResumeService {
 
     // 更新简历
     resume.fileIds = fileIds;
+    return resume.save();
+  }
+
+  async addFileWithType(id: string, file: Express.Multer.File, fileType: string) {
+    const resume = await this.resumeModel.findById(new Types.ObjectId(id));
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    // 上传文件
+    const fileId = await this.uploadService.uploadFile(file, { type: fileType });
+    const objectId = new Types.ObjectId(fileId);
+    
+    // 添加到fileIds数组
+    resume.fileIds.push(objectId);
+
+    const fileInfo = {
+      url: `/api/upload/file/${fileId}`,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    };
+
+    // 根据文件类型分类存储
+    switch (fileType) {
+      case 'idCardFront':
+        resume.idCardFront = fileInfo;
+        break;
+      case 'idCardBack':
+        resume.idCardBack = fileInfo;
+        break;
+      case 'personalPhoto':
+        resume.personalPhoto = fileInfo;
+        if (!resume.photoUrls) resume.photoUrls = [];
+        resume.photoUrls.push(`/api/upload/file/${fileId}`);
+        break;
+      case 'certificate':
+        if (!resume.certificates) resume.certificates = [];
+        resume.certificates.push(fileInfo);
+        if (!resume.certificateUrls) resume.certificateUrls = [];
+        resume.certificateUrls.push(`/api/upload/file/${fileId}`);
+        break;
+      case 'medicalReport':
+        if (!resume.reports) resume.reports = [];
+        resume.reports.push(fileInfo);
+        if (!resume.medicalReportUrls) resume.medicalReportUrls = [];
+        resume.medicalReportUrls.push(`/api/upload/file/${fileId}`);
+        break;
+      default:
+        // 默认归类为个人照片
+        if (!resume.photoUrls) resume.photoUrls = [];
+        resume.photoUrls.push(`/api/upload/file/${fileId}`);
+        break;
+    }
+
     return resume.save();
   }
 

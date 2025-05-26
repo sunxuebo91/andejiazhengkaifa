@@ -514,11 +514,86 @@ const ResumeDetail = () => {
   // 处理编辑操作 - 将数据存储到localStorage并跳转到创建页面
   const handleEdit = () => {
     if (resume) {
-      console.log('保存简历数据到localStorage以便编辑:', resume);
-      // 将简历数据存储到localStorage
-      localStorage.setItem('editingResume', JSON.stringify(resume));
-      // 导航到创建简历页面，带上edit=true参数
-      navigate('/aunt/create-resume?edit=true');
+      console.log('进入编辑模式，简历数据:', resume);
+      setEditModalVisible(true);
+      
+      // 设置表单初始值
+      const formValues = {
+        ...resume,
+        // 处理服务地址 - 如果是数组则取第一个，如果是字符串则直接使用
+        serviceArea: Array.isArray(resume.serviceArea) 
+          ? resume.serviceArea[0] 
+          : resume.serviceArea,
+        // 处理身份证照片URL
+        idCardFrontUrl: resume.idCardFront?.url || resume.idCardFrontUrl,
+        idCardBackUrl: resume.idCardBack?.url || resume.idCardBackUrl,
+        // 处理工作经历日期
+        workExperiences: resume.workExperiences?.map((exp: any) => {
+          console.log('处理工作经历日期:', exp);
+          
+          let startDate = null;
+          let endDate = null;
+          
+          // 处理开始日期
+          if (exp.startDate && exp.startDate !== '-') {
+            try {
+              // 尝试多种日期格式
+              if (exp.startDate.includes('年')) {
+                // 格式：2024年1月
+                startDate = dayjs(exp.startDate, 'YYYY年M月');
+              } else if (exp.startDate.includes('-')) {
+                // 格式：2024-01
+                startDate = dayjs(exp.startDate, 'YYYY-MM');
+              } else {
+                // 其他格式
+                startDate = dayjs(exp.startDate);
+              }
+              
+              if (!startDate.isValid()) {
+                startDate = null;
+              }
+            } catch (e) {
+              console.error('解析开始日期失败:', exp.startDate, e);
+              startDate = null;
+            }
+          }
+          
+          // 处理结束日期
+          if (exp.endDate && exp.endDate !== '-') {
+            try {
+              // 尝试多种日期格式
+              if (exp.endDate.includes('年')) {
+                // 格式：2024年1月
+                endDate = dayjs(exp.endDate, 'YYYY年M月');
+              } else if (exp.endDate.includes('-')) {
+                // 格式：2024-01
+                endDate = dayjs(exp.endDate, 'YYYY-MM');
+              } else {
+                // 其他格式
+                endDate = dayjs(exp.endDate);
+              }
+              
+              if (!endDate.isValid()) {
+                endDate = null;
+              }
+            } catch (e) {
+              console.error('解析结束日期失败:', exp.endDate, e);
+              endDate = null;
+            }
+          }
+          
+          console.log('解析后的日期:', { startDate, endDate });
+          
+          return {
+            ...exp,
+            startDate,
+            endDate,
+          };
+        }) || [],
+      };
+      
+      console.log('设置表单值:', formValues);
+      form.setFieldsValue(formValues);
       message.success('已进入编辑模式');
     } else {
       message.error('无法获取简历数据');
@@ -563,7 +638,7 @@ const ResumeDetail = () => {
         ...values,
         birthDate: values.birthDate ? values.birthDate.format('YYYY-MM-DD') : undefined,
         // 处理工作经验的日期格式化
-        workExperiences: values.workExperience?.map((item: any) => {
+        workExperiences: values.workExperiences?.map((item: any) => {
           console.log('处理工作经历项:', item);
           // 确保每个对象都是有效的
           if (!item) return null;
@@ -1362,14 +1437,6 @@ const ResumeDetail = () => {
             <Form
               form={form}
               layout="vertical"
-              initialValues={{
-                ...resume,
-                workExperiences: resume?.workExperiences?.map((exp: any) => ({
-                  ...exp,
-                  startDate: exp.startDate && exp.startDate !== '-' ? dayjs(exp.startDate) : null,
-                  endDate: exp.endDate && exp.endDate !== '-' ? dayjs(exp.endDate) : null,
-                })) || [],
-              }}
             >
               <h3>基本信息</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -1630,18 +1697,70 @@ const ResumeDetail = () => {
                     onChange={(info) => handleIdCardUpload('front', info)}
                     accept=".jpg,.jpeg,.png"
                   >
-                    {form.getFieldValue('idCardFrontUrl') ? (
-                      <img 
-                        src={form.getFieldValue('idCardFrontUrl')} 
-                        alt="身份证正面" 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                      />
-                    ) : (
-                      <div>
-                        <PlusOutlined />
-                        <div style={{ marginTop: 8 }}>上传</div>
-                      </div>
-                    )}
+                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                      {form.getFieldValue('idCardFrontUrl') ? (
+                        <>
+                          <img 
+                            src={form.getFieldValue('idCardFrontUrl')} 
+                            alt="身份证正面" 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px' }} 
+                          />
+                          {/* 预览和重新上传图标 */}
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '8px', 
+                            right: '8px', 
+                            display: 'flex', 
+                            gap: '8px' 
+                          }}>
+                            <Button
+                              type="primary"
+                              shape="circle"
+                              size="small"
+                              icon={<EyeOutlined />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePreview(form.getFieldValue('idCardFrontUrl'));
+                              }}
+                              style={{ backgroundColor: 'rgba(0,0,0,0.6)', border: 'none' }}
+                            />
+                            <Button
+                              type="primary"
+                              shape="circle"
+                              size="small"
+                              icon={<PlusOutlined />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // 触发文件选择
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.accept = '.jpg,.jpeg,.png';
+                                input.onchange = (event) => {
+                                  const file = (event.target as HTMLInputElement).files?.[0];
+                                  if (file) {
+                                    handleIdCardUpload('front', { file: { originFileObj: file } });
+                                  }
+                                };
+                                input.click();
+                              }}
+                              style={{ backgroundColor: 'rgba(0,0,0,0.6)', border: 'none' }}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          height: '100%',
+                          color: '#999'
+                        }}>
+                          <PlusOutlined style={{ fontSize: '32px' }} />
+                          <div style={{ marginTop: 8, fontSize: '14px' }}>上传身份证正面</div>
+                        </div>
+                      )}
+                    </div>
                   </Upload>
                 </Form.Item>
                 <Form.Item name="idCardBackUrl" label="身份证反面">
@@ -1653,25 +1772,77 @@ const ResumeDetail = () => {
                     onChange={(info) => handleIdCardUpload('back', info)}
                     accept=".jpg,.jpeg,.png"
                   >
-                    {form.getFieldValue('idCardBackUrl') ? (
-                      <img 
-                        src={form.getFieldValue('idCardBackUrl')} 
-                        alt="身份证反面" 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                      />
-                    ) : (
-                      <div>
-                        <PlusOutlined />
-                        <div style={{ marginTop: 8 }}>上传</div>
-                      </div>
-                    )}
+                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                      {form.getFieldValue('idCardBackUrl') ? (
+                        <>
+                          <img 
+                            src={form.getFieldValue('idCardBackUrl')} 
+                            alt="身份证反面" 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px' }} 
+                          />
+                          {/* 预览和重新上传图标 */}
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '8px', 
+                            right: '8px', 
+                            display: 'flex', 
+                            gap: '8px' 
+                          }}>
+                            <Button
+                              type="primary"
+                              shape="circle"
+                              size="small"
+                              icon={<EyeOutlined />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePreview(form.getFieldValue('idCardBackUrl'));
+                              }}
+                              style={{ backgroundColor: 'rgba(0,0,0,0.6)', border: 'none' }}
+                            />
+                            <Button
+                              type="primary"
+                              shape="circle"
+                              size="small"
+                              icon={<PlusOutlined />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // 触发文件选择
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.accept = '.jpg,.jpeg,.png';
+                                input.onchange = (event) => {
+                                  const file = (event.target as HTMLInputElement).files?.[0];
+                                  if (file) {
+                                    handleIdCardUpload('back', { file: { originFileObj: file } });
+                                  }
+                                };
+                                input.click();
+                              }}
+                              style={{ backgroundColor: 'rgba(0,0,0,0.6)', border: 'none' }}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          height: '100%',
+                          color: '#999'
+                        }}>
+                          <PlusOutlined style={{ fontSize: '32px' }} />
+                          <div style={{ marginTop: 8, fontSize: '14px' }}>上传身份证反面</div>
+                        </div>
+                      )}
+                    </div>
                   </Upload>
                 </Form.Item>
               </div>
 
               {/* 个人照片 */}
               <h3 style={{ marginTop: 24 }}>个人照片</h3>
-              <Form.Item name="photoUrls" label="个人照片">
+              <Form.Item name="photoUrls">
                 <Upload
                   name="file"
                   listType="picture-card"
@@ -1730,8 +1901,8 @@ const ResumeDetail = () => {
               </Form.Item>
 
               {/* 证书照片 */}
-              <h3 style={{ marginTop: 24 }}>证书照片</h3>
-              <Form.Item name="certificateUrls" label="证书照片">
+              <h3 style={{ marginTop: 24 }}>技能证书</h3>
+              <Form.Item name="certificateUrls">
                 <Upload
                   name="file"
                   listType="picture-card"
@@ -1791,7 +1962,7 @@ const ResumeDetail = () => {
 
               {/* 体检报告 */}
               <h3 style={{ marginTop: 24 }}>体检报告</h3>
-              <Form.Item name="medicalReportUrls" label="体检报告">
+              <Form.Item name="medicalReportUrls">
                 <Upload
                   name="file"
                   listType="picture-card"
@@ -1845,7 +2016,12 @@ const ResumeDetail = () => {
                   onPreview={(file) => {
                     const previewUrl = file.url || (file.response && file.response.url);
                     if (previewUrl) {
-                      handlePreview(previewUrl);
+                      // 如果是PDF文件，直接在新窗口打开
+                      if (file.type === 'application/pdf' || previewUrl.toLowerCase().endsWith('.pdf')) {
+                        window.open(previewUrl, '_blank');
+                      } else {
+                        handlePreview(previewUrl);
+                      }
                     }
                   }}
                   itemRender={(originNode, file) => {

@@ -24,16 +24,26 @@ api.interceptors.request.use(
   }
 );
 
+// 添加错误响应类型定义
+interface ErrorResponseData {
+  message?: string;
+  error?: {
+    code: string;
+    details?: any;
+  };
+  [key: string]: any;
+}
+
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
     // 直接返回数据部分
     return response.data;
   },
-  (error: AxiosError) => {
+  (error: AxiosError<ErrorResponseData>) => {
     if (error.response) {
       // 服务器返回错误
-      const { status, data } = error.response;
+      const { status, data, config } = error.response;
       
       // 处理401未授权错误 - 清除token并重定向到登录页
       if (status === 401) {
@@ -41,8 +51,34 @@ api.interceptors.response.use(
         console.error('认证失败，请重新登录');
       }
       
-      console.error(`请求错误: ${status} - ${data?.message || '未知错误'}`);
-      return Promise.reject(data || error);
+      // 增强错误日志
+      console.groupCollapsed(`请求错误: ${status} - ${config?.url}`);
+      console.error('请求配置:', config);
+      console.error('响应数据:', data);
+      if (status === 400 && data) {
+        console.error('验证错误详情:', data.error?.details || data.message);
+      }
+      console.groupEnd();
+      
+      // 保留原始错误对象，但添加响应数据
+      if (data) {
+        error.response.data = {
+          ...data,
+          originalError: {
+            status,
+            statusText: error.response.statusText,
+            headers: error.response.headers,
+            config: {
+              url: config?.url,
+              method: config?.method,
+              headers: config?.headers,
+              data: config?.data
+            }
+          }
+        };
+      }
+      
+      return Promise.reject(error);
     }
     
     if (error.request) {

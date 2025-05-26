@@ -5,12 +5,6 @@ export type WorkExperienceDocument = WorkExperienceSchema & Document;
 
 @Schema({ _id: false })
 export class WorkExperienceSchema {
-  @Prop({ type: String, required: true })
-  company: string;
-
-  @Prop({ type: String, required: true })
-  position: string;
-
   @Prop({ type: Date, required: true })
   startDate: Date;
 

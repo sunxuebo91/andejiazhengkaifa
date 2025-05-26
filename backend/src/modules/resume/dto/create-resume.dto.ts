@@ -1,6 +1,7 @@
 import { IsNotEmpty, IsString, IsNumber, IsArray, IsOptional, IsDateString, IsEnum, Matches, Min, Max } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+import dayjs from 'dayjs';
 
 // 定义枚举类型
 export enum Education {
@@ -162,7 +163,21 @@ export class CreateResumeDto {
 
   @ApiProperty({ description: '宗教信仰', enum: Religion })
   @IsOptional()
-  @IsEnum(Religion)
+  @IsEnum(Religion, { message: '请选择有效的宗教信仰' })
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    // 处理前端可能传入的中文值
+    const religionMap = {
+      '无': Religion.NONE,
+      '佛教': Religion.BUDDHISM,
+      '基督教': Religion.CHRISTIANITY,
+      '伊斯兰教': Religion.ISLAM,
+      '天主教': Religion.CATHOLICISM,
+      '道教': Religion.TAOISM,
+      '其他': Religion.OTHER
+    };
+    return religionMap[value] || value;
+  })
   religion?: Religion;
 
   @ApiProperty({ description: '现居地址', example: '北京市朝阳区建国路88号' })
@@ -193,6 +208,11 @@ export class CreateResumeDto {
   @ApiProperty({ description: '性别', enum: Gender })
   @IsNotEmpty({ message: '性别不能为空' })
   @IsEnum(Gender, { message: '性别必须是 male 或 female' })
+  @Transform(({ value }) => {
+    if (value === 'male') return Gender.MALE;
+    if (value === 'female') return Gender.FEMALE;
+    return value;
+  })
   gender: Gender;
 
   @ApiProperty({ description: '生肖', enum: Zodiac })
@@ -208,18 +228,45 @@ export class CreateResumeDto {
   @ApiProperty({ description: '工作类型', enum: JobType })
   @IsNotEmpty({ message: '工种不能为空' })
   @IsEnum(JobType, { message: '请选择正确的工种' })
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    const jobType = value.toLowerCase();
+    // 确保值在枚举范围内
+    if (Object.values(JobType).includes(jobType as JobType)) {
+      return jobType;
+    }
+    return undefined;
+  })
   jobType: JobType;
 
   @ApiProperty({ description: '期望薪资', example: 8000 })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : Math.max(0, Math.floor(num));
+  })
   @IsNumber({}, { message: '期望薪资必须是数字' })
   @Min(0, { message: '期望薪资必须大于等于0' })
   expectedSalary?: number;
 
-  @ApiProperty({ description: '服务区域', example: '郑州市金水区' })
+  @ApiProperty({ description: '服务区域', example: ['郑州市金水区'] })
   @IsOptional()
-  @IsString()
-  serviceArea?: string;
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [value];
+      } catch {
+        return [value];
+      }
+    }
+    return Array.isArray(value) ? value : [value];
+  })
+  @IsArray()
+  @IsString({ each: true })
+  serviceArea?: string[];
 
   @ApiProperty({ description: '接单状态', enum: OrderStatus })
   @IsOptional()
@@ -229,7 +276,19 @@ export class CreateResumeDto {
   @ApiProperty({ description: '技能列表', enum: Skill, isArray: true })
   @IsOptional()
   @IsArray()
-  @IsEnum(Skill, { each: true })
+  @IsEnum(Skill, { each: true, message: '请选择有效的技能标签' })
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.map(s => s.toLowerCase()) : [];
+      } catch {
+        return [];
+      }
+    }
+    return Array.isArray(value) ? value.map(s => s.toLowerCase()) : [];
+  })
   skills?: Skill[];
 
   @ApiProperty({ description: '工作经验年限', example: 5 })
@@ -267,12 +326,21 @@ export class CreateResumeDto {
     if (!value) return [];
     if (typeof value === 'string') {
       try {
-        return JSON.parse(value);
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.map(exp => ({
+          ...exp,
+          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
+          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
+        })) : [];
       } catch {
         return [];
       }
     }
-    return Array.isArray(value) ? value : [];
+    return Array.isArray(value) ? value.map(exp => ({
+      ...exp,
+      startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
+      endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
+    })) : [];
   })
   workExperiences?: Array<{
     startDate: string;

@@ -1,10 +1,10 @@
 // 性别枚举
 export enum Gender {
-  MALE = 'MALE',
-  FEMALE = 'FEMALE'
+  MALE = 'male',
+  FEMALE = 'female'
 }
 
-export type GenderType = keyof typeof Gender;
+export type GenderType = 'male' | 'female';
 
 // 工种枚举
 export enum JobType {

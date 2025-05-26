@@ -264,9 +264,20 @@ const ResumeDetail = () => {
         // 查看完整的工作经历对象
         console.log("工作经历完整对象:", JSON.stringify(exp));
         
-        // 更健壮的检查，确保startDate和endDate即使是空字符串也显示为'-'
-        const startDate = exp.startDate && String(exp.startDate).trim() !== '' ? String(exp.startDate) : '-';
-        const endDate = exp.endDate && String(exp.endDate).trim() !== '' ? String(exp.endDate) : '-';
+        // 格式化日期为中文格式
+        const formatDateToChinese = (dateStr: string | undefined) => {
+          if (!dateStr || dateStr === '-') return '-';
+          try {
+            const date = dayjs(dateStr);
+            return date.isValid() ? `${date.year()}年${date.month() + 1}月` : '-';
+          } catch (e) {
+            console.error('日期格式化失败:', e);
+            return '-';
+          }
+        };
+        
+        const startDate = formatDateToChinese(exp.startDate);
+        const endDate = formatDateToChinese(exp.endDate);
         const description = exp.description || '-';
         
         console.log("格式化后的日期:", {startDate, endDate});

@@ -108,11 +108,11 @@ export class Resume extends Document {
   @IsArray()
   workHistory: WorkExperience[];
 
-  @ApiProperty({ description: '技能特长' })
-  @Prop({ type: [String], default: [] })
+  @ApiProperty({ description: '技能特长', enum: Skill, isArray: true })
+  @Prop({ type: [String], enum: Skill, default: [] })
   @IsArray()
-  @IsString({ each: true })
-  skills: string[];
+  @IsEnum(Skill, { each: true })
+  skills: Skill[];
 
   @ApiProperty({ description: '自我介绍' })
   @Prop({ nullable: true })
@@ -167,8 +167,8 @@ export class Resume extends Document {
   @Prop({ type: String, enum: Zodiac, nullable: true })
   zodiac?: Zodiac;
 
-  @Prop({ nullable: true })
-  serviceArea?: string;
+  @Prop({ type: [String], default: [] })
+  serviceArea?: string[];
 
   @Prop({ type: String, enum: OrderStatus, nullable: true })
   orderStatus?: OrderStatus;

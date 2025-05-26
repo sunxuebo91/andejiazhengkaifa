@@ -82,7 +82,7 @@ interface FormValues {
   zodiac?: string;
   zodiacSign?: string;
   expectedSalary?: number;
-  serviceArea?: string;
+  serviceArea?: string[];
   orderStatus?: string;
   skills?: string[];
   leadSource?: string;
@@ -154,15 +154,42 @@ const toDayjs = (date: any): Dayjs | undefined => {
 
 // 添加工种映射常量
 const JOB_TYPE_MAP = {
-  [JobType.YUEXIN]: '月薪',
-  [JobType.ZHUJIA_YUER]: '住家育儿',
-  [JobType.BAIBAN_YUER]: '白班育儿',
-  [JobType.BAOJIE]: '保洁',
-  [JobType.BAIBAN_BAOMU]: '白班保姆',
-  [JobType.ZHUJIA_BAOMU]: '住家保姆',
-  [JobType.YANGCHONG]: '养宠',
-  [JobType.XIAOSHI]: '小时工'
+  'ZHUJIA_YUER': '住家育儿',
+  'BAIBAN_YUER': '白班育儿',
+  'BAOJIE': '保洁',
+  'BAIBAN_BAOMU': '白班保姆',
+  'ZHUJIA_BAOMU': '住家保姆',
+  'YANGCHONG': '养宠',
+  'XIAOSHI': '小时工',
+  'YUEXIN': '月薪'
 } as const;
+
+// 添加工种值转换函数
+const convertJobType = (value: string): string => {
+  const jobTypeMap: Record<string, string> = {
+    'ZHUJIA_YUER': 'zhujia-yuer',
+    'BAIBAN_YUER': 'baiban-yuer',
+    'BAOJIE': 'baojie',
+    'BAIBAN_BAOMU': 'baiban-baomu',
+    'ZHUJIA_BAOMU': 'zhujia-baomu',
+    'YANGCHONG': 'yangchong',
+    'XIAOSHI': 'xiaoshi',
+    'YUEXIN': 'yuexin'
+  };
+  return jobTypeMap[value] || value;
+};
+
+// 添加有效工种值列表
+const VALID_JOB_TYPES = [
+  'zhujia-yuer',
+  'baiban-yuer',
+  'baojie',
+  'baiban-baomu',
+  'zhujia-baomu',
+  'yangchong',
+  'xiaoshi',
+  'yuexin'
+] as const;
 
 const CreateResume = () => {
   const { message: messageApi } = App.useApp();
@@ -198,7 +225,9 @@ const CreateResume = () => {
 
   // 性别选择处理函数，确保 form 可用
   const handleGenderChange = (value: GenderType) => {
-    form.setFieldsValue({ gender: value });
+    if (value === Gender.MALE || value === Gender.FEMALE) {
+      form.setFieldsValue({ gender: value });
+    }
   };
 
   // 检查URL是否包含edit参数，如果不包含，应当是创建新简历
@@ -516,81 +545,173 @@ const CreateResume = () => {
     );
   };
 
-  // 修改 handleSubmit
+  // 添加日期格式化函数
+  const formatDateToChinese = (date: string | Date | undefined): string => {
+    if (!date) return '';
+    const d = dayjs(date);
+    return `${d.year()}年${d.month() + 1}月`;
+  };
+
+  // 修改 DatePicker 组件的配置
+  const datePickerProps = {
+    format: 'YYYY年MM月DD日',
+    allowClear: true,
+    style: { width: '100%' },
+    getPopupContainer: (trigger: HTMLElement) => trigger.parentElement || document.body
+  } as const;
+
+  // 修改工作经历 DatePicker 的配置
+  const workExperienceDatePickerProps = {
+    format: 'YYYY年MM月',
+    picker: 'month' as DatePickerProps['picker'],
+    allowClear: true,
+    style: { width: '100%' },
+    getPopupContainer: (trigger: HTMLElement) => trigger.parentElement || document.body
+  } as const;
+
+  // 修改工作经历 DatePicker 的 onChange 处理
+  const handleWorkExperienceDateChange = (name: number, field: 'startDate' | 'endDate') => (date: Dayjs | null) => {
+    debugLog(`${field}被选择:`, date);
+    const workExperiences = form.getFieldValue('workExperiences') || [];
+    const updatedExperiences = [...workExperiences];
+    updatedExperiences[name] = {
+      ...updatedExperiences[name],
+      [field]: date ? toDayjs(date) : undefined
+    };
+    form.setFieldsValue({ workExperiences: updatedExperiences });
+  };
+
+  // 修改 handleSubmit 函数
   const handleSubmit = async (values: FormValues) => {
+    let formData: FormData | null = null;
+    let processedValues: Partial<FormValues> = {};
+    
     try {
       setSubmitting(true);
 
-      // 检查必填字段
-      const requiredFields = [
-        { key: 'name', label: '姓名' },
-        { key: 'age', label: '年龄' },
-        { key: 'phone', label: '手机号码' },
-        { key: 'gender', label: '性别' },
-        { key: 'nativePlace', label: '籍贯' },
-        { key: 'jobType', label: '工种' },
-        { key: 'education', label: '学历' },
-        { key: 'experienceYears', label: '工作经验年限' }
-      ];
-
-      // 检查是否有未填写的必填字段
-      const missingFields = requiredFields.filter(field => {
-        const value = values[field.key];
-        return value === undefined || value === null || value === '';
+      // 记录原始值
+      console.log('工种原始值:', {
+        jobType: values.jobType,
+        type: typeof values.jobType,
+        rawValue: values.jobType
       });
 
-      if (missingFields.length > 0) {
-        const missingLabels = missingFields.map(field => field.label).join(', ');
-        messageApi.error(`请填写以下必填字段: ${missingLabels}`);
-        setSubmitting(false);
-        return;
+      // 验证必填字段
+      if (!values.jobType) {
+        throw new Error('工种不能为空');
       }
 
       // 处理表单数据，确保枚举值正确
-      const processedValues = {
+      processedValues = {
         ...values,
-        // 确保枚举值正确
-        gender: values.gender as GenderType,
-        jobType: values.jobType,
-        education: values.education as keyof typeof Education,
+        // 确保性别值正确
+        gender: values.gender === 'male' || values.gender === 'female' ? values.gender : 'female',
+        // 确保工种使用正确的枚举值
+        jobType: (() => {
+          const convertedValue = convertJobType(String(values.jobType));
+          console.log('工种处理过程:', {
+            originalValue: values.jobType,
+            convertedValue,
+            validTypes: VALID_JOB_TYPES
+          });
+
+          // 检查转换后的值是否在有效值列表中
+          if (!VALID_JOB_TYPES.includes(convertedValue as typeof VALID_JOB_TYPES[number])) {
+            throw new Error(`请选择正确的工种，当前值: ${convertedValue}`);
+          }
+          return convertedValue;
+        })(),
+        // 确保学历使用正确的枚举值
+        education: (() => {
+          const education = values.education?.toLowerCase();
+          const validEducation = [
+            'no', 'primary', 'middle', 'secondary', 'vocational',
+            'high', 'college', 'bachelor', 'graduate'
+          ];
+          if (!education || !validEducation.includes(education)) {
+            throw new Error('请选择正确的学历');
+          }
+          return education;
+        })(),
         // 处理日期
         birthDate: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : undefined,
         medicalExamDate: values.medicalExamDate ? dayjs(values.medicalExamDate).format('YYYY-MM-DD') : undefined,
-        // 处理工作经历
+        // 处理工作经历，确保日期字段格式正确
         workExperiences: values.workExperiences?.map(exp => ({
           ...exp,
-          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
-          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
-        })),
+          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : dayjs().format('YYYY-MM'),
+          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : dayjs().format('YYYY-MM'),
+          description: exp.description || ''
+        })) || [],
         // 确保数字类型正确
-        age: Number(values.age),
-        experienceYears: Number(values.experienceYears),
-        expectedSalary: values.expectedSalary ? Math.floor(Number(values.expectedSalary)) : undefined
+        age: (() => {
+          const age = Number(values.age);
+          if (isNaN(age) || age < 18 || age > 80) {
+            throw new Error('年龄必须在18-80岁之间');
+          }
+          return age;
+        })(),
+        experienceYears: (() => {
+          const years = Number(values.experienceYears);
+          if (isNaN(years) || years < 0 || years > 50) {
+            throw new Error('工作经验年限必须在0-50年之间');
+          }
+          return years;
+        })(),
+        // 确保期望薪资是有效的数字
+        expectedSalary: values.expectedSalary ? Math.max(0, Math.floor(Number(values.expectedSalary))) : undefined,
+        // 确保 serviceArea 始终是数组且不为空
+        serviceArea: (() => {
+          if (!values.serviceArea || (Array.isArray(values.serviceArea) && values.serviceArea.length === 0)) {
+            throw new Error('服务区域不能为空');
+          }
+          return Array.isArray(values.serviceArea) ? values.serviceArea : [values.serviceArea];
+        })(),
+        // 确保 skills 是数组且值正确
+        skills: (() => {
+          if (!values.skills || (Array.isArray(values.skills) && values.skills.length === 0)) {
+            return []; // 技能是可选的，允许为空数组
+          }
+          const skillsArray = Array.isArray(values.skills) ? values.skills : [values.skills];
+          const validSkills = [
+            'chanhou', 'teshu-yinger', 'yiliaobackground', 'yuying', 'zaojiao',
+            'fushi', 'ertui', 'waiyu', 'zhongcan', 'xican', 'mianshi', 'jiashi', 'shouyi'
+          ];
+          const filteredSkills = skillsArray
+            .map(skill => skill.toLowerCase())
+            .filter(skill => validSkills.includes(skill));
+          if (filteredSkills.length === 0) {
+            throw new Error('请选择有效的技能标签');
+          }
+          return filteredSkills;
+        })()
       };
 
-      // 创建 FormData 并添加基本字段
-      const formData = new FormData();
-      Object.entries(processedValues).forEach(([key, value]) => {
-        // 对于必填字段，确保它们被添加到 formData 中
-        if (requiredFields.some(field => field.key === key)) {
-          if (value === undefined || value === null || value === '') {
-            messageApi.error(`${requiredFields.find(field => field.key === key)?.label}不能为空`);
-            setSubmitting(false);
-            return;
-          }
-        }
+      // 创建 FormData
+      formData = new FormData();
+      if (!formData) {
+        throw new Error('无法创建 FormData 对象');
+      }
 
-        // 处理值的添加
+      // 添加基本字段
+      Object.entries(processedValues).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
-          if (key === 'expectedSalary' || key === 'age' || key === 'experienceYears') {
-            formData.append(key, Math.floor(Number(value)).toString());
+          if (key === 'workExperiences') {
+            // 特殊处理工作经历，确保日期格式正确
+            const formattedExperiences = (value as any[]).map(exp => ({
+              ...exp,
+              startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : dayjs().format('YYYY-MM'),
+              endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : dayjs().format('YYYY-MM')
+            }));
+            formData!.append(key, JSON.stringify(formattedExperiences));
+          } else if (key === 'expectedSalary' || key === 'age' || key === 'experienceYears') {
+            formData!.append(key, Math.floor(Number(value)).toString());
           } else if (Array.isArray(value)) {
-            formData.append(key, JSON.stringify(value));
+            formData!.append(key, JSON.stringify(value));
           } else if (typeof value === 'object') {
-            formData.append(key, JSON.stringify(value));
+            formData!.append(key, JSON.stringify(value));
           } else {
-            // 对于枚举值，直接使用字符串值
-            formData.append(key, String(value));
+            formData!.append(key, String(value));
           }
         }
       });
@@ -600,9 +721,10 @@ const CreateResume = () => {
 
       // 定义添加文件的函数
       const addFilesToFormData = (files: CustomUploadFile[], type: string) => {
+        if (!formData) return;
         files.forEach(file => {
           if (file.originFileObj) {
-            formData.append('files', file.originFileObj as Blob);
+            formData!.append('files', file.originFileObj as Blob);
             fileTypes.push(type);
           }
         });
@@ -615,24 +737,23 @@ const CreateResume = () => {
       addFilesToFormData(certificateFiles, 'other');
       addFilesToFormData(medicalReportFiles, 'other');
 
-      // 添加文件类型数组
-      formData.append('fileTypes', JSON.stringify(fileTypes));
-
       // 添加已存在的文件 URL
-      if (hasExistingIdCardFront && existingIdCardFrontUrl) {
-        formData.append('idCardFrontUrl', existingIdCardFrontUrl);
-      }
-      if (hasExistingIdCardBack && existingIdCardBackUrl) {
-        formData.append('idCardBackUrl', existingIdCardBackUrl);
-      }
-      if (existingPhotoUrls.length > 0) {
-        formData.append('photoUrls', JSON.stringify(existingPhotoUrls));
-      }
-      if (existingCertificateUrls.length > 0) {
-        formData.append('certificateUrls', JSON.stringify(existingCertificateUrls));
-      }
-      if (existingMedicalReportUrls.length > 0) {
-        formData.append('medicalReportUrls', JSON.stringify(existingMedicalReportUrls));
+      if (formData) {
+        if (hasExistingIdCardFront && existingIdCardFrontUrl) {
+          formData.append('idCardFrontUrl', existingIdCardFrontUrl);
+        }
+        if (hasExistingIdCardBack && existingIdCardBackUrl) {
+          formData.append('idCardBackUrl', existingIdCardBackUrl);
+        }
+        if (existingPhotoUrls.length > 0) {
+          formData.append('photoUrls', JSON.stringify(existingPhotoUrls));
+        }
+        if (existingCertificateUrls.length > 0) {
+          formData.append('certificateUrls', JSON.stringify(existingCertificateUrls));
+        }
+        if (existingMedicalReportUrls.length > 0) {
+          formData.append('medicalReportUrls', JSON.stringify(existingMedicalReportUrls));
+        }
       }
 
       // 记录完整的提交数据
@@ -643,13 +764,10 @@ const CreateResume = () => {
           手机号: processedValues.phone,
           性别: processedValues.gender,
           籍贯: processedValues.nativePlace,
-          工种: {
-            value: processedValues.jobType,
-            type: typeof processedValues.jobType,
-            formDataValue: formData.get('jobType')
-          },
+          工种: processedValues.jobType,
           学历: processedValues.education,
-          工作经验年限: processedValues.experienceYears
+          工作经验年限: processedValues.experienceYears,
+          期望薪资: processedValues.expectedSalary
         },
         可选信息: {
           身份证号: processedValues.idNumber || '',
@@ -660,8 +778,7 @@ const CreateResume = () => {
           民族: processedValues.ethnicity || '',
           生肖: processedValues.zodiac || '',
           星座: processedValues.zodiacSign || '',
-          期望薪资: processedValues.expectedSalary || '',
-          服务区域: processedValues.serviceArea || '',
+          服务区域: processedValues.serviceArea || [],
           接单状态: processedValues.orderStatus || '',
           技能标签: processedValues.skills || [],
           来源渠道: processedValues.leadSource || ''
@@ -686,6 +803,14 @@ const CreateResume = () => {
         }
       });
 
+      // 记录发送到后端的数据
+      const formDataObj = Object.fromEntries(formData.entries());
+      console.log('发送到后端的数据:', {
+        formData: formDataObj,
+        rawValues: processedValues,
+        fileTypes
+      });
+
       // 发送请求
       const response = await apiService.upload('/resumes', formData);
 
@@ -698,25 +823,65 @@ const CreateResume = () => {
 
       if (response.success) {
         messageApi.success('创建简历成功');
-        // 跳转到简历列表页面
-        console.log('准备导航到简历列表页面');
         navigate('/aunt/list');
-        console.log('导航指令已发送');
       } else {
         messageApi.error(response.message || '创建简历失败');
       }
     } catch (error: unknown) {
-      // 记录错误信息
-      console.error('提交表单 - 错误:', {
+      // 详细的错误日志记录
+      const isAxiosError = (error: unknown): error is any => {
+        return typeof error === 'object' && error !== null && 'isAxiosError' in error;
+      };
+
+      console.error('提交表单 - 详细错误信息:', {
         error,
-        message: error instanceof Error ? error.message : '未知错误',
-        response: error instanceof Error && 'response' in error ? (error as any).response?.data : undefined
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : '未知错误',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        axiosError: isAxiosError(error) ? {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          headers: error.response?.headers,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            headers: error.config?.headers,
+            data: error.config?.data
+          }
+        } : undefined,
+        formData: formData ? Object.fromEntries(formData.entries()) : undefined,
+        processedValues,
+        formValues: values
       });
-      messageApi.error(
-        error instanceof Error && 'response' in error 
-          ? (error as any).response?.data?.message || '创建简历失败'
-          : '创建简历失败'
-      );
+
+      // 提取并显示具体的错误信息
+      let errorMessage = '创建简历失败';
+      if (isAxiosError(error)) {
+        const axiosError = error;
+        if (axiosError.response?.data?.message) {
+          errorMessage = axiosError.response.data.message;
+        } else if (axiosError.response?.data?.error) {
+          errorMessage = axiosError.response.data.error;
+        } else if (axiosError.message) {
+          errorMessage = axiosError.message;
+        }
+        
+        // 如果是验证错误，显示具体的字段错误
+        if (axiosError.response?.data?.errors) {
+          const validationErrors = axiosError.response.data.errors;
+          const errorDetails = Object.entries(validationErrors)
+            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+            .join('\n');
+          console.error('表单验证错误详情:', errorDetails);
+          errorMessage = `表单验证失败:\n${errorDetails}`;
+        }
+
+        // 记录原始响应数据
+        console.error('后端返回的原始错误数据:', axiosError.response?.data);
+      }
+      
+      messageApi.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -870,35 +1035,6 @@ const CreateResume = () => {
         break;
     }
     return true;
-  };
-
-  // 修改 DatePicker 组件的配置
-  const datePickerProps = {
-    format: 'YYYY-MM-DD',
-    allowClear: true,
-    style: { width: '100%' },
-    getPopupContainer: (trigger: HTMLElement) => trigger.parentElement || document.body
-  } as const;
-
-  // 修改工作经历 DatePicker 的配置
-  const workExperienceDatePickerProps = {
-    format: 'YYYY-MM',
-    picker: 'month' as DatePickerProps['picker'],
-    allowClear: true,
-    style: { width: '100%' },
-    getPopupContainer: (trigger: HTMLElement) => trigger.parentElement || document.body
-  } as const;
-
-  // 修改工作经历 DatePicker 的 onChange 处理
-  const handleWorkExperienceDateChange = (name: number, field: 'startDate' | 'endDate') => (date: Dayjs | null) => {
-    debugLog(`${field}被选择:`, date);
-    const workExperiences = form.getFieldValue('workExperiences') || [];
-    const updatedExperiences = [...workExperiences];
-    updatedExperiences[name] = {
-      ...updatedExperiences[name],
-      [field]: date ? toDayjs(date) : undefined
-    };
-    form.setFieldsValue({ workExperiences: updatedExperiences });
   };
 
   return (

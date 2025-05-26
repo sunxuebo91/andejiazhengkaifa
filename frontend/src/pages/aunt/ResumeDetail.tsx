@@ -329,7 +329,7 @@ interface ResumeData {
   // 新的文件信息结构
   idCardFront?: FileInfo;
   idCardBack?: FileInfo;
-  personalPhoto?: FileInfo;
+  personalPhoto?: FileInfo[];  // 修改为数组，支持多张个人照片
   certificates?: FileInfo[];
   reports?: FileInfo[];
   // 保持向后兼容的旧字段
@@ -418,6 +418,15 @@ const ResumeDetail = () => {
 
       const resumeData = response.data.data;
       console.log('获取到的简历数据:', JSON.stringify(resumeData, null, 2));
+      
+      // 专门打印文件相关信息
+      console.log('文件分类信息:', {
+        personalPhoto: resumeData.personalPhoto,
+        certificates: resumeData.certificates,
+        reports: resumeData.reports,
+        idCardFront: resumeData.idCardFront,
+        idCardBack: resumeData.idCardBack
+      });
 
       // 打印原始图片URL信息
       console.log('原始图片URL信息:', {
@@ -1245,9 +1254,13 @@ const ResumeDetail = () => {
           </Card>
 
           <Card title="个人照片" style={{ marginBottom: 24 }}>
-            {resume?.personalPhoto ? (
+            {resume?.personalPhoto?.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {renderFilePreview(resume.personalPhoto, 0)}
+                {resume.personalPhoto.map((photo: FileInfo, index: number) => (
+                  <div key={`personal-photo-${photo.fileId || index}`}>
+                    {renderFilePreview(photo, index)}
+                  </div>
+                ))}
               </div>
             ) : resume?.photoUrls?.filter(Boolean).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>

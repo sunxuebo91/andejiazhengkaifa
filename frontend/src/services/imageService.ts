@@ -3,17 +3,49 @@ import axios from 'axios';
 import api from './api';
 import { AxiosError } from 'axios';
 
-// 压缩选项
-const defaultCompressionOptions = {
-  maxSizeMB: 0.05,      // 50KB = 0.05MB
-  maxWidthOrHeight: 1024,
+// 优化压缩选项 - 提供不同场景的压缩配置
+const compressionOptions = {
+  // 身份证等重要文档 - 保持较高质量
+  idCard: {
+    maxSizeMB: 0.2,      // 200KB
+    maxWidthOrHeight: 1200,
+    useWebWorker: true,
+    quality: 0.8,
+  },
+  // 个人照片 - 平衡质量和大小
+  photo: {
+    maxSizeMB: 0.1,      // 100KB
+    maxWidthOrHeight: 800,
+    useWebWorker: true,
+    quality: 0.7,
+  },
+  // 证书照片 - 保持清晰度
+  certificate: {
+    maxSizeMB: 0.15,     // 150KB
+    maxWidthOrHeight: 1000,
+    useWebWorker: true,
+    quality: 0.75,
+  },
+  // 体检报告 - 保持可读性
+  medicalReport: {
+    maxSizeMB: 0.3,      // 300KB
+    maxWidthOrHeight: 1400,
+    useWebWorker: true,
+    quality: 0.8,
+  },
+  // 默认压缩选项
+  default: {
+    maxSizeMB: 0.1,      // 100KB
+    maxWidthOrHeight: 800,
   useWebWorker: true,
+    quality: 0.7,
+  }
 };
 
 export class ImageService {
-  static async compressImage(file: File, options = defaultCompressionOptions) {
+  static async compressImage(file: File, type: keyof typeof compressionOptions = 'default') {
     try {
-      console.log(`开始压缩图片: ${file.name} (${(file.size / 1024).toFixed(2)}KB)`);
+      console.log(`开始压缩图片: ${file.name} (${(file.size / 1024).toFixed(2)}KB) - 类型: ${type}`);
       
       // 检查文件类型
       if (!file.type.includes('image')) {
@@ -21,8 +53,15 @@ export class ImageService {
         return file;
       }
       
+      // 如果文件已经很小，跳过压缩
+      const targetSize = compressionOptions[type].maxSizeMB * 1024 * 1024;
+      if (file.size <= targetSize) {
+        console.log('文件已经足够小，跳过压缩');
+        return file;
+      }
+      
       // 压缩图片
-      const compressedFile = await imageCompression(file, options);
+      const compressedFile = await imageCompression(file, compressionOptions[type]);
       
       console.log(`图片压缩完成: ${(compressedFile.size / 1024).toFixed(2)}KB (压缩率: ${
         ((1 - compressedFile.size / file.size) * 100).toFixed(1)
@@ -31,7 +70,48 @@ export class ImageService {
       return compressedFile;
     } catch (error) {
       console.error('图片压缩失败:', error);
-      throw error;
+      // 如果压缩失败，返回原文件
+      console.warn('压缩失败，使用原文件');
+      return file;
+    }
+  }
+
+  // 生成缩略图
+  static async generateThumbnail(file: File): Promise<File> {
+    try {
+      const thumbnailOptions = {
+        maxSizeMB: 0.02,     // 20KB 缩略图
+        maxWidthOrHeight: 200,
+        useWebWorker: true,
+        quality: 0.6,
+      };
+      
+      const thumbnail = await imageCompression(file, thumbnailOptions);
+      console.log(`缩略图生成完成: ${(thumbnail.size / 1024).toFixed(2)}KB`);
+      return thumbnail;
+    } catch (error) {
+      console.error('缩略图生成失败:', error);
+      return file;
+    }
+  }
+
+  // 预加载图片
+  static preloadImage(src: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  // 批量预加载图片
+  static async preloadImages(urls: string[]): Promise<void> {
+    try {
+      await Promise.all(urls.map(url => this.preloadImage(url)));
+      console.log(`成功预加载 ${urls.length} 张图片`);
+    } catch (error) {
+      console.warn('部分图片预加载失败:', error);
     }
   }
 

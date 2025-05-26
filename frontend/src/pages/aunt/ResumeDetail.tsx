@@ -17,6 +17,7 @@ dayjs.extend(customParseFormat);
 import apiService from '../../services/api';
 import type { UploadFile } from 'antd/es/upload/interface';
 import imageCompression from 'browser-image-compression';
+import { extractFileUrl, extractFileId, isPdfFile } from '../../utils/uploadHelper';
 const { Option } = Select;
 
 // 中国省份/地区常量数据
@@ -637,6 +638,7 @@ const ResumeDetail = () => {
       const formData = {
         ...values,
         birthDate: values.birthDate ? values.birthDate.format('YYYY-MM-DD') : undefined,
+        medicalExamDate: values.medicalExamDate ? values.medicalExamDate.format('YYYY-MM-DD') : undefined,
         // 处理工作经验的日期格式化
         workExperiences: values.workExperiences?.map((item: any) => {
           console.log('处理工作经历项:', item);
@@ -1546,6 +1548,15 @@ const ResumeDetail = () => {
                     <Option value="pisces">双鱼座</Option>
                   </Select>
                 </Form.Item>
+                <Form.Item name="emergencyContactName" label="紧急联系人">
+                  <Input placeholder="请输入紧急联系人姓名" />
+                </Form.Item>
+                <Form.Item name="emergencyContactPhone" label="紧急联系人电话">
+                  <Input placeholder="请输入紧急联系人电话" />
+                </Form.Item>
+                <Form.Item name="medicalExamDate" label="体检时间">
+                  <DatePicker style={{ width: '100%' }} placeholder="请选择体检时间" />
+                </Form.Item>
               </div>
               
               <h3 style={{ marginTop: 24 }}>工作信息</h3>
@@ -1854,6 +1865,9 @@ const ResumeDetail = () => {
                   }))}
                   action="/api/upload/file"
                   data={{ type: 'personalPhoto' }}
+                  headers={{
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                  }}
                   beforeUpload={(file) => {
                     const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
                     if (!isJpgOrPng) {
@@ -1866,28 +1880,63 @@ const ResumeDetail = () => {
                     return isJpgOrPng && isLt2M;
                   }}
                   onChange={(info) => {
-                    const fileList = [...info.fileList];
-                    // 只保留已上传成功的和正在上传的文件
-                    const filteredList = fileList.filter(file => !!file.status);
+                    const { status, name, response } = info.file;
                     
-                    // 更新photoUrls字段，只包含已上传成功的文件URL
-                    const urls = filteredList
-                      .filter(file => file.status === 'done')
-                      .map(file => file.url || (file.response && file.response.url))
-                      .filter(url => !!url);
-                    
-                    form.setFieldsValue({ photoUrls: urls });
-                    
-                    // 显示上传成功或失败的消息
-                    const { file } = info;
-                    if (file.status === 'done') {
-                      message.success(`${file.name} 上传成功`);
-                    } else if (file.status === 'error') {
-                      message.error(`${file.name} 上传失败`);
+                    if (status === 'done') {
+                      if (response && response.success && response.data) {
+                        message.success(`${name} 上传成功`);
+                        
+                        // 更新表单字段
+                        const currentUrls = form.getFieldValue('photoUrls') || [];
+                        const fileUrl = `/api/upload/file/${response.data.fileId}`;
+                        const newUrls = [...currentUrls, fileUrl];
+                        form.setFieldsValue({ photoUrls: newUrls });
+                      } else {
+                        message.error(`${name} 上传失败: ${response?.message || '未知错误'}`);
+                      }
+                    } else if (status === 'error') {
+                      message.error(`${name} 上传失败`);
+                    }
+                  }}
+                  onRemove={async (file) => {
+                    try {
+                      const fileUrl = extractFileUrl(file);
+                      if (!fileUrl) {
+                        message.error('无法获取文件URL');
+                        return false;
+                      }
+
+                      const fileId = extractFileId(fileUrl);
+                      if (!fileId) {
+                        message.error('无法获取文件ID');
+                        return false;
+                      }
+
+                      const response = await axios.delete(`/api/upload/file/${fileId}`, {
+                        headers: {
+                          Authorization: `Bearer ${localStorage.getItem('token')}`,
+                        },
+                      });
+
+                      if (response.data.success) {
+                        const currentUrls = form.getFieldValue('photoUrls') || [];
+                        const newUrls = currentUrls.filter((url: string) => url !== fileUrl);
+                        form.setFieldsValue({ photoUrls: newUrls });
+                        
+                        message.success('文件删除成功');
+                        return true;
+                      } else {
+                        message.error(response.data.message || '删除失败');
+                        return false;
+                      }
+                    } catch (error: any) {
+                      console.error('删除文件失败:', error);
+                      message.error(error.response?.data?.message || '删除文件失败');
+                      return false;
                     }
                   }}
                   onPreview={(file) => {
-                    const previewUrl = file.url || (file.response && file.response.url);
+                    const previewUrl = extractFileUrl(file);
                     if (previewUrl) {
                       handlePreview(previewUrl);
                     }
@@ -1914,6 +1963,9 @@ const ResumeDetail = () => {
                   }))}
                   action="/api/upload/file"
                   data={{ type: 'certificate' }}
+                  headers={{
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                  }}
                   beforeUpload={(file) => {
                     const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
                     if (!isJpgOrPng) {
@@ -1926,28 +1978,63 @@ const ResumeDetail = () => {
                     return isJpgOrPng && isLt2M;
                   }}
                   onChange={(info) => {
-                    const fileList = [...info.fileList];
-                    // 只保留已上传成功的和正在上传的文件
-                    const filteredList = fileList.filter(file => !!file.status);
+                    const { status, name, response } = info.file;
                     
-                    // 更新certificateUrls字段，只包含已上传成功的文件URL
-                    const urls = filteredList
-                      .filter(file => file.status === 'done')
-                      .map(file => file.url || (file.response && file.response.url))
-                      .filter(url => !!url);
-                    
-                    form.setFieldsValue({ certificateUrls: urls });
-                    
-                    // 显示上传成功或失败的消息
-                    const { file } = info;
-                    if (file.status === 'done') {
-                      message.success(`${file.name} 上传成功`);
-                    } else if (file.status === 'error') {
-                      message.error(`${file.name} 上传失败`);
+                    if (status === 'done') {
+                      if (response && response.success && response.data) {
+                        message.success(`${name} 上传成功`);
+                        
+                        // 更新表单字段
+                        const currentUrls = form.getFieldValue('certificateUrls') || [];
+                        const fileUrl = `/api/upload/file/${response.data.fileId}`;
+                        const newUrls = [...currentUrls, fileUrl];
+                        form.setFieldsValue({ certificateUrls: newUrls });
+                      } else {
+                        message.error(`${name} 上传失败: ${response?.message || '未知错误'}`);
+                      }
+                    } else if (status === 'error') {
+                      message.error(`${name} 上传失败`);
+                    }
+                  }}
+                  onRemove={async (file) => {
+                    try {
+                      const fileUrl = extractFileUrl(file);
+                      if (!fileUrl) {
+                        message.error('无法获取文件URL');
+                        return false;
+                      }
+
+                      const fileId = extractFileId(fileUrl);
+                      if (!fileId) {
+                        message.error('无法获取文件ID');
+                        return false;
+                      }
+
+                      const response = await axios.delete(`/api/upload/file/${fileId}`, {
+                        headers: {
+                          Authorization: `Bearer ${localStorage.getItem('token')}`,
+                        },
+                      });
+
+                      if (response.data.success) {
+                        const currentUrls = form.getFieldValue('certificateUrls') || [];
+                        const newUrls = currentUrls.filter((url: string) => url !== fileUrl);
+                        form.setFieldsValue({ certificateUrls: newUrls });
+                        
+                        message.success('文件删除成功');
+                        return true;
+                      } else {
+                        message.error(response.data.message || '删除失败');
+                        return false;
+                      }
+                    } catch (error: any) {
+                      console.error('删除文件失败:', error);
+                      message.error(error.response?.data?.message || '删除文件失败');
+                      return false;
                     }
                   }}
                   onPreview={(file) => {
-                    const previewUrl = file.url || (file.response && file.response.url);
+                    const previewUrl = extractFileUrl(file);
                     if (previewUrl) {
                       handlePreview(previewUrl);
                     }
@@ -1978,6 +2065,9 @@ const ResumeDetail = () => {
                   })}
                   action="/api/upload/file"
                   data={{ type: 'medicalReport' }}
+                  headers={{
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                  }}
                   beforeUpload={(file) => {
                     const isValidType = 
                       file.type === 'image/jpeg' || 
@@ -1993,55 +2083,128 @@ const ResumeDetail = () => {
                     return isValidType && isLt5M;
                   }}
                   onChange={(info) => {
-                    const fileList = [...info.fileList];
-                    // 只保留已上传成功的和正在上传的文件
-                    const filteredList = fileList.filter(file => !!file.status);
+                    const { status, name, response } = info.file;
                     
-                    // 更新medicalReportUrls字段，只包含已上传成功的文件URL
-                    const urls = filteredList
-                      .filter(file => file.status === 'done')
-                      .map(file => file.url || (file.response && file.response.url))
-                      .filter(url => !!url);
-                    
-                    form.setFieldsValue({ medicalReportUrls: urls });
-                    
-                    // 显示上传成功或失败的消息
-                    const { file } = info;
-                    if (file.status === 'done') {
-                      message.success(`${file.name} 上传成功`);
-                    } else if (file.status === 'error') {
-                      message.error(`${file.name} 上传失败`);
+                    if (status === 'done') {
+                      if (response && response.success && response.data) {
+                        message.success(`${name} 上传成功`);
+                        
+                        // 更新表单字段
+                        const currentUrls = form.getFieldValue('medicalReportUrls') || [];
+                        const fileUrl = `/api/upload/file/${response.data.fileId}`;
+                        const newUrls = [...currentUrls, fileUrl];
+                        form.setFieldsValue({ medicalReportUrls: newUrls });
+                      } else {
+                        message.error(`${name} 上传失败: ${response?.message || '未知错误'}`);
+                      }
+                    } else if (status === 'error') {
+                      message.error(`${name} 上传失败`);
+                    }
+                  }}
+                  onRemove={async (file) => {
+                    try {
+                      const fileUrl = extractFileUrl(file);
+                      if (!fileUrl) {
+                        message.error('无法获取文件URL');
+                        return false;
+                      }
+
+                      const fileId = extractFileId(fileUrl);
+                      if (!fileId) {
+                        message.error('无法获取文件ID');
+                        return false;
+                      }
+
+                      const response = await axios.delete(`/api/upload/file/${fileId}`, {
+                        headers: {
+                          Authorization: `Bearer ${localStorage.getItem('token')}`,
+                        },
+                      });
+
+                      if (response.data.success) {
+                        const currentUrls = form.getFieldValue('medicalReportUrls') || [];
+                        const newUrls = currentUrls.filter((url: string) => url !== fileUrl);
+                        form.setFieldsValue({ medicalReportUrls: newUrls });
+                        
+                        message.success('文件删除成功');
+                        return true;
+                      } else {
+                        message.error(response.data.message || '删除失败');
+                        return false;
+                      }
+                    } catch (error: any) {
+                      console.error('删除文件失败:', error);
+                      message.error(error.response?.data?.message || '删除文件失败');
+                      return false;
                     }
                   }}
                   onPreview={(file) => {
-                    const previewUrl = file.url || (file.response && file.response.url);
+                    const previewUrl = extractFileUrl(file);
                     if (previewUrl) {
-                      // 如果是PDF文件，直接在新窗口打开
-                      if (file.type === 'application/pdf' || previewUrl.toLowerCase().endsWith('.pdf')) {
-                        window.open(previewUrl, '_blank');
+                      if (isPdfFile(file)) {
+                        window.open(previewUrl, '_blank', 'noopener,noreferrer');
                       } else {
                         handlePreview(previewUrl);
                       }
                     }
                   }}
                   itemRender={(originNode, file) => {
-                    if (file.type === 'application/pdf' || 
-                        file.url?.toLowerCase().endsWith('.pdf') || 
-                        (file.response && file.response.url?.toLowerCase().endsWith('.pdf'))) {
+                    if (isPdfFile(file)) {
+                      const previewUrl = extractFileUrl(file);
+                      const fileName = file.name || previewUrl?.split('/').pop() || 'PDF文档';
                       return (
-                        <div style={{ 
-                          position: 'relative',
-                          width: '100%', 
-                          height: '100%',
-                          display: 'flex', 
-                          flexDirection: 'column',
-                          justifyContent: 'center', 
-                          alignItems: 'center',
-                          backgroundColor: '#f5f5f5',
-                          border: '1px solid #d9d9d9'
-                        }}>
+                        <div 
+                          style={{ 
+                            position: 'relative',
+                            width: '100%', 
+                            height: '100%',
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            justifyContent: 'center', 
+                            alignItems: 'center',
+                            backgroundColor: '#f5f5f5',
+                            border: '1px solid #d9d9d9',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            overflow: 'hidden'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (previewUrl) {
+                              window.open(previewUrl, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                        >
                           <FilePdfOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
-                          <div style={{ marginTop: 8, fontSize: 12 }}>PDF文档</div>
+                          <div style={{ 
+                            marginTop: 8, 
+                            fontSize: 12, 
+                            textAlign: 'center', 
+                            padding: '0 4px', 
+                            wordBreak: 'break-all',
+                            maxWidth: '100%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical'
+                          }}>
+                            {fileName}
+                          </div>
+                          <div style={{ 
+                            fontSize: 12, 
+                            color: '#999', 
+                            marginTop: 4,
+                            position: 'absolute',
+                            bottom: 4,
+                            left: 0,
+                            right: 0,
+                            textAlign: 'center',
+                            background: 'rgba(255,255,255,0.8)',
+                            padding: '2px 0'
+                          }}>
+                            点击查看PDF
+                          </div>
                           {file.status === 'uploading' && (
                             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <Spin size="small" />

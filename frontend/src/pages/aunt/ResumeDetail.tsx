@@ -1,9 +1,9 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Form, Input, Select, DatePicker, Upload, Typography, Divider, Row, Col, Tooltip, Table, Space } from 'antd';
+import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Form, Input, Select, DatePicker, Upload, Typography, Tooltip, Table } from 'antd';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { EditOutlined, SaveOutlined, ArrowLeftOutlined, FilePdfOutlined, EyeOutlined, PlusOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { EditOutlined, SaveOutlined, FilePdfOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
@@ -14,8 +14,8 @@ dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
 dayjs.extend(customParseFormat);
-import apiService from '../../services/api';
-import type { UploadFile } from 'antd/es/upload/interface';
+// import apiService from '../../services/api';
+// import type { UploadFile } from 'antd/es/upload/interface';
 import imageCompression from 'browser-image-compression';
 import { extractFileUrl, extractFileId, isPdfFile } from '../../utils/uploadHelper';
 const { Option } = Select;
@@ -294,11 +294,11 @@ interface FileInfo {
   url?: string;
 }
 
-interface FollowUpRecord {
-  id: string;
-  content: string;
-  timestamp: string;
-}
+// interface FollowUpRecord {
+//   id: string;
+//   content: string;
+//   timestamp: string;
+// }
 
 interface ResumeData {
   _id: string;
@@ -348,10 +348,10 @@ interface ResumeData {
 }
 
 // 处理图片URL的工具函数
-const processImageUrl = (url: string): string => {
-  if (!url) return '';
-  return url.startsWith('http') ? url : `/api/upload/file/${url}`;
-};
+// const processImageUrl = (url: string): string => {
+//   if (!url) return '';
+//   return url.startsWith('http') ? url : `/api/upload/file/${url}`;
+// };
 
 const ResumeDetail = () => {
   const { id: shortId } = useParams();
@@ -455,10 +455,10 @@ const ResumeDetail = () => {
       };
 
       // 处理fileIds生成图片URL
-      const generateImageUrls = (fileIds: string[]): string[] => {
-        if (!Array.isArray(fileIds)) return [];
-        return fileIds.map(fileId => fileId);
-      };
+      // const generateImageUrls = (fileIds: string[]): string[] => {
+      //   if (!Array.isArray(fileIds)) return [];
+      //   return fileIds.map(fileId => fileId);
+      // };
 
       // 更新简历数据
       const updatedResumeData = {
@@ -637,8 +637,8 @@ const ResumeDetail = () => {
       // 准备提交数据：处理日期字段
       const formData = {
         ...values,
-        birthDate: values.birthDate ? values.birthDate.format('YYYY-MM-DD') : undefined,
-        medicalExamDate: values.medicalExamDate ? values.medicalExamDate.format('YYYY-MM-DD') : undefined,
+        birthDate: values.birthDate ? (typeof values.birthDate.format === 'function' ? values.birthDate.format('YYYY-MM-DD') : values.birthDate) : undefined,
+        medicalExamDate: values.medicalExamDate ? (typeof values.medicalExamDate.format === 'function' ? values.medicalExamDate.format('YYYY-MM-DD') : values.medicalExamDate) : undefined,
         // 处理工作经验的日期格式化
         workExperiences: values.workExperiences?.map((item: any) => {
           console.log('处理工作经历项:', item);
@@ -692,7 +692,24 @@ const ResumeDetail = () => {
     setPreviewVisible(true);
   };
 
-  // 更新文件预览函数的类型
+  // 处理文件删除 - 已移除，删除功能现在只在编辑模式的Upload组件中提供
+  // const handleFileDelete = async (fileId: string, fileType: 'photo' | 'certificate' | 'medical') => {
+  //   try {
+  //     const response = await axios.delete(`/api/resumes/${resume._id}/files/${fileId}`);
+  //     if (response.data.success) {
+  //       messageApi.success('文件删除成功');
+  //       // 重新获取简历数据
+  //       await fetchResumeDetail();
+  //     } else {
+  //       throw new Error(response.data.message || '删除失败');
+  //     }
+  //   } catch (error: any) {
+  //     console.error('删除文件失败:', error);
+  //     messageApi.error(error.message || '删除文件失败');
+  //   }
+  // };
+
+  // 改进的文件预览渲染函数
   const renderFilePreview = (file: FileInfo | string, index: number) => {
     if (typeof file === 'string') {
       return renderLegacyFilePreview(file, index);
@@ -713,34 +730,41 @@ const ResumeDetail = () => {
     });
 
     return (
-      <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px' }}>
+      <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
         {isPdf ? (
-          <Button
-            type="primary"
-            icon={<FilePdfOutlined />}
-            onClick={() => window.open(fileUrl, '_blank')}
-            style={{ height: '60px', width: '120px' }}
-          >
-            查看PDF
-          </Button>
+          <div style={{ position: 'relative' }}>
+            <Button
+              type="primary"
+              icon={<FilePdfOutlined />}
+              onClick={() => window.open(fileUrl, '_blank')}
+              style={{ height: '60px', width: '120px' }}
+            >
+              查看PDF
+            </Button>
+
+          </div>
         ) : (
-          <Image
-            src={fileUrl}
-            alt={file.filename}
-            style={{ maxWidth: '200px', maxHeight: '200px' }}
-            placeholder={(
-              <div style={{ 
-                background: '#f5f5f5', 
-                width: '200px', 
-                height: '200px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
-                加载中...
-              </div>
-            )}
-          />
+          <div style={{ position: 'relative' }}>
+            <Image
+              src={fileUrl}
+              alt={file.filename}
+              style={{ maxWidth: '200px', maxHeight: '200px' }}
+              placeholder={(
+                <div style={{ 
+                  background: '#f5f5f5', 
+                  width: '200px', 
+                  height: '200px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}>
+                  加载中...
+                </div>
+              )}
+              fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIiBzdHJva2U9IiNkOWQ5ZDkiIHN0cm9rZS1kYXNoYXJyYXk9IjUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+5paH5Lu25LiN5a2Y5ZyoPC90ZXh0Pjwvc3ZnPg=="
+            />
+
+          </div>
         )}
       </div>
     );
@@ -751,42 +775,52 @@ const ResumeDetail = () => {
     const fileUrl = url.startsWith('/api/upload/file/') ? url : `/api/upload/file/${url}`;
     const uniqueKey = `legacy-file-${index}`;
     
+    // 从URL中提取文件ID - 已不再使用
+    // const fileId = url.replace('/api/upload/file/', '').replace(/^\//, '');
+    
     // 检查是否为PDF文件（通过URL或文件扩展名判断）
     const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
     
     return (
-      <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px' }}>
+      <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
         {isPdf ? (
-          <Button
-            type="primary"
-            icon={<FilePdfOutlined />}
-            onClick={() => window.open(fileUrl, '_blank')}
-            style={{ height: '60px', width: '120px' }}
-          >
-            查看PDF
-          </Button>
+          <div style={{ position: 'relative' }}>
+            <Button
+              type="primary"
+              icon={<FilePdfOutlined />}
+              onClick={() => window.open(fileUrl, '_blank')}
+              style={{ height: '60px', width: '120px' }}
+            >
+              查看PDF
+            </Button>
+
+          </div>
         ) : (
-          <Image
-            src={fileUrl}
-            alt={`文件 ${index + 1}`}
-            style={{ maxWidth: '200px', maxHeight: '200px' }}
-            placeholder={(
-              <div style={{ 
-                background: '#f5f5f5', 
-                width: '200px', 
-                height: '200px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
-                加载中...
-              </div>
-            )}
-            onError={() => {
-              // 如果图片加载失败，可能是PDF文件，显示PDF按钮
-              console.log('图片加载失败，可能是PDF文件:', fileUrl);
-            }}
-          />
+          <div style={{ position: 'relative' }}>
+            <Image
+              src={fileUrl}
+              alt={`文件 ${index + 1}`}
+              style={{ maxWidth: '200px', maxHeight: '200px' }}
+              placeholder={(
+                <div style={{ 
+                  background: '#f5f5f5', 
+                  width: '200px', 
+                  height: '200px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}>
+                  加载中...
+                </div>
+              )}
+              fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIiBzdHJva2U9IiNkOWQ5ZDkiIHN0cm9rZS1kYXNoYXJyYXk9IjUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+5paH5Lu25LiN5a2Y5ZyoPC90ZXh0Pjwvc3ZnPg=="
+              onError={() => {
+                // 如果图片加载失败，可能是PDF文件，显示PDF按钮
+                console.log('图片加载失败，可能是PDF文件:', fileUrl);
+              }}
+            />
+
+          </div>
         )}
       </div>
     );
@@ -2054,11 +2088,13 @@ const ResumeDetail = () => {
                   name="file"
                   listType="picture-card"
                   fileList={(form.getFieldValue('medicalReportUrls') || []).map((url: string, index: number) => {
-                    const isPdf = url.toLowerCase().endsWith('.pdf');
+                    // 更准确的PDF检测逻辑
+                    const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
+                    const fileName = isPdf ? `report-${index}.pdf` : `report-${index}.jpg`;
                     return {
                       uid: `-${index}`,
-                      name: isPdf ? `report-${index}.pdf` : `report-${index}.jpg`,
-                      status: 'done',
+                      name: fileName,
+                      status: 'done' as const,
                       url: url,
                       type: isPdf ? 'application/pdf' : 'image/jpeg'
                     };

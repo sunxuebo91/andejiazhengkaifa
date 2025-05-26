@@ -262,6 +262,45 @@ export class ResumeService {
 
     // 从简历中移除文件ID
     resume.fileIds = resume.fileIds.filter(id => id.toString() !== fileId);
+    
+    // 构建要删除的URL
+    const fileUrl = `/api/upload/file/${fileId}`;
+    
+    // 从所有URL数组中移除对应的文件URL
+    if (resume.photoUrls) {
+      resume.photoUrls = resume.photoUrls.filter(url => url !== fileUrl);
+    }
+    
+    if (resume.certificateUrls) {
+      resume.certificateUrls = resume.certificateUrls.filter(url => url !== fileUrl);
+    }
+    
+    if (resume.medicalReportUrls) {
+      resume.medicalReportUrls = resume.medicalReportUrls.filter(url => url !== fileUrl);
+    }
+    
+    // 从结构化文件信息中移除
+    if (resume.personalPhoto && resume.personalPhoto.url === fileUrl) {
+      resume.personalPhoto = undefined;
+    }
+    
+    if (resume.certificates) {
+      resume.certificates = resume.certificates.filter(cert => cert.url !== fileUrl);
+    }
+    
+    if (resume.reports) {
+      resume.reports = resume.reports.filter(report => report.url !== fileUrl);
+    }
+    
+    // 检查身份证照片
+    if (resume.idCardFront?.url === fileUrl) {
+      resume.idCardFront = undefined;
+    }
+    
+    if (resume.idCardBack?.url === fileUrl) {
+      resume.idCardBack = undefined;
+    }
+    
     await resume.save();
 
     // 删除文件

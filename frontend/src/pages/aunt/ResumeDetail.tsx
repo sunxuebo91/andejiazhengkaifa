@@ -43,8 +43,127 @@ const ethnicities = [
   '独龙族', '鄂伦春族', '赫哲族', '门巴族', '珞巴族', '基诺族'
 ];
 
-// 教育程度映射
-const educationMap = {
+// 添加映射对象的类型定义
+type EducationMapType = {
+  [key: string]: string;
+  no: string;
+  primary: string;
+  middle: string;
+  secondary: string;
+  vocational: string;
+  high: string;
+  college: string;
+  bachelor: string;
+  graduate: string;
+};
+
+type MaritalStatusMapType = {
+  [key: string]: string;
+  single: string;
+  married: string;
+  divorced: string;
+  widowed: string;
+};
+
+type ReligionMapType = {
+  [key: string]: string;
+  none: string;
+  buddhism: string;
+  taoism: string;
+  christianity: string;
+  catholicism: string;
+  islam: string;
+  other: string;
+};
+
+type GenderMapType = {
+  [key: string]: string;
+  male: string;
+  female: string;
+  男: string;
+  女: string;
+};
+
+type ZodiacMapType = {
+  [key: string]: string;
+  rat: string;
+  ox: string;
+  tiger: string;
+  rabbit: string;
+  dragon: string;
+  snake: string;
+  horse: string;
+  goat: string;
+  monkey: string;
+  rooster: string;
+  dog: string;
+  pig: string;
+};
+
+type ZodiacSignMapType = {
+  [key: string]: string;
+  capricorn: string;
+  aquarius: string;
+  pisces: string;
+  aries: string;
+  taurus: string;
+  gemini: string;
+  cancer: string;
+  leo: string;
+  virgo: string;
+  libra: string;
+  scorpio: string;
+  sagittarius: string;
+};
+
+type JobTypeMapType = {
+  [key: string]: string;
+  yuexin: string;
+  'zhujia-yuer': string;
+  'baiban-yuer': string;
+  baojie: string;
+  'baiban-baomu': string;
+  'zhujia-baomu': string;
+  yangchong: string;
+  xiaoshi: string;
+};
+
+type OrderStatusMapType = {
+  [key: string]: string;
+  accepting: string;
+  'not-accepting': string;
+  'on-service': string;
+};
+
+type LeadSourceMapType = {
+  [key: string]: string;
+  referral: string;
+  'paid-lead': string;
+  community: string;
+  'door-to-door': string;
+  'shared-order': string;
+  other: string;
+};
+
+type SkillsMapType = {
+  [key: string]: string;
+  chanhou: string;
+  'teshu-yinger': string;
+  yiliaobackground: string;
+  yuying: string;
+  zaojiao: string;
+  fushi: string;
+  ertui: string;
+  waiyu: string;
+  zhongcan: string;
+  xican: string;
+  mianshi: string;
+  jiashi: string;
+  shouyi: string;
+};
+
+// 声明映射对象的类型
+const educationMap: EducationMapType = {
   no: '无学历',
   primary: '小学',
   middle: '初中',
@@ -56,16 +175,14 @@ const educationMap = {
   graduate: '研究生及以上'
 };
 
-// 婚姻状况映射
-const maritalStatusMap = {
+const maritalStatusMap: MaritalStatusMapType = {
   single: '未婚',
   married: '已婚',
   divorced: '离异',
   widowed: '丧偶'
 };
 
-// 宗教信仰映射
-const religionMap = {
+const religionMap: ReligionMapType = {
   none: '无',
   buddhism: '佛教',
   taoism: '道教',
@@ -75,16 +192,14 @@ const religionMap = {
   other: '其他'
 };
 
-// 性别映射
-const genderMap = {
+const genderMap: GenderMapType = {
   male: '男',
   female: '女',
-  '男': '男',
-  '女': '女'
+  男: '男',
+  女: '女'
 };
 
-// 生肖映射
-const zodiacMap = {
+const zodiacMap: ZodiacMapType = {
   rat: '鼠',
   ox: '牛',
   tiger: '虎',
@@ -100,7 +215,7 @@ const zodiacMap = {
 };
 
 // 星座映射
-const zodiacSignMap = {
+const zodiacSignMap: ZodiacSignMapType = {
   capricorn: '摩羯座',
   aquarius: '水瓶座',
   pisces: '双鱼座',
@@ -116,7 +231,7 @@ const zodiacSignMap = {
 };
 
 // 工种映射
-const jobTypeMap = {
+const jobTypeMap: JobTypeMapType = {
   yuexin: '月嫂',
   'zhujia-yuer': '住家育儿嫂',
   'baiban-yuer': '白班育儿',
@@ -128,14 +243,14 @@ const jobTypeMap = {
 };
 
 // 接单状态映射
-const orderStatusMap = {
+const orderStatusMap: OrderStatusMapType = {
   accepting: '想接单',
   'not-accepting': '不接单',
   'on-service': '已上户'
 };
 
 // 技能标签映射
-const skillsMap = {
+const skillsMap: SkillsMapType = {
   chanhou: '产后修复',
   'teshu-yinger': '特殊婴儿护理',
   yiliaobackground: '医疗背景',
@@ -152,7 +267,7 @@ const skillsMap = {
 };
 
 // 线索来源映射
-const leadSourceMap = {
+const leadSourceMap: LeadSourceMapType = {
   referral: '转介绍',
   'paid-lead': '付费线索',
   community: '社群线索',
@@ -163,19 +278,24 @@ const leadSourceMap = {
 
 // 添加类型定义
 interface WorkExperience {
-  _id?: string;
   startDate: string;
   endDate: string;
   description: string;
 }
 
-// 定义文件信息接口
 interface FileInfo {
   fileId: string;
-  filename: string;
+  filename: string;  // 保持与后端一致的命名
   mimeType: string;
   size: number;
   uploadTime: Date;
+  url?: string;
+}
+
+interface FollowUpRecord {
+  id: string;
+  content: string;
+  timestamp: string;
 }
 
 interface ResumeData {
@@ -223,6 +343,12 @@ interface ResumeData {
   __v: number;
 }
 
+// 处理图片URL的工具函数
+const processImageUrl = (url: string): string => {
+  if (!url) return '';
+  return url.startsWith('http') ? url : `/api/upload/file/${url}`;
+};
+
 const ResumeDetail = () => {
   const { id: shortId } = useParams();
   const navigate = useNavigate();
@@ -244,51 +370,25 @@ const ResumeDetail = () => {
 
   // 在组件内部处理数据前的函数，处理工作经历的日期格式
   const formatWorkExperiences = (data: Partial<ResumeData>) => {
-    // 获取工作经历数据，支持两种字段名
-    const workExps = data.workExperiences || data.workExperience || [];
-    
-    // 确保是数组
-    const workExpsArray = Array.isArray(workExps) ? workExps : [workExps].filter(Boolean);
-    
-    console.log("处理工作经历前的数据:", workExpsArray);
-    
-    if (!workExpsArray || workExpsArray.length === 0) {
-      return [];
+    const workExps = data.workExperiences || [];
+    return Array.isArray(workExps) ? workExps.map((exp: WorkExperience) => ({
+      ...exp,
+      startDate: formatDateToChinese(exp.startDate),
+      endDate: formatDateToChinese(exp.endDate),
+      description: exp.description || '-'
+    })) : [];
+  };
+
+  // 更新日期格式化函数
+  const formatDateToChinese = (dateStr: string): string => {
+    if (!dateStr || dateStr === '-') return '-';
+    try {
+      const date = dayjs(dateStr);
+      return date.isValid() ? `${date.year()}年${date.month() + 1}月` : '-';
+    } catch (e) {
+      console.error('日期格式化失败:', e);
+      return '-';
     }
-    
-    return workExpsArray
-      .filter(exp => exp !== null && exp !== undefined)
-      .map(exp => {
-        console.log("处理单个工作经历:", exp);
-        
-        // 查看完整的工作经历对象
-        console.log("工作经历完整对象:", JSON.stringify(exp));
-        
-        // 格式化日期为中文格式
-        const formatDateToChinese = (dateStr: string | undefined) => {
-          if (!dateStr || dateStr === '-') return '-';
-          try {
-            const date = dayjs(dateStr);
-            return date.isValid() ? `${date.year()}年${date.month() + 1}月` : '-';
-          } catch (e) {
-            console.error('日期格式化失败:', e);
-            return '-';
-          }
-        };
-        
-        const startDate = formatDateToChinese(exp.startDate);
-        const endDate = formatDateToChinese(exp.endDate);
-        const description = exp.description || '-';
-        
-        console.log("格式化后的日期:", {startDate, endDate});
-        
-        return {
-          ...exp,
-          startDate,
-          endDate,
-          description
-        };
-      });
   };
 
   // 获取简历详情
@@ -494,149 +594,73 @@ const ResumeDetail = () => {
     setPreviewVisible(true);
   };
 
-  // 修改文件预览渲染函数
-  const renderFilePreview = (file: FileInfo | string | null | undefined, index: number) => {
-    if (!file) return null;
-
-    // 处理旧的数据结构（字符串URL）
+  // 更新文件预览函数的类型
+  const renderFilePreview = (file: FileInfo | string, index: number) => {
     if (typeof file === 'string') {
-      const url = processImageUrl(file);
-      if (!url) return null;
-      return renderLegacyFilePreview(url, index);
+      return renderLegacyFilePreview(file, index);
     }
 
-    // 处理新的数据结构（FileInfo对象）
-    const fileUrl = processImageUrl(`/upload/file/${file.fileId}`);
+    const fileUrl = processImageUrl(file.fileId);
     const isPdf = file.mimeType === 'application/pdf';
     const uniqueKey = `file-${file.fileId}-${index}`;
 
     return (
-      <div key={uniqueKey} style={{ display: 'inline-block', margin: '0 8px 8px 0' }}>
+      <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px' }}>
         {isPdf ? (
-          <div style={{ 
-            width: 100, 
-            height: 100, 
-            border: '1px solid #d9d9d9', 
-            borderRadius: 2, 
-            display: 'flex', 
-            flexDirection: 'column',
-            justifyContent: 'center', 
-            alignItems: 'center',
-            background: '#f5f5f5',
-            padding: '8px'
-          }}>
-            <a 
-              href={fileUrl} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                window.open(fileUrl, '_blank');
-              }}
-            >
-              <FilePdfOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
-              <div style={{ fontSize: '12px', marginTop: '4px', color: '#666' }}>
-                {file.filename}
-              </div>
-            </a>
-          </div>
+          <Button
+            type="primary"
+            icon={<FilePdfOutlined />}
+            onClick={() => window.open(fileUrl, '_blank')}
+          >
+            查看PDF
+          </Button>
         ) : (
-          <div style={{ 
-            width: 100, 
-            height: 100, 
-            border: '1px solid #d9d9d9', 
-            borderRadius: 2, 
-            overflow: 'hidden',
-            position: 'relative'
-          }}>
-            <img 
-              src={fileUrl} 
-              alt={file.filename} 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onClick={() => handlePreview(fileUrl)}
-              onError={(e) => {
-                console.error(`图片加载失败: ${fileUrl}, 错误信息:`, e);
-                const target = e.target as HTMLImageElement;
-                target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-                message.error(`图片加载失败: ${file.filename}`);
-              }}
-            />
-            <div style={{ 
-              position: 'absolute', 
-              bottom: 0, 
-              left: 0, 
-              right: 0, 
-              background: 'rgba(0,0,0,0.5)', 
-              color: 'white', 
-              fontSize: '10px', 
-              padding: '2px 4px',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {file.filename}
-            </div>
-          </div>
+          <Image
+            src={fileUrl}
+            alt={file.filename}
+            style={{ maxWidth: '200px', maxHeight: '200px' }}
+            placeholder={(
+              <div style={{ 
+                background: '#f5f5f5', 
+                width: '200px', 
+                height: '200px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                加载中...
+              </div>
+            )}
+          />
         )}
       </div>
     );
   };
 
-  // 处理旧的文件预览（向后兼容）
+  // 更新渲染旧版文件预览的函数
   const renderLegacyFilePreview = (url: string, index: number) => {
-    const isPdf = url.toLowerCase().endsWith('.pdf');
-    const uniqueKey = `legacy-file-${url}-${index}`;
+    const fileUrl = processImageUrl(url);
+    const uniqueKey = `legacy-file-${index}`;
     
     return (
-      <div key={uniqueKey} style={{ display: 'inline-block', margin: '0 8px 8px 0' }}>
-        {isPdf ? (
-          <div style={{ 
-            width: 100, 
-            height: 100, 
-            border: '1px solid #d9d9d9', 
-            borderRadius: 2, 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center',
-            background: '#f5f5f5'
-          }}>
-            <a 
-              href={url} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                window.open(url, '_blank');
-              }}
-            >
-              <FilePdfOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
-            </a>
-          </div>
-        ) : (
-          <div style={{ 
-            width: 100, 
-            height: 100, 
-            border: '1px solid #d9d9d9', 
-            borderRadius: 2, 
-            overflow: 'hidden',
-            position: 'relative'
-          }}>
-            <img 
-              src={url} 
-              alt={`文件预览-${index}`} 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onClick={() => handlePreview(url)}
-              onError={(e) => {
-                console.error(`图片加载失败: ${url}, 错误信息:`, e);
-                const target = e.target as HTMLImageElement;
-                target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-                message.error(`图片加载失败: ${url}`);
-              }}
-            />
-          </div>
-        )}
+      <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px' }}>
+        <Image
+          src={fileUrl}
+          alt={`文件 ${index + 1}`}
+          style={{ maxWidth: '200px', maxHeight: '200px' }}
+          placeholder={(
+            <div style={{ 
+              background: '#f5f5f5', 
+              width: '200px', 
+              height: '200px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center' 
+            }}>
+              加载中...
+            </div>
+          )}
+        />
       </div>
     );
   };
@@ -651,12 +675,11 @@ const ResumeDetail = () => {
 
     console.log("渲染工作经历列表:", resume.workExperiences);
     
-    return resume.workExperiences.map((exp, index) => {
-      if (!exp) return null; // 跳过无效的工作经历
+    return resume.workExperiences.map((exp: WorkExperience, index: number) => {
+      if (!exp) return null;
       
       console.log(`渲染工作经历 ${index+1}:`, exp);
       
-      // 使用工作经历的描述和时间作为key的一部分，确保唯一性
       const uniqueKey = `${exp.startDate || ''}-${exp.endDate || ''}-${exp.description?.substring(0, 20) || ''}-${index}`;
       
       return (
@@ -970,9 +993,9 @@ const ResumeDetail = () => {
         header={{
           title: '简历详情',
           breadcrumb: {
-            routes: [
-              { path: '/aunt/list', breadcrumbName: '阿姨简历库' },
-              { breadcrumbName: '简历详情' },
+            items: [
+              { path: '/aunt/list', title: '阿姨简历库' },
+              { title: '简历详情' },
             ],
           },
         }}
@@ -997,9 +1020,9 @@ const ResumeDetail = () => {
         header={{
           title: '简历详情',
           breadcrumb: {
-            routes: [
-              { path: '/aunt/resume-list', breadcrumbName: '阿姨简历库' },
-              { breadcrumbName: '简历详情' },
+            items: [
+              { path: '/aunt/resume-list', title: '阿姨简历库' },
+              { title: '简历详情' },
             ],
           },
           extra: [
@@ -1042,9 +1065,9 @@ const ResumeDetail = () => {
         header={{
           title: '简历详情',
           breadcrumb: {
-            routes: [
-              { path: '/aunt/list', breadcrumbName: '阿姨简历库' },
-              { breadcrumbName: '简历详情' },
+            items: [
+              { path: '/aunt/list', title: '阿姨简历库' },
+              { title: '简历详情' },
             ],
           },
         }}

@@ -1,16 +1,48 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Typography, Tooltip, Table, Form, Input, Select } from 'antd';
+import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Form, Input, Select, DatePicker, Upload, Typography, Tooltip, Table } from 'antd';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { EditOutlined, FilePdfOutlined } from '@ant-design/icons';
+import { EditOutlined, SaveOutlined, FilePdfOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+// 添加dayjs插件
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
+// 注册插件
+dayjs.extend(isSameOrBefore);
+dayjs.extend(isSameOrAfter);
 
-// 注册dayjs插件
 dayjs.extend(customParseFormat);
-
+// import apiService from '../../services/api';
+// import type { UploadFile } from 'antd/es/upload/interface';
+import imageCompression from 'browser-image-compression';
+import { extractFileUrl, extractFileId, isPdfFile } from '../../utils/uploadHelper';
 const { Option } = Select;
+
+// 中国省份/地区常量数据
+const provinces = [
+  // 23个省
+  '河北省', '山西省', '辽宁省', '吉林省', '黑龙江省', '江苏省', '浙江省', '安徽省', 
+  '福建省', '江西省', '山东省', '河南省', '湖北省', '湖南省', '广东省', '海南省', 
+  '四川省', '贵州省', '云南省', '陕西省', '甘肃省', '青海省', '台湾省',
+  // 4个直辖市
+  '北京市', '天津市', '上海市', '重庆市',
+  // 5个自治区
+  '广西壮族自治区', '内蒙古自治区', '西藏自治区', '宁夏回族自治区', '新疆维吾尔自治区',
+  // 2个特别行政区
+  '香港特别行政区', '澳门特别行政区'
+];
+
+// 中国56个民族常量数据
+const ethnicities = [
+  '汉族', '蒙古族', '回族', '藏族', '维吾尔族', '苗族', '彝族', '壮族', '布依族', '朝鲜族',
+  '满族', '侗族', '瑶族', '白族', '土家族', '哈尼族', '哈萨克族', '傣族', '黎族', '傈僳族',
+  '佤族', '畲族', '高山族', '拉祜族', '水族', '东乡族', '纳西族', '景颇族', '柯尔克孜族', '土族',
+  '达斡尔族', '仫佬族', '羌族', '布朗族', '撒拉族', '毛南族', '仡佬族', '锡伯族', '阿昌族', '普米族',
+  '塔吉克族', '怒族', '乌孜别克族', '俄罗斯族', '鄂温克族', '德昂族', '保安族', '裕固族', '京族', '塔塔尔族',
+  '独龙族', '鄂伦春族', '赫哲族', '门巴族', '珞巴族', '基诺族'
+];
 
 // 添加映射对象的类型定义
 type EducationMapType = {
@@ -327,56 +359,15 @@ const ResumeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [resume, setResume] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [previewVisible, setPreviewVisible] = useState(false);
-  const [previewImage, setPreviewImage] = useState('');
   const [messageApi, contextHolder] = message.useMessage();
+  const [previewImage, setPreviewImage] = useState<string>('');
+  const [previewVisible, setPreviewVisible] = useState(false);
 
   // 跟进记录相关状态
   const [followUpRecords, setFollowUpRecords] = useState<any[]>([]);
   const [isAddFollowUpVisible, setIsAddFollowUpVisible] = useState(false);
-  const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpForm] = Form.useForm();
-
-  // 处理编辑操作
-  const handleEdit = () => {
-    if (resume) {
-      const formattedResume = {
-        ...resume,
-        workExperiences: resume.workExperiences?.map((exp: any) => ({
-          ...exp,
-          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : null,
-          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : null,
-          description: exp.description || ''
-        })) || [],
-        birthDate: resume.birthDate ? dayjs(resume.birthDate).format('YYYY-MM-DD') : null,
-        medicalExamDate: resume.medicalExamDate ? dayjs(resume.medicalExamDate).format('YYYY-MM-DD') : null,
-        skills: Array.isArray(resume.skills) ? resume.skills : [],
-        serviceArea: Array.isArray(resume.serviceArea) ? resume.serviceArea : 
-          (resume.serviceArea ? [resume.serviceArea] : []),
-        photoUrls: Array.isArray(resume.photoUrls) ? resume.photoUrls : [],
-        certificateUrls: Array.isArray(resume.certificateUrls) ? resume.certificateUrls : [],
-        medicalReportUrls: Array.isArray(resume.medicalReportUrls) ? resume.medicalReportUrls : [],
-        idCardFrontUrl: resume.idCardFront?.url || resume.idCardFrontUrl || '',
-        idCardBackUrl: resume.idCardBack?.url || resume.idCardBackUrl || '',
-        // 确保地址相关字段被正确传递
-        currentAddress: resume.currentAddress || '',
-        hukouAddress: resume.hukouAddress || '',
-        nativePlace: resume.nativePlace || ''
-      };
-      
-      // 在保存前检查并打印地址字段
-      console.log('保存到localStorage的简历数据（地址字段）:', {
-        currentAddress: formattedResume.currentAddress,
-        hukouAddress: formattedResume.hukouAddress,
-        nativePlace: formattedResume.nativePlace
-      });
-      
-      localStorage.setItem('editingResume', JSON.stringify(formattedResume));
-      navigate(`/aunt/create-resume?edit=true&id=${resume.id}`);
-    } else {
-      message.error('无法获取简历数据');
-    }
-  };
+  const [followUpLoading, setFollowUpLoading] = useState(false);
 
   // 在组件内部处理数据前的函数，处理工作经历的日期格式
   const formatWorkExperiences = (data: Partial<ResumeData>) => {
@@ -518,6 +509,39 @@ const ResumeDetail = () => {
     }
   }, [shortId]);
 
+  // 处理编辑操作
+  const handleEdit = () => {
+    if (resume) {
+      const formattedResume = {
+        ...resume,
+        workExperiences: resume.workExperiences?.map((exp: any) => ({
+          ...exp,
+          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : null,
+          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : null,
+          description: exp.description || ''
+        })) || [],
+        birthDate: resume.birthDate ? dayjs(resume.birthDate).format('YYYY-MM-DD') : null,
+        medicalExamDate: resume.medicalExamDate ? dayjs(resume.medicalExamDate).format('YYYY-MM-DD') : null,
+        skills: Array.isArray(resume.skills) ? resume.skills : [],
+        serviceArea: Array.isArray(resume.serviceArea) ? resume.serviceArea : 
+          (resume.serviceArea ? [resume.serviceArea] : []),
+        photoUrls: Array.isArray(resume.photoUrls) ? resume.photoUrls : [],
+        certificateUrls: Array.isArray(resume.certificateUrls) ? resume.certificateUrls : [],
+        medicalReportUrls: Array.isArray(resume.medicalReportUrls) ? resume.medicalReportUrls : [],
+        idCardFrontUrl: resume.idCardFront?.url || resume.idCardFrontUrl || '',
+        idCardBackUrl: resume.idCardBack?.url || resume.idCardBackUrl || '',
+        currentAddress: resume.currentAddress || '',
+        hukouAddress: resume.hukouAddress || '',
+        nativePlace: resume.nativePlace || ''
+      };
+      
+      localStorage.setItem('editingResume', JSON.stringify(formattedResume));
+      navigate(`/aunt/create-resume?edit=true&id=${resume.id}`);
+    } else {
+      message.error('无法获取简历数据');
+    }
+  };
+
   // 处理图片预览
   const handlePreview = (url: string) => {
     console.log(`处理图片预览:`, url);
@@ -529,111 +553,122 @@ const ResumeDetail = () => {
     setPreviewVisible(true);
   };
 
-  // 处理文件删除 - 已移除，删除功能现在只在编辑模式的Upload组件中提供
-  // const handleFileDelete = async (fileId: string, fileType: 'photo' | 'certificate' | 'medical') => {
-  //   try {
-  //     const response = await axios.delete(`/api/resumes/${resume._id}/files/${fileId}`);
-  //     if (response.data.success) {
-  //       messageApi.success('文件删除成功');
-  //       // 重新获取简历数据
-  //       await fetchResumeDetail();
-  //     } else {
-  //       throw new Error(response.data.message || '删除失败');
-  //     }
-  //   } catch (error: any) {
-  //     console.error('删除文件失败:', error);
-  //     messageApi.error(error.message || '删除文件失败');
-  //   }
-  // };
-
-  // FilePreview组件
-const FilePreview: React.FC<{
-  file: FileInfo | string;
-  index: number;
-}> = ({ file, index }) => {
-  const [pdfStatus, setPdfStatus] = useState<'loading' | 'available' | 'unavailable'>('loading');
-  const messageApi = message.useMessage()[0];
-
-  // 处理文件URL
-  const fileUrl = typeof file === 'string' 
-    ? (file.startsWith('/api/upload/file/') ? file : `/api/upload/file/${file}`)
-    : (file.url || `/api/upload/file/${file.fileId}`);
-
-  // 获取MIME类型
-  const mimeType = typeof file === 'string' 
-    ? (file.toLowerCase().includes('.pdf') ? 'application/pdf' : '') 
-    : (file.mimeType || file.mimetype || '');
-
-  const isPdf = mimeType === 'application/pdf' || (typeof file === 'string' && file.toLowerCase().includes('.pdf'));
-  
-  // 检查PDF是否可用
-  useEffect(() => {
-    if (isPdf) {
-      fetch(fileUrl, { method: 'HEAD' })
-        .then(response => {
-          setPdfStatus(response.ok ? 'available' : 'unavailable');
-        })
-        .catch(() => {
-          setPdfStatus('unavailable');
-        });
+  // 改进的文件预览渲染函数
+  const renderFilePreview = (file: FileInfo | string, index: number) => {
+    if (typeof file === 'string') {
+      return renderLegacyFilePreview(file, index);
     }
-  }, [fileUrl, isPdf]);
 
-  const handlePdfClick = () => {
-    if (pdfStatus === 'available') {
-      window.open(fileUrl, '_blank');
-    } else {
-      messageApi.error('PDF文件不存在或已被删除');
-    }
-  };
+    // 处理FileInfo对象，使用url字段而不是fileId
+    const fileUrl = file.url || `/api/upload/file/${file.fileId}`;
+    // 兼容两种字段名：mimeType 和 mimetype
+    const mimeType = file.mimeType || file.mimetype || '';
+    const isPdf = mimeType === 'application/pdf';
+    const uniqueKey = `file-${file.fileId || index}-${index}`;
 
-  if (isPdf) {
+    console.log('渲染文件预览:', {
+      filename: file.filename,
+      mimeType: mimeType,
+      isPdf: isPdf,
+      fileUrl: fileUrl
+    });
+
     return (
-      <div style={{ position: 'relative' }}>
-        <Button
-          type="primary"
-          icon={<FilePdfOutlined />}
-          onClick={handlePdfClick}
-          style={{ height: '60px', width: '120px' }}
-          danger={pdfStatus === 'unavailable'}
-          loading={pdfStatus === 'loading'}
-        >
-          {pdfStatus === 'loading' ? '检查中' : 
-           pdfStatus === 'available' ? '查看PDF' : 
-           '文件不存在'}
-        </Button>
+      <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
+        {isPdf ? (
+          <div style={{ position: 'relative' }}>
+            <Button
+              type="primary"
+              icon={<FilePdfOutlined />}
+              onClick={() => window.open(fileUrl, '_blank')}
+              style={{ height: '60px', width: '120px' }}
+            >
+              查看PDF
+            </Button>
+
+          </div>
+        ) : (
+          <div style={{ position: 'relative' }}>
+            <Image
+              src={fileUrl}
+              alt={file.filename}
+              style={{ maxWidth: '200px', maxHeight: '200px' }}
+              placeholder={(
+                <div style={{ 
+                  background: '#f5f5f5', 
+                  width: '200px', 
+                  height: '200px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}>
+                  加载中...
+                </div>
+              )}
+              fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIiBzdHJva2U9IiNkOWQ5ZDkiIHN0cm9rZS1kYXNoYXJyYXk9IjUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+5paH5Lu25LiN5a2Y5ZyoPC90ZXh0Pjwvc3ZnPg=="
+            />
+
+          </div>
+        )}
       </div>
     );
-  }
+  };
 
-  return (
-    <div style={{ position: 'relative' }}>
-      <Image
-        src={fileUrl}
-        alt={typeof file === 'string' ? `文件 ${index + 1}` : file.filename}
-        style={{ maxWidth: '200px', maxHeight: '200px' }}
-        preview={true}
-        onError={(e) => {
-          const target = e.target as HTMLImageElement;
-          target.parentElement?.parentElement?.remove();
-        }}
-      />
-    </div>
-  );
-};
+  // 更新渲染旧版文件预览的函数
+  const renderLegacyFilePreview = (url: string, index: number) => {
+    const fileUrl = url.startsWith('/api/upload/file/') ? url : `/api/upload/file/${url}`;
+    const uniqueKey = `legacy-file-${index}`;
+    
+    // 从URL中提取文件ID - 已不再使用
+    // const fileId = url.replace('/api/upload/file/', '').replace(/^\//, '');
+    
+    // 检查是否为PDF文件（通过URL或文件扩展名判断）
+    const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
+    
+    return (
+      <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
+        {isPdf ? (
+          <div style={{ position: 'relative' }}>
+            <Button
+              type="primary"
+              icon={<FilePdfOutlined />}
+              onClick={() => window.open(fileUrl, '_blank')}
+              style={{ height: '60px', width: '120px' }}
+            >
+              查看PDF
+            </Button>
 
-// 改进的文件预览渲染函数
-const renderFilePreview = (file: FileInfo | string, index: number) => {
-  const uniqueKey = typeof file === 'string' 
-    ? `legacy-file-${index}` 
-    : `file-${file.fileId || index}-${index}`;
+          </div>
+        ) : (
+          <div style={{ position: 'relative' }}>
+            <Image
+              src={fileUrl}
+              alt={`文件 ${index + 1}`}
+              style={{ maxWidth: '200px', maxHeight: '200px' }}
+              placeholder={(
+                <div style={{ 
+                  background: '#f5f5f5', 
+                  width: '200px', 
+                  height: '200px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}>
+                  加载中...
+                </div>
+              )}
+              fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIiBzdHJva2U9IiNkOWQ5ZDkiIHN0cm9rZS1kYXNoYXJyYXk9IjUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+5paH5Lu25LiN5a2Y5ZyoPC90ZXh0Pjwvc3ZnPg=="
+              onError={() => {
+                // 如果图片加载失败，可能是PDF文件，显示PDF按钮
+                console.log('图片加载失败，可能是PDF文件:', fileUrl);
+              }}
+            />
 
-  return (
-    <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
-      <FilePreview file={file} index={index} />
-    </div>
-  );
-};
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // 工作经历显示卡片
   const renderWorkExperiences = () => {
@@ -843,7 +878,67 @@ const renderFilePreview = (file: FileInfo | string, index: number) => {
     </Modal>
   );
 
-  // 身份证上传和OCR识别功能已移至 CreateResume 组件中
+  // 处理身份证上传和OCR识别
+  const handleIdCardUpload = async (type: 'front' | 'back', info: any) => {
+    if (!info?.file) {
+      messageApi.error(`未获取到文件信息`);
+      return;
+    }
+
+    const file = info.file.originFileObj || info.file;
+    if (!file) {
+      messageApi.error(`未获取到文件对象`);
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // 压缩图片
+      const compressedFile = await imageCompression(file, {
+        maxSizeMB: 0.05,
+        maxWidthOrHeight: 1024,
+        useWebWorker: true
+      });
+
+      // 创建FormData对象
+      const formData = new FormData();
+      formData.append('file', compressedFile);
+      formData.append('idCardSide', type);
+
+      // 1. 先进行OCR识别
+      const ocrResponse = await axios.post('/api/ocr/idcard', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
+      });
+
+      if (!ocrResponse.data.success) {
+        throw new Error(ocrResponse.data.message || 'OCR识别失败');
+      }
+
+      messageApi.success('身份证识别成功');
+
+      // 2. 上传图片
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', compressedFile);
+      
+      const uploadResponse = await axios.post(`/api/upload/id-card/${type}`, uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (!uploadResponse.data.success) {
+        throw new Error(uploadResponse.data.message || '图片上传失败');
+      }
+
+      messageApi.success('图片上传成功');
+
+    } catch (error: any) {
+      console.error('处理身份证失败:', error);
+      messageApi.error(error.message || `身份证处理失败`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 在组件加载时打印图片URL信息
   useEffect(() => {
@@ -1148,20 +1243,19 @@ const renderFilePreview = (file: FileInfo | string, index: number) => {
               pagination={{ pageSize: 5 }}
             />
           </Card>
-
-          <Modal
-            open={previewVisible}
-            title={previewImage ? '图片预览' : ''}
-            footer={null}
-            onCancel={() => setPreviewVisible(false)}
-          >
-            <img alt="预览" style={{ width: '100%' }} src={previewImage} />
-          </Modal>
-
         </Card>
 
         {/* 添加跟进记录弹窗 */}
         <AddFollowUpModal />
+
+        <Modal
+          open={previewVisible}
+          title={previewImage ? '图片预览' : ''}
+          footer={null}
+          onCancel={() => setPreviewVisible(false)}
+        >
+          <img alt="预览" style={{ width: '100%' }} src={previewImage} />
+        </Modal>
       </div>
     </>
   );

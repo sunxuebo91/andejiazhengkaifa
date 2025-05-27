@@ -474,75 +474,148 @@ const CreateResume = () => {
 
   // 更新身份证图片预览组件
   const renderIdCardPreview = (type: 'front' | 'back', file: CustomUploadFile | undefined) => {
-    if (!file) return null;
-
-    return (
-      <div style={{ 
-        border: '1px solid #d9d9d9', 
-        borderRadius: 8, 
-        padding: 8, 
-        position: 'relative',
-        height: 160
-      }}>
-        <img 
-          src={file.url}
-          alt={`身份证${type === 'front' ? '正面' : '背面'}`}
-          style={{ 
-            width: '100%', 
-            height: '100%', 
-            objectFit: 'contain' 
-          }}
-          onLoad={() => debugLog(`身份证${type === 'front' ? '正面' : '背面'}图片加载成功`)}
-          onError={(e) => {
-            console.error(`身份证${type === 'front' ? '正面' : '背面'}图片加载失败`);
-            e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFeAJmv2G12QAAAABJRU5ErkJggg==';
-          }}
-        />
+    // 检查是否有新上传的文件
+    if (file) {
+      return (
         <div style={{ 
-          position: 'absolute', 
-          bottom: 8, 
-          left: 8, 
-          background: 'rgba(0,0,0,0.6)', 
-          color: 'white', 
-          padding: '2px 8px', 
-          borderRadius: 4,
-          fontSize: 12
+          border: '1px solid #d9d9d9', 
+          borderRadius: 8, 
+          padding: 8, 
+          position: 'relative',
+          height: 160
         }}>
-          {(file.size ? (file.size / 1024).toFixed(2) : '0.00')} KB
-        </div>
-        <div style={{ 
-          position: 'absolute', 
-          top: 8, 
-          right: 8, 
-          display: 'flex', 
-          gap: 8 
-        }}>
-          <Button
-            size="small"
-            shape="circle"
-            icon={<EyeOutlined />}
-            onClick={() => previewIdCard(file.originFileObj)}
-          />
-          <Button
-            size="small"
-            shape="circle"
-            danger
-            icon={<CloseOutlined />}
-            onClick={() => {
-              setIdCardFiles(prev => {
-                if (file.url && file.url.startsWith('blob:')) {
-                  URL.revokeObjectURL(file.url);
-                }
-                return {
-                  ...prev,
-                  [type]: []
-                };
-              });
+          <img 
+            src={file.url}
+            alt={`身份证${type === 'front' ? '正面' : '背面'}`}
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'contain' 
+            }}
+            onLoad={() => debugLog(`身份证${type === 'front' ? '正面' : '背面'}图片加载成功`)}
+            onError={(e) => {
+              console.error(`身份证${type === 'front' ? '正面' : '背面'}图片加载失败`);
+              e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFeAJmv2G12QAAAABJRU5ErkJggg==';
             }}
           />
+          <div style={{ 
+            position: 'absolute', 
+            bottom: 8, 
+            left: 8, 
+            background: 'rgba(0,0,0,0.6)', 
+            color: 'white', 
+            padding: '2px 8px', 
+            borderRadius: 4,
+            fontSize: 12
+          }}>
+            {(file.size ? (file.size / 1024).toFixed(2) : '0.00')} KB
+          </div>
+          <div style={{ 
+            position: 'absolute', 
+            top: 8, 
+            right: 8, 
+            display: 'flex', 
+            gap: 8 
+          }}>
+            <Button
+              size="small"
+              shape="circle"
+              icon={<EyeOutlined />}
+              onClick={() => previewIdCard(file.originFileObj)}
+            />
+            <Button
+              size="small"
+              shape="circle"
+              danger
+              icon={<CloseOutlined />}
+              onClick={() => {
+                setIdCardFiles(prev => {
+                  if (file.url && file.url.startsWith('blob:')) {
+                    URL.revokeObjectURL(file.url);
+                  }
+                  return {
+                    ...prev,
+                    [type]: []
+                  };
+                });
+              }}
+            />
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+
+    // 检查是否有已有的照片URL
+    const existingUrl = type === 'front' ? existingIdCardFrontUrl : existingIdCardBackUrl;
+    if (existingUrl) {
+      return (
+        <div style={{ 
+          border: '1px solid #d9d9d9', 
+          borderRadius: 8, 
+          padding: 8, 
+          position: 'relative',
+          height: 160
+        }}>
+          <img 
+            src={existingUrl}
+            alt={`身份证${type === 'front' ? '正面' : '背面'}`}
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'contain' 
+            }}
+            onLoad={() => debugLog(`已有身份证${type === 'front' ? '正面' : '背面'}图片加载成功`)}
+            onError={(e) => {
+              console.error(`已有身份证${type === 'front' ? '正面' : '背面'}图片加载失败`);
+              e.currentTarget.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFeAJmv2G12QAAAABJRU5ErkJggg==';
+            }}
+          />
+          <div style={{ 
+            position: 'absolute', 
+            top: 8, 
+            right: 8, 
+            display: 'flex', 
+            gap: 8 
+          }}>
+            <Button
+              size="small"
+              shape="circle"
+              icon={<EyeOutlined />}
+              onClick={() => {
+                // 创建一个临时的File对象用于预览
+                fetch(existingUrl)
+                  .then(res => res.blob())
+                  .then(blob => {
+                    const file = new File([blob], `idcard-${type}.jpg`, { type: 'image/jpeg' });
+                    previewIdCard(file);
+                  })
+                  .catch(err => {
+                    console.error('预览已有照片失败:', err);
+                    messageApi.error('预览照片失败');
+                  });
+              }}
+            />
+            <Button
+              size="small"
+              shape="circle"
+              danger
+              icon={<CloseOutlined />}
+              onClick={() => {
+                if (type === 'front') {
+                  setExistingIdCardFrontUrl('');
+                  setHasExistingIdCardFront(false);
+                } else {
+                  setExistingIdCardBackUrl('');
+                  setHasExistingIdCardBack(false);
+                }
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   // 添加日期格式化函数

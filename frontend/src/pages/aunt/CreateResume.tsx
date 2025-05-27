@@ -816,8 +816,36 @@ const CreateResume = () => {
         fileTypes
       });
 
-      // 发送请求
-      const response = await apiService.upload('/resumes', formData);
+      // 获取URL参数
+      const params = new URLSearchParams(window.location.search);
+      const isEditMode = params.get('edit') === 'true';
+      const resumeId = params.get('id');
+
+      let response;
+      if (isEditMode && resumeId) {
+        // 编辑模式：更新现有简历
+        response = await apiService.upload(`/resumes/${resumeId}`, formData, 'PUT');
+        
+        if (response.success) {
+          messageApi.success('更新简历成功');
+          // 清除localStorage中的编辑数据
+          localStorage.removeItem('editingResume');
+          // 跳转回详情页面
+          navigate(`/aunt/detail/${resumeId}`);
+        } else {
+          messageApi.error(response.message || '更新简历失败');
+        }
+      } else {
+        // 创建模式：创建新简历
+        response = await apiService.upload('/resumes', formData);
+        
+        if (response.success) {
+          messageApi.success('创建简历成功');
+          navigate('/aunt/list');
+        } else {
+          messageApi.error(response.message || '创建简历失败');
+        }
+      }
 
       // 记录响应数据
       console.log('提交表单 - 响应数据:', {
@@ -825,13 +853,6 @@ const CreateResume = () => {
         message: response.message,
         data: response.data
       });
-
-      if (response.success) {
-        messageApi.success('创建简历成功');
-        navigate('/aunt/list');
-      } else {
-        messageApi.error(response.message || '创建简历失败');
-      }
     } catch (error: unknown) {
       // 详细的错误日志记录
       const isAxiosError = (error: unknown): error is any => {
@@ -1046,6 +1067,18 @@ const CreateResume = () => {
     <PageContainer
       header={{
         title: pageTitle,
+        breadcrumb: {
+          items: [
+            { path: '/aunt/list', title: '阿姨简历库' },
+            ...(isEditing 
+              ? [
+                  { path: `/aunt/detail/${new URLSearchParams(window.location.search).get('id')}`, title: '简历详情' },
+                  { title: '编辑简历' }
+                ]
+              : [{ title: '创建简历' }]
+            ),
+          ],
+        },
         onBack: () => window.history.back(),
         extra: [
           <Button 
@@ -1063,7 +1096,9 @@ const CreateResume = () => {
         style={{ marginBottom: 24 }}
         title={
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Title level={4} style={{ margin: 0 }}>阿姨简历信息</Title>
+            <Title level={4} style={{ margin: 0 }}>
+              {isEditing ? '编辑阿姨简历' : '创建阿姨简历'}
+            </Title>
           </div>
         }
         >
@@ -1729,9 +1764,17 @@ const CreateResume = () => {
               loading={loading || submitting}
               style={{ marginRight: '16px' }}
             >
-              提交
+              {isEditing ? '保存更新' : '创建简历'}
             </Button>
-            <Button onClick={() => navigate(-1)}>取消</Button>
+            <Button onClick={() => {
+              // 如果是编辑模式，清除localStorage中的数据
+              if (isEditing) {
+                localStorage.removeItem('editingResume');
+              }
+              navigate(-1);
+            }}>
+              取消
+            </Button>
           </div>
           </Form>
         </Card>

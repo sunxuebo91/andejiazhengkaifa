@@ -152,19 +152,19 @@ const toDayjs = (date: any): Dayjs | undefined => {
   return parsed.isValid() ? parsed : undefined;
 };
 
-// 添加工种映射常量
+// 修改工种映射常量
 const JOB_TYPE_MAP = {
-  'ZHUJIA_YUER': '住家育儿',
-  'BAIBAN_YUER': '白班育儿',
-  'BAOJIE': '保洁',
-  'BAIBAN_BAOMU': '白班保姆',
-  'ZHUJIA_BAOMU': '住家保姆',
-  'YANGCHONG': '养宠',
-  'XIAOSHI': '小时工',
-  'YUEXIN': '月薪'
+  'zhujia-yuer': '住家育儿',
+  'baiban-yuer': '白班育儿',
+  'baojie': '保洁',
+  'baiban-baomu': '白班保姆',
+  'zhujia-baomu': '住家保姆',
+  'yangchong': '养宠',
+  'xiaoshi': '小时工',
+  'yuexin': '月薪'
 } as const;
 
-// 添加工种值转换函数
+// 修改工种值转换函数
 const convertJobType = (value: string): string => {
   const jobTypeMap: Record<string, string> = {
     'ZHUJIA_YUER': 'zhujia-yuer',
@@ -174,22 +174,51 @@ const convertJobType = (value: string): string => {
     'ZHUJIA_BAOMU': 'zhujia-baomu',
     'YANGCHONG': 'yangchong',
     'XIAOSHI': 'xiaoshi',
-    'YUEXIN': 'yuexin'
+    'YUEXIN': 'yuexin',
+    // 添加小写形式的映射
+    'zhujia-yuer': 'zhujia-yuer',
+    'baiban-yuer': 'baiban-yuer',
+    'baojie': 'baojie',
+    'baiban-baomu': 'baiban-baomu',
+    'zhujia-baomu': 'zhujia-baomu',
+    'yangchong': 'yangchong',
+    'xiaoshi': 'xiaoshi',
+    'yuexin': 'yuexin'
   };
   return jobTypeMap[value] || value;
 };
 
-// 添加有效工种值列表
-const VALID_JOB_TYPES = [
-  'zhujia-yuer',
-  'baiban-yuer',
-  'baojie',
-  'baiban-baomu',
-  'zhujia-baomu',
-  'yangchong',
-  'xiaoshi',
-  'yuexin'
-] as const;
+// 修改有效工种值列表
+const VALID_JOB_TYPES = Object.keys(JOB_TYPE_MAP) as Array<keyof typeof JOB_TYPE_MAP>;
+
+// 添加学历映射常量
+const EDUCATION_MAP = {
+  'no': '无学历',
+  'primary': '小学',
+  'middle': '初中',
+  'secondary': '中专',
+  'vocational': '职高',
+  'high': '高中',
+  'college': '大专',
+  'bachelor': '本科',
+  'graduate': '研究生'
+} as const;
+
+// 添加学历值转换函数
+const convertEducation = (value: string): string => {
+  const educationMap: Record<string, string> = {
+    'no': 'no',
+    'primary': 'primary',
+    'middle': 'middle',
+    'secondary': 'secondary',
+    'vocational': 'vocational',
+    'high': 'high',
+    'college': 'college',
+    'bachelor': 'bachelor',
+    'graduate': 'graduate'
+  };
+  return educationMap[value.toLowerCase()] || value;
+};
 
 const CreateResume = () => {
   const { message: messageApi } = App.useApp();
@@ -681,26 +710,16 @@ const CreateResume = () => {
         gender: values.gender === 'male' || values.gender === 'female' ? values.gender : 'female',
         // 确保工种使用正确的枚举值
         jobType: (() => {
-          const convertedValue = convertJobType(String(values.jobType));
-          console.log('工种处理过程:', {
-            originalValue: values.jobType,
-            convertedValue,
-            validTypes: VALID_JOB_TYPES
-          });
-
-          // 检查转换后的值是否在有效值列表中
-          if (!VALID_JOB_TYPES.includes(convertedValue as typeof VALID_JOB_TYPES[number])) {
-            throw new Error(`请选择正确的工种，当前值: ${convertedValue}`);
+          const jobType = values.jobType;
+          if (!jobType || !VALID_JOB_TYPES.includes(jobType as keyof typeof JOB_TYPE_MAP)) {
+            throw new Error('请选择正确的工种');
           }
-          return convertedValue;
+          return jobType;
         })(),
         // 确保学历使用正确的枚举值
         education: (() => {
           const education = values.education?.toLowerCase();
-          const validEducation = [
-            'no', 'primary', 'middle', 'secondary', 'vocational',
-            'high', 'college', 'bachelor', 'graduate'
-          ];
+          const validEducation = Object.keys(EDUCATION_MAP);
           if (!education || !validEducation.includes(education)) {
             throw new Error('请选择正确的学历');
           }
@@ -1037,6 +1056,8 @@ const CreateResume = () => {
           ...editingResume,
           birthDate: toDayjs(editingResume.birthDate),
           medicalExamDate: toDayjs(editingResume.medicalExamDate),
+          // 确保工种值使用正确的枚举值
+          jobType: editingResume.jobType ? convertJobType(editingResume.jobType) : undefined,
           workExperiences: (editingResume.workExperiences || []).map((exp: WorkExperienceItem) => {
             if (!exp) return null;
             return {
@@ -1366,15 +1387,9 @@ const CreateResume = () => {
                     rules={[{ required: true, message: '请选择学历' }]}
                   >
                     <Select placeholder="请选择学历">
-                      <Option value={Education.NO}>无学历</Option>
-                      <Option value={Education.PRIMARY}>小学</Option>
-                      <Option value={Education.MIDDLE}>初中</Option>
-                      <Option value={Education.SECONDARY}>中专</Option>
-                      <Option value={Education.VOCATIONAL}>职高</Option>
-                      <Option value={Education.HIGH}>高中</Option>
-                      <Option value={Education.COLLEGE}>大专</Option>
-                      <Option value={Education.BACHELOR}>本科</Option>
-                      <Option value={Education.GRADUATE}>研究生</Option>
+                      {Object.entries(EDUCATION_MAP).map(([value, label]) => (
+                        <Option key={value} value={value}>{label}</Option>
+                      ))}
                     </Select>
                   </Form.Item>
                 </Col>

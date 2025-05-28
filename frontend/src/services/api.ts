@@ -138,10 +138,10 @@ export const apiService = {
   },
   
   // 文件上传专用方法
-  upload: <T = any>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+  upload: <T = any>(url: string, formData: FormData, method: string = 'POST', config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
     return request<T>({
       ...config,
-      method: 'POST',
+      method,
       url,
       data: formData,
       headers: {

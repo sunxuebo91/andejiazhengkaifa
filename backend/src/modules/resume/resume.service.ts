@@ -321,4 +321,75 @@ export class ResumeService {
     const resume = new this.resumeModel(createResumeDto);
     return resume.save();
   }
+
+  async updateWithFiles(
+    id: string,
+    updateResumeDto: UpdateResumeDto,
+    files: Express.Multer.File[] = [],
+    fileTypes: string[] = []
+  ) {
+    const resume = await this.resumeModel.findById(new Types.ObjectId(id));
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    // 处理文件上传
+    const categorizedFiles: any = {};
+    const fileIds = [...(resume.fileIds || [])];
+
+    // 上传新文件
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileType = fileTypes[i] || 'personalPhoto'; // 默认为个人照片
+
+      // 上传文件
+      const fileId = await this.uploadService.uploadFile(file, { type: fileType });
+      const objectId = new Types.ObjectId(fileId);
+      fileIds.push(objectId);
+
+      const fileInfo = {
+        url: `/api/upload/file/${fileId}`,
+        filename: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size
+      };
+
+      // 根据文件类型分类存储
+      switch (fileType) {
+        case 'idCardFront':
+          resume.idCardFront = fileInfo;
+          break;
+        case 'idCardBack':
+          resume.idCardBack = fileInfo;
+          break;
+        case 'personalPhoto':
+          if (!resume.photoUrls) resume.photoUrls = [];
+          resume.photoUrls.push(`/api/upload/file/${fileId}`);
+          break;
+        case 'certificate':
+          if (!resume.certificates) resume.certificates = [];
+          resume.certificates.push(fileInfo);
+          if (!resume.certificateUrls) resume.certificateUrls = [];
+          resume.certificateUrls.push(`/api/upload/file/${fileId}`);
+          break;
+        case 'medicalReport':
+          if (!resume.reports) resume.reports = [];
+          resume.reports.push(fileInfo);
+          if (!resume.medicalReportUrls) resume.medicalReportUrls = [];
+          resume.medicalReportUrls.push(`/api/upload/file/${fileId}`);
+          break;
+        default:
+          if (!resume.photoUrls) resume.photoUrls = [];
+          resume.photoUrls.push(`/api/upload/file/${fileId}`);
+          break;
+      }
+    }
+
+    // 更新简历基本信息
+    Object.assign(resume, updateResumeDto);
+    resume.fileIds = fileIds;
+
+    // 保存更新后的简历
+    return resume.save();
+  }
 }

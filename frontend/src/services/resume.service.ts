@@ -181,7 +181,7 @@ export const resumeService = {
       }
     }
     
-    const response = await apiService.upload<ApiResponse<Resume>>(`/resumes/${id}`, formData);
+    const response = await apiService.upload<ApiResponse<Resume>>(`/resumes/${id}`, formData, 'PATCH');
     return response.data;
   },
   

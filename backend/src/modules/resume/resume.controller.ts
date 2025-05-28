@@ -182,12 +182,46 @@ export class ResumeController {
   }
 
   @Patch(':id')
+  @UseInterceptors(FilesInterceptor('files'))
   @ApiOperation({ summary: '更新简历' })
+  @ApiConsumes('multipart/form-data')
   @ApiResponse({ status: 200, description: '更新成功' })
-  async update(@Param('id') id: string, @Body() updateResumeDto: UpdateResumeDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateResumeDto: UpdateResumeDto,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Req() req
+  ) {
     try {
       this.logger.log(`更新简历: id=${id}, data=${JSON.stringify(updateResumeDto)}`);
-      const resume = await this.resumeService.update(id, updateResumeDto);
+      
+      // 从请求体中提取文件类型数组
+      let fileTypes: string[] = [];
+      if (req.body.fileTypes) {
+        if (Array.isArray(req.body.fileTypes)) {
+          fileTypes = req.body.fileTypes;
+        } else if (typeof req.body.fileTypes === 'string') {
+          try {
+            fileTypes = JSON.parse(req.body.fileTypes);
+          } catch {
+            fileTypes = [req.body.fileTypes];
+          }
+        }
+      }
+
+      this.logger.debug('更新简历 - 文件信息:', {
+        filesCount: files?.length || 0,
+        fileTypes,
+        updateData: updateResumeDto
+      });
+
+      const resume = await this.resumeService.updateWithFiles(
+        id,
+        updateResumeDto,
+        files || [],
+        fileTypes
+      );
+
       return {
         success: true,
         data: resume,

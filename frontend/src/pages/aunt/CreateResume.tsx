@@ -16,6 +16,8 @@ import type { Dayjs } from 'dayjs';
 import type { DatePickerProps } from 'antd';
 import { GenderType, JobType, Education } from '@/types/resume';
 import { Gender } from '@/types/resume';
+import { ApiResponse } from '@/services/api';
+import { Resume } from '@/services/resume.service';
 
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
@@ -685,298 +687,164 @@ const CreateResume = () => {
 
   // 修改 handleSubmit 函数
   const handleSubmit = async (values: FormValues) => {
-    let formData: FormData | null = null;
-    let processedValues: Partial<FormValues> = {};
-    
     try {
       setSubmitting(true);
-
-      // 记录原始值
-      console.log('工种原始值:', {
-        jobType: values.jobType,
-        type: typeof values.jobType,
-        rawValue: values.jobType
-      });
-
-      // 验证必填字段
-      if (!values.jobType) {
-        throw new Error('工种不能为空');
-      }
-
-      // 处理表单数据，确保枚举值正确
-      processedValues = {
-        ...values,
-        // 确保性别值正确
-        gender: values.gender === 'male' || values.gender === 'female' ? values.gender : 'female',
-        // 确保工种使用正确的枚举值
-        jobType: (() => {
-          const jobType = values.jobType;
-          if (!jobType || !VALID_JOB_TYPES.includes(jobType as keyof typeof JOB_TYPE_MAP)) {
-            throw new Error('请选择正确的工种');
-          }
-          return jobType;
-        })(),
-        // 确保学历使用正确的枚举值
-        education: (() => {
-          const education = values.education?.toLowerCase();
-          const validEducation = Object.keys(EDUCATION_MAP);
-          if (!education || !validEducation.includes(education)) {
-            throw new Error('请选择正确的学历');
-          }
-          return education;
-        })(),
-        // 处理日期
-        birthDate: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : undefined,
-        medicalExamDate: values.medicalExamDate ? dayjs(values.medicalExamDate).format('YYYY-MM-DD') : undefined,
-        // 处理工作经历，确保日期字段格式正确
-        workExperiences: values.workExperiences?.map(exp => ({
-          ...exp,
-          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : dayjs().format('YYYY-MM'),
-          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : dayjs().format('YYYY-MM'),
-          description: exp.description || ''
-        })) || [],
-        // 确保数字类型正确
-        age: (() => {
-          const age = Number(values.age);
-          if (isNaN(age) || age < 18 || age > 80) {
-            throw new Error('年龄必须在18-80岁之间');
-          }
-          return age;
-        })(),
-        experienceYears: (() => {
-          const years = Number(values.experienceYears);
-          if (isNaN(years) || years < 0 || years > 50) {
-            throw new Error('工作经验年限必须在0-50年之间');
-          }
-          return years;
-        })(),
-        // 确保期望薪资是有效的数字
-        expectedSalary: values.expectedSalary ? Math.max(0, Math.floor(Number(values.expectedSalary))) : undefined,
-        // 确保 serviceArea 始终是数组且不为空
-        serviceArea: (() => {
-          if (!values.serviceArea || (Array.isArray(values.serviceArea) && values.serviceArea.length === 0)) {
-            throw new Error('服务区域不能为空');
-          }
-          return Array.isArray(values.serviceArea) ? values.serviceArea : [values.serviceArea];
-        })(),
-        // 确保 skills 是数组且值正确
-        skills: (() => {
-          if (!values.skills || (Array.isArray(values.skills) && values.skills.length === 0)) {
-            return []; // 技能是可选的，允许为空数组
-          }
-          const skillsArray = Array.isArray(values.skills) ? values.skills : [values.skills];
-          const validSkills = [
-            'chanhou', 'teshu-yinger', 'yiliaobackground', 'yuying', 'zaojiao',
-            'fushi', 'ertui', 'waiyu', 'zhongcan', 'xican', 'mianshi', 'jiashi', 'shouyi'
-          ];
-          const filteredSkills = skillsArray
-            .map(skill => skill.toLowerCase())
-            .filter(skill => validSkills.includes(skill));
-          if (filteredSkills.length === 0) {
-            throw new Error('请选择有效的技能标签');
-          }
-          return filteredSkills;
-        })()
-      };
-
-      // 创建 FormData
-      formData = new FormData();
-      if (!formData) {
-        throw new Error('无法创建 FormData 对象');
-      }
-
-      // 添加基本字段
-      Object.entries(processedValues).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          if (key === 'workExperiences') {
-            // 特殊处理工作经历，确保日期格式正确
-            const formattedExperiences = (value as any[]).map(exp => ({
-              ...exp,
-              startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : dayjs().format('YYYY-MM'),
-              endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : dayjs().format('YYYY-MM')
-            }));
-            formData!.append(key, JSON.stringify(formattedExperiences));
-          } else if (key === 'expectedSalary' || key === 'age' || key === 'experienceYears') {
-            formData!.append(key, Math.floor(Number(value)).toString());
-          } else if (Array.isArray(value)) {
-            formData!.append(key, JSON.stringify(value));
-          } else if (typeof value === 'object') {
-            formData!.append(key, JSON.stringify(value));
-          } else {
-            formData!.append(key, String(value));
-          }
-        }
-      });
-
-      // 添加文件类型数组
-      const fileTypes: string[] = [];
-
-      // 定义添加文件的函数
-      const addFilesToFormData = (files: CustomUploadFile[], type: string) => {
-        if (!formData) return;
-        files.forEach(file => {
-          if (file.originFileObj) {
-            formData!.append('files', file.originFileObj as Blob);
-            fileTypes.push(type);
-          }
-        });
-      };
-
-      // 添加新文件及其类型
-      addFilesToFormData(idCardFiles.front, 'idCardFront');
-      addFilesToFormData(idCardFiles.back, 'idCardBack');
-      addFilesToFormData(photoFiles, 'personalPhoto');
-      addFilesToFormData(certificateFiles, 'certificate');
-      addFilesToFormData(medicalReportFiles, 'medicalReport');
-
-      // 添加文件类型数组到FormData
-      if (formData && fileTypes.length > 0) {
-        formData.append('fileTypes', JSON.stringify(fileTypes));
-      }
-
-      // 添加已存在的文件 URL
-      if (formData) {
-        if (hasExistingIdCardFront && existingIdCardFrontUrl) {
-          formData.append('idCardFrontUrl', existingIdCardFrontUrl);
-        }
-        if (hasExistingIdCardBack && existingIdCardBackUrl) {
-          formData.append('idCardBackUrl', existingIdCardBackUrl);
-        }
-        if (existingPhotoUrls.length > 0) {
-          formData.append('photoUrls', JSON.stringify(existingPhotoUrls));
-        }
-        if (existingCertificateUrls.length > 0) {
-          formData.append('certificateUrls', JSON.stringify(existingCertificateUrls));
-        }
-        if (existingMedicalReportUrls.length > 0) {
-          formData.append('medicalReportUrls', JSON.stringify(existingMedicalReportUrls));
-        }
-      }
-
-      // 记录完整的提交数据
-      console.log('提交表单 - 完整数据:', {
-        基本信息: {
-          姓名: processedValues.name,
-          年龄: processedValues.age,
-          手机号: processedValues.phone,
-          性别: processedValues.gender,
-          籍贯: processedValues.nativePlace,
-          工种: processedValues.jobType,
-          学历: processedValues.education,
-          工作经验年限: processedValues.experienceYears,
-          期望薪资: processedValues.expectedSalary
-        },
-        可选信息: {
-          身份证号: processedValues.idNumber || '',
-          微信号: processedValues.wechat || '',
-          现居地址: processedValues.currentAddress || '',
-          户籍地址: processedValues.hukouAddress || '',
-          出生日期: processedValues.birthDate || '',
-          民族: processedValues.ethnicity || '',
-          生肖: processedValues.zodiac || '',
-          星座: processedValues.zodiacSign || '',
-          服务区域: processedValues.serviceArea || [],
-          接单状态: processedValues.orderStatus || '',
-          技能标签: processedValues.skills || [],
-          来源渠道: processedValues.leadSource || ''
-        },
-        工作经历: processedValues.workExperiences || [],
-        文件信息: {
-          新上传文件: {
-            身份证正面: idCardFiles.front.length > 0,
-            身份证背面: idCardFiles.back.length > 0,
-            个人照片数量: photoFiles.length,
-            技能证书数量: certificateFiles.length,
-            体检报告数量: medicalReportFiles.length
-          },
-          已存在文件: {
-            身份证正面: hasExistingIdCardFront,
-            身份证背面: hasExistingIdCardBack,
-            个人照片数量: existingPhotoUrls.length,
-            技能证书数量: existingCertificateUrls.length,
-            体检报告数量: existingMedicalReportUrls.length
-          },
-          文件类型: fileTypes
-        }
-      });
-
-      // 记录发送到后端的数据
-      const formDataObj = Object.fromEntries(formData.entries());
-      console.log('发送到后端的数据:', {
-        formData: formDataObj,
-        rawValues: processedValues,
-        fileTypes
-      });
-
+      
       // 获取URL参数
       const params = new URLSearchParams(window.location.search);
       const isEditMode = params.get('edit') === 'true';
       const resumeId = params.get('id');
 
+      const formDataToSend = new FormData();
+      
+      // 添加基本信息，确保所有字段都被正确转换
+      Object.keys(values).forEach(key => {
+        if (key !== 'files' && values[key] !== undefined && values[key] !== null) {
+          if (typeof values[key] === 'object') {
+            // 对于对象类型的字段（如日期、数组等），进行特殊处理
+            if (key === 'workExperiences') {
+              // 确保工作经历数据格式正确
+              const experiences = values[key].map((exp: any) => ({
+                ...exp,
+                startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
+                endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
+              }));
+              formDataToSend.append(key, JSON.stringify(experiences));
+            } else if (key === 'serviceArea' || key === 'skills') {
+              // 确保数组类型的字段被正确序列化
+              formDataToSend.append(key, JSON.stringify(Array.isArray(values[key]) ? values[key] : [values[key]]));
+            } else {
+              formDataToSend.append(key, JSON.stringify(values[key]));
+            }
+          } else {
+            // 对于基本类型的字段，直接转换为字符串
+            formDataToSend.append(key, String(values[key]));
+          }
+        }
+      });
+
+      // 处理文件上传
+      const allFiles: CustomUploadFile[] = [
+        ...idCardFiles.front,
+        ...idCardFiles.back,
+        ...photoFiles,
+        ...certificateFiles,
+        ...medicalReportFiles
+      ];
+
+      const fileTypes: string[] = [];
+      
+      // 添加新上传的文件
+      allFiles.forEach(file => {
+        if (file.originFileObj) {
+          formDataToSend.append('files', file.originFileObj);
+          
+          // 根据文件来源确定类型
+          let fileType = 'personalPhoto'; // 默认为个人照片
+          if (idCardFiles.front.includes(file)) {
+            fileType = 'idCardFront';
+          } else if (idCardFiles.back.includes(file)) {
+            fileType = 'idCardBack';
+          } else if (certificateFiles.includes(file)) {
+            fileType = 'certificate';
+          } else if (medicalReportFiles.includes(file)) {
+            fileType = 'medicalReport';
+          }
+          fileTypes.push(fileType);
+        }
+      });
+
+      // 添加已存在的文件URL
+      if (hasExistingIdCardFront && existingIdCardFrontUrl) {
+        formDataToSend.append('idCardFrontUrl', existingIdCardFrontUrl);
+      }
+      if (hasExistingIdCardBack && existingIdCardBackUrl) {
+        formDataToSend.append('idCardBackUrl', existingIdCardBackUrl);
+      }
+      if (existingPhotoUrls.length > 0) {
+        formDataToSend.append('photoUrls', JSON.stringify(existingPhotoUrls));
+      }
+      if (existingCertificateUrls.length > 0) {
+        formDataToSend.append('certificateUrls', JSON.stringify(existingCertificateUrls));
+      }
+      if (existingMedicalReportUrls.length > 0) {
+        formDataToSend.append('medicalReportUrls', JSON.stringify(existingMedicalReportUrls));
+      }
+
+      // 只有在有新文件时才添加fileTypes
+      if (fileTypes.length > 0) {
+        formDataToSend.append('fileTypes', JSON.stringify(fileTypes));
+      }
+
+      // 记录请求数据
+      console.log('提交表单 - 请求数据:', {
+        formData: Object.fromEntries(formDataToSend.entries()),
+        filesCount: fileTypes.length,
+        fileTypes,
+        existingFiles: {
+          idCardFront: hasExistingIdCardFront,
+          idCardBack: hasExistingIdCardBack,
+          photos: existingPhotoUrls.length,
+          certificates: existingCertificateUrls.length,
+          medicalReports: existingMedicalReportUrls.length
+        },
+        rawValues: values // 添加原始表单值以便调试
+      });
+
       let response;
       if (isEditMode && resumeId) {
-        // 编辑模式：更新现有简历
-        response = await apiService.upload(`/resumes/${resumeId}`, formData, 'PUT');
-        
-        if (response.success) {
-          messageApi.success('更新简历成功');
-          // 清除localStorage中的编辑数据
-          localStorage.removeItem('editingResume');
-          // 跳转回详情页面
-          navigate(`/aunt/detail/${resumeId}`);
-        } else {
-          messageApi.error(response.message || '更新简历失败');
-        }
+        // 更新模式：更新现有简历
+        console.log('更新简历 - 发送请求:', {
+          url: `/resumes/${resumeId}`,
+          method: 'PATCH',
+          formData: Object.fromEntries(formDataToSend.entries())
+        });
+        response = await apiService.upload<ApiResponse<Resume>>(`/resumes/${resumeId}`, formDataToSend, 'PATCH');
       } else {
         // 创建模式：创建新简历
-        response = await apiService.upload('/resumes', formData);
-        
-        if (response.success) {
-          messageApi.success('创建简历成功');
-          navigate('/aunt/list');
+        console.log('创建简历 - 发送请求:', {
+          url: '/resumes',
+          method: 'POST',
+          formData: Object.fromEntries(formDataToSend.entries())
+        });
+        response = await apiService.upload<ApiResponse<Resume>>('/resumes', formDataToSend, 'POST');
+      }
+
+      if (!response?.data) {
+        throw new Error('服务器响应无效');
+      }
+
+      const { success, message, data: resumeData } = response.data;
+      
+      if (success) {
+        messageApi.success('更新简历成功');
+        // 清除localStorage中的编辑数据
+        localStorage.removeItem('editingResume');
+        // 跳转回详情页面
+        if (resumeId) {
+          navigate(`/aunt/resumes/detail/${resumeId}`);
         } else {
-          messageApi.error(response.message || '创建简历失败');
+          navigate('/aunt/resumes');
         }
+      } else {
+        throw new Error(message || '更新简历失败');
       }
 
       // 记录响应数据
       console.log('提交表单 - 响应数据:', {
-        success: response.success,
-        message: response.message,
-        data: response.data
+        success,
+        message,
+        data: resumeData
       });
-    } catch (error: unknown) {
-      // 详细的错误日志记录
-      const isAxiosError = (error: unknown): error is any => {
-        return typeof error === 'object' && error !== null && 'isAxiosError' in error;
-      };
-
-      console.error('提交表单 - 详细错误信息:', {
-        error,
-        errorType: error instanceof Error ? error.constructor.name : typeof error,
-        errorMessage: error instanceof Error ? error.message : '未知错误',
-        errorStack: error instanceof Error ? error.stack : undefined,
-        axiosError: isAxiosError(error) ? {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
-          headers: error.response?.headers,
-          config: {
-            url: error.config?.url,
-            method: error.config?.method,
-            headers: error.config?.headers,
-            data: error.config?.data
-          }
-        } : undefined,
-        formData: formData ? Object.fromEntries(formData.entries()) : undefined,
-        processedValues,
-        formValues: values
-      });
-
-      // 提取并显示具体的错误信息
-      let errorMessage = '创建简历失败';
-      if (isAxiosError(error)) {
-        const axiosError = error;
+    } catch (error) {
+      console.error('更新简历失败:', error);
+      
+      // 提取具体的错误信息
+      let errorMessage = '更新简历失败';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        const axiosError = error as any;
         if (axiosError.response?.data?.message) {
           errorMessage = axiosError.response.data.message;
         } else if (axiosError.response?.data?.error) {
@@ -984,19 +852,6 @@ const CreateResume = () => {
         } else if (axiosError.message) {
           errorMessage = axiosError.message;
         }
-        
-        // 如果是验证错误，显示具体的字段错误
-        if (axiosError.response?.data?.errors) {
-          const validationErrors = axiosError.response.data.errors;
-          const errorDetails = Object.entries(validationErrors)
-            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
-            .join('\n');
-          console.error('表单验证错误详情:', errorDetails);
-          errorMessage = `表单验证失败:\n${errorDetails}`;
-        }
-
-        // 记录原始响应数据
-        console.error('后端返回的原始错误数据:', axiosError.response?.data);
       }
       
       messageApi.error(errorMessage);
@@ -1082,7 +937,8 @@ const CreateResume = () => {
 
   // Update the file handling functions
   const handleFileChange = (type: 'photo' | 'certificate' | 'medical') => (info: UploadChangeParam<UploadFile<any>>) => {
-    const fileList = info.fileList.map(file => {
+    // 只处理新上传的文件，保持已存在的文件不变
+    const newFiles = info.fileList.filter(file => !(file as any).isExisting).map(file => {
       const baseProps: BaseFileProps = {
         uid: file.uid || `${Date.now()}`,
         name: file.name || '未命名文件',
@@ -1093,16 +949,6 @@ const CreateResume = () => {
         type: file.type
       };
 
-      // Check if this is an existing file
-      if ((file as any).isExisting) {
-        return {
-          ...baseProps,
-          status: 'done' as const,
-          isExisting: true
-        } as ExistingFile;
-      }
-
-      // Otherwise it's a new file
       return {
         ...baseProps,
         status: (file.status || 'done') as UploadFileStatus,
@@ -1112,13 +958,13 @@ const CreateResume = () => {
 
     switch (type) {
       case 'photo':
-        setPhotoFiles(fileList);
+        setPhotoFiles(newFiles);
         break;
       case 'certificate':
-        setCertificateFiles(fileList);
+        setCertificateFiles(newFiles);
         break;
       case 'medical':
-        setMedicalReportFiles(fileList);
+        setMedicalReportFiles(newFiles);
         break;
     }
   };
@@ -1751,7 +1597,7 @@ const CreateResume = () => {
                       fileList={[
                         ...photoFiles,
                         ...existingPhotoUrls.map((url, index) => ({
-                          uid: `existing-${index}`,
+                          uid: `existing-photo-${url}-${index}`,
                           name: `已有图片 ${index + 1}`,
                           status: 'done' as const,
                           url: url,
@@ -1782,8 +1628,11 @@ const CreateResume = () => {
                         ...certificateFiles,
                         ...existingCertificateUrls.map((url, index) => {
                           const isPdf = url.toLowerCase().endsWith('.pdf');
+                          // 使用 URL 的哈希值和时间戳组合生成唯一标识符
+                          const urlHash = btoa(url).replace(/[^a-zA-Z0-9]/g, '');
+                          const timestamp = Date.now();
                           return {
-                            uid: `existing-certificate-${index}`,
+                            uid: `existing-certificate-${urlHash}-${timestamp}-${index}`,
                             name: url.split('/').pop() || `证书${index + 1}`,
                             status: 'done' as const,
                             url: isPdf ? undefined : url,
@@ -1830,7 +1679,7 @@ const CreateResume = () => {
                         ...existingMedicalReportUrls.map((url, index) => {
                           const isPdf = url.toLowerCase().endsWith('.pdf');
                           return {
-                            uid: `existing-${index}`,
+                            uid: `existing-medical-${url}-${index}`,
                             name: `已有报告 ${index + 1}`,
                             status: 'done' as const,
                             url: isPdf ? undefined : url,

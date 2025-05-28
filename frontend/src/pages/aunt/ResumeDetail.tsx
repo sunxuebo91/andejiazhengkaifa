@@ -1,3 +1,4 @@
+import React from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Form, Input, Select, DatePicker, Upload, Typography, Tooltip, Table } from 'antd';
 import { useEffect, useState } from 'react';
@@ -544,13 +545,22 @@ const ResumeDetail = () => {
 
   // 处理图片预览
   const handlePreview = (url: string) => {
-    console.log(`处理图片预览:`, url);
+    console.log(`处理预览:`, url);
     if (!url) {
       console.warn('预览URL为空');
       return;
     }
-    setPreviewImage(url);
-    setPreviewVisible(true);
+    // 判断是否为 PDF 文件（例如，通过 isPdfFile 或检查 url 是否包含"pdf"）
+    const isPdf = isPdfFile({ url });
+    if (isPdf) {
+      // 使用 Modal 打开 PDF 预览，例如使用 iframe 加载 PDF
+      setPreviewImage(url);
+      setPreviewVisible(true);
+    } else {
+      // 原有逻辑，预览图片
+      setPreviewImage(url);
+      setPreviewVisible(true);
+    }
   };
 
   // 改进的文件预览渲染函数
@@ -563,7 +573,7 @@ const ResumeDetail = () => {
     const fileUrl = file.url || `/api/upload/file/${file.fileId}`;
     // 兼容两种字段名：mimeType 和 mimetype
     const mimeType = file.mimeType || file.mimetype || '';
-    const isPdf = mimeType === 'application/pdf';
+    const isPdf = isPdfFile(file);
     const uniqueKey = `file-${file.fileId || index}-${index}`;
 
     console.log('渲染文件预览:', {
@@ -573,6 +583,11 @@ const ResumeDetail = () => {
       fileUrl: fileUrl
     });
 
+    // 如果 fileUrl 为空或无效，则直接不渲染任何内容
+    if (!fileUrl) {
+      return null;
+    }
+
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
         {isPdf ? (
@@ -580,10 +595,10 @@ const ResumeDetail = () => {
             <Button
               type="primary"
               icon={<FilePdfOutlined />}
-              onClick={() => window.open(fileUrl, '_blank')}
+              onClick={() => handlePreview(fileUrl)}
               style={{ height: '60px', width: '120px' }}
             >
-              查看PDF
+              已有报告
             </Button>
 
           </div>
@@ -605,7 +620,8 @@ const ResumeDetail = () => {
                   加载中...
                 </div>
               )}
-              fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIiBzdHJva2U9IiNkOWQ5ZDkiIHN0cm9rZS1kYXNoYXJyYXk9IjUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+5paH5Lu25LiN5a2Y5ZyoPC90ZXh0Pjwvc3ZnPg=="
+              fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" // 使用一个1x1的透明GIF作为fallback
+              // 或者 fallback={null} 如果组件支持
             />
 
           </div>
@@ -619,11 +635,12 @@ const ResumeDetail = () => {
     const fileUrl = url.startsWith('/api/upload/file/') ? url : `/api/upload/file/${url}`;
     const uniqueKey = `legacy-file-${index}`;
     
-    // 从URL中提取文件ID - 已不再使用
-    // const fileId = url.replace('/api/upload/file/', '').replace(/^\//, '');
-    
-    // 检查是否为PDF文件（通过URL或文件扩展名判断）
     const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
+
+    // 如果 fileUrl 为空或无效，则直接不渲染任何内容
+    if (!fileUrl || fileUrl === '/api/upload/file/') { // 额外判断一下是否只有前缀
+      return null;
+    }
     
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
@@ -632,10 +649,10 @@ const ResumeDetail = () => {
             <Button
               type="primary"
               icon={<FilePdfOutlined />}
-              onClick={() => window.open(fileUrl, '_blank')}
+              onClick={() => handlePreview(fileUrl)}
               style={{ height: '60px', width: '120px' }}
             >
-              查看PDF
+              已有报告
             </Button>
 
           </div>
@@ -657,10 +674,12 @@ const ResumeDetail = () => {
                   加载中...
                 </div>
               )}
-              fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIiBzdHJva2U9IiNkOWQ5ZDkiIHN0cm9rZS1kYXNoYXJyYXk9IjUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+5paH5Lu25LiN5a2Y5ZyoPC90ZXh0Pjwvc3ZnPg=="
-              onError={() => {
-                // 如果图片加载失败，可能是PDF文件，显示PDF按钮
-                console.log('图片加载失败，可能是PDF文件:', fileUrl);
+              fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" // 使用一个1x1的透明GIF作为fallback
+              // 或者 fallback={null} 如果组件支持
+              onError={(e) => {
+                // 确保图片加载失败时，其占位符或自身不显示
+                // (e.target as HTMLImageElement).style.display = 'none'; // 这是一个更强的隐藏方式，但fallback可能已经处理了
+                console.log('图片加载失败，将不显示:', fileUrl);
               }}
             />
 
@@ -1219,9 +1238,7 @@ const ResumeDetail = () => {
                   </div>
                 ))}
               </div>
-            ) : (
-              '未上传'
-            )}
+            ) : null}
           </Card>
 
           <Card
@@ -1250,11 +1267,19 @@ const ResumeDetail = () => {
 
         <Modal
           open={previewVisible}
-          title={previewImage ? '图片预览' : ''}
+          title={previewImage ? (isPdfFile({ url: previewImage }) ? 'PDF 预览' : '图片预览') : ''}
           footer={null}
           onCancel={() => setPreviewVisible(false)}
         >
-          <img alt="预览" style={{ width: '100%' }} src={previewImage} />
+          {isPdfFile({ url: previewImage }) ? (
+            <React.Fragment>
+              <iframe src={previewImage} style={{ width: '100%', height: '80vh' }} />
+            </React.Fragment>
+          ) : (
+            <React.Fragment>
+              <img alt="预览" style={{ width: '100%' }} src={previewImage} />
+            </React.Fragment>
+          )}
         </Modal>
       </div>
     </>

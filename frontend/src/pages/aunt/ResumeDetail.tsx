@@ -284,15 +284,26 @@ interface WorkExperience {
   description: string;
 }
 
-interface FileInfo {
-  fileId: string;
-  filename: string;  // 保持与后端一致的命名
-  mimeType?: string;
-  mimetype?: string;  // 兼容后端返回的字段名
+// 添加类型定义
+type FileUrl = string;
+type FileInfo = {
+  url: string;
+  filename: string;
   size: number;
-  uploadTime: Date;
-  url?: string;
-}
+  mimetype?: string;
+  mimeType?: string;
+};
+
+// 添加工具函数来检查URL是否在新格式数据中
+const isUrlInNewFormat = (url: FileUrl, newFormatData: FileInfo | FileInfo[] | undefined): boolean => {
+  if (!newFormatData) return false;
+  
+  if (Array.isArray(newFormatData)) {
+    return newFormatData.some(file => file.url === url);
+  }
+  
+  return newFormatData.url === url;
+};
 
 // interface FollowUpRecord {
 //   id: string;
@@ -597,21 +608,15 @@ const ResumeDetail = () => {
     }
 
     // 处理FileInfo对象，使用url字段而不是fileId
-    const fileUrl = file.url || `/api/upload/file/${file.fileId}`;
+    const fileUrl = file.url || (file.fileId ? `/api/upload/file/${file.fileId}` : null);
     // 兼容两种字段名：mimeType 和 mimetype
     const mimeType = file.mimeType || file.mimetype || '';
     const isPdf = isPdfFile(file);
     const uniqueKey = `file-${file.fileId || index}-${index}`;
 
-    console.log('渲染文件预览:', {
-      filename: file.filename,
-      mimeType: mimeType,
-      isPdf: isPdf,
-      fileUrl: fileUrl
-    });
-
     // 如果 fileUrl 为空或无效，则直接不渲染任何内容
     if (!fileUrl) {
+      console.log('文件URL无效，跳过渲染:', file);
       return null;
     }
 
@@ -625,15 +630,14 @@ const ResumeDetail = () => {
               onClick={() => handlePreview(fileUrl)}
               style={{ height: '60px', width: '120px' }}
             >
-              已有报告
+              {file.filename || '查看文件'}
             </Button>
-
           </div>
         ) : (
           <div style={{ position: 'relative' }}>
             <Image
               src={fileUrl}
-              alt={file.filename}
+              alt={file.filename || `文件 ${index + 1}`}
               style={{ maxWidth: '200px', maxHeight: '200px' }}
               placeholder={(
                 <div style={{ 
@@ -647,10 +651,15 @@ const ResumeDetail = () => {
                   加载中...
                 </div>
               )}
-              fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" // 使用一个1x1的透明GIF作为fallback
-              // 或者 fallback={null} 如果组件支持
+              fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+              onError={(e) => {
+                console.log('图片加载失败，将不显示:', fileUrl);
+                const imgContainer = (e.target as HTMLElement).closest('div[style*="position: relative"]');
+                if (imgContainer && imgContainer instanceof HTMLElement) {
+                  imgContainer.style.display = 'none';
+                }
+              }}
             />
-
           </div>
         )}
       </div>
@@ -659,16 +668,16 @@ const ResumeDetail = () => {
 
   // 更新渲染旧版文件预览的函数
   const renderLegacyFilePreview = (url: string, index: number) => {
-    const fileUrl = url.startsWith('/api/upload/file/') ? url : `/api/upload/file/${url}`;
-    const uniqueKey = `legacy-file-${index}`;
-    
-    const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
-
-    // 如果 fileUrl 为空或无效，则直接不渲染任何内容
-    if (!fileUrl || fileUrl === '/api/upload/file/') { // 额外判断一下是否只有前缀
+    // 如果URL为空或无效，直接返回null
+    if (!url || url === '/api/upload/file/' || url === '/api/upload/file') {
+      console.log('无效的文件URL，跳过渲染:', url);
       return null;
     }
-    
+
+    const fileUrl = url.startsWith('/api/upload/file/') ? url : `/api/upload/file/${url}`;
+    const uniqueKey = `legacy-file-${index}`;
+    const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
+
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
         {isPdf ? (
@@ -679,9 +688,8 @@ const ResumeDetail = () => {
               onClick={() => handlePreview(fileUrl)}
               style={{ height: '60px', width: '120px' }}
             >
-              已有报告
+              查看文件
             </Button>
-
           </div>
         ) : (
           <div style={{ position: 'relative' }}>
@@ -701,13 +709,15 @@ const ResumeDetail = () => {
                   加载中...
                 </div>
               )}
-              fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" // 使用一个1x1的透明GIF作为fallback
-              // 或者 fallback={null} 如果组件支持
-              onError={() => {
+              fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+              onError={(e) => {
                 console.log('图片加载失败，将不显示:', fileUrl);
+                const imgContainer = (e.target as HTMLElement).closest('div[style*="position: relative"]');
+                if (imgContainer && imgContainer instanceof HTMLElement) {
+                  imgContainer.style.display = 'none';
+                }
               }}
             />
-
           </div>
         )}
       </div>
@@ -1124,94 +1134,71 @@ const ResumeDetail = () => {
           </Card>
 
           <Card title="身份证照片" style={{ marginBottom: 24 }}>
-            <Descriptions bordered column={2}>
-              <Descriptions.Item label="身份证正面" span={1}>
-                {resume?.idCardFront ? (
-                  <div style={{ display: 'inline-block', margin: '8px' }}>
-                    {renderFilePreview(resume.idCardFront, 0)}
-                  </div>
-                ) : resume?.idCardFrontUrl ? (
-                  <div style={{ display: 'inline-block', margin: '8px' }}>
-                    {renderFilePreview(resume.idCardFrontUrl, 0)}
-                  </div>
-                ) : '未上传'}
-              </Descriptions.Item>
-              <Descriptions.Item label="身份证反面" span={1}>
-                {resume?.idCardBack ? (
-                  <div style={{ display: 'inline-block', margin: '8px' }}>
-                    {renderFilePreview(resume.idCardBack, 1)}
-                  </div>
-                ) : resume?.idCardBackUrl ? (
-                  <div style={{ display: 'inline-block', margin: '8px' }}>
-                    {renderFilePreview(resume.idCardBackUrl, 1)}
-                  </div>
-                ) : '未上传'}
-              </Descriptions.Item>
-            </Descriptions>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {resume?.idCardFront && renderFilePreview(resume.idCardFront, 0)}
+              {resume?.idCardBack && renderFilePreview(resume.idCardBack, 1)}
+            </div>
           </Card>
 
           <Card title="个人照片" style={{ marginBottom: 24 }}>
-            {resume?.personalPhoto?.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.personalPhoto.map((photo: FileInfo, index: number) => (
-                  <div key={`personal-photo-${photo.fileId || index}`}>
-                    {renderFilePreview(photo, index)}
-                  </div>
-                ))}
-              </div>
-            ) : resume?.photoUrls?.filter(Boolean).length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.photoUrls.filter(Boolean).map((url: string, index: number) => (
-                  <div key={`photo-${index}`}>
-                    {renderFilePreview(url, index)}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              '未上传'
-            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {/* 优先使用新格式的 personalPhoto */}
+              {resume?.personalPhoto && (
+                Array.isArray(resume.personalPhoto) 
+                  ? resume.personalPhoto.map((photo: FileInfo, index: number) => (
+                      <div key={`photo-${photo.url}-${index}`}>
+                        {renderFilePreview(photo, index)}
+                      </div>
+                    ))
+                  : renderFilePreview(resume.personalPhoto, 0)
+              )}
+              {/* 处理旧版 photoUrls，但排除已经在新格式中显示过的 URL */}
+              {resume?.photoUrls?.filter(Boolean).filter((url: FileUrl) => 
+                !isUrlInNewFormat(url, resume.personalPhoto)
+              ).map((url: FileUrl, index: number) => (
+                <div key={`photo-legacy-${url}-${index}`}>
+                  {renderFilePreview(url, index)}
+                </div>
+              ))}
+            </div>
           </Card>
 
           <Card title="证书照片" style={{ marginBottom: 24 }}>
-            {resume?.certificates?.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.certificates.map((cert: FileInfo, index: number) => (
-                  <div key={`certificate-${cert.fileId || index}`}>
-                    {renderFilePreview(cert, index)}
-                  </div>
-                ))}
-              </div>
-            ) : resume?.certificateUrls?.filter(Boolean).length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.certificateUrls.filter(Boolean).map((url: string, index: number) => (
-                  <div key={`certificate-legacy-${index}`}>
-                    {renderFilePreview(url, index)}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              '未上传'
-            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {/* 优先使用新格式的 certificates */}
+              {resume?.certificates?.map((cert: FileInfo, index: number) => (
+                <div key={`cert-${cert.url}-${index}`}>
+                  {renderFilePreview(cert, index)}
+                </div>
+              ))}
+              {/* 处理旧版 certificateUrls，但排除已经在新格式中显示过的 URL */}
+              {resume?.certificateUrls?.filter(Boolean).filter((url: FileUrl) => 
+                !isUrlInNewFormat(url, resume.certificates)
+              ).map((url: FileUrl, index: number) => (
+                <div key={`cert-legacy-${url}-${index}`}>
+                  {renderFilePreview(url, index)}
+                </div>
+              ))}
+            </div>
           </Card>
 
           <Card title="体检报告" style={{ marginBottom: 24 }}>
-            {resume?.reports?.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.reports.map((report: FileInfo, index: number) => (
-                  <div key={`report-${report.fileId || index}`}>
-                    {renderFilePreview(report, index)}
-                  </div>
-                ))}
-              </div>
-            ) : resume?.medicalReportUrls?.filter(Boolean).length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {resume.medicalReportUrls.filter(Boolean).map((url: string, index: number) => (
-                  <div key={`report-legacy-${index}`}>
-                    {renderFilePreview(url, index)}
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {/* 优先使用新格式的 reports */}
+              {resume?.reports?.map((report: FileInfo, index: number) => (
+                <div key={`report-${report.url}-${index}`}>
+                  {renderFilePreview(report, index)}
+                </div>
+              ))}
+              {/* 处理旧版 medicalReportUrls，但排除已经在新格式中显示过的 URL */}
+              {resume?.medicalReportUrls?.filter(Boolean).filter((url: FileUrl) => 
+                !isUrlInNewFormat(url, resume.reports)
+              ).map((url: FileUrl, index: number) => (
+                <div key={`report-legacy-${url}-${index}`}>
+                  {renderFilePreview(url, index)}
+                </div>
+              ))}
+            </div>
           </Card>
 
           <Card
@@ -1245,13 +1232,13 @@ const ResumeDetail = () => {
           onCancel={() => setPreviewVisible(false)}
         >
           {isPdfFile({ url: previewImage }) ? (
-            <React.Fragment>
-              <iframe src={previewImage} style={{ width: '100%', height: '80vh' }} />
-            </React.Fragment>
+            <iframe
+              src={previewImage}
+              style={{ width: '100%', height: '500px', border: 'none' }}
+              title="PDF预览"
+            />
           ) : (
-            <React.Fragment>
-              <img alt="预览" style={{ width: '100%' }} src={previewImage} />
-            </React.Fragment>
+            <img alt="预览" style={{ width: '100%' }} src={previewImage} />
           )}
         </Modal>
       </div>

@@ -3,6 +3,9 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
+type PromiseVoid = Promise<void>;
+type PromiseAny = Promise<any>;
+
 @Injectable()
 export class ImageCacheService {
   private readonly logger = new Logger(ImageCacheService.name);
@@ -22,7 +25,7 @@ export class ImageCacheService {
     return hash.digest('hex');
   }
 
-  async getCachedResult(buffer: Buffer, type: string): Promise<any | null> {
+  async getCachedResult(buffer: Buffer, type: string): PromiseAny {
     try {
       const cacheKey = this.generateCacheKey(buffer, type);
       const cachePath = path.join(this.cacheDir, `${cacheKey}.json`);
@@ -48,7 +51,7 @@ export class ImageCacheService {
     }
   }
 
-  async setCachedResult(buffer: Buffer, type: string, result: any): Promise<void> {
+  async setCachedResult(buffer: Buffer, type: string, result: any): PromiseVoid {
     try {
       const cacheKey = this.generateCacheKey(buffer, type);
       const cachePath = path.join(this.cacheDir, `${cacheKey}.json`);
@@ -60,7 +63,7 @@ export class ImageCacheService {
     }
   }
 
-  async clearExpiredCache(): Promise<void> {
+  async clearExpiredCache(): PromiseVoid {
     try {
       const files = fs.readdirSync(this.cacheDir);
       const now = Date.now();

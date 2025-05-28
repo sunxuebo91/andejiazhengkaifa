@@ -186,53 +186,50 @@ export class ResumeController {
   @ApiOperation({ summary: '更新简历' })
   @ApiConsumes('multipart/form-data')
   @ApiResponse({ status: 200, description: '更新成功' })
+  @Patch(':id')
+  @UseInterceptors(FilesInterceptor('files'))
   async update(
     @Param('id') id: string,
     @Body() updateResumeDto: UpdateResumeDto,
     @UploadedFiles() files: Express.Multer.File[],
-    @Req() req
+    @Req() req: any,
   ) {
     try {
-      this.logger.log(`更新简历: id=${id}, data=${JSON.stringify(updateResumeDto)}`);
+      console.log('更新简历 - 请求体:', req.body);
+      console.log('更新简历 - DTO验证后:', updateResumeDto);
       
-      // 从请求体中提取文件类型数组
+      // 处理 fileTypes
       let fileTypes: string[] = [];
       if (req.body.fileTypes) {
-        if (Array.isArray(req.body.fileTypes)) {
-          fileTypes = req.body.fileTypes;
-        } else if (typeof req.body.fileTypes === 'string') {
+        if (typeof req.body.fileTypes === 'string') {
           try {
             fileTypes = JSON.parse(req.body.fileTypes);
           } catch {
             fileTypes = [req.body.fileTypes];
           }
+        } else if (Array.isArray(req.body.fileTypes)) {
+          fileTypes = req.body.fileTypes;
         }
       }
-
-      this.logger.debug('更新简历 - 文件信息:', {
-        filesCount: files?.length || 0,
-        fileTypes,
-        updateData: updateResumeDto
-      });
-
-      const resume = await this.resumeService.updateWithFiles(
+      
+      console.log('更新简历 - 文件类型:', fileTypes);
+      console.log('更新简历 - 上传文件数量:', files?.length || 0);
+      
+      const result = await this.resumeService.updateWithFiles(
         id,
         updateResumeDto,
         files || [],
-        fileTypes
+        fileTypes,
       );
-
-      return {
-        success: true,
-        data: resume,
-        message: '更新简历成功'
-      };
+      
+      return result;
     } catch (error) {
-      this.logger.error(`更新简历失败: ${error.message}`);
+      console.error('更新简历失败:', error);
+      // 修改错误处理，与创建简历保持一致
       return {
         success: false,
-        data: null,
-        message: `更新简历失败: ${error.message}`
+        message: error.message || '更新简历失败',
+        error: error.message,
       };
     }
   }

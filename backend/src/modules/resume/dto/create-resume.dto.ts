@@ -256,13 +256,13 @@ export class CreateResumeDto {
   @IsNotEmpty({ message: '工种不能为空' })
   @IsEnum(JobType, { message: '请选择正确的工种' })
   @Transform(({ value }) => {
-    if (!value) return undefined;
+    if (!value) return value; // 保持原值，让 @IsNotEmpty 处理
     const jobType = value.toLowerCase();
     // 确保值在枚举范围内
     if (Object.values(JobType).includes(jobType as JobType)) {
       return jobType;
     }
-    return undefined;
+    return value; // 返回原值，让 @IsEnum 处理验证错误
   })
   jobType: JobType;
 

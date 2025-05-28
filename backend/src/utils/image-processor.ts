@@ -1,12 +1,15 @@
 import sharp from 'sharp';
 import { BadRequestException } from '@nestjs/common';
 
+type PromiseVoid = Promise<void>;
+type PromiseBuffer = Promise<Buffer>;
+
 export class ImageProcessor {
   private static readonly MAX_SIZE = 5 * 1024 * 1024; // 5MB
   private static readonly TARGET_SIZE = 1024; // 1024px
   private static readonly QUALITY = 80;
 
-  static async validateImage(buffer: Buffer): Promise<void> {
+  static async validateImage(buffer: Buffer): PromiseVoid {
     try {
       const metadata = await sharp(buffer).metadata();
       
@@ -37,7 +40,7 @@ export class ImageProcessor {
     }
   }
 
-  static async processIdCardImage(buffer: Buffer): Promise<Buffer> {
+  static async processIdCardImage(buffer: Buffer): PromiseBuffer {
     try {
       // 获取图片信息
       const metadata = await sharp(buffer).metadata();

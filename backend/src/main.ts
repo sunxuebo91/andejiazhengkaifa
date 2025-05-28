@@ -46,10 +46,13 @@ async function bootstrap() {
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
     // 启用全局验证
+    // 临时放宽验证规则进行调试
     app.useGlobalPipes(new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: true,
+      forbidNonWhitelisted: false, // 临时设为false
+      skipMissingProperties: true,  // 跳过缺失属性
+      disableErrorMessages: false, // 显示详细错误信息
     }));
 
     // 配置Swagger文档

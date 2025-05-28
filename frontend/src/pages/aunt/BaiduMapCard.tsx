@@ -281,8 +281,19 @@ const BaiduMapCard = memo(({ value, onChange }: BaiduMapCardProps) => {
   useEffect(() => {
     if (value !== undefined && value !== address) {
       setAddress(value);
+      // 如果输入框已经存在，也要更新输入框的值
+      if (inputRef.current) {
+        inputRef.current.value = value;
+      }
     }
-  }, [value]);
+  }, [value, address]);
+
+  // 移除重复的初始化useEffect，因为useState已经处理了初始值
+  useEffect(() => {
+    if (value) {
+      setAddress(value);
+    }
+  }, []);
 
   // API加载完成后，二次确认初始化
   useEffect(() => {
@@ -325,4 +336,4 @@ const BaiduMapCard = memo(({ value, onChange }: BaiduMapCardProps) => {
 // 为了保持向后兼容性，添加displayName
 BaiduMapCard.displayName = 'BaiduMapCard';
 
-export default BaiduMapCard; 
+export default BaiduMapCard;

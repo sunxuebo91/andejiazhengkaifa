@@ -14,7 +14,7 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import type { Dayjs } from 'dayjs';
 import type { DatePickerProps } from 'antd';
-import { GenderType, JobType, Education } from '@/types/resume';
+import { GenderType } from '@/types/resume';
 import { Gender } from '@/types/resume';
 import { ApiResponse } from '@/services/api';
 import { Resume } from '@/services/resume.service';
@@ -190,8 +190,7 @@ const convertJobType = (value: string): string => {
   return jobTypeMap[value] || value;
 };
 
-// 修改有效工种值列表
-const VALID_JOB_TYPES = Object.keys(JOB_TYPE_MAP) as Array<keyof typeof JOB_TYPE_MAP>;
+
 
 // 添加学历映射常量
 const EDUCATION_MAP = {
@@ -206,21 +205,7 @@ const EDUCATION_MAP = {
   'graduate': '研究生'
 } as const;
 
-// 添加学历值转换函数
-const convertEducation = (value: string): string => {
-  const educationMap: Record<string, string> = {
-    'no': 'no',
-    'primary': 'primary',
-    'middle': 'middle',
-    'secondary': 'secondary',
-    'vocational': 'vocational',
-    'high': 'high',
-    'college': 'college',
-    'bachelor': 'bachelor',
-    'graduate': 'graduate'
-  };
-  return educationMap[value.toLowerCase()] || value;
-};
+
 
 const CreateResume = () => {
   const { message: messageApi } = App.useApp();
@@ -649,12 +634,7 @@ const CreateResume = () => {
     return null;
   };
 
-  // 添加日期格式化函数
-  const formatDateToChinese = (date: string | Date | undefined): string => {
-    if (!date) return '';
-    const d = dayjs(date);
-    return `${d.year()}年${d.month() + 1}月`;
-  };
+
 
   // 修改 DatePicker 组件的配置
   const datePickerProps = {
@@ -695,33 +675,100 @@ const CreateResume = () => {
       const isEditMode = params.get('edit') === 'true';
       const resumeId = params.get('id');
 
+      // 在FormData构建之前添加必填字段检查
+      const requiredFields = ['name', 'phone', 'age', 'education', 'gender', 'jobType', 'experienceYears'];
+      const missingFields = requiredFields.filter(field => !values[field] || values[field] === '');
+
+      if (missingFields.length > 0) {
+        console.error('缺少必填字段:', missingFields);
+        messageApi.error(`请填写必填字段: ${missingFields.join(', ')}`);
+        return;
+      }
+
+      console.log('必填字段检查通过:', requiredFields.map(field => `${field}: ${values[field]}`));
+
       const formDataToSend = new FormData();
       
       // 添加基本信息，确保所有字段都被正确转换
       Object.keys(values).forEach(key => {
-        if (key !== 'files' && values[key] !== undefined && values[key] !== null) {
-          if (typeof values[key] === 'object') {
-            // 对于对象类型的字段（如日期、数组等），进行特殊处理
-            if (key === 'workExperiences') {
-              // 确保工作经历数据格式正确
-              const experiences = values[key].map((exp: any) => ({
+        const value = values[key];
+        
+        // 定义后端DTO中允许的字段列表
+        const allowedFields = [
+          'userId', 'name', 'phone', 'age', 'wechat', 'idNumber', 'education',
+          'maritalStatus', 'religion', 'currentAddress', 'nativePlace', 'hukouAddress',
+          'birthDate', 'ethnicity', 'gender', 'zodiac', 'zodiacSign', 'jobType',
+          'expectedSalary', 'serviceArea', 'orderStatus', 'skills', 'experienceYears',
+          'leadSource', 'workExperiences', 'emergencyContactName', 'emergencyContactPhone',
+          'selfIntroduction', 'specialSkills', 'remarks', 'medicalExamDate',
+          'idCardFrontUrl', 'idCardBackUrl', 'photoUrls', 'certificateUrls', 'medicalReportUrls'
+        ];
+        
+        // 只处理允许的字段
+        if (!allowedFields.includes(key)) {
+          console.warn(`跳过未定义字段: ${key}`);
+          return;
+        }
+        
+        // 跳过空值和未定义值
+        if (value !== undefined && value !== null && value !== '') {
+          if (key === 'age' || key === 'expectedSalary' || key === 'experienceYears') {
+            // 数字字段：确保是有效数字
+            const numValue = Number(value);
+            if (!isNaN(numValue)) {
+              formDataToSend.append(key, String(numValue));
+            }
+          } else if (key === 'gender') {
+            // 性别字段：确保是有效的枚举值
+            if (value === 'male' || value === 'female') {
+              formDataToSend.append(key, value);
+            }
+          } else if (key === 'jobType') {
+            // 工作类型：确保是有效的枚举值
+            if (value && typeof value === 'string') {
+              formDataToSend.append(key, value);
+            }
+          } else if (key === 'serviceArea') {
+            // 服务区域：确保是字符串数组
+            if (typeof value === 'string') {
+              formDataToSend.append(key, JSON.stringify([value]));
+            } else if (Array.isArray(value) && value.length > 0) {
+              formDataToSend.append(key, JSON.stringify(value));
+            }
+          } else if (key === 'workExperiences') {
+            // 工作经历：确保是数组格式
+            if (Array.isArray(value) && value.length > 0) {
+              const experiences = value.map((exp: any) => ({
                 ...exp,
                 startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
                 endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
               }));
               formDataToSend.append(key, JSON.stringify(experiences));
-            } else if (key === 'serviceArea' || key === 'skills') {
-              // 确保数组类型的字段被正确序列化
-              formDataToSend.append(key, JSON.stringify(Array.isArray(values[key]) ? values[key] : [values[key]]));
-            } else {
-              formDataToSend.append(key, JSON.stringify(values[key]));
+            }
+          } else if (key === 'skills') {
+            // 技能标签：确保是数组格式
+            if (Array.isArray(value) && value.length > 0) {
+              formDataToSend.append(key, JSON.stringify(value));
+            }
+          } else if (key === 'education' || key === 'maritalStatus' || key === 'religion' || 
+                     key === 'zodiac' || key === 'zodiacSign' || key === 'orderStatus' || key === 'leadSource') {
+            // 枚举字段：确保值不为空
+            if (value && typeof value === 'string') {
+              formDataToSend.append(key, value);
             }
           } else {
-            // 对于基本类型的字段，直接转换为字符串
-            formDataToSend.append(key, String(values[key]));
+            // 其他字符串字段：只有非空值才添加
+            if (typeof value === 'string' && value.trim() !== '') {
+              formDataToSend.append(key, value.trim());
+            } else if (typeof value !== 'string' && value !== null && value !== undefined) {
+              formDataToSend.append(key, String(value));
+            }
           }
         }
       });
+
+      // 添加调试日志
+      console.log('FormData entries:', Object.fromEntries(formDataToSend.entries()));
 
       // 处理文件上传
       const allFiles: CustomUploadFile[] = [
@@ -775,6 +822,17 @@ const CreateResume = () => {
       if (fileTypes.length > 0) {
         formDataToSend.append('fileTypes', JSON.stringify(fileTypes));
       }
+
+      // 在第780行附近添加更详细的日志
+      console.log('详细表单数据检查:', {
+        gender: values.gender,
+        genderType: typeof values.gender,
+        jobType: values.jobType,
+        jobTypeType: typeof values.jobType,
+        age: values.age,
+        ageType: typeof values.age,
+        allFormData: Object.fromEntries(formDataToSend.entries())
+      });
 
       // 记录请求数据
       console.log('提交表单 - 请求数据:', {
@@ -971,33 +1029,45 @@ const CreateResume = () => {
 
   // Update the handleFileRemove function
   const handleFileRemove = (type: 'photo' | 'certificate' | 'medical') => (file: UploadFile<any>) => {
-    // Convert UploadFile to CustomUploadFile by checking if it's an existing file
     const isExisting = (file as any).isExisting === true;
     
     if (isExisting) {
       switch (type) {
         case 'photo':
-          setExistingPhotoUrls(prev => prev.filter(url => url !== file.url));
+          setExistingPhotoUrls(prev => {
+            const newUrls = prev.filter(url => url !== file.url);
+            console.log('删除照片后的URL列表:', newUrls);
+            return newUrls;
+          });
           break;
         case 'certificate':
-          setExistingCertificateUrls(prev => prev.filter(url => url !== file.url));
+          setExistingCertificateUrls(prev => {
+            const newUrls = prev.filter(url => url !== file.url);
+            console.log('删除证书后的URL列表:', newUrls);
+            return newUrls;
+          });
           break;
         case 'medical':
-          setExistingMedicalReportUrls(prev => prev.filter(url => url !== file.url));
+          setExistingMedicalReportUrls(prev => {
+            const newUrls = prev.filter(url => url !== file.url);
+            console.log('删除报告后的URL列表:', newUrls);
+            return newUrls;
+          });
           break;
       }
       return true;
     }
     
+    // 处理新上传的文件删除
     switch (type) {
       case 'photo':
-        setPhotoFiles(prev => prev.filter(item => item.originFileObj !== file.originFileObj));
+        setPhotoFiles(prev => prev.filter(item => item.uid !== file.uid));
         break;
       case 'certificate':
-        setCertificateFiles(prev => prev.filter(item => item.originFileObj !== file.originFileObj));
+        setCertificateFiles(prev => prev.filter(item => item.uid !== file.uid));
         break;
       case 'medical':
-        setMedicalReportFiles(prev => prev.filter(item => item.originFileObj !== file.originFileObj));
+        setMedicalReportFiles(prev => prev.filter(item => item.uid !== file.uid));
         break;
     }
     return true;
@@ -1628,11 +1698,8 @@ const CreateResume = () => {
                         ...certificateFiles,
                         ...existingCertificateUrls.map((url, index) => {
                           const isPdf = url.toLowerCase().endsWith('.pdf');
-                          // 使用 URL 的哈希值和时间戳组合生成唯一标识符
-                          const urlHash = btoa(url).replace(/[^a-zA-Z0-9]/g, '');
-                          const timestamp = Date.now();
                           return {
-                            uid: `existing-certificate-${urlHash}-${timestamp}-${index}`,
+                            uid: `existing-certificate-${index}`,
                             name: url.split('/').pop() || `证书${index + 1}`,
                             status: 'done' as const,
                             url: isPdf ? undefined : url,

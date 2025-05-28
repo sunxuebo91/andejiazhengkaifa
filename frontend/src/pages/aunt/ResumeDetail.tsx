@@ -1,4 +1,3 @@
-import React from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Form, Input, Select, Typography, Tooltip, Table } from 'antd';
 import { useEffect, useState } from 'react';
@@ -292,6 +291,7 @@ type FileInfo = {
   size: number;
   mimetype?: string;
   mimeType?: string;
+  fileId?: string; // 添加fileId属性
 };
 
 // 添加工具函数来检查URL是否在新格式数据中
@@ -610,7 +610,6 @@ const ResumeDetail = () => {
     // 处理FileInfo对象，使用url字段而不是fileId
     const fileUrl = file.url || (file.fileId ? `/api/upload/file/${file.fileId}` : null);
     // 兼容两种字段名：mimeType 和 mimetype
-    const mimeType = file.mimeType || file.mimetype || '';
     const isPdf = isPdfFile(file);
     const uniqueKey = `file-${file.fileId || index}-${index}`;
 

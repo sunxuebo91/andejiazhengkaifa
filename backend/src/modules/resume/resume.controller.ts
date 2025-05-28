@@ -8,6 +8,7 @@ import { Resume } from './models/resume.entity';
 import { UploadService } from '../upload/upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UseGuards } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 
 @ApiTags('简历管理')
 @Controller('resumes')
@@ -39,8 +40,8 @@ export class ResumeController {
           type: 'array',
           items: {
             type: 'string',
-            enum: ['idCardFront', 'idCardBack', 'other'],
-            description: '文件类型：idCardFront(身份证正面)、idCardBack(身份证背面)、other(其他)'
+            enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport', 'other'],
+            description: '文件类型：idCardFront(身份证正面)、idCardBack(身份证背面)、personalPhoto(个人照片)、certificate(证书)、medicalReport(体检报告)、other(其他)'
           }
         },
         title: { type: 'string' },
@@ -53,6 +54,9 @@ export class ResumeController {
     @UploadedFiles() files: Express.Multer.File[] = [],
     @Req() req,
   ) {
+    let resume = null;
+    let fileErrors = [];
+
     try {
       // 从请求体中提取文件类型数组
       let fileTypes: string[] = [];
@@ -86,18 +90,66 @@ export class ResumeController {
         filesLength: filesArray.length
       });
 
-      const resume = await this.resumeService.createWithFiles(
+      // 尝试创建简历
+      resume = await this.resumeService.createWithFiles(
         { ...dto, userId: req.user.userId },
         filesArray,
         fileTypes
       );
-      return {
-        success: true,
-        data: resume,
-        message: '创建简历成功'
-      };
+
+      // 检查是否有文件上传错误
+      if (resume && resume.fileUploadErrors && resume.fileUploadErrors.length > 0) {
+        fileErrors = resume.fileUploadErrors;
+        delete resume.fileUploadErrors; // 移除错误信息，避免污染返回数据
+      }
+
+      // 如果简历创建成功，即使有文件上传错误也返回成功
+      if (resume) {
+        this.logger.log(`简历创建成功: ${resume._id}`);
+        return {
+          success: true,
+          data: resume,
+          message: fileErrors.length > 0 
+            ? `简历创建成功，但部分文件上传失败: ${fileErrors.join(', ')}`
+            : '创建简历成功'
+        };
+      }
+
+      throw new Error('简历创建失败');
     } catch (error) {
-      this.logger.error(`创建简历失败: ${error.message}`);
+      this.logger.error(`创建简历失败: ${error.message}`, error.stack);
+      
+      // 处理特定类型的错误
+      if (error instanceof ConflictException) {
+        return {
+          success: false,
+          data: null,
+          message: error.message
+        };
+      }
+      
+      if (error instanceof BadRequestException) {
+        return {
+          success: false,
+          data: null,
+          message: error.message
+        };
+      }
+      
+      // 如果简历已经创建成功，但后续处理出错，返回部分成功状态
+      if (resume) {
+        this.logger.warn(`简历已创建但处理过程中出现错误: ${error.message}`, {
+          resumeId: resume._id,
+          error: error.message
+        });
+        return {
+          success: true,
+          data: resume,
+          message: `简历已创建，但处理过程中出现错误: ${error.message}`
+        };
+      }
+      
+      // 完全失败的情况
       return {
         success: false,
         data: null,
@@ -352,4 +404,12 @@ export class ResumeController {
       };
     }
   }
+  // 删除从这里开始的重复代码：
+  // @Patch(':id')
+  // async update(
+  //   @Param('id') id: string,
+  //   @Body() updateResumeDto: UpdateResumeDto,
+  // ) {
+  //   ...
+  // }
 }

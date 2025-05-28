@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Resume } from './models/resume.entity';
@@ -26,9 +26,28 @@ export class ResumeService {
       throw new BadRequestException('用户ID不能为空');
     }
 
+    // 检查手机号是否重复
+    const existingResumeWithPhone = await this.resumeModel.findOne({
+      phone: createResumeDto.phone
+    });
+    if (existingResumeWithPhone) {
+      throw new ConflictException('该手机号已被其他简历使用');
+    }
+
+    // 如果提供了身份证号，检查是否重复
+    if (createResumeDto.idNumber) {
+      const existingResumeWithIdNumber = await this.resumeModel.findOne({
+        idNumber: createResumeDto.idNumber
+      });
+      if (existingResumeWithIdNumber) {
+        throw new ConflictException('该身份证号已被其他简历使用');
+      }
+    }
+
     // 确保files是数组
     const filesArray = Array.isArray(files) ? files : [];
     const fileIds: Types.ObjectId[] = [];
+    const fileUploadErrors: string[] = [];
     
     // 分类存储文件信息
     const categorizedFiles = {
@@ -47,7 +66,7 @@ export class ResumeService {
       // 上传文件
       for (let i = 0; i < filesArray.length; i++) {
         const file = filesArray[i];
-        const fileType = fileTypes[i] || 'other';  // 使用传入的文件类型，如果没有则默认为other
+        const fileType = fileTypes[i] || 'other';
         
         if (file) {  // 确保文件存在
           try {
@@ -91,21 +110,50 @@ export class ResumeService {
             }
           } catch (error) {
             this.logger.error(`文件上传失败: ${error.message}`);
+            fileUploadErrors.push(`文件 ${file.originalname} 上传失败: ${error.message}`);
             // 继续处理其他文件，不中断整个流程
           }
         }
       }
     }
 
-    // 创建简历，确保fileIds始终是数组，并包含分类文件信息
-    const resume = new this.resumeModel({
-      ...createResumeDto,
-      ...categorizedFiles,
-      fileIds: fileIds,
-      userId: new Types.ObjectId(createResumeDto.userId)
-    });
+    try {
+      // 创建简历，确保fileIds始终是数组，并包含分类文件信息
+      const resume = new this.resumeModel({
+        ...createResumeDto,
+        ...categorizedFiles,
+        fileIds: fileIds,
+        userId: new Types.ObjectId(createResumeDto.userId)
+      });
 
-    return resume.save();
+      const savedResume = await resume.save();
+      
+      // 如果有文件上传错误，将其添加到返回的简历对象中
+      if (fileUploadErrors.length > 0) {
+        (savedResume as any).fileUploadErrors = fileUploadErrors;
+      }
+
+      return savedResume;
+    } catch (error) {
+      this.logger.error(`保存简历失败: ${error.message}`);
+      
+      // 处理MongoDB错误
+      if (error.code === 11000) {
+        // 检查具体是哪个字段重复
+        const field = Object.keys(error.keyPattern)[0];
+        switch (field) {
+          case 'phone':
+            throw new ConflictException('该手机号已被其他简历使用');
+          case 'idNumber':
+            throw new ConflictException('该身份证号已被其他简历使用');
+          default:
+            throw new ConflictException(`数据重复: ${field}`);
+        }
+      }
+      
+      // 其他错误
+      throw new BadRequestException(`创建简历失败: ${error.message}`);
+    }
   }
 
   async findAll(page: number, pageSize: number, search?: string) {
@@ -323,73 +371,105 @@ export class ResumeService {
   }
 
   async updateWithFiles(
-    id: string,
-    updateResumeDto: UpdateResumeDto,
-    files: Express.Multer.File[] = [],
-    fileTypes: string[] = []
+    id: string, 
+    updateResumeDto: UpdateResumeDto, 
+    files?: Express.Multer.File[],
+    fileTypes?: string[]
   ) {
+    // 检查身份证号是否重复
+    if (updateResumeDto.idNumber) {
+      const existingResume = await this.resumeModel.findOne({
+        idNumber: updateResumeDto.idNumber,
+        _id: { $ne: id } // 排除当前简历
+      });
+      
+      if (existingResume) {
+        throw new ConflictException('身份证号已被其他简历使用');
+      }
+    }
+    
     const resume = await this.resumeModel.findById(new Types.ObjectId(id));
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
-
+  
     // 处理文件上传
     const categorizedFiles: any = {};
     const fileIds = [...(resume.fileIds || [])];
-
+    const filesArray = Array.isArray(files) ? files : [];
+    const fileTypesArray = Array.isArray(fileTypes) ? fileTypes : [];
+  
     // 上传新文件
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const fileType = fileTypes[i] || 'personalPhoto'; // 默认为个人照片
-
+    for (let i = 0; i < filesArray.length; i++) {
+      const file = filesArray[i];
+      const fileType = fileTypesArray[i] || 'personalPhoto'; // 默认为个人照片
+  
       // 上传文件
       const fileId = await this.uploadService.uploadFile(file, { type: fileType });
       const objectId = new Types.ObjectId(fileId);
       fileIds.push(objectId);
-
+  
       const fileInfo = {
         url: `/api/upload/file/${fileId}`,
         filename: file.originalname,
         mimetype: file.mimetype,
         size: file.size
       };
-
+  
       // 根据文件类型分类存储
-      switch (fileType) {
+      if (!categorizedFiles[fileType]) {
+        categorizedFiles[fileType] = [];
+      }
+      categorizedFiles[fileType].push(fileInfo);
+    }
+  
+    // 更新简历基本信息
+    Object.assign(resume, updateResumeDto);
+    
+    // 更新文件ID列表
+    resume.fileIds = fileIds;
+    
+    // 更新分类文件信息
+    Object.keys(categorizedFiles).forEach(type => {
+      switch (type) {
+        case 'personalPhoto':
+          resume.personalPhoto = categorizedFiles[type][0]; // 个人照片只保存一个
+          if (!resume.photoUrls) resume.photoUrls = [];
+          resume.photoUrls.push(categorizedFiles[type][0].url);
+          break;
         case 'idCardFront':
-          resume.idCardFront = fileInfo;
+          resume.idCardFront = categorizedFiles[type][0];
           break;
         case 'idCardBack':
-          resume.idCardBack = fileInfo;
-          break;
-        case 'personalPhoto':
-          if (!resume.photoUrls) resume.photoUrls = [];
-          resume.photoUrls.push(`/api/upload/file/${fileId}`);
+          resume.idCardBack = categorizedFiles[type][0];
           break;
         case 'certificate':
           if (!resume.certificates) resume.certificates = [];
-          resume.certificates.push(fileInfo);
+          resume.certificates.push(...categorizedFiles[type]);
           if (!resume.certificateUrls) resume.certificateUrls = [];
-          resume.certificateUrls.push(`/api/upload/file/${fileId}`);
+          resume.certificateUrls.push(...categorizedFiles[type].map(f => f.url));
           break;
         case 'medicalReport':
           if (!resume.reports) resume.reports = [];
-          resume.reports.push(fileInfo);
+          resume.reports.push(...categorizedFiles[type]);
           if (!resume.medicalReportUrls) resume.medicalReportUrls = [];
-          resume.medicalReportUrls.push(`/api/upload/file/${fileId}`);
+          resume.medicalReportUrls.push(...categorizedFiles[type].map(f => f.url));
           break;
         default:
+          // 默认归类为个人照片
           if (!resume.photoUrls) resume.photoUrls = [];
-          resume.photoUrls.push(`/api/upload/file/${fileId}`);
+          resume.photoUrls.push(...categorizedFiles[type].map(f => f.url));
           break;
       }
-    }
-
-    // 更新简历基本信息
-    Object.assign(resume, updateResumeDto);
-    resume.fileIds = fileIds;
-
+    });
+  
     // 保存更新后的简历
-    return resume.save();
+    const savedResume = await resume.save();
+    
+    return {
+      success: true,
+      data: savedResume,
+      message: '简历更新成功'
+    };
   }
 }

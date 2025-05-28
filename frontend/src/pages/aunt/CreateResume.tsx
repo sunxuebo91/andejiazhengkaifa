@@ -712,7 +712,18 @@ const CreateResume = () => {
         
         // 跳过空值和未定义值
         if (value !== undefined && value !== null && value !== '') {
-          if (key === 'age' || key === 'expectedSalary' || key === 'experienceYears') {
+          if (key === 'birthDate' || key === 'medicalExamDate') {
+            // 日期字段：确保是有效的 ISO 8601 日期字符串
+            if (value instanceof Date || dayjs.isDayjs(value)) {
+              formDataToSend.append(key, dayjs(value).format('YYYY-MM-DD'));
+            } else if (typeof value === 'string') {
+              // 尝试解析日期字符串
+              const date = dayjs(value);
+              if (date.isValid()) {
+                formDataToSend.append(key, date.format('YYYY-MM-DD'));
+              }
+            }
+          } else if (key === 'age' || key === 'expectedSalary' || key === 'experienceYears') {
             // 数字字段：确保是有效数字
             const numValue = Number(value);
             if (!isNaN(numValue)) {
@@ -726,35 +737,69 @@ const CreateResume = () => {
           } else if (key === 'jobType') {
             // 工作类型：确保是有效的枚举值
             if (value && typeof value === 'string') {
-              formDataToSend.append(key, value);
+              formDataToSend.append(key, value.toLowerCase());
             }
           } else if (key === 'serviceArea') {
             // 服务区域：确保是字符串数组
-            if (typeof value === 'string') {
-              formDataToSend.append(key, JSON.stringify([value]));
-            } else if (Array.isArray(value) && value.length > 0) {
+            if (Array.isArray(value)) {
               formDataToSend.append(key, JSON.stringify(value));
+            } else if (typeof value === 'string') {
+              try {
+                const parsed = JSON.parse(value);
+                formDataToSend.append(key, JSON.stringify(Array.isArray(parsed) ? parsed : [value]));
+              } catch {
+                formDataToSend.append(key, JSON.stringify([value]));
+              }
             }
           } else if (key === 'workExperiences') {
-            // 工作经历：确保是数组格式
+            // 工作经历：确保是数组格式，并正确处理日期
             if (Array.isArray(value) && value.length > 0) {
               const experiences = value.map((exp: any) => ({
                 ...exp,
-                startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
-                endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
+                startDate: exp.startDate ? dayjs(exp.startDate).toISOString() : undefined,
+                endDate: exp.endDate ? dayjs(exp.endDate).toISOString() : undefined,
+                description: exp.description || ''
               }));
               formDataToSend.append(key, JSON.stringify(experiences));
             }
           } else if (key === 'skills') {
             // 技能标签：确保是数组格式
-            if (Array.isArray(value) && value.length > 0) {
-              formDataToSend.append(key, JSON.stringify(value));
+            if (Array.isArray(value)) {
+              formDataToSend.append(key, JSON.stringify(value.map(s => s.toLowerCase())));
+            } else if (typeof value === 'string') {
+              try {
+                const parsed = JSON.parse(value);
+                formDataToSend.append(key, JSON.stringify(Array.isArray(parsed) ? parsed.map(s => s.toLowerCase()) : [value.toLowerCase()]));
+              } catch {
+                formDataToSend.append(key, JSON.stringify([value.toLowerCase()]));
+              }
             }
-          } else if (key === 'education' || key === 'maritalStatus' || key === 'religion' || 
-                     key === 'zodiac' || key === 'zodiacSign' || key === 'orderStatus' || key === 'leadSource') {
-            // 枚举字段：确保值不为空
-            if (value && typeof value === 'string') {
-              formDataToSend.append(key, value);
+          } else if (['photoUrls', 'certificateUrls', 'medicalReportUrls'].includes(key)) {
+            // 文件URL数组：确保是字符串数组
+            if (Array.isArray(value)) {
+              // 直接使用数组，不需要 JSON.stringify
+              value.forEach(url => {
+                if (typeof url === 'string' && url.trim() !== '') {
+                  formDataToSend.append(key, url.trim());
+                }
+              });
+            } else if (typeof value === 'string') {
+              try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                  parsed.forEach(url => {
+                    if (typeof url === 'string' && url.trim() !== '') {
+                      formDataToSend.append(key, url.trim());
+                    }
+                  });
+                } else if (value.trim() !== '') {
+                  formDataToSend.append(key, value.trim());
+                }
+              } catch {
+                if (value.trim() !== '') {
+                  formDataToSend.append(key, value.trim());
+                }
+              }
             }
           } else {
             // 其他字符串字段：只有非空值才添加
@@ -809,13 +854,25 @@ const CreateResume = () => {
         formDataToSend.append('idCardBackUrl', existingIdCardBackUrl);
       }
       if (existingPhotoUrls.length > 0) {
-        formDataToSend.append('photoUrls', JSON.stringify(existingPhotoUrls));
+        existingPhotoUrls.forEach(url => {
+          if (url.trim() !== '') {
+            formDataToSend.append('photoUrls', url.trim());
+          }
+        });
       }
       if (existingCertificateUrls.length > 0) {
-        formDataToSend.append('certificateUrls', JSON.stringify(existingCertificateUrls));
+        existingCertificateUrls.forEach(url => {
+          if (url.trim() !== '') {
+            formDataToSend.append('certificateUrls', url.trim());
+          }
+        });
       }
       if (existingMedicalReportUrls.length > 0) {
-        formDataToSend.append('medicalReportUrls', JSON.stringify(existingMedicalReportUrls));
+        existingMedicalReportUrls.forEach(url => {
+          if (url.trim() !== '') {
+            formDataToSend.append('medicalReportUrls', url.trim());
+          }
+        });
       }
 
       // 只有在有新文件时才添加fileTypes
@@ -823,7 +880,7 @@ const CreateResume = () => {
         formDataToSend.append('fileTypes', JSON.stringify(fileTypes));
       }
 
-      // 在第780行附近添加更详细的日志
+      // 添加更详细的日志
       console.log('详细表单数据检查:', {
         gender: values.gender,
         genderType: typeof values.gender,
@@ -831,7 +888,25 @@ const CreateResume = () => {
         jobTypeType: typeof values.jobType,
         age: values.age,
         ageType: typeof values.age,
+        birthDate: values.birthDate,
+        birthDateType: typeof values.birthDate,
+        medicalExamDate: values.medicalExamDate,
+        medicalExamDateType: typeof values.medicalExamDate,
+        photoUrls: values.photoUrls,
+        photoUrlsType: typeof values.photoUrls,
+        certificateUrls: values.certificateUrls,
+        certificateUrlsType: typeof values.certificateUrls,
+        medicalReportUrls: values.medicalReportUrls,
+        medicalReportUrlsType: typeof values.medicalReportUrls,
         allFormData: Object.fromEntries(formDataToSend.entries())
+      });
+
+      console.log('日期字段详细检查:', {
+        birthDate: values.birthDate,
+        birthDateType: typeof values.birthDate,
+        birthDateFormatted: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : null,
+        birthDateISO: values.birthDate ? dayjs(values.birthDate).toISOString() : null,
+        birthDateValid: values.birthDate ? dayjs(values.birthDate).isValid() : false
       });
 
       // 记录请求数据
@@ -846,7 +921,7 @@ const CreateResume = () => {
           certificates: existingCertificateUrls.length,
           medicalReports: existingMedicalReportUrls.length
         },
-        rawValues: values // 添加原始表单值以便调试
+        rawValues: values
       });
 
       let response;
@@ -875,7 +950,7 @@ const CreateResume = () => {
       const { success, message, data: resumeData } = response.data;
       
       if (success) {
-        messageApi.success('更新简历成功');
+        messageApi.success(isEditMode ? '更新简历成功' : '创建简历成功');
         // 清除localStorage中的编辑数据
         localStorage.removeItem('editingResume');
         // 跳转回详情页面
@@ -885,7 +960,7 @@ const CreateResume = () => {
           navigate('/aunt/resumes');
         }
       } else {
-        throw new Error(message || '更新简历失败');
+        throw new Error(message || (isEditMode ? '更新简历失败' : '创建简历失败'));
       }
 
       // 记录响应数据
@@ -903,8 +978,20 @@ const CreateResume = () => {
         errorMessage = error.message;
       } else if (typeof error === 'object' && error !== null) {
         const axiosError = error as any;
-        if (axiosError.response?.data?.message) {
+        // 检查是否是重复手机号错误
+        if (axiosError.response?.data?.error?.details?.message?.includes('duplicate key error') && 
+            axiosError.response?.data?.error?.details?.message?.includes('phone')) {
+          errorMessage = '该手机号已被注册，请使用其他手机号';
+        } else if (axiosError.response?.data?.message) {
           errorMessage = axiosError.response.data.message;
+        } else if (axiosError.response?.data?.error?.details?.message) {
+          // 处理数组形式的错误消息
+          const messages = axiosError.response.data.error.details.message;
+          if (Array.isArray(messages)) {
+            errorMessage = messages.join(', ');
+          } else {
+            errorMessage = messages;
+          }
         } else if (axiosError.response?.data?.error) {
           errorMessage = axiosError.response.data.error;
         } else if (axiosError.message) {

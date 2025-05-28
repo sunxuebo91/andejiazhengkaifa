@@ -211,6 +211,16 @@ export class CreateResumeDto {
   @ApiProperty({ description: '出生日期', example: '1990-01-01' })
   @IsOptional()
   @IsDateString()
+  @IsOptional()
+  @IsDateString({}, { message: 'birthDate must be a valid date string (YYYY-MM-DD or ISO 8601)' })
+  @Transform(({ value }) => {
+  if (typeof value === 'string') {
+    // 尝试解析多种日期格式
+    const date = new Date(value);
+    return date.toISOString().split('T')[0]; // 返回 YYYY-MM-DD 格式
+  }
+  return value;
+  })
   birthDate?: string;
 
   @ApiProperty({ description: '民族', example: '汉族' })

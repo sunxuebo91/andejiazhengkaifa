@@ -1,10 +1,10 @@
 import React from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Form, Input, Select, DatePicker, Upload, Typography, Tooltip, Table } from 'antd';
+import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Form, Input, Select, Typography, Tooltip, Table } from 'antd';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { EditOutlined, SaveOutlined, FilePdfOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined, FilePdfOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
@@ -13,37 +13,36 @@ import customParseFormat from 'dayjs/plugin/customParseFormat';
 // 注册插件
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
-
 dayjs.extend(customParseFormat);
+
 // import apiService from '../../services/api';
 // import type { UploadFile } from 'antd/es/upload/interface';
-import imageCompression from 'browser-image-compression';
-import { extractFileUrl, extractFileId, isPdfFile } from '../../utils/uploadHelper';
-const { Option } = Select;
+import { isPdfFile } from '../../utils/uploadHelper';
+// const { Option } = Select;
 
 // 中国省份/地区常量数据
-const provinces = [
-  // 23个省
-  '河北省', '山西省', '辽宁省', '吉林省', '黑龙江省', '江苏省', '浙江省', '安徽省', 
-  '福建省', '江西省', '山东省', '河南省', '湖北省', '湖南省', '广东省', '海南省', 
-  '四川省', '贵州省', '云南省', '陕西省', '甘肃省', '青海省', '台湾省',
-  // 4个直辖市
-  '北京市', '天津市', '上海市', '重庆市',
-  // 5个自治区
-  '广西壮族自治区', '内蒙古自治区', '西藏自治区', '宁夏回族自治区', '新疆维吾尔自治区',
-  // 2个特别行政区
-  '香港特别行政区', '澳门特别行政区'
-];
+// const provinces = [
+//   // 23个省
+//   '河北省', '山西省', '辽宁省', '吉林省', '黑龙江省', '江苏省', '浙江省', '安徽省', 
+//   '福建省', '江西省', '山东省', '河南省', '湖北省', '湖南省', '广东省', '海南省', 
+//   '四川省', '贵州省', '云南省', '陕西省', '甘肃省', '青海省', '台湾省',
+//   // 4个直辖市
+//   '北京市', '天津市', '上海市', '重庆市',
+//   // 5个自治区
+//   '广西壮族自治区', '内蒙古自治区', '西藏自治区', '宁夏回族自治区', '新疆维吾尔自治区',
+//   // 2个特别行政区
+//   '香港特别行政区', '澳门特别行政区'
+// ];
 
 // 中国56个民族常量数据
-const ethnicities = [
-  '汉族', '蒙古族', '回族', '藏族', '维吾尔族', '苗族', '彝族', '壮族', '布依族', '朝鲜族',
-  '满族', '侗族', '瑶族', '白族', '土家族', '哈尼族', '哈萨克族', '傣族', '黎族', '傈僳族',
-  '佤族', '畲族', '高山族', '拉祜族', '水族', '东乡族', '纳西族', '景颇族', '柯尔克孜族', '土族',
-  '达斡尔族', '仫佬族', '羌族', '布朗族', '撒拉族', '毛南族', '仡佬族', '锡伯族', '阿昌族', '普米族',
-  '塔吉克族', '怒族', '乌孜别克族', '俄罗斯族', '鄂温克族', '德昂族', '保安族', '裕固族', '京族', '塔塔尔族',
-  '独龙族', '鄂伦春族', '赫哲族', '门巴族', '珞巴族', '基诺族'
-];
+// const ethnicities = [
+//   '汉族', '蒙古族', '回族', '藏族', '维吾尔族', '苗族', '彝族', '壮族', '布依族', '朝鲜族',
+//   '满族', '侗族', '瑶族', '白族', '土家族', '哈尼族', '哈萨克族', '傣族', '黎族', '傈僳族',
+//   '佤族', '畲族', '高山族', '拉祜族', '水族', '东乡族', '纳西族', '景颇族', '柯尔克孜族', '土族',
+//   '达斡尔族', '仫佬族', '羌族', '布朗族', '撒拉族', '毛南族', '仡佬族', '锡伯族', '阿昌族', '普米族',
+//   '塔吉克族', '怒族', '乌孜别克族', '俄罗斯族', '鄂温克族', '德昂族', '保安族', '裕固族', '京族', '塔塔尔族',
+//   '独龙族', '鄂伦春族', '赫哲族', '门巴族', '珞巴族', '基诺族'
+// ];
 
 // 添加映射对象的类型定义
 type EducationMapType = {
@@ -360,7 +359,7 @@ const ResumeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [resume, setResume] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [messageApi, contextHolder] = message.useMessage();
+  const [, contextHolder] = message.useMessage();
   const [previewImage, setPreviewImage] = useState<string>('');
   const [previewVisible, setPreviewVisible] = useState(false);
 
@@ -370,27 +369,44 @@ const ResumeDetail = () => {
   const [followUpForm] = Form.useForm();
   const [followUpLoading, setFollowUpLoading] = useState(false);
 
-  // 在组件内部处理数据前的函数，处理工作经历的日期格式
-  const formatWorkExperiences = (data: Partial<ResumeData>) => {
-    const workExps = data.workExperiences || [];
-    return Array.isArray(workExps) ? workExps.map((exp: WorkExperience) => ({
-      ...exp,
-      startDate: formatDateToChinese(exp.startDate),
-      endDate: formatDateToChinese(exp.endDate),
-      description: exp.description || '-'
-    })) : [];
-  };
-
   // 更新日期格式化函数
   const formatDateToChinese = (dateStr: string): string => {
     if (!dateStr || dateStr === '-') return '-';
     try {
+      // 处理 ISO 格式的日期字符串
       const date = dayjs(dateStr);
-      return date.isValid() ? `${date.year()}年${date.month() + 1}月` : '-';
+      if (!date.isValid()) {
+        console.warn('Invalid date:', dateStr);
+        return '-';
+      }
+      return `${date.year()}年${date.month() + 1}月`;
     } catch (e) {
-      console.error('日期格式化失败:', e);
+      console.error('日期格式化失败:', e, '原始日期:', dateStr);
       return '-';
     }
+  };
+
+  // 在组件内部处理数据前的函数，处理工作经历的日期格式
+  const formatWorkExperiences = (data: Partial<ResumeData>) => {
+    if (!data.workExperiences || !Array.isArray(data.workExperiences)) {
+      console.log('No work experiences or invalid format:', data.workExperiences);
+      return [];
+    }
+
+    return data.workExperiences.map((exp: WorkExperience) => {
+      if (!exp) {
+        console.warn('Invalid work experience entry:', exp);
+        return null;
+      }
+
+      // 保持原始日期格式，不在这里格式化
+      return {
+        ...exp,
+        startDate: exp.startDate || '-',
+        endDate: exp.endDate || '-',
+        description: exp.description || '-'
+      };
+    }).filter(Boolean);
   };
 
   // 获取简历详情
@@ -513,14 +529,24 @@ const ResumeDetail = () => {
   // 处理编辑操作
   const handleEdit = () => {
     if (resume) {
+      console.log('准备编辑的原始数据:', resume);
+      
       const formattedResume = {
         ...resume,
-        workExperiences: resume.workExperiences?.map((exp: any) => ({
-          ...exp,
-          startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : null,
-          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : null,
-          description: exp.description || ''
-        })) || [],
+        workExperiences: resume.workExperiences?.map((exp: any) => {
+          console.log('处理工作经历:', exp);
+          // 确保日期格式正确
+          const startDate = exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : null;
+          const endDate = exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : null;
+          console.log('格式化后的日期:', { startDate, endDate });
+          
+          return {
+            ...exp,
+            startDate,
+            endDate,
+            description: exp.description || ''
+          };
+        }) || [],
         birthDate: resume.birthDate ? dayjs(resume.birthDate).format('YYYY-MM-DD') : null,
         medicalExamDate: resume.medicalExamDate ? dayjs(resume.medicalExamDate).format('YYYY-MM-DD') : null,
         skills: Array.isArray(resume.skills) ? resume.skills : [],
@@ -536,6 +562,7 @@ const ResumeDetail = () => {
         nativePlace: resume.nativePlace || ''
       };
       
+      console.log('准备保存到localStorage的数据:', formattedResume);
       localStorage.setItem('editingResume', JSON.stringify(formattedResume));
       navigate(`/aunt/create-resume?edit=true&id=${resume.id}`);
     } else {
@@ -676,9 +703,7 @@ const ResumeDetail = () => {
               )}
               fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" // 使用一个1x1的透明GIF作为fallback
               // 或者 fallback={null} 如果组件支持
-              onError={(e) => {
-                // 确保图片加载失败时，其占位符或自身不显示
-                // (e.target as HTMLImageElement).style.display = 'none'; // 这是一个更强的隐藏方式，但fallback可能已经处理了
+              onError={() => {
                 console.log('图片加载失败，将不显示:', fileUrl);
               }}
             />
@@ -700,9 +725,19 @@ const ResumeDetail = () => {
     console.log("渲染工作经历列表:", resume.workExperiences);
     
     return resume.workExperiences.map((exp: WorkExperience, index: number) => {
-      if (!exp) return null;
+      if (!exp) {
+        console.warn(`工作经历 ${index + 1} 数据无效:`, exp);
+        return null;
+      }
       
-      console.log(`渲染工作经历 ${index+1}:`, exp);
+      const logData = {
+        original: exp,
+        startDate: exp.startDate,
+        endDate: exp.endDate,
+        formattedStartDate: formatDateToChinese(exp.startDate),
+        formattedEndDate: formatDateToChinese(exp.endDate)
+      };
+      console.log(`渲染工作经历 ${index + 1}:`, logData);
       
       const uniqueKey = `${exp.startDate || ''}-${exp.endDate || ''}-${exp.description?.substring(0, 20) || ''}-${index}`;
       
@@ -715,10 +750,10 @@ const ResumeDetail = () => {
         >
           <Descriptions bordered column={2}>
             <Descriptions.Item label="开始时间">
-              {exp.startDate || '-'}
+              {exp.startDate ? formatDateToChinese(exp.startDate) : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="结束时间">
-              {exp.endDate || '-'}
+              {exp.endDate ? formatDateToChinese(exp.endDate) : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="工作简介" span={2}>
               {exp.description || '-'}
@@ -896,68 +931,6 @@ const ResumeDetail = () => {
       </Form>
     </Modal>
   );
-
-  // 处理身份证上传和OCR识别
-  const handleIdCardUpload = async (type: 'front' | 'back', info: any) => {
-    if (!info?.file) {
-      messageApi.error(`未获取到文件信息`);
-      return;
-    }
-
-    const file = info.file.originFileObj || info.file;
-    if (!file) {
-      messageApi.error(`未获取到文件对象`);
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // 压缩图片
-      const compressedFile = await imageCompression(file, {
-        maxSizeMB: 0.05,
-        maxWidthOrHeight: 1024,
-        useWebWorker: true
-      });
-
-      // 创建FormData对象
-      const formData = new FormData();
-      formData.append('file', compressedFile);
-      formData.append('idCardSide', type);
-
-      // 1. 先进行OCR识别
-      const ocrResponse = await axios.post('/api/ocr/idcard', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 30000,
-      });
-
-      if (!ocrResponse.data.success) {
-        throw new Error(ocrResponse.data.message || 'OCR识别失败');
-      }
-
-      messageApi.success('身份证识别成功');
-
-      // 2. 上传图片
-      const uploadFormData = new FormData();
-      uploadFormData.append('file', compressedFile);
-      
-      const uploadResponse = await axios.post(`/api/upload/id-card/${type}`, uploadFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      if (!uploadResponse.data.success) {
-        throw new Error(uploadResponse.data.message || '图片上传失败');
-      }
-
-      messageApi.success('图片上传成功');
-
-    } catch (error: any) {
-      console.error('处理身份证失败:', error);
-      messageApi.error(error.message || `身份证处理失败`);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // 在组件加载时打印图片URL信息
   useEffect(() => {

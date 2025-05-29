@@ -158,12 +158,15 @@ export const apiService = {
   },
 
   // 检查后端服务健康状态
-  checkHealth: async () => {
+  checkHealth: async (): Promise<boolean> => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 5000 });
-      return response.status === 200;
+      const response = await apiService.get<{ status: string; timestamp: string; message?: string }>('/api/health', undefined, { 
+        timeout: 5000,
+        validateStatus: (status: number) => status === 200
+      });
+      return response.data?.status === 'ok' || response.data?.status === 'healthy';
     } catch (error) {
-      console.error('后端服务健康检查失败');
+      console.error('后端服务健康检查失败:', error);
       return false;
     }
   }

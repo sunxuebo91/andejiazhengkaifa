@@ -213,6 +213,7 @@ const CreateResume = () => {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [editingResume, setEditingResume] = useState<ExtendedResume | null>(null);
+  const [messageState, setMessageState] = useState<{ type: 'success' | 'error' | 'info' | 'warning', content: string } | null>(null);
   const [idCardFiles, setIdCardFiles] = useState<{
     front: CustomUploadFile[];
     back: CustomUploadFile[];
@@ -237,7 +238,47 @@ const CreateResume = () => {
   const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
   const [medicalPdfCount, setMedicalPdfCount] = useState<number>(0);
 
-  // 加载简历数据
+  // 修改健康检查相关的 useEffect
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const isHealthy = await checkBackendConnection();
+        if (isHealthy) {
+          setMessageState({ type: 'success', content: '后端连接正常' });
+        } else {
+          setMessageState({ type: 'error', content: '后端服务暂时无法连接，请检查后端服务是否启动' });
+        }
+      } catch (error) {
+        setMessageState({ type: 'error', content: '后端服务暂时无法连接，请检查后端服务是否启动' });
+      }
+    };
+
+    const timer = setTimeout(checkHealth, 3000);
+    return () => clearTimeout(timer);
+  }, []); // 移除 messageApi 依赖
+
+  // 添加一个新的 useEffect 来处理消息状态
+  useEffect(() => {
+    if (messageState) {
+      switch (messageState.type) {
+        case 'success':
+          messageApi.success(messageState.content);
+          break;
+        case 'error':
+          messageApi.error(messageState.content);
+          break;
+        case 'info':
+          messageApi.info(messageState.content);
+          break;
+        case 'warning':
+          messageApi.warning(messageState.content);
+          break;
+      }
+      setMessageState(null);
+    }
+  }, [messageState, messageApi]);
+
+  // 修改 loadResumeData 函数
   const loadResumeData = async (resumeId: string) => {
     try {
       setLoading(true);
@@ -284,56 +325,58 @@ const CreateResume = () => {
         // 设置表单值
         form.setFieldsValue(formData);
       } else {
-        messageApi.error(response.message || '加载简历失败');
+        setMessageState({ type: 'error', content: response.message || '加载简历失败' });
       }
     } catch (error) {
       console.error('加载简历失败:', error);
-      messageApi.error('加载简历失败，请稍后重试');
+      setMessageState({ type: 'error', content: '加载简历失败，请稍后重试' });
     } finally {
       setLoading(false);
     }
   };
 
-  // 组件挂载时检查认证状态
+  // 修改 checkAuthAndLoadData 函数
   useEffect(() => {
-    if (!isLoggedIn()) {
-      messageApi.error('请先登录');
-      navigate('/login');
-      return;
-    }
+    const checkAuthAndLoadData = async () => {
+      if (!isLoggedIn()) {
+        setMessageState({ type: 'error', content: '请先登录' });
+        navigate('/login');
+        return;
+      }
 
-    // 检查是否是编辑模式
-    const params = new URLSearchParams(window.location.search);
-    const isEditMode = params.get('edit') === 'true';
-    const resumeId = params.get('id');
+      // 检查是否是编辑模式
+      const params = new URLSearchParams(window.location.search);
+      const isEditMode = params.get('edit') === 'true';
+      const resumeId = params.get('id');
 
-    if (isEditMode && resumeId) {
-      // 编辑模式：加载简历数据
-      loadResumeData(resumeId);
-    } else {
-      // 创建模式：检查本地存储中是否有未完成的编辑
-      const savedData = localStorage.getItem('editingResume');
-      if (savedData) {
-        try {
-          const parsedData = JSON.parse(savedData) as ExtendedResume;
-          form.setFieldsValue({
-            ...parsedData,
-            // Keep dates as strings in the form data
-            birthDate: parsedData.birthDate,
-            medicalExamDate: parsedData.medicalExamDate,
-            // Ensure jobType is properly typed
-            jobType: parsedData.jobType as JobType,
-            workExperiences: parsedData.workExperiences || []
-          });
-          setEditingResume(parsedData);
-          messageApi.info('已恢复未完成的编辑');
-        } catch (error) {
-          console.error('恢复编辑数据失败:', error);
-          localStorage.removeItem('editingResume');
+      if (isEditMode && resumeId) {
+        await loadResumeData(resumeId);
+      } else {
+        const savedData = localStorage.getItem('editingResume');
+        if (savedData) {
+          try {
+            const parsedData = JSON.parse(savedData) as ExtendedResume;
+            form.setFieldsValue({
+              ...parsedData,
+              // Keep dates as strings in the form data
+              birthDate: parsedData.birthDate,
+              medicalExamDate: parsedData.medicalExamDate,
+              // Ensure jobType is properly typed
+              jobType: parsedData.jobType as JobType,
+              workExperiences: parsedData.workExperiences || []
+            });
+            setEditingResume(parsedData);
+            setMessageState({ type: 'info', content: '已恢复未完成的编辑' });
+          } catch (error) {
+            console.error('恢复编辑数据失败:', error);
+            localStorage.removeItem('editingResume');
+          }
         }
       }
-    }
-  }, [form, navigate, messageApi]);
+    };
+
+    checkAuthAndLoadData();
+  }, [form, navigate]);
 
   // 性别选择处理函数，确保 form 可用
   const handleGenderChange = (value: GenderType) => {
@@ -342,28 +385,38 @@ const CreateResume = () => {
     }
   };
 
+  // 使用 useEffect 进行健康检查
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const isHealthy = await checkBackendConnection();
+        if (isHealthy) {
+          messageApi.success('后端连接正常');
+        }
+      } catch (error) {
+        messageApi.error('后端服务暂时无法连接，请检查后端服务是否启动');
+      }
+    };
+
+    // 延迟3秒执行健康检查
+    const timer = setTimeout(checkHealth, 3000);
+    return () => clearTimeout(timer);
+  }, [messageApi]); // 添加 messageApi 作为依赖项
+
   // 定义检查后端连接的函数
-  const checkBackendConnection = async () => {
+  const checkBackendConnection = async (): Promise<boolean> => {
     try {
-      await apiService.get('/health');
-      messageApi.success('后端连接正常');
+      const isHealthy = await apiService.checkHealth();
+      if (!isHealthy) {
+        throw new Error('后端服务响应异常');
+      }
+      return true;
     } catch (error: unknown) {
       const apiError = error as ApiErrorResponse;
-      messageApi.error('后端服务暂时无法连接，请检查后端服务是否启动');
       console.error(`连接后端失败: ${apiError.response?.status || apiError.message || '未知错误'}`);
+      throw error;
     }
   };
-
-  useEffect(() => {
-    debugLog('CreateResume component mounted');
-
-    // 添加延迟，确保后端有足够时间启动
-    const timer = setTimeout(() => {
-      checkBackendConnection();
-    }, 3000); // 延迟3秒执行
-
-    return () => clearTimeout(timer);
-  }, []);
 
   // 页面标题
   const pageTitle = editingResume ? '编辑简历' : '创建简历';
@@ -464,9 +517,9 @@ const CreateResume = () => {
     } catch (error) {
       console.error('OCR识别失败:', error);
       if (error instanceof Error) {
-        messageApi.error(`身份证识别失败: ${error.message}`);
+        setMessageState({ type: 'error', content: `身份证识别失败: ${error.message}` });
       } else {
-        messageApi.error('身份证识别失败，请手动填写信息');
+        setMessageState({ type: 'error', content: '身份证识别失败，请手动填写信息' });
       }
     } finally {
       setIsOcrProcessing(false);
@@ -480,21 +533,21 @@ const CreateResume = () => {
     beforeUpload: (file: RcFile) => {
       // 检查是否正在处理OCR
       if (isOcrProcessing) {
-        messageApi.warning('正在处理身份证识别，请稍候...');
+        setMessageState({ type: 'warning', content: '正在处理身份证识别，请稍候...' });
         return false;
       }
 
       // 检查文件类型
       const isImage = file.type.startsWith('image/');
       if (!isImage) {
-        messageApi.error('只能上传图片文件！');
+        setMessageState({ type: 'error', content: '只能上传图片文件！' });
         return false;
       }
       
       // 检查文件大小（限制为5MB）
       const isLt5M = file.size / 1024 / 1024 < 5;
       if (!isLt5M) {
-        messageApi.error('图片大小不能超过5MB！');
+        setMessageState({ type: 'error', content: '图片大小不能超过5MB！' });
         return false;
       }
 
@@ -802,11 +855,7 @@ const CreateResume = () => {
       }
     } catch (error) {
       console.error('提交简历失败:', error);
-      if (error instanceof Error) {
-        messageApi.error(`提交失败: ${error.message}`);
-      } else {
-        messageApi.error('提交失败，请重试');
-      }
+      setMessageState({ type: 'error', content: '提交失败，请重试' });
     } finally {
       setSubmitting(false);
     }
@@ -885,42 +934,47 @@ const CreateResume = () => {
   }, [editingResume, form]);
 
   // Update the file handling functions
-  const handleFileChange = (type: 'photo' | 'certificate' | 'medical') => (info: UploadChangeParam<UploadFile<any>>) => {
-    // 只处理新上传的文件，保持已存在的文件不变
-    const newFiles = info.fileList.filter(file => !(file as any).isExisting).map(file => {
-      const baseProps: BaseFileProps = {
-        uid: file.uid || `${Date.now()}`,
-        name: file.name || '未命名文件',
-        url: file.url,
-        thumbUrl: file.thumbUrl,
-        originFileObj: file.originFileObj,
-        size: file.size,
-        type: file.type
-      };
+  const handleFileChange = (type: 'photo' | 'certificate' | 'medical') => async (info: UploadChangeParam<UploadFile<any>>) => {
+    try {
+      // 只处理新上传的文件，保持已存在的文件不变
+      const newFiles = info.fileList.filter(file => !(file as any).isExisting).map(file => {
+        const baseProps: BaseFileProps = {
+          uid: file.uid || `${Date.now()}`,
+          name: file.name || '未命名文件',
+          url: file.url,
+          thumbUrl: file.thumbUrl,
+          originFileObj: file.originFileObj,
+          size: file.size,
+          type: file.type
+        };
 
-      return {
-        ...baseProps,
-        status: (file.status || 'done') as UploadFileStatus,
-        isExisting: false
-      } as NewFile;
-    });
+        return {
+          ...baseProps,
+          status: (file.status || 'done') as UploadFileStatus,
+          isExisting: false
+        } as NewFile;
+      });
 
-    // 对于体检报告，需要特别处理PDF文件
-    if (type === 'medical') {
-      const pdfFiles = newFiles.filter(file => file.type === 'application/pdf');
-      setMedicalPdfCount(pdfFiles.length);
-    }
+      // 对于体检报告，需要特别处理PDF文件
+      if (type === 'medical') {
+        const pdfFiles = newFiles.filter(file => file.type === 'application/pdf');
+        setMedicalPdfCount(pdfFiles.length);
+      }
 
-    switch (type) {
-      case 'photo':
-        setPhotoFiles(newFiles);
-        break;
-      case 'certificate':
-        setCertificateFiles(newFiles);
-        break;
-      case 'medical':
-        setMedicalReportFiles(newFiles);
-        break;
+      switch (type) {
+        case 'photo':
+          setPhotoFiles(newFiles);
+          break;
+        case 'certificate':
+          setCertificateFiles(newFiles);
+          break;
+        case 'medical':
+          setMedicalReportFiles(newFiles);
+          break;
+      }
+    } catch (error) {
+      console.error('文件上传失败:', error);
+      setMessageState({ type: 'error', content: '文件上传失败，请重试' });
     }
   };
 
@@ -968,6 +1022,57 @@ const CreateResume = () => {
         break;
     }
     return true;
+  };
+
+  // 修改身份证OCR处理函数
+  const handleOcrSuccess = (data: any) => {
+    if (data && data.name) {
+      form.setFieldsValue({
+        name: data.name,
+        gender: data.gender === '男' ? Gender.MALE : Gender.FEMALE,
+        idNumber: data.idNumber,
+        birthDate: data.birthDate ? dayjs(data.birthDate) : undefined,
+        nativePlace: data.nativePlace
+      });
+      setMessageState({ type: 'success', content: '身份证信息识别成功' });
+    } else {
+      setMessageState({ type: 'warning', content: '未能识别到身份证信息，请手动填写' });
+    }
+  };
+
+  // 修改预览处理函数
+  const handlePreview = async (file: RcFile) => {
+    try {
+      // ... existing code ...
+    } catch (error) {
+      console.error('预览照片失败:', error);
+      setMessageState({ type: 'error', content: '预览照片失败' });
+    }
+  };
+
+  // 修改提交成功处理
+  const handleSubmitSuccess = () => {
+    setMessageState({ type: 'success', content: '简历创建成功' });
+    navigate('/aunt/resume-list');
+  };
+
+  // 修改工作经历删除处理
+  const handleRemoveWorkExperience = (index: number) => {
+    const experiences = form.getFieldValue('workExperiences') || [];
+    if (experiences.length <= 1) {
+      setMessageState({ type: 'warning', content: '至少需要保留一条工作经历' });
+      return;
+    }
+    // ... existing code ...
+  };
+
+  // 修改PDF文件上传处理
+  const handlePdfUpload = (file: RcFile) => {
+    if (medicalPdfCount >= MAX_MEDICAL_PDF_COUNT) {
+      setMessageState({ type: 'error', content: 'PDF文件数量已达到上限（5个）' });
+      return false;
+    }
+    // ... existing code ...
   };
 
   return (

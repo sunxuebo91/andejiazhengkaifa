@@ -17,17 +17,24 @@ export interface Resume {
   currentAddress?: string;
   hukouAddress?: string;
   birthDate?: string;
+  medicalExamDate?: string;
   ethnicity?: string;
   gender?: string;
   zodiac?: string;
   zodiacSign?: string;
   jobType: string;
   expectedSalary?: number;
-  serviceArea?: string;
+  serviceArea?: string[];
   orderStatus?: string;
   skills?: string[];
   leadSource?: string;
-  workExperience?: { startDate: string; endDate: string; description: string }[];
+  workExperience?: { 
+    startDate: string; 
+    endDate: string; 
+    description: string;
+    company?: string;
+    position?: string;
+  }[];
   
   // 文件URL
   idCardFrontUrl?: string;

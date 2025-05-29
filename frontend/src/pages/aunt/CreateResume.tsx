@@ -1,30 +1,27 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App } from 'antd';
+import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, message, Space } from 'antd';
 import { useState, useEffect } from 'react';
-import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { UploadFile, UploadChangeParam } from 'antd/es/upload/interface';
-import type { RcFile } from 'antd/es/upload';
+import type { UploadFile, RcFile } from 'antd/es/upload/interface';
+import type { UploadChangeParam } from 'antd/es/upload';
+import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import BaiduMapCard from '../../components/BaiduMapCard';
-import apiService from '../../services/api';
-import { ImageService } from '../../services/imageService';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
-import type { Dayjs } from 'dayjs';
-import type { DatePickerProps } from 'antd';
-import { GenderType } from '@/types/resume';
-import { Gender } from '@/types/resume';
-import { ApiResponse } from '@/services/api';
-import { Resume } from '@/services/resume.service';
+import BaiduMapCard from '../../components/BaiduMapCard';
+import apiService from '../../services/api';
+import { ImageService } from '../../services/imageService';
+import { Gender, GenderType, JobType, Education, FormValues, WorkExperience } from '../../types/resume';
+import type { Resume } from '../../services/resume.service';
+import type { ApiResponse } from '@/services/api';
+import { isLoggedIn } from '@/services/auth';
 
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
-
-// 删除 axios 相关配置，因为使用 apiService 替代
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -56,40 +53,6 @@ const ethnicities = [
 // 在文件顶部添加调试模式常量
 // 调试模式开关，生产环境设为false
 const DEBUG_MODE = false;
-
-// 添加类型定义
-interface WorkExperience {
-  startDate: string;
-  endDate: string;
-  description: string;
-}
-
-interface FormValues {
-  name: string;
-  gender: GenderType;
-  age: number;
-  idNumber: string;
-  phone: string;
-  address: string;
-  workExperiences: WorkExperience[];
-  experienceYears?: number;
-  nativePlace?: string;
-  jobType?: string;
-  education?: string;
-  wechat?: string;
-  currentAddress?: string;
-  hukouAddress?: string;
-  birthDate?: string;
-  ethnicity?: string;
-  zodiac?: string;
-  zodiacSign?: string;
-  expectedSalary?: number;
-  serviceArea?: string[];
-  orderStatus?: string;
-  skills?: string[];
-  leadSource?: string;
-  [key: string]: any;
-}
 
 // Define a base type for file properties
 type BaseFileProps = {
@@ -130,29 +93,10 @@ interface ApiErrorResponse {
 // Add UploadFileStatus type
 type UploadFileStatus = 'uploading' | 'done' | 'error' | 'removed';
 
-// Add new interfaces and type definitions after the existing ones
-interface WorkExperienceItem {
-  startDate?: string;
-  endDate?: string;
-  description?: string;
-}
-
 // Restore utility functions
 function debugLog(...args: unknown[]): void {
   if (DEBUG_MODE) console.log(...args);
 }
-
-// 添加日期验证工具函数
-const isValidDate = (date: any): date is Dayjs => {
-  return date && typeof date === 'object' && 'isValid' in date && date.isValid();
-};
-
-const toDayjs = (date: any): Dayjs | undefined => {
-  if (!date) return undefined;
-  if (isValidDate(date)) return date;
-  const parsed = dayjs(date);
-  return parsed.isValid() ? parsed : undefined;
-};
 
 // 修改工种映射常量
 const JOB_TYPE_MAP = {
@@ -165,32 +109,6 @@ const JOB_TYPE_MAP = {
   'xiaoshi': '小时工',
   'yuexin': '月薪'
 } as const;
-
-// 修改工种值转换函数
-const convertJobType = (value: string): string => {
-  const jobTypeMap: Record<string, string> = {
-    'ZHUJIA_YUER': 'zhujia-yuer',
-    'BAIBAN_YUER': 'baiban-yuer',
-    'BAOJIE': 'baojie',
-    'BAIBAN_BAOMU': 'baiban-baomu',
-    'ZHUJIA_BAOMU': 'zhujia-baomu',
-    'YANGCHONG': 'yangchong',
-    'XIAOSHI': 'xiaoshi',
-    'YUEXIN': 'yuexin',
-    // 添加小写形式的映射
-    'zhujia-yuer': 'zhujia-yuer',
-    'baiban-yuer': 'baiban-yuer',
-    'baojie': 'baojie',
-    'baiban-baomu': 'baiban-baomu',
-    'zhujia-baomu': 'zhujia-baomu',
-    'yangchong': 'yangchong',
-    'xiaoshi': 'xiaoshi',
-    'yuexin': 'yuexin'
-  };
-  return jobTypeMap[value] || value;
-};
-
-
 
 // 添加学历映射常量
 const EDUCATION_MAP = {
@@ -205,15 +123,85 @@ const EDUCATION_MAP = {
   'graduate': '研究生'
 } as const;
 
+// 定义工作经历项类型（使用WorkExperience接口）
+type WorkExperienceItem = WorkExperience;
 
+// 扩展Resume类型以包含前端特有的字段
+interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'workExperience' | 'education'> {
+  gender: GenderType;
+  jobType: JobType;
+  education: Education;
+  medicalExamDate?: string;
+  birthDate?: string;
+  workExperiences?: WorkExperience[];
+}
+
+// 添加类型转换辅助函数
+const convertToExtendedResume = (resume: Resume): ExtendedResume => {
+  // 确保jobType是JobType类型
+  let jobType: JobType;
+  try {
+    if (typeof resume.jobType === 'string' && Object.values(JobType).includes(resume.jobType as JobType)) {
+      jobType = resume.jobType as JobType;
+    } else {
+      jobType = JobType.ZHUJIA_YUER;
+    }
+  } catch {
+    jobType = JobType.ZHUJIA_YUER;
+  }
+
+  // 确保education是Education类型
+  let education: Education;
+  try {
+    if (typeof resume.education === 'string' && Object.values(Education).includes(resume.education as Education)) {
+      education = resume.education as Education;
+    } else {
+      education = Education.NO;
+    }
+  } catch {
+    education = Education.NO;
+  }
+
+  // 确保gender是GenderType类型
+  let gender: GenderType;
+  try {
+    const genderValue = resume.gender as string;
+    if (genderValue === Gender.MALE || genderValue === Gender.FEMALE) {
+      gender = genderValue;
+    } else {
+      gender = Gender.FEMALE;
+    }
+  } catch {
+    gender = Gender.FEMALE;
+  }
+
+  // 确保工作经历数组的类型正确
+  const workExperiences: WorkExperience[] = (resume.workExperience || [])
+    .filter((exp: WorkExperience | null): exp is WorkExperience => exp !== null)
+    .map((exp: WorkExperience) => ({
+      startDate: exp.startDate || '',
+      endDate: exp.endDate || '',
+      description: exp.description || '',
+      company: exp.company || undefined,
+      position: exp.position || undefined
+    }));
+
+  return {
+    ...resume,
+    jobType,
+    education,
+    gender,
+    workExperiences
+  };
+};
 
 const CreateResume = () => {
-  const { message: messageApi } = App.useApp();
-  const [form] = Form.useForm<FormValues>();
   const navigate = useNavigate();
-  const [loading] = useState<boolean>(false);
+  const [messageApi] = message.useMessage();
+  const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [editingResume, setEditingResume] = useState<ExtendedResume | null>(null);
   const [idCardFiles, setIdCardFiles] = useState<{
     front: CustomUploadFile[];
     back: CustomUploadFile[];
@@ -235,9 +223,105 @@ const CreateResume = () => {
   const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
   const [existingCertificateUrls, setExistingCertificateUrls] = useState<string[]>([]);
   const [existingMedicalReportUrls, setExistingMedicalReportUrls] = useState<string[]>([]);
-  const [hasExistingIdCardFront, setHasExistingIdCardFront] = useState<boolean>(false);
-  const [hasExistingIdCardBack, setHasExistingIdCardBack] = useState<boolean>(false);
   const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
+
+  // 加载简历数据
+  const loadResumeData = async (resumeId: string) => {
+    try {
+      setLoading(true);
+      const response = await apiService.get<ApiResponse<Resume>>(`/resumes/${resumeId}`);
+      if (response.success && response.data) {
+        // 使用类型断言，先转换为unknown再转换为Resume
+        const resumeData = response.data as unknown as Resume;
+        const extendedResume = convertToExtendedResume(resumeData);
+        setEditingResume(extendedResume);
+        
+        // 设置表单数据，确保所有字段都是正确的类型
+        const formData = {
+          name: extendedResume.name,
+          age: extendedResume.age,
+          phone: extendedResume.phone,
+          gender: extendedResume.gender,
+          nativePlace: extendedResume.nativePlace,
+          jobType: extendedResume.jobType,
+          education: extendedResume.education,
+          experienceYears: extendedResume.experienceYears,
+          idNumber: extendedResume.idNumber,
+          wechat: extendedResume.wechat,
+          currentAddress: extendedResume.currentAddress,
+          hukouAddress: extendedResume.hukouAddress,
+          birthDate: extendedResume.birthDate || undefined,
+          medicalExamDate: extendedResume.medicalExamDate || undefined,
+          ethnicity: extendedResume.ethnicity,
+          zodiac: extendedResume.zodiac,
+          zodiacSign: extendedResume.zodiacSign,
+          expectedSalary: extendedResume.expectedSalary,
+          serviceArea: extendedResume.serviceArea,
+          orderStatus: extendedResume.orderStatus,
+          skills: extendedResume.skills,
+          leadSource: extendedResume.leadSource,
+          workExperiences: extendedResume.workExperiences?.map(exp => ({
+            startDate: exp.startDate || '',
+            endDate: exp.endDate || '',
+            description: exp.description || '',
+            company: exp.company || undefined,
+            position: exp.position || undefined
+          })) || []
+        };
+        
+        // 设置表单值
+        form.setFieldsValue(formData);
+      } else {
+        messageApi.error(response.message || '加载简历失败');
+      }
+    } catch (error) {
+      console.error('加载简历失败:', error);
+      messageApi.error('加载简历失败，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 组件挂载时检查认证状态
+  useEffect(() => {
+    if (!isLoggedIn()) {
+      messageApi.error('请先登录');
+      navigate('/login');
+      return;
+    }
+
+    // 检查是否是编辑模式
+    const params = new URLSearchParams(window.location.search);
+    const isEditMode = params.get('edit') === 'true';
+    const resumeId = params.get('id');
+
+    if (isEditMode && resumeId) {
+      // 编辑模式：加载简历数据
+      loadResumeData(resumeId);
+    } else {
+      // 创建模式：检查本地存储中是否有未完成的编辑
+      const savedData = localStorage.getItem('editingResume');
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData) as ExtendedResume;
+          form.setFieldsValue({
+            ...parsedData,
+            // Keep dates as strings in the form data
+            birthDate: parsedData.birthDate,
+            medicalExamDate: parsedData.medicalExamDate,
+            // Ensure jobType is properly typed
+            jobType: parsedData.jobType as JobType,
+            workExperiences: parsedData.workExperiences || []
+          });
+          setEditingResume(parsedData);
+          messageApi.info('已恢复未完成的编辑');
+        } catch (error) {
+          console.error('恢复编辑数据失败:', error);
+          localStorage.removeItem('editingResume');
+        }
+      }
+    }
+  }, [form, navigate, messageApi]);
 
   // 性别选择处理函数，确保 form 可用
   const handleGenderChange = (value: GenderType) => {
@@ -245,20 +329,6 @@ const CreateResume = () => {
       form.setFieldsValue({ gender: value });
     }
   };
-
-  // 检查URL是否包含edit参数，如果不包含，应当是创建新简历
-  useEffect(() => {
-    // 获取当前URL
-    const url = window.location.href;
-    
-    // 如果URL不包含edit参数，则清除localStorage中的editingResume
-    if (!url.includes('edit=true')) {
-      debugLog('清除localStorage中的editingResume数据，进入创建新简历模式');
-      localStorage.removeItem('editingResume');
-    } else {
-      debugLog('保留editingResume数据，进入编辑简历模式');
-    }
-  }, []);
 
   // 定义检查后端连接的函数
   const checkBackendConnection = async () => {
@@ -284,7 +354,7 @@ const CreateResume = () => {
   }, []);
 
   // 页面标题
-  const pageTitle = isEditing ? '编辑简历' : '创建简历';
+  const pageTitle = editingResume ? '编辑简历' : '创建简历';
 
   // 身份证上传组件的自定义渲染
   const uploadButton = (
@@ -619,10 +689,8 @@ const CreateResume = () => {
               onClick={() => {
                 if (type === 'front') {
                   setExistingIdCardFrontUrl('');
-                  setHasExistingIdCardFront(false);
                 } else {
                   setExistingIdCardBackUrl('');
-                  setHasExistingIdCardBack(false);
                 }
               }}
             />
@@ -634,451 +702,119 @@ const CreateResume = () => {
     return null;
   };
 
-
-
-  // 修改 DatePicker 组件的配置
-  const datePickerProps = {
-    format: 'YYYY年MM月DD日',
-    allowClear: true,
-    style: { width: '100%' },
-    getPopupContainer: (trigger: HTMLElement) => trigger.parentElement || document.body
-  } as const;
-
-  // 修改工作经历 DatePicker 的配置
-  const workExperienceDatePickerProps = {
-    format: 'YYYY年MM月',
-    picker: 'month' as DatePickerProps['picker'],
-    allowClear: true,
-    style: { width: '100%' },
-    getPopupContainer: (trigger: HTMLElement) => trigger.parentElement || document.body
-  } as const;
-
-  // 修改工作经历 DatePicker 的 onChange 处理
-  const handleWorkExperienceDateChange = (name: number, field: 'startDate' | 'endDate') => (date: Dayjs | null) => {
-    debugLog(`${field}被选择:`, date);
-    const workExperiences = form.getFieldValue('workExperiences') || [];
-    const updatedExperiences = [...workExperiences];
-    updatedExperiences[name] = {
-      ...updatedExperiences[name],
-      [field]: date ? toDayjs(date) : undefined
-    };
-    form.setFieldsValue({ workExperiences: updatedExperiences });
-  };
-
   // 修改 handleSubmit 函数
   const handleSubmit = async (values: FormValues) => {
     try {
-      setSubmitting(true);
-      
-      // 获取URL参数
-      const params = new URLSearchParams(window.location.search);
-      const isEditMode = params.get('edit') === 'true';
-      const resumeId = params.get('id');
+      // Convert form values to the expected types for submission
+      const submitData = {
+        ...values,
+        // Convert Dayjs objects to string dates
+        birthDate: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : undefined,
+        medicalExamDate: values.medicalExamDate ? dayjs(values.medicalExamDate).format('YYYY-MM-DD') : undefined,
+        // Ensure jobType is properly typed
+        jobType: values.jobType as JobType,
+      };
 
-      // 在FormData构建之前添加必填字段检查
-      const requiredFields = ['name', 'phone', 'age', 'education', 'gender', 'jobType', 'experienceYears'];
-      const missingFields = requiredFields.filter(field => !values[field] || values[field] === '');
-
-      if (missingFields.length > 0) {
-        console.error('缺少必填字段:', missingFields);
-        messageApi.error(`请填写必填字段: ${missingFields.join(', ')}`);
+      // Validate required fields
+      if (!submitData.name || !submitData.phone || !submitData.gender || !submitData.jobType) {
+        messageApi.error('请填写必填项');
         return;
       }
 
-      console.log('必填字段检查通过:', requiredFields.map(field => `${field}: ${values[field]}`));
+      // Rest of the submit logic...
+      const endpoint = editingResume ? `/resumes/${editingResume.id}` : '/resumes';
+      const method = editingResume ? 'put' : 'post';
 
-      const formDataToSend = new FormData();
+      const response = await apiService[method](endpoint, submitData);
       
-      // 添加基本信息，确保所有字段都被正确转换
-      Object.keys(values).forEach(key => {
-        const value = values[key];
-        
-        // 定义后端DTO中允许的字段列表
-        const allowedFields = [
-          'userId', 'name', 'phone', 'age', 'wechat', 'idNumber', 'education',
-          'maritalStatus', 'religion', 'currentAddress', 'nativePlace', 'hukouAddress',
-          'birthDate', 'ethnicity', 'gender', 'zodiac', 'zodiacSign', 'jobType',
-          'expectedSalary', 'serviceArea', 'orderStatus', 'skills', 'experienceYears',
-          'leadSource', 'workExperiences', 'emergencyContactName', 'emergencyContactPhone',
-          'selfIntroduction', 'specialSkills', 'remarks', 'medicalExamDate',
-          'idCardFrontUrl', 'idCardBackUrl', 'photoUrls', 'certificateUrls', 'medicalReportUrls'
-        ];
-        
-        // 只处理允许的字段
-        if (!allowedFields.includes(key)) {
-          console.warn(`跳过未定义字段: ${key}`);
-          return;
-        }
-        
-        // 跳过空值和未定义值
-        if (value !== undefined && value !== null && value !== '') {
-          if (key === 'birthDate' || key === 'medicalExamDate') {
-            // 日期字段：确保是有效的 ISO 8601 日期字符串
-            if (value instanceof Date || dayjs.isDayjs(value)) {
-              formDataToSend.append(key, dayjs(value).format('YYYY-MM-DD'));
-            } else if (typeof value === 'string') {
-              // 尝试解析日期字符串
-              const date = dayjs(value);
-              if (date.isValid()) {
-                formDataToSend.append(key, date.format('YYYY-MM-DD'));
-              }
-            }
-          } else if (key === 'age' || key === 'expectedSalary' || key === 'experienceYears') {
-            // 数字字段：确保是有效数字
-            const numValue = Number(value);
-            if (!isNaN(numValue)) {
-              formDataToSend.append(key, String(numValue));
-            }
-          } else if (key === 'gender') {
-            // 性别字段：确保是有效的枚举值
-            if (value === 'male' || value === 'female') {
-              formDataToSend.append(key, value);
-            }
-          } else if (key === 'jobType') {
-            // 工作类型：确保是有效的枚举值
-            if (value && typeof value === 'string') {
-              formDataToSend.append(key, value.toLowerCase());
-            }
-          } else if (key === 'serviceArea') {
-            // 服务区域：确保是字符串数组
-            if (Array.isArray(value)) {
-              formDataToSend.append(key, JSON.stringify(value));
-            } else if (typeof value === 'string') {
-              try {
-                const parsed = JSON.parse(value);
-                formDataToSend.append(key, JSON.stringify(Array.isArray(parsed) ? parsed : [value]));
-              } catch {
-                formDataToSend.append(key, JSON.stringify([value]));
-              }
-            }
-          } else if (key === 'workExperiences') {
-            // 工作经历：确保是数组格式，并正确处理日期
-            if (Array.isArray(value) && value.length > 0) {
-              const experiences = value.map((exp: any) => ({
-                ...exp,
-                startDate: exp.startDate ? dayjs(exp.startDate).toISOString() : undefined,
-                endDate: exp.endDate ? dayjs(exp.endDate).toISOString() : undefined,
-                description: exp.description || ''
-              }));
-              formDataToSend.append(key, JSON.stringify(experiences));
-            }
-          } else if (key === 'skills') {
-            // 技能标签：确保是数组格式
-            if (Array.isArray(value)) {
-              formDataToSend.append(key, JSON.stringify(value.map(s => s.toLowerCase())));
-            } else if (typeof value === 'string') {
-              try {
-                const parsed = JSON.parse(value);
-                formDataToSend.append(key, JSON.stringify(Array.isArray(parsed) ? parsed.map(s => s.toLowerCase()) : [value.toLowerCase()]));
-              } catch {
-                formDataToSend.append(key, JSON.stringify([value.toLowerCase()]));
-              }
-            }
-          } else if (['photoUrls', 'certificateUrls', 'medicalReportUrls'].includes(key)) {
-            // 文件URL数组：确保是字符串数组
-            if (Array.isArray(value)) {
-              // 直接使用数组，不需要 JSON.stringify
-              value.forEach(url => {
-                if (typeof url === 'string' && url.trim() !== '') {
-                  formDataToSend.append(key, url.trim());
-                }
-              });
-            } else if (typeof value === 'string') {
-              try {
-                const parsed = JSON.parse(value);
-                if (Array.isArray(parsed)) {
-                  parsed.forEach(url => {
-                    if (typeof url === 'string' && url.trim() !== '') {
-                      formDataToSend.append(key, url.trim());
-                    }
-                  });
-                } else if (value.trim() !== '') {
-                  formDataToSend.append(key, value.trim());
-                }
-              } catch {
-                if (value.trim() !== '') {
-                  formDataToSend.append(key, value.trim());
-                }
-              }
-            }
-          } else {
-            // 其他字符串字段：只有非空值才添加
-            if (typeof value === 'string' && value.trim() !== '') {
-              formDataToSend.append(key, value.trim());
-            } else if (typeof value !== 'string' && value !== null && value !== undefined) {
-              formDataToSend.append(key, String(value));
-            }
-          }
-        }
-      });
-
-      // 添加调试日志
-      console.log('FormData entries:', Object.fromEntries(formDataToSend.entries()));
-
-      // 处理文件上传
-      const allFiles: CustomUploadFile[] = [
-        ...idCardFiles.front,
-        ...idCardFiles.back,
-        ...photoFiles,
-        ...certificateFiles,
-        ...medicalReportFiles
-      ];
-
-      const fileTypes: string[] = [];
-      
-      // 添加新上传的文件
-      allFiles.forEach(file => {
-        if (file.originFileObj) {
-          formDataToSend.append('files', file.originFileObj);
-          
-          // 根据文件来源确定类型
-          let fileType = 'personalPhoto'; // 默认为个人照片
-          if (idCardFiles.front.includes(file)) {
-            fileType = 'idCardFront';
-          } else if (idCardFiles.back.includes(file)) {
-            fileType = 'idCardBack';
-          } else if (certificateFiles.includes(file)) {
-            fileType = 'certificate';
-          } else if (medicalReportFiles.includes(file)) {
-            fileType = 'medicalReport';
-          }
-          fileTypes.push(fileType);
-        }
-      });
-
-      // 添加已存在的文件URL
-      if (hasExistingIdCardFront && existingIdCardFrontUrl) {
-        formDataToSend.append('idCardFrontUrl', existingIdCardFrontUrl);
-      }
-      if (hasExistingIdCardBack && existingIdCardBackUrl) {
-        formDataToSend.append('idCardBackUrl', existingIdCardBackUrl);
-      }
-      if (existingPhotoUrls.length > 0) {
-        existingPhotoUrls.forEach(url => {
-          if (url.trim() !== '') {
-            formDataToSend.append('photoUrls', url.trim());
-          }
-        });
-      }
-      if (existingCertificateUrls.length > 0) {
-        existingCertificateUrls.forEach(url => {
-          if (url.trim() !== '') {
-            formDataToSend.append('certificateUrls', url.trim());
-          }
-        });
-      }
-      if (existingMedicalReportUrls.length > 0) {
-        existingMedicalReportUrls.forEach(url => {
-          if (url.trim() !== '') {
-            formDataToSend.append('medicalReportUrls', url.trim());
-          }
-        });
-      }
-
-      // 只有在有新文件时才添加fileTypes
-      if (fileTypes.length > 0) {
-        formDataToSend.append('fileTypes', JSON.stringify(fileTypes));
-      }
-
-      // 添加更详细的日志
-      console.log('详细表单数据检查:', {
-        gender: values.gender,
-        genderType: typeof values.gender,
-        jobType: values.jobType,
-        jobTypeType: typeof values.jobType,
-        age: values.age,
-        ageType: typeof values.age,
-        birthDate: values.birthDate,
-        birthDateType: typeof values.birthDate,
-        medicalExamDate: values.medicalExamDate,
-        medicalExamDateType: typeof values.medicalExamDate,
-        photoUrls: values.photoUrls,
-        photoUrlsType: typeof values.photoUrls,
-        certificateUrls: values.certificateUrls,
-        certificateUrlsType: typeof values.certificateUrls,
-        medicalReportUrls: values.medicalReportUrls,
-        medicalReportUrlsType: typeof values.medicalReportUrls,
-        allFormData: Object.fromEntries(formDataToSend.entries())
-      });
-
-      console.log('日期字段详细检查:', {
-        birthDate: values.birthDate,
-        birthDateType: typeof values.birthDate,
-        birthDateFormatted: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : null,
-        birthDateISO: values.birthDate ? dayjs(values.birthDate).toISOString() : null,
-        birthDateValid: values.birthDate ? dayjs(values.birthDate).isValid() : false
-      });
-
-      // 记录请求数据
-      console.log('提交表单 - 请求数据:', {
-        formData: Object.fromEntries(formDataToSend.entries()),
-        filesCount: fileTypes.length,
-        fileTypes,
-        existingFiles: {
-          idCardFront: hasExistingIdCardFront,
-          idCardBack: hasExistingIdCardBack,
-          photos: existingPhotoUrls.length,
-          certificates: existingCertificateUrls.length,
-          medicalReports: existingMedicalReportUrls.length
-        },
-        rawValues: values
-      });
-
-      let response;
-      if (isEditMode && resumeId) {
-        // 更新模式：更新现有简历
-        console.log('更新简历 - 发送请求:', {
-          url: `/resumes/${resumeId}`,
-          method: 'PATCH',
-          formData: Object.fromEntries(formDataToSend.entries())
-        });
-        response = await apiService.upload<ApiResponse<Resume>>(`/resumes/${resumeId}`, formDataToSend, 'PATCH');
-      } else {
-        // 创建模式：创建新简历
-        console.log('创建简历 - 发送请求:', {
-          url: '/resumes',
-          method: 'POST',
-          formData: Object.fromEntries(formDataToSend.entries())
-        });
-        response = await apiService.upload<ApiResponse<Resume>>('/resumes', formDataToSend, 'POST');
-      }
-
-      if (!response?.data) {
-        throw new Error('服务器响应无效');
-      }
-
-      const { success, message, data: resumeData } = response.data;
-      
-      if (success) {
-        messageApi.success(isEditMode ? '更新简历成功' : '创建简历成功');
-        // 清除localStorage中的编辑数据
+      if (response.data) {
+        messageApi.success(editingResume ? '简历更新成功' : '简历创建成功');
+        // Clear any saved draft
         localStorage.removeItem('editingResume');
-        // 跳转回详情页面
-        if (resumeId) {
-          navigate(`/aunt/resumes/detail/${resumeId}`);
-        } else {
-          navigate('/aunt/resumes');
-        }
-      } else {
-        throw new Error(message || (isEditMode ? '更新简历失败' : '创建简历失败'));
+        // Navigate to resume list
+        navigate('/aunt/list');
       }
-
-      // 记录响应数据
-      console.log('提交表单 - 响应数据:', {
-        success,
-        message,
-        data: resumeData
-      });
     } catch (error) {
-      console.error('更新简历失败:', error);
-      
-      // 提取具体的错误信息
-      let errorMessage = '更新简历失败';
+      console.error('提交简历失败:', error);
       if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'object' && error !== null) {
-        const axiosError = error as any;
-        // 检查是否是重复手机号错误
-        if (axiosError.response?.data?.error?.details?.message?.includes('duplicate key error') && 
-            axiosError.response?.data?.error?.details?.message?.includes('phone')) {
-          errorMessage = '该手机号已被注册，请使用其他手机号';
-        } else if (axiosError.response?.data?.message) {
-          errorMessage = axiosError.response.data.message;
-        } else if (axiosError.response?.data?.error?.details?.message) {
-          // 处理数组形式的错误消息
-          const messages = axiosError.response.data.error.details.message;
-          if (Array.isArray(messages)) {
-            errorMessage = messages.join(', ');
-          } else {
-            errorMessage = messages;
-          }
-        } else if (axiosError.response?.data?.error) {
-          errorMessage = axiosError.response.data.error;
-        } else if (axiosError.message) {
-          errorMessage = axiosError.message;
-        }
+        messageApi.error(`提交失败: ${error.message}`);
+      } else {
+        messageApi.error('提交失败，请重试');
       }
-      
-      messageApi.error(errorMessage);
-    } finally {
-      setSubmitting(false);
     }
   };
 
   // 检查是否为编辑模式并加载现有图片
   useEffect(() => {
-    if (isEditing) {
-      const editingResumeJSON = localStorage.getItem('editingResume');
-      if (editingResumeJSON) {
-        const editingResume = JSON.parse(editingResumeJSON);
-        debugLog('加载编辑简历数据:', editingResume);
-        
-        // 设置身份证照片
-        if (editingResume.idCardFrontUrl) {
-          setExistingIdCardFrontUrl(editingResume.idCardFrontUrl);
-          setHasExistingIdCardFront(true);
-        }
-        
-        if (editingResume.idCardBackUrl) {
-          setExistingIdCardBackUrl(editingResume.idCardBackUrl);
-          setHasExistingIdCardBack(true);
-        }
-        
-        // 设置个人照片
-        if (editingResume.photoUrls && editingResume.photoUrls.length > 0) {
-          setExistingPhotoUrls(editingResume.photoUrls);
-        }
-        
-        // 设置技能证书
-        if (editingResume.certificateUrls && editingResume.certificateUrls.length > 0) {
-          setExistingCertificateUrls(editingResume.certificateUrls);
-        }
-        
-        // 设置体检报告
-        if (editingResume.medicalReportUrls && editingResume.medicalReportUrls.length > 0) {
-          setExistingMedicalReportUrls(editingResume.medicalReportUrls);
-        }
+    if (editingResume) {
+      // 设置身份证照片
+      if (editingResume.idCardFrontUrl) {
+        setExistingIdCardFrontUrl(editingResume.idCardFrontUrl);
+      }
+      
+      if (editingResume.idCardBackUrl) {
+        setExistingIdCardBackUrl(editingResume.idCardBackUrl);
+      }
+      
+      // 设置个人照片
+      if (editingResume.photoUrls && editingResume.photoUrls.length > 0) {
+        setExistingPhotoUrls(editingResume.photoUrls);
+      }
+      
+      // 设置技能证书
+      if (editingResume.certificateUrls && editingResume.certificateUrls.length > 0) {
+        setExistingCertificateUrls(editingResume.certificateUrls);
+      }
+      
+      // 设置体检报告
+      if (editingResume.medicalReportUrls && editingResume.medicalReportUrls.length > 0) {
+        setExistingMedicalReportUrls(editingResume.medicalReportUrls);
       }
     }
-  }, [isEditing]);
+  }, [editingResume]);
 
   // 组件初始化
   useEffect(() => {
-    // 检查是否有编辑中的简历数据
-    const editingResumeJSON = localStorage.getItem('editingResume');
-    if (editingResumeJSON) {
-      try {
-        const editingResume = JSON.parse(editingResumeJSON);
-        debugLog('从localStorage加载简历数据进行编辑:', editingResume);
-        
-        // 处理日期字段，确保所有日期值都是有效的 dayjs 对象
-        const formData = {
-          ...editingResume,
-          birthDate: toDayjs(editingResume.birthDate),
-          medicalExamDate: toDayjs(editingResume.medicalExamDate),
-          // 确保工种值使用正确的枚举值
-          jobType: editingResume.jobType ? convertJobType(editingResume.jobType) : undefined,
-          workExperiences: (editingResume.workExperiences || []).map((exp: WorkExperienceItem) => {
-            if (!exp) return null;
-            return {
-              ...exp,
-              startDate: toDayjs(exp.startDate),
-              endDate: toDayjs(exp.endDate),
-              description: exp.description || ''
-            };
-          }).filter(Boolean)
-        };
-        
-        // 设置表单数据
-        form.setFieldsValue(formData);
-        setIsEditing(true);
-      } catch (error) {
-        console.error('解析编辑数据出错:', error);
-        messageApi.error('加载编辑数据失败');
-        localStorage.removeItem('editingResume');
-      }
+    if (editingResume) {
+      // 处理表单数据，确保所有字段都是正确的类型
+      const formData = {
+        name: editingResume.name,
+        age: editingResume.age,
+        phone: editingResume.phone,
+        gender: editingResume.gender,
+        nativePlace: editingResume.nativePlace,
+        jobType: editingResume.jobType,
+        education: editingResume.education,
+        experienceYears: editingResume.experienceYears,
+        idNumber: editingResume.idNumber,
+        wechat: editingResume.wechat,
+        currentAddress: editingResume.currentAddress,
+        hukouAddress: editingResume.hukouAddress,
+        birthDate: editingResume.birthDate || undefined,
+        medicalExamDate: editingResume.medicalExamDate || undefined,
+        ethnicity: editingResume.ethnicity,
+        zodiac: editingResume.zodiac,
+        zodiacSign: editingResume.zodiacSign,
+        expectedSalary: editingResume.expectedSalary,
+        serviceArea: editingResume.serviceArea,
+        orderStatus: editingResume.orderStatus,
+        skills: editingResume.skills,
+        leadSource: editingResume.leadSource,
+        workExperiences: (editingResume.workExperiences || [])
+          .filter((exp: WorkExperienceItem | null): exp is WorkExperienceItem => exp !== null)
+          .map((exp: WorkExperienceItem) => ({
+            startDate: exp.startDate || '',
+            endDate: exp.endDate || '',
+            description: exp.description || '',
+            company: exp.company || undefined,
+            position: exp.position || undefined
+          }))
+      };
+
+      // 设置表单值
+      form.setFieldsValue(formData);
     }
-  }, [form, messageApi]);
+  }, [editingResume, form]);
 
   // Update the file handling functions
   const handleFileChange = (type: 'photo' | 'certificate' | 'medical') => (info: UploadChangeParam<UploadFile<any>>) => {
@@ -1167,7 +903,7 @@ const CreateResume = () => {
         breadcrumb: {
           items: [
             { path: '/aunt/list', title: '阿姨简历库' },
-            ...(isEditing 
+            ...(editingResume 
               ? [
                   { path: `/aunt/detail/${new URLSearchParams(window.location.search).get('id')}`, title: '简历详情' },
                   { title: '编辑简历' }
@@ -1194,7 +930,7 @@ const CreateResume = () => {
         title={
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Title level={4} style={{ margin: 0 }}>
-              {isEditing ? '编辑阿姨简历' : '创建阿姨简历'}
+              {editingResume ? '编辑阿姨简历' : '创建阿姨简历'}
             </Title>
           </div>
         }
@@ -1330,11 +1066,15 @@ const CreateResume = () => {
                 </Col>
                 <Col span={8}>
                   <Form.Item
-                    label="生日"
+                    label="出生日期"
                     name="birthDate"
-                    getValueProps={(value) => ({ value: toDayjs(value) })}
+                    rules={[{ required: true, message: '请选择出生日期' }]}
+                    getValueProps={(value: string | undefined) => ({
+                      value: value ? dayjs(value) : undefined
+                    })}
+                    getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM-DD') : undefined}
                   >
-                    <DatePicker {...datePickerProps} placeholder="请选择出生日期" />
+                    <DatePicker style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
               </Row>
@@ -1656,59 +1396,41 @@ const CreateResume = () => {
               <Row gutter={24}>
                 <Col span={24}>
                   <Form.List name="workExperiences">
-                    {(fields, { add, remove }) => (
+                    {(fields, { add }) => (
                       <>
                         {fields.map(({ key, name, ...restField }) => (
-                          <Card 
-                            key={key} 
-                            style={{ marginBottom: 16 }} 
-                            title={`工作经历 ${name + 1}`}
-                            extra={
-                              <Button 
-                                type="text" 
-                                danger 
-                                onClick={() => remove(name)}
-                                icon={<DeleteOutlined />}
-                              >
-                                删除
-                              </Button>
-                            }
-                          >
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                              <Form.Item
-                                {...restField}
-                                name={[name, 'startDate']}
-                                label="开始时间"
-                                getValueProps={(value) => ({ value: toDayjs(value) })}
-                              >
-                                <DatePicker 
-                                  {...workExperienceDatePickerProps}
-                                  placeholder="选择开始时间"
-                                  onChange={handleWorkExperienceDateChange(name, 'startDate')}
-                                />
-                              </Form.Item>
-                              <Form.Item
-                                {...restField}
-                                name={[name, 'endDate']}
-                                label="结束时间"
-                                getValueProps={(value) => ({ value: toDayjs(value) })}
-                              >
-                                <DatePicker 
-                                  {...workExperienceDatePickerProps}
-                                  placeholder="选择结束时间"
-                                  onChange={handleWorkExperienceDateChange(name, 'endDate')}
-                                />
-                              </Form.Item>
-                              <Form.Item
-                                {...restField}
-                                name={[name, 'description']}
-                                label="工作描述"
-                                style={{ gridColumn: 'span 2' }}
-                              >
-                                <Input.TextArea rows={4} placeholder="请描述工作内容和职责" />
-                              </Form.Item>
-                            </div>
-                          </Card>
+                          <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'startDate']}
+                              rules={[{ required: true, message: '请选择开始日期' }]}
+                              getValueProps={(value: string | undefined) => ({
+                                value: value ? dayjs(value) : undefined
+                              })}
+                              getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM-DD') : undefined}
+                            >
+                              <DatePicker placeholder="开始日期" />
+                            </Form.Item>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'endDate']}
+                              rules={[{ required: true, message: '请选择结束日期' }]}
+                              getValueProps={(value: string | undefined) => ({
+                                value: value ? dayjs(value) : undefined
+                              })}
+                              getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM-DD') : undefined}
+                            >
+                              <DatePicker placeholder="结束日期" />
+                            </Form.Item>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'description']}
+                              label="工作描述"
+                              style={{ gridColumn: 'span 2' }}
+                            >
+                              <Input.TextArea rows={4} placeholder="请描述工作内容和职责" />
+                            </Form.Item>
+                          </Space>
                         ))}
                         <Form.Item>
                           <Button 
@@ -1818,10 +1540,14 @@ const CreateResume = () => {
                     <Form.Item
                       label="体检时间"
                       name="medicalExamDate"
-                      getValueProps={(value) => ({ value: toDayjs(value) })}
+                      rules={[{ required: true, message: '请选择体检日期' }]}
+                      getValueProps={(value: string | undefined) => ({
+                        value: value ? dayjs(value) : undefined
+                      })}
+                      getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM-DD') : undefined}
                     >
                       <DatePicker 
-                        placeholder="请选择体检时间" 
+                        placeholder="请选择体检日期" 
                         style={{ width: '100%' }} 
                         format="YYYY-MM-DD"
                       />
@@ -1866,11 +1592,11 @@ const CreateResume = () => {
               loading={loading || submitting}
               style={{ marginRight: '16px' }}
             >
-              {isEditing ? '保存更新' : '创建简历'}
+              {editingResume ? '保存更新' : '创建简历'}
             </Button>
             <Button onClick={() => {
               // 如果是编辑模式，清除localStorage中的数据
-              if (isEditing) {
+              if (editingResume) {
                 localStorage.removeItem('editingResume');
               }
               navigate(-1);

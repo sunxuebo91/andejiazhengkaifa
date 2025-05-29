@@ -96,13 +96,13 @@ export class ResumeController {
         filesArray,
         fileTypes
       );
-
+  
       // 检查是否有文件上传错误
       if (resume && resume.fileUploadErrors && resume.fileUploadErrors.length > 0) {
         fileErrors = resume.fileUploadErrors;
         delete resume.fileUploadErrors; // 移除错误信息，避免污染返回数据
       }
-
+  
       // 如果简历创建成功，即使有文件上传错误也返回成功
       if (resume) {
         this.logger.log(`简历创建成功: ${resume._id}`);
@@ -114,7 +114,7 @@ export class ResumeController {
             : '创建简历成功'
         };
       }
-
+  
       throw new Error('简历创建失败');
     } catch (error) {
       this.logger.error(`创建简历失败: ${error.message}`, error.stack);

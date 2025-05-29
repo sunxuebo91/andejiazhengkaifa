@@ -4,10 +4,36 @@ import { Card, Row, Col, Statistic, Spin, message, Space } from 'antd';
 import { UserOutlined, FileAddOutlined, CheckCircleOutlined, CloseCircleOutlined, HomeOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import type { Resume } from '../services/resume.service';
+
+// 定义统计数据接口
+interface Stats {
+  totalResumes: number;
+  newTodayResumes: number;
+  acceptingResumes: number;
+  notAcceptingResumes: number;
+  onServiceResumes: number;
+}
+
+// 定义API响应接口
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+// 定义分页数据接口
+interface PaginatedData<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
 
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Stats>({
     totalResumes: 0,
     newTodayResumes: 0,
     acceptingResumes: 0,
@@ -20,8 +46,12 @@ const Dashboard: React.FC = () => {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      // 获取所有简历
-      const response = await axios.get('/api/resumes', {
+      // 获取所有简历，设置较大的pageSize以确保获取所有数据
+      const response = await axios.get<ApiResponse<PaginatedData<Resume>>>('/api/resumes', {
+        params: {
+          page: 1,
+          pageSize: 1000 // 设置一个足够大的数值以获取所有数据
+        },
         timeout: 10000,
         headers: {
           'Cache-Control': 'no-cache',
@@ -35,23 +65,28 @@ const Dashboard: React.FC = () => {
         throw new Error('获取数据失败');
       }
 
-      const { items: resumes = [] } = data;
+      const { items: resumes = [], total } = data;
+
+      // 如果返回的数据总数大于当前获取的数据量，说明还有更多数据
+      if (total > resumes.length) {
+        console.warn(`警告：简历总数(${total})大于当前获取的数据量(${resumes.length})，统计数据可能不准确`);
+      }
 
       // 当天的起始时间（零点）
       const todayStart = dayjs().startOf('day');
       
       // 分类统计
-      const totalResumes = resumes.length;
+      const totalResumes = total; // 使用后端返回的总数
       
       // 今日新增：创建时间在今天的简历
-      const newTodayResumes = resumes.filter(resume => 
+      const newTodayResumes = resumes.filter((resume: Resume) => 
         resume.createdAt && dayjs(resume.createdAt).isAfter(todayStart)
       ).length;
       
       // 按接单状态统计
-      const acceptingResumes = resumes.filter(resume => resume.orderStatus === 'accepting').length;
-      const notAcceptingResumes = resumes.filter(resume => resume.orderStatus === 'not-accepting').length;
-      const onServiceResumes = resumes.filter(resume => resume.orderStatus === 'on-service').length;
+      const acceptingResumes = resumes.filter((resume: Resume) => resume.orderStatus === 'accepting').length;
+      const notAcceptingResumes = resumes.filter((resume: Resume) => resume.orderStatus === 'not-accepting').length;
+      const onServiceResumes = resumes.filter((resume: Resume) => resume.orderStatus === 'on-service').length;
 
       // 更新统计数据
       setStats({

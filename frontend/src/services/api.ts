@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
-import { getToken } from './auth';
+import { getToken, removeToken } from './auth';
 
 // 创建axios实例
 const api = axios.create({
@@ -47,8 +47,12 @@ api.interceptors.response.use(
       
       // 处理401未授权错误 - 清除token并重定向到登录页
       if (status === 401) {
-        // 在此可添加重定向到登录页的逻辑
         console.error('认证失败，请重新登录');
+        // 清除token
+        removeToken();
+        // 使用window.location.href进行硬重定向，确保完全刷新页面状态
+        window.location.href = '/login';
+        return Promise.reject(new Error('认证失败，请重新登录'));
       }
       
       // 增强错误日志

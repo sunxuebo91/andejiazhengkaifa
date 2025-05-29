@@ -212,11 +212,20 @@ export class CreateResumeDto {
   @IsOptional()
   @IsDateString()
   @IsOptional()
+  @ApiProperty({ description: '出生日期', example: '1990-01-01' })
+  @IsOptional()
   @IsDateString({}, { message: 'birthDate must be a valid date string (YYYY-MM-DD or ISO 8601)' })
   @Transform(({ value }) => {
+  // 处理空值情况
+  if (!value || value === '' || value === null || value === undefined) {
+    return undefined;
+  }
   if (typeof value === 'string') {
     // 尝试解析多种日期格式
     const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      return value; // 返回原值，让验证器处理错误
+    }
     return date.toISOString().split('T')[0]; // 返回 YYYY-MM-DD 格式
   }
   return value;

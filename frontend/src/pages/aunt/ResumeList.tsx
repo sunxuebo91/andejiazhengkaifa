@@ -1,5 +1,5 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Form, message, Modal, Button, Select, Input, Table, Space, Tag, Tooltip } from 'antd';
+import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip } from 'antd';
 import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -24,7 +24,7 @@ const genderMap = {
 
 const ResumeList = () => {
   const [form] = Form.useForm();
-  const [messageApi, contextHolder] = message.useMessage();
+  const { message: messageApi } = App.useApp();
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpVisible, setFollowUpVisible] = useState(false);
   const [followUpForm] = Form.useForm();
@@ -367,8 +367,6 @@ const ResumeList = () => {
         ],
       }}
     >
-      {contextHolder}
-      
       {/* 查询表单 */}
       <Card style={{ marginBottom: 16 }}>
         <Form

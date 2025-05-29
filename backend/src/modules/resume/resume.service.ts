@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Resume } from './models/resume.entity';
+import { Resume, IResume } from './models/resume.entity';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Logger } from '@nestjs/common';
@@ -13,7 +13,7 @@ export class ResumeService {
 
   constructor(
     @InjectModel(Resume.name)
-    private readonly resumeModel: Model<Resume>,
+    private readonly resumeModel: Model<IResume>,
     private uploadService: UploadService
   ) {}
 

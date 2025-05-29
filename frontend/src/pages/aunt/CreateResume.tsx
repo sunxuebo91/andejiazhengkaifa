@@ -1,5 +1,5 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, message, Space } from 'antd';
+import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App } from 'antd';
 import { useState, useEffect } from 'react';
 import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +17,7 @@ import { Gender, GenderType, JobType, Education, FormValues, WorkExperience } fr
 import type { Resume } from '../../services/resume.service';
 import type { ApiResponse } from '@/services/api';
 import { isLoggedIn } from '@/services/auth';
+import resumeService, { ResumeFormData } from '../../services/resume.service';
 
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
@@ -195,25 +196,37 @@ const convertToExtendedResume = (resume: Resume): ExtendedResume => {
   };
 };
 
-// 修改类型声明
-type FileWithOriginFileObj = UploadFile & {
-  originFileObj?: RcFile;
-};
+// 修改文件类型定义
+type FileType = 'image/jpeg' | 'image/jpg' | 'image/png' | 'application/pdf';
+type ImageType = 'image/jpeg' | 'image/jpg' | 'image/png';
 
-// 添加常量定义
-const MAX_PHOTO_COUNT = 10;
-const MAX_CERTIFICATE_COUNT = 10;
-const MAX_MEDICAL_REPORT_COUNT = 10;
-const MAX_MEDICAL_PDF_COUNT = 5;
+// 修改文件上传配置
+const FILE_UPLOAD_CONFIG = {
+  maxSize: 5 * 1024 * 1024, // 5MB
+  allowedImageTypes: ['image/jpeg', 'image/jpg', 'image/png'] as ImageType[],
+  allowedPdfTypes: ['application/pdf'] as const,
+  maxPhotoCount: 10,
+  maxCertificateCount: 10,
+  maxMedicalReportCount: 10,
+  maxMedicalPdfCount: 5
+} as const;
 
-const CreateResume = () => {
+// 文件上传按钮组件
+const uploadButton = (
+  <div>
+    <PlusOutlined />
+    <div style={{ marginTop: 8 }}>上传</div>
+  </div>
+);
+
+const CreateResume: React.FC = () => {
   const navigate = useNavigate();
-  const [messageApi] = message.useMessage();
-  const [form] = Form.useForm<FormValues>();
+  const [form] = Form.useForm();
+  const { message: messageApi } = App.useApp();
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [editingResume, setEditingResume] = useState<ExtendedResume | null>(null);
-  const [messageState, setMessageState] = useState<{ type: 'success' | 'error' | 'info' | 'warning', content: string } | null>(null);
+  const [messageState, setMessageState] = useState<{ type: 'success' | 'warning' | 'error'; content: string } | null>(null);
   const [idCardFiles, setIdCardFiles] = useState<{
     front: CustomUploadFile[];
     back: CustomUploadFile[];
@@ -232,11 +245,169 @@ const CreateResume = () => {
   });
   const [existingIdCardFrontUrl, setExistingIdCardFrontUrl] = useState<string>('');
   const [existingIdCardBackUrl, setExistingIdCardBackUrl] = useState<string>('');
-  const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
-  const [existingCertificateUrls, setExistingCertificateUrls] = useState<string[]>([]);
-  const [existingMedicalReportUrls, setExistingMedicalReportUrls] = useState<string[]>([]);
   const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
-  const [medicalPdfCount, setMedicalPdfCount] = useState<number>(0);
+
+  // 将 validateFile 移到组件内部
+  const validateFile = (file: RcFile, type: 'idCard' | 'photo' | 'certificate' | 'medical'): boolean => {
+    // 检查文件大小
+    if (file.size > FILE_UPLOAD_CONFIG.maxSize) {
+      messageApi.error(`文件大小不能超过${FILE_UPLOAD_CONFIG.maxSize / 1024 / 1024}MB`);
+      return false;
+    }
+
+    // 检查文件类型
+    const fileType = file.type as FileType;
+    if (type === 'medical') {
+      if (![...FILE_UPLOAD_CONFIG.allowedImageTypes, ...FILE_UPLOAD_CONFIG.allowedPdfTypes].includes(fileType)) {
+        messageApi.error('只支持JPG、JPEG、PNG和PDF文件');
+        return false;
+      }
+    } else {
+      if (!FILE_UPLOAD_CONFIG.allowedImageTypes.includes(fileType as ImageType)) {
+        messageApi.error('只支持JPG、JPEG、PNG图片文件');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // 文件上传处理函数
+  const handleFileChange = (type: 'photo' | 'certificate' | 'medical') => 
+    (info: UploadChangeParam<UploadFile<any>>) => {
+      const { file, fileList } = info;
+      
+      // 验证文件
+      if (file.status === 'uploading' && file.originFileObj) {
+        if (!validateFile(file.originFileObj, type)) {
+          return;
+        }
+      }
+
+      // 更新文件列表
+      switch (type) {
+        case 'photo':
+          setPhotoFiles(fileList as CustomUploadFile[]);
+          break;
+        case 'certificate':
+          setCertificateFiles(fileList as CustomUploadFile[]);
+          break;
+        case 'medical':
+          setMedicalReportFiles(fileList as CustomUploadFile[]);
+          break;
+      }
+
+      // 处理上传状态
+      if (file.status === 'done') {
+        messageApi.success(`${file.name} 上传成功`);
+      } else if (file.status === 'error') {
+        messageApi.error(`${file.name} 上传失败`);
+      }
+    };
+
+  // 修改文件预览处理函数
+  const handlePreview = (file: CustomUploadFile, setPreviewState: (state: any) => void) => {
+    if (!file) return;
+
+    if (file.type === 'application/pdf') {
+      // PDF文件在新窗口打开
+      window.open(file.url, '_blank');
+    } else {
+      // 图片文件在Modal中预览
+      setPreviewState({
+        visible: true,
+        image: file.url || '',
+        title: file.name
+      });
+    }
+  };
+
+  // 添加文件上传相关的类型定义
+  interface FileUploadState {
+    files: CustomUploadFile[];
+    existingUrls: string[];
+    pdfCount: number;
+  }
+
+  // 修改文件上传状态管理
+  const [fileUploadState, setFileUploadState] = useState<{
+    photo: FileUploadState;
+    certificate: FileUploadState;
+    medical: FileUploadState;
+  }>({
+    photo: {
+      files: [],
+      existingUrls: [],
+      pdfCount: 0
+    },
+    certificate: {
+      files: [],
+      existingUrls: [],
+      pdfCount: 0
+    },
+    medical: {
+      files: [],
+      existingUrls: [],
+      pdfCount: 0
+    }
+  });
+
+  // 修改文件移除处理函数
+  const handleFileRemove = (type: 'photo' | 'certificate' | 'medical') => 
+    (file: UploadFile<any>) => {
+      const customFile = file as CustomUploadFile;
+      setFileUploadState(prev => {
+        const currentState = prev[type];
+        if (customFile.isExisting) {
+          return {
+            ...prev,
+            [type]: {
+              ...currentState,
+              existingUrls: currentState.existingUrls.filter(url => url !== customFile.url)
+            }
+          };
+        } else {
+          return {
+            ...prev,
+            [type]: {
+              ...currentState,
+              files: currentState.files.filter(f => f.uid !== customFile.uid),
+              pdfCount: type === 'medical' && customFile.type === 'application/pdf' ? 
+                currentState.pdfCount - 1 : 
+                currentState.pdfCount
+            }
+          };
+        }
+      });
+      return true;
+    };
+
+  // 修改文件上传组件的渲染
+  const renderUploadList = (type: 'photo' | 'certificate' | 'medical') => {
+    const files = type === 'photo' ? fileUploadState.photo.files :
+                 type === 'certificate' ? fileUploadState.certificate.files :
+                 fileUploadState.medical.files;
+    const maxCount = type === 'medical' ? FILE_UPLOAD_CONFIG.maxMedicalReportCount :
+                    type === 'certificate' ? FILE_UPLOAD_CONFIG.maxCertificateCount :
+                    FILE_UPLOAD_CONFIG.maxPhotoCount;
+    
+    const isMaxReached = files.length >= maxCount ||
+                        (type === 'medical' && fileUploadState.medical.pdfCount >= FILE_UPLOAD_CONFIG.maxMedicalPdfCount);
+
+    return (
+      <Upload<CustomUploadFile>
+        listType="picture-card"
+        fileList={files}
+        onRemove={handleFileRemove(type)}
+        beforeUpload={() => false}
+        onChange={handleFileChange(type)}
+        accept={type === 'medical' ? '.jpg,.jpeg,.png,.pdf' : '.jpg,.jpeg,.png'}
+        multiple
+      >
+        {isMaxReached ? null : uploadButton}
+      </Upload>
+    );
+  };
 
   // 修改健康检查相关的 useEffect
   useEffect(() => {
@@ -267,9 +438,6 @@ const CreateResume = () => {
         case 'error':
           messageApi.error(messageState.content);
           break;
-        case 'info':
-          messageApi.info(messageState.content);
-          break;
         case 'warning':
           messageApi.warning(messageState.content);
           break;
@@ -282,7 +450,7 @@ const CreateResume = () => {
   const loadResumeData = async (resumeId: string) => {
     try {
       setLoading(true);
-      const response = await apiService.get<ApiResponse<Resume>>(`/resumes/${resumeId}`);
+      const response = await apiService.get<ApiResponse<Resume>>(`/api/resumes/${resumeId}`);
       if (response.success && response.data) {
         // 使用类型断言，先转换为unknown再转换为Resume
         const resumeData = response.data as unknown as Resume;
@@ -303,8 +471,8 @@ const CreateResume = () => {
           wechat: extendedResume.wechat,
           currentAddress: extendedResume.currentAddress,
           hukouAddress: extendedResume.hukouAddress,
-          birthDate: extendedResume.birthDate || undefined,
-          medicalExamDate: extendedResume.medicalExamDate || undefined,
+          birthDate: extendedResume.birthDate ? dayjs(extendedResume.birthDate).format('YYYY-MM-DD') : undefined,
+          medicalExamDate: extendedResume.medicalExamDate ? dayjs(extendedResume.medicalExamDate).format('YYYY-MM-DD') : undefined,
           ethnicity: extendedResume.ethnicity,
           zodiac: extendedResume.zodiac,
           zodiacSign: extendedResume.zodiacSign,
@@ -356,17 +524,9 @@ const CreateResume = () => {
         if (savedData) {
           try {
             const parsedData = JSON.parse(savedData) as ExtendedResume;
-            form.setFieldsValue({
-              ...parsedData,
-              // Keep dates as strings in the form data
-              birthDate: parsedData.birthDate,
-              medicalExamDate: parsedData.medicalExamDate,
-              // Ensure jobType is properly typed
-              jobType: parsedData.jobType as JobType,
-              workExperiences: parsedData.workExperiences || []
-            });
+            form.setFieldsValue(parsedData);
             setEditingResume(parsedData);
-            setMessageState({ type: 'info', content: '已恢复未完成的编辑' });
+            setMessageState({ type: 'success', content: '已恢复未完成的编辑' });
           } catch (error) {
             console.error('恢复编辑数据失败:', error);
             localStorage.removeItem('editingResume');
@@ -421,106 +581,53 @@ const CreateResume = () => {
   // 页面标题
   const pageTitle = editingResume ? '编辑简历' : '创建简历';
 
-  // 身份证上传组件的自定义渲染
-  const uploadButton = (
-    <div>
-      <PlusOutlined />
-      <div style={{ marginTop: 8 }}>上传</div>
-    </div>
-  );
-
-  // 身份证文件上传变更处理
+  // 修改身份证上传处理函数
   const handleIdCardUpload = async (type: 'front' | 'back', info: UploadChangeParam<UploadFile<any>>) => {
-    debugLog('开始处理身份证上传:', { type, info });
-    
-    // 检查是否正在处理OCR
     if (isOcrProcessing) {
-      debugLog('OCR处理正在进行中，忽略新的上传请求');
+      messageApi.warning('正在处理身份证识别，请稍候...');
       return;
     }
 
-    // 检查文件对象是否存在
-    if (!info.file) {
-      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}上传失败: 未获取到文件信息`);
-      messageApi.error('文件上传失败，请重试');
-      return;
-    }
-
-    // 检查文件对象
     const file = info.file.originFileObj;
     if (!file) {
-      console.error(`${type === 'front' ? '身份证正面' : '身份证背面'}文件上传失败:`, {
-        status: info.file.status,
-        name: info.file.name,
-        size: info.file.size,
-        type: info.file.type,
-        uid: info.file.uid
-      });
       messageApi.error('文件上传失败，请重试');
       return;
     }
 
-    // 检查文件类型
-    if (!file.type.startsWith('image/')) {
-      console.error('不支持的文件类型:', file.type);
-      messageApi.error('请上传图片文件（JPG、JPEG、PNG）');
+    if (!validateFile(file, 'idCard')) {
       return;
     }
 
     try {
       setIsOcrProcessing(true);
-      debugLog('开始OCR识别:', { 
-        type, 
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      });
-
-      // 使用 ImageService 进行 OCR 识别
       const ocrResult = await ImageService.ocrIdCard(file, type);
-      debugLog('OCR识别结果:', ocrResult);
-
-      // 提取并填充表单数据
       const formValues = ImageService.extractIdCardInfo(ocrResult);
-      debugLog('提取的表单数据:', formValues);
-
+      
       if (Object.keys(formValues).length > 0) {
         form.setFieldsValue(formValues);
         messageApi.success('身份证信息识别成功');
       } else {
-        debugLog('未能从OCR结果中提取到有效信息');
         messageApi.warning('未能识别到身份证信息，请手动填写');
       }
 
-      // 更新文件状态
       const newFile = {
         uid: file.uid || `-1`,
         name: file.name,
         status: 'done' as const,
         url: URL.createObjectURL(file),
         originFileObj: file,
-        isExisting: false
+        isExisting: false,
+        type: file.type
       };
 
-      if (type === 'front') {
-        setIdCardFiles(prev => ({
-          ...prev,
-          front: [newFile]
-        }));
-      } else {
-        setIdCardFiles(prev => ({
-          ...prev,
-          back: [newFile]
-        }));
-      }
+      setIdCardFiles(prev => ({
+        ...prev,
+        [type]: [newFile]
+      }));
 
     } catch (error) {
       console.error('OCR识别失败:', error);
-      if (error instanceof Error) {
-        setMessageState({ type: 'error', content: `身份证识别失败: ${error.message}` });
-      } else {
-        setMessageState({ type: 'error', content: '身份证识别失败，请手动填写信息' });
-      }
+      messageApi.error(error instanceof Error ? error.message : '身份证识别失败，请手动填写信息');
     } finally {
       setIsOcrProcessing(false);
     }
@@ -771,91 +878,75 @@ const CreateResume = () => {
   const handleSubmit = async (values: FormValues) => {
     try {
       setSubmitting(true);
-      console.log('表单验证通过，准备提交:', values);
+      
+      // 获取文件对象并确保类型正确
+      const frontFile = (idCardFiles.front[0] as CustomUploadFile)?.originFileObj;
+      const backFile = (idCardFiles.back[0] as CustomUploadFile)?.originFileObj;
+      const photoFileList = (photoFiles as CustomUploadFile[])
+        .map(file => file.originFileObj)
+        .filter((file): file is RcFile => file !== undefined);
+      const certificateFileList = (certificateFiles as CustomUploadFile[])
+        .map(file => file.originFileObj)
+        .filter((file): file is RcFile => file !== undefined);
+      const medicalReportFileList = (medicalReportFiles as CustomUploadFile[])
+        .map(file => file.originFileObj)
+        .filter((file): file is RcFile => file !== undefined);
+      
+      // 构建 ResumeFormData 对象
+      const resumeData: ResumeFormData = {
+        name: values.name,
+        age: values.age,
+        phone: values.phone,
+        gender: values.gender,
+        nativePlace: values.nativePlace,
+        jobType: values.jobType,
+        education: values.education,
+        experienceYears: values.experienceYears,
+        idNumber: values.idNumber,
+        wechat: values.wechat,
+        currentAddress: values.currentAddress,
+        hukouAddress: values.hukouAddress,
+        birthDate: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : undefined,
+        medicalExamDate: values.medicalExamDate ? dayjs(values.medicalExamDate).format('YYYY-MM-DD') : undefined,
+        ethnicity: values.ethnicity,
+        zodiac: values.zodiac,
+        zodiacSign: values.zodiacSign,
+        expectedSalary: values.expectedSalary,
+        serviceArea: values.serviceArea,
+        orderStatus: values.orderStatus,
+        skills: values.skills,
+        leadSource: values.leadSource,
+        workExperience: values.workExperiences?.map(exp => ({
+          startDate: exp.startDate || '',
+          endDate: exp.endDate || '',
+          description: exp.description || '',
+          company: exp.company,
+          position: exp.position
+        })) || [],
+        // 添加文件字段
+        idCardFront: frontFile as unknown as File,
+        idCardBack: backFile as unknown as File,
+        photoFiles: photoFileList as unknown as File[],
+        certificateFiles: certificateFileList as unknown as File[],
+        medicalReportFiles: medicalReportFileList as unknown as File[]
+      };
 
-      // 准备文件上传数据
-      const formData = new FormData();
-      const fileTypes: string[] = [];
-      
-      // 添加基本信息
-      Object.entries(values).forEach(([key, value]) => {
-        // 跳过文件字段，它们将单独处理
-        if (
-          key !== 'idCardFront' && 
-          key !== 'idCardBack' && 
-          key !== 'photoFiles' && 
-          key !== 'certificateFiles' && 
-          key !== 'medicalReportFiles'
-        ) {
-          // 处理数组和对象
-          if (value !== null && value !== undefined) {
-            if (Array.isArray(value) || typeof value === 'object') {
-              formData.append(key, JSON.stringify(value));
-            } else {
-              formData.append(key, value.toString());
-            }
-          }
-        }
-      });
-
-      // 添加文件
-      const frontFile = idCardFiles.front[0] as FileWithOriginFileObj;
-      const backFile = idCardFiles.back[0] as FileWithOriginFileObj;
-
-      if (frontFile?.originFileObj) {
-        formData.append('files', frontFile.originFileObj);
-        fileTypes.push('idCardFront');
-      }
-      
-      if (backFile?.originFileObj) {
-        formData.append('files', backFile.originFileObj);
-        fileTypes.push('idCardBack');
-      }
-      
-      // 添加个人照片
-      (photoFiles as FileWithOriginFileObj[]).forEach(file => {
-        if (file.originFileObj) {
-          formData.append('files', file.originFileObj);
-          fileTypes.push('personalPhoto');
-        }
-      });
-      
-      // 添加证书照片
-      (certificateFiles as FileWithOriginFileObj[]).forEach(file => {
-        if (file.originFileObj) {
-          formData.append('files', file.originFileObj);
-          fileTypes.push('certificate');
-        }
-      });
-      
-      // 添加体检报告
-      (medicalReportFiles as FileWithOriginFileObj[]).forEach(file => {
-        if (file.originFileObj) {
-          formData.append('files', file.originFileObj);
-          fileTypes.push('medicalReport');
-        }
-      });
-
-      // 添加文件类型数组
-      formData.append('fileTypes', JSON.stringify(fileTypes));
-
-      // 发送请求
-      const endpoint = editingResume ? `/resumes/${editingResume.id}` : '/resumes';
-      const method = editingResume ? 'put' : 'post';
-      
-      console.log('发送请求到:', endpoint, '方法:', method, '文件类型:', fileTypes);
-      const response = await apiService[method](endpoint, formData);
-      
-      if (response.success) {
-        messageApi.success('简历创建成功');
-        // 修改导航路径
-        navigate('/aunt/list');
+      let response;
+      if (editingResume?.id) {
+        response = await resumeService.update(editingResume.id, resumeData);
       } else {
-        throw new Error(response.message || '提交失败');
+        response = await resumeService.create(resumeData);
       }
-    } catch (error) {
+
+      if (response?.success) {
+        messageApi.success(editingResume ? '简历更新成功' : '简历创建成功');
+        navigate('/aunt/list');  // 修改为正确的路由路径
+      } else {
+        throw new Error(response?.message || '操作失败');
+      }
+    } catch (error: any) {
       console.error('提交简历失败:', error);
-      setMessageState({ type: 'error', content: '提交失败，请重试' });
+      messageApi.error(error.message || '提交失败，请重试');
     } finally {
       setSubmitting(false);
     }
@@ -871,21 +962,6 @@ const CreateResume = () => {
       
       if (editingResume.idCardBackUrl) {
         setExistingIdCardBackUrl(editingResume.idCardBackUrl);
-      }
-      
-      // 设置个人照片
-      if (editingResume.photoUrls && editingResume.photoUrls.length > 0) {
-        setExistingPhotoUrls(editingResume.photoUrls);
-      }
-      
-      // 设置技能证书
-      if (editingResume.certificateUrls && editingResume.certificateUrls.length > 0) {
-        setExistingCertificateUrls(editingResume.certificateUrls);
-      }
-      
-      // 设置体检报告
-      if (editingResume.medicalReportUrls && editingResume.medicalReportUrls.length > 0) {
-        setExistingMedicalReportUrls(editingResume.medicalReportUrls);
       }
     }
   }, [editingResume]);
@@ -907,8 +983,8 @@ const CreateResume = () => {
         wechat: editingResume.wechat,
         currentAddress: editingResume.currentAddress,
         hukouAddress: editingResume.hukouAddress,
-        birthDate: editingResume.birthDate || undefined,
-        medicalExamDate: editingResume.medicalExamDate || undefined,
+        birthDate: editingResume.birthDate ? dayjs(editingResume.birthDate).format('YYYY-MM-DD') : undefined,
+        medicalExamDate: editingResume.medicalExamDate ? dayjs(editingResume.medicalExamDate).format('YYYY-MM-DD') : undefined,
         ethnicity: editingResume.ethnicity,
         zodiac: editingResume.zodiac,
         zodiacSign: editingResume.zodiacSign,
@@ -933,147 +1009,43 @@ const CreateResume = () => {
     }
   }, [editingResume, form]);
 
-  // Update the file handling functions
-  const handleFileChange = (type: 'photo' | 'certificate' | 'medical') => async (info: UploadChangeParam<UploadFile<any>>) => {
-    try {
-      // 只处理新上传的文件，保持已存在的文件不变
-      const newFiles = info.fileList.filter(file => !(file as any).isExisting).map(file => {
-        const baseProps: BaseFileProps = {
-          uid: file.uid || `${Date.now()}`,
-          name: file.name || '未命名文件',
-          url: file.url,
-          thumbUrl: file.thumbUrl,
-          originFileObj: file.originFileObj,
-          size: file.size,
-          type: file.type
-        };
-
-        return {
-          ...baseProps,
-          status: (file.status || 'done') as UploadFileStatus,
-          isExisting: false
-        } as NewFile;
-      });
-
-      // 对于体检报告，需要特别处理PDF文件
-      if (type === 'medical') {
-        const pdfFiles = newFiles.filter(file => file.type === 'application/pdf');
-        setMedicalPdfCount(pdfFiles.length);
-      }
-
-      switch (type) {
-        case 'photo':
-          setPhotoFiles(newFiles);
-          break;
-        case 'certificate':
-          setCertificateFiles(newFiles);
-          break;
-        case 'medical':
-          setMedicalReportFiles(newFiles);
-          break;
-      }
-    } catch (error) {
-      console.error('文件上传失败:', error);
-      setMessageState({ type: 'error', content: '文件上传失败，请重试' });
-    }
-  };
-
-  // Update the handleFileRemove function
-  const handleFileRemove = (type: 'photo' | 'certificate' | 'medical') => (file: UploadFile<any>) => {
-    const isExisting = (file as any).isExisting === true;
-    
-    if (isExisting) {
-      switch (type) {
-        case 'photo':
-          setExistingPhotoUrls(prev => {
-            const newUrls = prev.filter(url => url !== file.url);
-            console.log('删除照片后的URL列表:', newUrls);
-            return newUrls;
-          });
-          break;
-        case 'certificate':
-          setExistingCertificateUrls(prev => {
-            const newUrls = prev.filter(url => url !== file.url);
-            console.log('删除证书后的URL列表:', newUrls);
-            return newUrls;
-          });
-          break;
-        case 'medical':
-          setExistingMedicalReportUrls(prev => {
-            const newUrls = prev.filter(url => url !== file.url);
-            console.log('删除报告后的URL列表:', newUrls);
-            return newUrls;
-          });
-          break;
-      }
-      return true;
-    }
-    
-    // 处理新上传的文件删除
-    switch (type) {
-      case 'photo':
-        setPhotoFiles(prev => prev.filter(item => item.uid !== file.uid));
-        break;
-      case 'certificate':
-        setCertificateFiles(prev => prev.filter(item => item.uid !== file.uid));
-        break;
-      case 'medical':
-        setMedicalReportFiles(prev => prev.filter(item => item.uid !== file.uid));
-        break;
-    }
-    return true;
-  };
-
-  // 修改身份证OCR处理函数
-  const handleOcrSuccess = (data: any) => {
-    if (data && data.name) {
-      form.setFieldsValue({
-        name: data.name,
-        gender: data.gender === '男' ? Gender.MALE : Gender.FEMALE,
-        idNumber: data.idNumber,
-        birthDate: data.birthDate ? dayjs(data.birthDate) : undefined,
-        nativePlace: data.nativePlace
-      });
-      setMessageState({ type: 'success', content: '身份证信息识别成功' });
+  // 修复日期选择器的值处理
+  const handleDateChange = (date: Dayjs | null, field: 'birthDate' | 'medicalExamDate' | string) => {
+    if (date && dayjs.isDayjs(date)) {
+      // 使用字符串格式存储日期，避免对象引用问题
+      const dateString = date.format('YYYY-MM-DD');
+      form.setFieldsValue({ [field]: dateString });
     } else {
-      setMessageState({ type: 'warning', content: '未能识别到身份证信息，请手动填写' });
+      form.setFieldsValue({ [field]: undefined });
     }
   };
 
-  // 修改预览处理函数
-  const handlePreview = async (file: RcFile) => {
-    try {
-      // ... existing code ...
-    } catch (error) {
-      console.error('预览照片失败:', error);
-      setMessageState({ type: 'error', content: '预览照片失败' });
-    }
-  };
+  // 修复日期选择器的渲染
+  type DateField = 'birthDate' | 'medicalExamDate' | string;
 
-  // 修改提交成功处理
-  const handleSubmitSuccess = () => {
-    setMessageState({ type: 'success', content: '简历创建成功' });
-    navigate('/aunt/resume-list');
-  };
-
-  // 修改工作经历删除处理
-  const handleRemoveWorkExperience = (index: number) => {
-    const experiences = form.getFieldValue('workExperiences') || [];
-    if (experiences.length <= 1) {
-      setMessageState({ type: 'warning', content: '至少需要保留一条工作经历' });
-      return;
-    }
-    // ... existing code ...
-  };
-
-  // 修改PDF文件上传处理
-  const handlePdfUpload = (file: RcFile) => {
-    if (medicalPdfCount >= MAX_MEDICAL_PDF_COUNT) {
-      setMessageState({ type: 'error', content: 'PDF文件数量已达到上限（5个）' });
-      return false;
-    }
-    // ... existing code ...
-  };
+  const renderDatePicker = (field: DateField, label: string) => (
+    <Form.Item
+      label={label}
+      name={field}
+      rules={field === 'medicalExamDate' ? [] : [{ required: true, message: `请选择${label}` }]}
+      getValueProps={(value: string | undefined) => ({
+        value: value ? dayjs(value) : null
+      })}
+      normalize={(value) => {
+        // 确保值始终是字符串或undefined
+        if (value && dayjs.isDayjs(value)) {
+          return value.format('YYYY-MM-DD');
+        }
+        return value;
+      }}
+    >
+      <DatePicker
+        onChange={(date) => handleDateChange(date, field)}
+        format="YYYY-MM-DD"
+        style={{ width: '100%' }}
+      />
+    </Form.Item>
+  );
 
   return (
     <PageContainer
@@ -1233,17 +1205,7 @@ const CreateResume = () => {
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item
-                    label="出生日期"
-                    name="birthDate"
-                    rules={[{ required: true, message: '请选择出生日期' }]}
-                    getValueProps={(value: string | undefined) => ({
-                      value: value ? dayjs(value) : undefined
-                    })}
-                    getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM-DD') : undefined}
-                  >
-                    <DatePicker style={{ width: '100%' }} />
-                  </Form.Item>
+                  {renderDatePicker('birthDate', '出生日期')}
                 </Col>
               </Row>
               
@@ -1598,13 +1560,31 @@ const CreateResume = () => {
                                   getValueProps={(value: string | undefined) => ({
                                     value: value ? dayjs(value) : undefined
                                   })}
-                                  getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM') : undefined}
+                                  normalize={(value) => {
+                                    if (value && dayjs.isDayjs(value)) {
+                                      return value.format('YYYY-MM');
+                                    }
+                                    return value;
+                                  }}
                                 >
                                   <DatePicker 
                                     style={{ width: '100%' }} 
                                     placeholder="开始日期" 
                                     picker="month"
                                     format="YYYY-MM"
+                                    onChange={(date) => {
+                                      if (date && dayjs.isDayjs(date)) {
+                                        form.setFieldsValue({
+                                          workExperiences: {
+                                            ...form.getFieldValue('workExperiences'),
+                                            [name]: {
+                                              ...form.getFieldValue(['workExperiences', name]),
+                                              startDate: date.format('YYYY-MM')
+                                            }
+                                          }
+                                        });
+                                      }
+                                    }}
                                   />
                                 </Form.Item>
                               </Col>
@@ -1617,13 +1597,31 @@ const CreateResume = () => {
                                   getValueProps={(value: string | undefined) => ({
                                     value: value ? dayjs(value) : undefined
                                   })}
-                                  getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM') : undefined}
+                                  normalize={(value) => {
+                                    if (value && dayjs.isDayjs(value)) {
+                                      return value.format('YYYY-MM');
+                                    }
+                                    return value;
+                                  }}
                                 >
                                   <DatePicker 
                                     style={{ width: '100%' }} 
                                     placeholder="结束日期" 
                                     picker="month"
                                     format="YYYY-MM"
+                                    onChange={(date) => {
+                                      if (date && dayjs.isDayjs(date)) {
+                                        form.setFieldsValue({
+                                          workExperiences: {
+                                            ...form.getFieldValue('workExperiences'),
+                                            [name]: {
+                                              ...form.getFieldValue(['workExperiences', name]),
+                                              endDate: date.format('YYYY-MM')
+                                            }
+                                          }
+                                        });
+                                      }
+                                    }}
                                   />
                                 </Form.Item>
                               </Col>
@@ -1686,27 +1684,7 @@ const CreateResume = () => {
                     title="个人照片" 
                     style={{ marginBottom: 16 }}
                   >
-                    <Upload
-                      listType="picture-card"
-                      fileList={[
-                        ...photoFiles,
-                        ...existingPhotoUrls.map((url, index) => ({
-                          uid: `existing-photo-${url}-${index}`,
-                          name: `已有图片 ${index + 1}`,
-                          status: 'done' as const,
-                          url: url,
-                          isExisting: true,
-                          type: 'image/jpeg'
-                        }))
-                      ]}
-                      onRemove={handleFileRemove('photo')}
-                      beforeUpload={() => false}
-                      onChange={handleFileChange('photo')}
-                      accept=".jpg,.jpeg,.png"
-                      multiple
-                    >
-                      {photoFiles.length + existingPhotoUrls.length >= MAX_PHOTO_COUNT ? null : uploadButton}
-                    </Upload>
+                    {renderUploadList('photo')}
                   </Card>
                 </Col>
                 
@@ -1716,33 +1694,7 @@ const CreateResume = () => {
                     title="技能证书" 
                     style={{ marginBottom: 16 }}
                   >
-                    <Upload
-                      listType="picture-card"
-                      fileList={[
-                        ...certificateFiles,
-                        ...existingCertificateUrls.map((url, index) => {
-                          const isPdf = url.toLowerCase().endsWith('.pdf');
-                          return {
-                            uid: `existing-certificate-${index}`,
-                            name: url.split('/').pop() || `证书${index + 1}`,
-                            status: 'done' as const,
-                            url: isPdf ? undefined : url,
-                            thumbUrl: isPdf
-                              ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAALrSURBVGiB7ZZNSFRBFMd/980M5lCjUoiNJtqkmR8ItUhcGNRCKKhFuogkXIgfCzcqLdq0KoQIAqEPaCG0CTOJcrJAUHDjB0hqYlKgLHJmnDed865vmWN2Z+a+Nx23//Lg3XPPf/f/P+e+d+97FhGYqVGzJRRvACJiA9oAB9AIrI8TLwhMAT5gFLgpIr5oAW0xwm1Ap4i0W8PVbkTkGpAGnBOR0+GxEQFEJBO4ChwVERuiYiJyDfgC9IVLEhoQkZ3AY0BKCPcpd133eywdJ8tybDQSETuGYXSKyIFwPzug1Qp3bNmyZU93d/eEbduxNChLA9d1La35+PETent7jwH7ReQ9VA8hEWkGbgMYhjHS19d3qa+vT0TEmqvJwrIs0eqqVCqq9p6fn19YWVm5FthvA9qAeoALFy70GIYxUtugKok6LfN5AMlAEwBVVVVtdc23cpmmmQLYReQ7wL179/64c+fOdN2TrVS6rvtTq/cDvgCg67pn7dq12yoqKpKL3ZqjdPpwHGdWqz8C8ATwaMr+/v6enJwcc65brKuru+H1epdLpVKB53n3FqrVs4EQKf90PNc9DMwCPykghPx2YFZTdgGngJSt/hR4vsA6KTIgGHQBnwBfnRqIFbwBxBtAvAHEG0C8AcQbQLwBxBtAvAH89wBExG4YRsxvZtOUctrp+/6g4ziD0+OmU36NypIsJY/66RudtLQ0MU3zY0dHx+7FgCkpKaG0tHQWQGZmpgBXqqqquoF7ixmAptm9MJDrurZpmj+AjMbGxsC2bdvWNDc3r9Lpj0qz3t7eD+Xl5ed0XRdgCjisxNdQP5biOI6taVoB0FVUVFTudDpzNE2LailKsizleR4i8sPzvJH5QAM4juPOzMxcAd4qiqI0NDSU7t27NzkaiFDzer3+paWlwcnJyfHFTJ+xVIZh2IHUhoYGbWJiYjwQCCxo+lQqFcvLy30LCgpK9+3bt3MxEMOUoihB0zTdVatW+eLUf9n6C/G3z8hTZStxAAAAAElFTkSuQmCC'
-                                : url,
-                              type: isPdf ? 'application/pdf' : 'image/jpeg',
-                              isExisting: true
-                            };
-                          })
-                        ]}
-                      onRemove={handleFileRemove('certificate')}
-                      beforeUpload={() => false}
-                      onChange={handleFileChange('certificate')}
-                      accept=".jpg,.jpeg,.png"
-                      multiple
-                    >
-                      {certificateFiles.length + existingCertificateUrls.length >= MAX_CERTIFICATE_COUNT ? null : uploadButton}
-                    </Upload>
+                    {renderUploadList('certificate')}
                   </Card>
                 </Col>
                 
@@ -1752,56 +1704,8 @@ const CreateResume = () => {
                     title="体检报告" 
                     style={{ marginBottom: 16 }}
                   >
-                    <Form.Item
-                      label="体检时间"
-                      name="medicalExamDate"
-                      getValueProps={(value: string | undefined) => ({
-                        value: value ? dayjs(value) : undefined
-                      })}
-                      getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM-DD') : undefined}
-                    >
-                      <DatePicker 
-                        placeholder="请选择体检日期" 
-                        style={{ width: '100%' }} 
-                        format="YYYY-MM-DD"
-                      />
-                    </Form.Item>
-                    <Upload
-                      listType="picture-card"
-                      fileList={[
-                        ...medicalReportFiles,
-                        ...existingMedicalReportUrls.map((url, index) => {
-                          const isPdf = url.toLowerCase().endsWith('.pdf');
-                          return {
-                            uid: `existing-medical-${url}-${index}`,
-                            name: `已有报告 ${index + 1}`,
-                            status: 'done' as const,
-                            url: isPdf ? undefined : url,
-                            thumbUrl: isPdf
-                              ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAALrSURBVGiB7ZZNSFRBFMd/980M5lCjUoiNJtqkmR8ItUhcGNRCKKhFuogkXIgfCzcqLdq0KoQIAqEPaCG0CTOJcrJAUHDjB0hqYlKgLHJmnDed865vmWN2Z+a+Nx23//Lg3XPPf/f/P+e+d+97FhGYqVGzJRRvACJiA9oAB9AIrI8TLwhMAT5gFLgpIr5oAW0xwm1Ap4i0W8PVbkTkGpAGnBOR0+GxEQFEJBO4ChwVERuiYiJyDfgC9IVLEhoQkZ3AY0BKCPcpd133eywdJ8tybDQSETuGYXSKyIFwPzug1Qp3bNmyZU93d/eEbduxNChLA9d1La35+PETent7jwH7ReQ9VA8hEWkGbgMYhjHS19d3qa+vT0REmqvJwrIs0eqqVCqq9p6fn19YWVm5FthvA9qAeoALFy70GIYxUtugKok6LfN5AMlAEwBVVVVtdc23cpmmmQLYReQ7wL179/64c+fOdN2TrVS6rvtTq/cDvgCg67pn7dq12yoqKpKL3ZqjdPpwHGdWqz8C8ATwaMr+/v6enJwcc65brKuru+H1epdLpVKB53n3FqrVs4EQKf90PNc9DMwCPykghPx2YFZTdgGngJSt/hR4vsA6KTIgGHQBnwBfnRqIFbwBxBtAvAHEG0C8AcQbQLwBxBtAvAH89wBExG4YRsxvZtOUctrp+/6g4ziD0+OmU36NypIsJY/66RudtLQ0MU3zY0dHx+7FgCkpKaG0tHQWQGZmpgBXqqqquoF7ixmAptm9MJDrurZpmj+AjMbGxsC2bdvWNDc3r9Lpj0qz3t7eD+Xl5ed0XRdgCjisxNdQP5biOI6taVoB0FVUVFTudDpzNE2LailKsizleR4i8sPzvJH5QAM4juPOzMxcAd4qiqI0NDSU7t27NzkaiFDzer3+paWlwcnJyfHFTJ+xVIZh2IHUhoYGbWJiYjwQCCxo+lQqFcvLy30LCgpK9+3bt3MxEMOUoihB0zTdVatW+eLUf9n6C/G3z8hTZStxAAAAAElFTkSuQmCC'
-                                : url,
-                              type: isPdf ? 'application/pdf' : 'image/jpeg',
-                              isExisting: true
-                            };
-                          })
-                        ]}
-                      onRemove={handleFileRemove('medical')}
-                      beforeUpload={(file) => {
-                        // 检查是否是PDF文件
-                        const isPdf = file.type === 'application/pdf';
-                        if (isPdf && medicalPdfCount >= MAX_MEDICAL_PDF_COUNT) {
-                          messageApi.error('PDF文件数量已达到上限（5个）');
-                          return false;
-                        }
-                        return false;
-                      }}
-                      onChange={handleFileChange('medical')}
-                      accept=".jpg,.jpeg,.png,.pdf"
-                      multiple
-                    >
-                      {medicalReportFiles.length + existingMedicalReportUrls.length >= MAX_MEDICAL_REPORT_COUNT || 
-                       (medicalPdfCount >= MAX_MEDICAL_PDF_COUNT && medicalReportFiles.some(f => f.type === 'application/pdf')) ? null : uploadButton}
-                    </Upload>
+                    {renderDatePicker('medicalExamDate', '体检时间')}
+                    {renderUploadList('medical')}
                   </Card>
                 </Col>
               </Row>
@@ -1842,4 +1746,10 @@ const CreateResume = () => {
   );
 };
 
-export default CreateResume;
+export default function CreateResumeWithApp() {
+  return (
+    <App>
+      <CreateResume />
+    </App>
+  );
+}

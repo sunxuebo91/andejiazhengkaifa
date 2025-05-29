@@ -1,5 +1,5 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Descriptions, Button, Spin, message, Image, Tag, Modal, Form, Input, Select, Typography, Tooltip, Table } from 'antd';
+import { Card, Descriptions, Button, Spin, App, Image, Tag, Modal, Form, Input, Select, Typography, Tooltip, Table } from 'antd';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -370,7 +370,7 @@ const ResumeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [resume, setResume] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [, contextHolder] = message.useMessage();
+  const { message: messageApi } = App.useApp();
   const [previewImage, setPreviewImage] = useState<string>('');
   const [previewVisible, setPreviewVisible] = useState(false);
 
@@ -525,7 +525,7 @@ const ResumeDetail = () => {
     } catch (error) {
       console.error('获取简历详情失败:', error);
       setError('获取简历详情失败');
-      message.error('获取简历详情失败');
+      messageApi.error('获取简历详情失败');
     } finally {
       setLoading(false);
     }
@@ -577,7 +577,7 @@ const ResumeDetail = () => {
       localStorage.setItem('editingResume', JSON.stringify(formattedResume));
       navigate(`/aunt/create-resume?edit=true&id=${resume.id}`);
     } else {
-      message.error('无法获取简历数据');
+      messageApi.error('无法获取简历数据');
     }
   };
 
@@ -791,7 +791,7 @@ const ResumeDetail = () => {
       setFollowUpRecords(resumeRecords);
     } catch (error) {
       console.error('获取跟进记录失败:', error);
-      message.error('获取跟进记录失败');
+      messageApi.error('获取跟进记录失败');
     }
   };
   
@@ -826,13 +826,13 @@ const ResumeDetail = () => {
       // 保存回localStorage
       localStorage.setItem('followUpRecords', JSON.stringify(updatedRecords));
       
-      message.success('添加跟进记录成功');
+      messageApi.success('添加跟进记录成功');
       setIsAddFollowUpVisible(false);
       followUpForm.resetFields();
       fetchFollowUpRecords(); // 刷新跟进记录列表
     } catch (error) {
       console.error('添加跟进记录失败:', error);
-      message.error('添加跟进记录失败');
+      messageApi.error('添加跟进记录失败');
     } finally {
       setFollowUpLoading(false);
     }
@@ -1044,7 +1044,6 @@ const ResumeDetail = () => {
 
   return (
     <>
-      {contextHolder}
       <div style={{ padding: '24px' }}>
         <Card 
           title={

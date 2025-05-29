@@ -68,13 +68,13 @@ export interface ApiResponse<T> {
 export const resumeService = {
   // 获取所有简历
   getAll: async () => {
-    const response = await apiService.get<ApiResponse<Resume[]>>('/resumes');
+    const response = await apiService.get<ApiResponse<Resume[]>>('/api/resumes');
     return response.data;
   },
   
   // 获取单个简历
   getById: async (id: string) => {
-    const response = await apiService.get<ApiResponse<Resume>>(`/resumes/${id}`);
+    const response = await apiService.get<ApiResponse<Resume>>(`/api/resumes/${id}`);
     return response.data;
   },
   
@@ -131,7 +131,7 @@ export const resumeService = {
       }
     }
     
-    const response = await apiService.upload<ApiResponse<Resume>>('/resumes', formData);
+    const response = await apiService.upload<ApiResponse<Resume>>('/api/resumes', formData);
     return response.data;
   },
   
@@ -188,13 +188,13 @@ export const resumeService = {
       }
     }
     
-    const response = await apiService.upload<ApiResponse<Resume>>(`/resumes/${id}`, formData, 'PATCH');
+    const response = await apiService.upload<ApiResponse<Resume>>(`/api/resumes/${id}`, formData, 'PATCH');
     return response.data;
   },
   
   // 删除简历
   delete: async (id: string) => {
-    return apiService.delete(`/resumes/${id}`);
+    return apiService.delete(`/api/resumes/${id}`);
   },
   
   // 检查简历是否重复
@@ -203,7 +203,7 @@ export const resumeService = {
     if (idNumber) {
       params.idNumber = idNumber;
     }
-    return apiService.get('/resumes/check-duplicate', params);
+    return apiService.get('/api/resumes/check-duplicate', params);
   }
 };
 

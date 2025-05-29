@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Input, Form, Spin, message } from 'antd';
+import { Card, Input, Form, Spin, App } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 
 // 百度地图AK
@@ -34,8 +34,8 @@ const BaiduMapCard: React.FC<BaiduMapCardProps> = ({ value, onChange }) => {
   const autoCompleteRef = useRef<any>(null);
   const inputRef = useRef<any>(null);
   
-  // 使用message hook代替静态message
-  const [messageApi, contextHolder] = message.useMessage();
+  // 使用App.useApp()获取message
+  const { message: messageApi } = App.useApp();
   
   // 加载百度地图API
   useEffect(() => {
@@ -269,7 +269,6 @@ const BaiduMapCard: React.FC<BaiduMapCardProps> = ({ value, onChange }) => {
       title="接单地址" 
       style={{ marginBottom: 24 }}
     >
-      {contextHolder}
       <Form.Item
         label="服务区域"
         name="serviceArea"

@@ -22,8 +22,59 @@ interface FileInfo {
   size: number;
 }
 
+// 定义Resume接口
+export interface IResume extends Document {
+  title: string;
+  content: string;
+  userId: Types.ObjectId;
+  fileIds: Types.ObjectId[];
+  name: string;
+  gender: Gender;
+  age: number;
+  phone: string;
+  wechat?: string;
+  idNumber?: string;
+  expectedPosition: string;
+  jobType: JobType;
+  expectedSalary: number;
+  workExperience: number;
+  education: Education;
+  school: string;
+  major: string;
+  workHistory: WorkExperience[];
+  skills: Skill[];
+  selfIntroduction?: string;
+  status: string;
+  remarks?: string;
+  ethnicity?: string;
+  zodiacSign?: ZodiacSign;
+  nativePlace: string;
+  experienceYears: number;
+  maritalStatus?: MaritalStatus;
+  religion?: Religion;
+  currentAddress?: string;
+  hukouAddress?: string;
+  birthDate?: string;
+  zodiac?: Zodiac;
+  serviceArea?: string[];
+  orderStatus?: OrderStatus;
+  leadSource?: LeadSource;
+  workExperiences?: WorkExperience[];
+  idCardFront?: FileInfo;
+  idCardBack?: FileInfo;
+  personalPhoto?: FileInfo;
+  photoUrls?: string[];
+  certificates?: FileInfo[];
+  reports?: FileInfo[];
+  certificateUrls?: string[];
+  medicalReportUrls?: string[];
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  medicalExamDate?: string;
+}
+
 @Schema({ timestamps: true, collection: 'resumes' })
-export class Resume extends Document {
+export class Resume extends Document implements IResume {
   @Prop()
   title: string;
 

@@ -1,14 +1,32 @@
-import React, { useEffect } from 'react';
-import { message } from 'antd';
+import React from 'react';
+import { App } from 'antd';
 
-const handleFileChange = (info: any) => {
-  useEffect(() => {
+// 自定义 Hook
+const useFileUpload = () => {
+  const { message: messageApi } = App.useApp();
+
+  const handleFileChange = (info: any) => {
     if (info.file.status === 'done') {
-      message.success(`${info.file.name} 上传成功`);
+      messageApi.success(`${info.file.name} 上传成功`);
     } else if (info.file.status === 'error') {
-      message.error(`${info.file.name} 上传失败`);
+      messageApi.error(`${info.file.name} 上传失败`);
     }
-  }, [info.file.status]);
+  };
+
+  return { handleFileChange };
 };
 
-export default handleFileChange; 
+// 组件
+const CreateResume: React.FC = () => {
+  const { handleFileChange } = useFileUpload();
+
+  return (
+    <div>
+      <h1>创建简历</h1>
+      <p>简历创建页面 - 开发中</p>
+      <input type="file" onChange={handleFileChange} />
+    </div>
+  );
+};
+
+export default CreateResume; 

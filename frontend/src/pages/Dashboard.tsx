@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Row, Col, Statistic, Spin, message, Space } from 'antd';
+import { Card, Row, Col, Statistic, Spin, App, Space } from 'antd';
 import { UserOutlined, FileAddOutlined, CheckCircleOutlined, CloseCircleOutlined, HomeOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -40,7 +40,7 @@ const Dashboard: React.FC = () => {
     notAcceptingResumes: 0,
     onServiceResumes: 0
   });
-  const [messageApi, contextHolder] = message.useMessage();
+  const { message: messageApi } = App.useApp();
 
   // 从后端获取统计数据
   const fetchStats = async () => {
@@ -183,8 +183,6 @@ const Dashboard: React.FC = () => {
         title: '驾驶舱',
       }}
     >
-      {contextHolder}
-      
       <div style={{ position: 'relative', minHeight: '200px' }}>
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', position: 'absolute', width: '100%', zIndex: 1 }}>

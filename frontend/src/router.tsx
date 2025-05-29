@@ -43,12 +43,12 @@ export const basicLayoutRoutes: RouteConfig[] = [
         element: <HomePage />,
       },
       {
-        path: 'aunt/resumes',
+        path: 'aunt/list',
         name: '简历列表',
         element: <AuntResumeList />,
       },
       {
-        path: 'aunt/resumes/create',
+        path: 'aunt/create-resume',
         name: '创建简历',
         element: <AuntCreateResume />,
       },

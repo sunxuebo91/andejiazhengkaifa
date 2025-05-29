@@ -53,12 +53,11 @@ export class ResumeService {
     const categorizedFiles = {
       idCardFront: null,
       idCardBack: null,
-      personalPhoto: null,
-      certificates: [],
-      reports: [],
       photoUrls: [],
       certificateUrls: [],
-      medicalReportUrls: []
+      medicalReportUrls: [],
+      certificates: [],
+      reports: []
     };
     
     // 只有在有文件时才处理文件上传
@@ -91,7 +90,6 @@ export class ResumeService {
                   categorizedFiles.idCardBack = fileInfo;
                   break;
                 case 'personalPhoto':
-                  categorizedFiles.personalPhoto = fileInfo;
                   categorizedFiles.photoUrls.push(`/api/upload/file/${fileId}`);
                   break;
                 case 'certificate':
@@ -111,47 +109,35 @@ export class ResumeService {
           } catch (error) {
             this.logger.error(`文件上传失败: ${error.message}`);
             fileUploadErrors.push(`文件 ${file.originalname} 上传失败: ${error.message}`);
-            // 继续处理其他文件，不中断整个流程
           }
         }
       }
     }
 
-    try {
-      // 创建简历，确保fileIds始终是数组，并包含分类文件信息
-      const resume = new this.resumeModel({
-        ...createResumeDto,
-        ...categorizedFiles,
-        fileIds: fileIds,
-        userId: new Types.ObjectId(createResumeDto.userId)
-      });
+    // 创建简历对象
+    const resumeData = {
+      ...createResumeDto,
+      fileIds,
+      idCardFront: categorizedFiles.idCardFront,
+      idCardBack: categorizedFiles.idCardBack,
+      photoUrls: categorizedFiles.photoUrls,
+      certificateUrls: categorizedFiles.certificateUrls,
+      medicalReportUrls: categorizedFiles.medicalReportUrls,
+      certificates: categorizedFiles.certificates,
+      reports: categorizedFiles.reports
+    };
 
+    try {
+      const resume = new this.resumeModel(resumeData);
       const savedResume = await resume.save();
       
-      // 如果有文件上传错误，将其添加到返回的简历对象中
-      if (fileUploadErrors.length > 0) {
-        (savedResume as any).fileUploadErrors = fileUploadErrors;
-      }
-
-      return savedResume;
+      return {
+        success: true,
+        data: savedResume,
+        message: '简历创建成功'
+      };
     } catch (error) {
-      this.logger.error(`保存简历失败: ${error.message}`);
-      
-      // 处理MongoDB错误
-      if (error.code === 11000) {
-        // 检查具体是哪个字段重复
-        const field = Object.keys(error.keyPattern)[0];
-        switch (field) {
-          case 'phone':
-            throw new ConflictException('该手机号已被其他简历使用');
-          case 'idNumber':
-            throw new ConflictException('该身份证号已被其他简历使用');
-          default:
-            throw new ConflictException(`数据重复: ${field}`);
-        }
-      }
-      
-      // 其他错误
+      this.logger.error('保存简历失败:', error);
       throw new BadRequestException(`创建简历失败: ${error.message}`);
     }
   }

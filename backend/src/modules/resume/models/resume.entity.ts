@@ -185,17 +185,14 @@ export class Resume extends Document {
   @Prop({ type: FileInfoSchema, nullable: true })
   idCardBack?: FileInfo;
 
-  @Prop({ type: FileInfoSchema, nullable: true })
-  personalPhoto?: FileInfo;
+  @Prop({ type: [String], default: [] })
+  photoUrls?: string[];
 
   @Prop({ type: [FileInfoSchema], default: [] })
   certificates?: FileInfo[];
 
   @Prop({ type: [FileInfoSchema], default: [] })
   reports?: FileInfo[];
-
-  @Prop({ type: [String], default: [] })
-  photoUrls?: string[];
 
   @Prop({ type: [String], default: [] })
   certificateUrls?: string[];

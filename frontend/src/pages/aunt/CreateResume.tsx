@@ -195,6 +195,17 @@ const convertToExtendedResume = (resume: Resume): ExtendedResume => {
   };
 };
 
+// 修改类型声明
+type FileWithOriginFileObj = UploadFile & {
+  originFileObj?: RcFile;
+};
+
+// 添加常量定义
+const MAX_PHOTO_COUNT = 10;
+const MAX_CERTIFICATE_COUNT = 10;
+const MAX_MEDICAL_REPORT_COUNT = 10;
+const MAX_MEDICAL_PDF_COUNT = 5;
+
 const CreateResume = () => {
   const navigate = useNavigate();
   const [messageApi] = message.useMessage();
@@ -224,6 +235,7 @@ const CreateResume = () => {
   const [existingCertificateUrls, setExistingCertificateUrls] = useState<string[]>([]);
   const [existingMedicalReportUrls, setExistingMedicalReportUrls] = useState<string[]>([]);
   const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
+  const [medicalPdfCount, setMedicalPdfCount] = useState<number>(0);
 
   // 加载简历数据
   const loadResumeData = async (resumeId: string) => {
@@ -705,34 +717,88 @@ const CreateResume = () => {
   // 修改 handleSubmit 函数
   const handleSubmit = async (values: FormValues) => {
     try {
-      // Convert form values to the expected types for submission
-      const submitData = {
-        ...values,
-        // Convert Dayjs objects to string dates
-        birthDate: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : undefined,
-        medicalExamDate: values.medicalExamDate ? dayjs(values.medicalExamDate).format('YYYY-MM-DD') : undefined,
-        // Ensure jobType is properly typed
-        jobType: values.jobType as JobType,
-      };
+      setSubmitting(true);
+      console.log('表单验证通过，准备提交:', values);
 
-      // Validate required fields
-      if (!submitData.name || !submitData.phone || !submitData.gender || !submitData.jobType) {
-        messageApi.error('请填写必填项');
-        return;
+      // 准备文件上传数据
+      const formData = new FormData();
+      const fileTypes: string[] = [];
+      
+      // 添加基本信息
+      Object.entries(values).forEach(([key, value]) => {
+        // 跳过文件字段，它们将单独处理
+        if (
+          key !== 'idCardFront' && 
+          key !== 'idCardBack' && 
+          key !== 'photoFiles' && 
+          key !== 'certificateFiles' && 
+          key !== 'medicalReportFiles'
+        ) {
+          // 处理数组和对象
+          if (value !== null && value !== undefined) {
+            if (Array.isArray(value) || typeof value === 'object') {
+              formData.append(key, JSON.stringify(value));
+            } else {
+              formData.append(key, value.toString());
+            }
+          }
+        }
+      });
+
+      // 添加文件
+      const frontFile = idCardFiles.front[0] as FileWithOriginFileObj;
+      const backFile = idCardFiles.back[0] as FileWithOriginFileObj;
+
+      if (frontFile?.originFileObj) {
+        formData.append('files', frontFile.originFileObj);
+        fileTypes.push('idCardFront');
       }
+      
+      if (backFile?.originFileObj) {
+        formData.append('files', backFile.originFileObj);
+        fileTypes.push('idCardBack');
+      }
+      
+      // 添加个人照片
+      (photoFiles as FileWithOriginFileObj[]).forEach(file => {
+        if (file.originFileObj) {
+          formData.append('files', file.originFileObj);
+          fileTypes.push('personalPhoto');
+        }
+      });
+      
+      // 添加证书照片
+      (certificateFiles as FileWithOriginFileObj[]).forEach(file => {
+        if (file.originFileObj) {
+          formData.append('files', file.originFileObj);
+          fileTypes.push('certificate');
+        }
+      });
+      
+      // 添加体检报告
+      (medicalReportFiles as FileWithOriginFileObj[]).forEach(file => {
+        if (file.originFileObj) {
+          formData.append('files', file.originFileObj);
+          fileTypes.push('medicalReport');
+        }
+      });
 
-      // Rest of the submit logic...
+      // 添加文件类型数组
+      formData.append('fileTypes', JSON.stringify(fileTypes));
+
+      // 发送请求
       const endpoint = editingResume ? `/resumes/${editingResume.id}` : '/resumes';
       const method = editingResume ? 'put' : 'post';
-
-      const response = await apiService[method](endpoint, submitData);
       
-      if (response.data) {
-        messageApi.success(editingResume ? '简历更新成功' : '简历创建成功');
-        // Clear any saved draft
-        localStorage.removeItem('editingResume');
-        // Navigate to resume list
+      console.log('发送请求到:', endpoint, '方法:', method, '文件类型:', fileTypes);
+      const response = await apiService[method](endpoint, formData);
+      
+      if (response.success) {
+        messageApi.success('简历创建成功');
+        // 修改导航路径
         navigate('/aunt/list');
+      } else {
+        throw new Error(response.message || '提交失败');
       }
     } catch (error) {
       console.error('提交简历失败:', error);
@@ -741,6 +807,8 @@ const CreateResume = () => {
       } else {
         messageApi.error('提交失败，请重试');
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -836,6 +904,12 @@ const CreateResume = () => {
         isExisting: false
       } as NewFile;
     });
+
+    // 对于体检报告，需要特别处理PDF文件
+    if (type === 'medical') {
+      const pdfFiles = newFiles.filter(file => file.type === 'application/pdf');
+      setMedicalPdfCount(pdfFiles.length);
+    }
 
     switch (type) {
       case 'photo':
@@ -938,18 +1012,7 @@ const CreateResume = () => {
           <Form
             form={form}
             layout="vertical"
-            onFinish={async (values) => {
-              try {
-                setSubmitting(true);
-                console.log('表单验证通过，准备提交:', values);
-                await handleSubmit(values);
-              } catch (error) {
-                console.error('表单提交失败:', error);
-                messageApi.error('表单提交失败，请检查填写是否正确');
-              } finally {
-                setSubmitting(false);
-              }
-            }}
+            onFinish={handleSubmit}
           >
           {/* 身份证信息区域 */}
           <Divider orientation="left">
@@ -1399,38 +1462,85 @@ const CreateResume = () => {
                     {(fields, { add }) => (
                       <>
                         {fields.map(({ key, name, ...restField }) => (
-                          <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
-                            <Form.Item
-                              {...restField}
-                              name={[name, 'startDate']}
-                              rules={[{ required: true, message: '请选择开始日期' }]}
-                              getValueProps={(value: string | undefined) => ({
-                                value: value ? dayjs(value) : undefined
-                              })}
-                              getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM-DD') : undefined}
-                            >
-                              <DatePicker placeholder="开始日期" />
-                            </Form.Item>
-                            <Form.Item
-                              {...restField}
-                              name={[name, 'endDate']}
-                              rules={[{ required: true, message: '请选择结束日期' }]}
-                              getValueProps={(value: string | undefined) => ({
-                                value: value ? dayjs(value) : undefined
-                              })}
-                              getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM-DD') : undefined}
-                            >
-                              <DatePicker placeholder="结束日期" />
-                            </Form.Item>
-                            <Form.Item
-                              {...restField}
-                              name={[name, 'description']}
-                              label="工作描述"
-                              style={{ gridColumn: 'span 2' }}
-                            >
-                              <Input.TextArea rows={4} placeholder="请描述工作内容和职责" />
-                            </Form.Item>
-                          </Space>
+                          <Card 
+                            key={key} 
+                            style={{ marginBottom: 16 }}
+                            extra={
+                              <Button
+                                type="text"
+                                danger
+                                icon={<CloseOutlined />}
+                                onClick={() => {
+                                  const experiences = form.getFieldValue('workExperiences');
+                                  if (experiences && experiences.length > 1) {
+                                    form.setFieldsValue({
+                                      workExperiences: experiences.filter((_: any, index: number) => index !== name)
+                                    });
+                                  } else {
+                                    messageApi.warning('至少需要保留一条工作经历');
+                                  }
+                                }}
+                              />
+                            }
+                          >
+                            <Row gutter={24}>
+                              <Col span={12}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'startDate']}
+                                  label="开始日期"
+                                  rules={[{ required: true, message: '请选择开始日期' }]}
+                                  getValueProps={(value: string | undefined) => ({
+                                    value: value ? dayjs(value) : undefined
+                                  })}
+                                  getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM') : undefined}
+                                >
+                                  <DatePicker 
+                                    style={{ width: '100%' }} 
+                                    placeholder="开始日期" 
+                                    picker="month"
+                                    format="YYYY-MM"
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col span={12}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'endDate']}
+                                  label="结束日期"
+                                  rules={[{ required: true, message: '请选择结束日期' }]}
+                                  getValueProps={(value: string | undefined) => ({
+                                    value: value ? dayjs(value) : undefined
+                                  })}
+                                  getValueFromEvent={(date: Dayjs | null) => date ? date.format('YYYY-MM') : undefined}
+                                >
+                                  <DatePicker 
+                                    style={{ width: '100%' }} 
+                                    placeholder="结束日期" 
+                                    picker="month"
+                                    format="YYYY-MM"
+                                  />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+                            <Row gutter={24}>
+                              <Col span={24}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'description']}
+                                  label="工作描述"
+                                  rules={[{ required: true, message: '请输入工作描述' }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Input.TextArea 
+                                    rows={4} 
+                                    placeholder="请描述工作内容和职责"
+                                    style={{ resize: 'none' }}
+                                  />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+                          </Card>
                         ))}
                         <Form.Item>
                           <Button 
@@ -1490,7 +1600,7 @@ const CreateResume = () => {
                       accept=".jpg,.jpeg,.png"
                       multiple
                     >
-                      {photoFiles.length + existingPhotoUrls.length >= 5 ? null : uploadButton}
+                      {photoFiles.length + existingPhotoUrls.length >= MAX_PHOTO_COUNT ? null : uploadButton}
                     </Upload>
                   </Card>
                 </Col>
@@ -1526,7 +1636,7 @@ const CreateResume = () => {
                       accept=".jpg,.jpeg,.png"
                       multiple
                     >
-                      {certificateFiles.length + existingCertificateUrls.length >= 5 ? null : uploadButton}
+                      {certificateFiles.length + existingCertificateUrls.length >= MAX_CERTIFICATE_COUNT ? null : uploadButton}
                     </Upload>
                   </Card>
                 </Col>
@@ -1564,7 +1674,7 @@ const CreateResume = () => {
                             status: 'done' as const,
                             url: isPdf ? undefined : url,
                             thumbUrl: isPdf
-                              ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAALrSURBVGiB7ZZNSFRBFMd/980M5lCjUoiNJtqkmR8ItUhcGNRCKKhFuogkXIgfCzcqLdq0KoQIAqEPaCG0CTOJcrJAUHDjB0hqYlKgLHJmnDed865vmWN2Z+a+Nx23//Lg3XPPf/f/P+e+d+97FhGYqVGzJRRvACJiA9oAB9AIrI8TLwhMAT5gFLgpIr5oAW0xwm1Ap4i0W8PVbkTkGpAGnBOR0+GxEQFEJBO4ChwVERuiYiJyDfgC9IVLEhoQkZ3AY0BKCPcpd133eywdJ8tybDQSETuGYXSKyIFwPzug1Qp3bNmyZU93d/eEbduxNChLA9d1La35+PETent7jwH7ReQ9VA8hEWkGbgMYhjHS19d3qa+vT0TEmqvJwrIs0eqqVCqq9p6fn19YWVm5FthvA9qAeoALFy70GIYxUtugKok6LfN5AMlAEwBVVVVtdc23cpmmmQLYReQ7wL179/64c+fOdN2TrVS6rvtTq/cDvgCg67pn7dq12yoqKpKL3ZqjdPpwHGdWqz8C8ATwaMr+/v6enJwcc65brKuru+H1epdLpVKB53n3FqrVs4EQKf90PNc9DMwCPykghPx2YFZTdgGngJSt/hR4vsA6KTIgGHQBnwBfnRqIFbwBxBtAvAHEG0C8AcQbQLwBxBtAvAH89wBExG4YRsxvZtOUctrp+/6g4ziD0+OmU36NypIsJY/66RudtLQ0MU3zY0dHx+7FgCkpKaG0tHQWQGZmpgBXqqqquoF7ixmAptm9MJDrurZpmj+AjMbGxsC2bdvWNDc3r9Lpj0qz3t7eD+Xl5ed0XRdgCjisxNdQP5biOI6taVoB0FVUVFTudDpzNE2LailKsizleR4i8sPzvJH5QAM4juPOzMxcAd4qiqI0NDSU7t27NzkaiFDzer3+paWlwcnJyfHFTJ+xVIZh2IHUhoYGbWJiYjwQCCxo+lQqFcvLy30LCgpK9+3bt3MxEMOUoihB0zTdVatW+eLUf9n6C/G3z8hTZStxAAAAAElFTkSuQmCC'
+                              ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAALrSURBVGiB7ZZNSFRBFMd/980M5lCjUoiNJtqkmR8ItUhcGNRCKKhFuogkXIgfCzcqLdq0KoQIAqEPaCG0CTOJcrJAUHDjB0hqYlKgLHJmnDed865vmWN2Z+a+Nx23//Lg3XPPf/f/P+e+d+97FhGYqVGzJRRvACJiA9oAB9AIrI8TLwhMAT5gFLgpIr5oAW0xwm1Ap4i0W8PVbkTkGpAGnBOR0+GxEQFEJBO4ChwVERuiYiJyDfgC9IVLEhoQkZ3AY0BKCPcpd133eywdJ8tybDQSETuGYXSKyIFwPzug1Qp3bNmyZU93d/eEbduxNChLA9d1La35+PETent7jwH7ReQ9VA8hEWkGbgMYhjHS19d3qa+vT0REmqvJwrIs0eqqVCqq9p6fn19YWVm5FthvA9qAeoALFy70GIYxUtugKok6LfN5AMlAEwBVVVVtdc23cpmmmQLYReQ7wL179/64c+fOdN2TrVS6rvtTq/cDvgCg67pn7dq12yoqKpKL3ZqjdPpwHGdWqz8C8ATwaMr+/v6enJwcc65brKuru+H1epdLpVKB53n3FqrVs4EQKf90PNc9DMwCPykghPx2YFZTdgGngJSt/hR4vsA6KTIgGHQBnwBfnRqIFbwBxBtAvAHEG0C8AcQbQLwBxBtAvAH89wBExG4YRsxvZtOUctrp+/6g4ziD0+OmU36NypIsJY/66RudtLQ0MU3zY0dHx+7FgCkpKaG0tHQWQGZmpgBXqqqquoF7ixmAptm9MJDrurZpmj+AjMbGxsC2bdvWNDc3r9Lpj0qz3t7eD+Xl5ed0XRdgCjisxNdQP5biOI6taVoB0FVUVFTudDpzNE2LailKsizleR4i8sPzvJH5QAM4juPOzMxcAd4qiqI0NDSU7t27NzkaiFDzer3+paWlwcnJyfHFTJ+xVIZh2IHUhoYGbWJiYjwQCCxo+lQqFcvLy30LCgpK9+3bt3MxEMOUoihB0zTdVatW+eLUf9n6C/G3z8hTZStxAAAAAElFTkSuQmCC'
                                 : url,
                               type: isPdf ? 'application/pdf' : 'image/jpeg',
                               isExisting: true
@@ -1572,12 +1682,21 @@ const CreateResume = () => {
                           })
                         ]}
                       onRemove={handleFileRemove('medical')}
-                      beforeUpload={() => false}
+                      beforeUpload={(file) => {
+                        // 检查是否是PDF文件
+                        const isPdf = file.type === 'application/pdf';
+                        if (isPdf && medicalPdfCount >= MAX_MEDICAL_PDF_COUNT) {
+                          messageApi.error('PDF文件数量已达到上限（5个）');
+                          return false;
+                        }
+                        return false;
+                      }}
                       onChange={handleFileChange('medical')}
                       accept=".jpg,.jpeg,.png,.pdf"
                       multiple
                     >
-                      {medicalReportFiles.length + existingMedicalReportUrls.length >= 5 ? null : uploadButton}
+                      {medicalReportFiles.length + existingMedicalReportUrls.length >= MAX_MEDICAL_REPORT_COUNT || 
+                       (medicalPdfCount >= MAX_MEDICAL_PDF_COUNT && medicalReportFiles.some(f => f.type === 'application/pdf')) ? null : uploadButton}
                     </Upload>
                   </Card>
                 </Col>

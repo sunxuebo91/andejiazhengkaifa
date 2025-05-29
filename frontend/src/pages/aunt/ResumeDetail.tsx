@@ -988,7 +988,7 @@ const ResumeDetail = () => {
           title: '简历详情',
           breadcrumb: {
             items: [
-              { path: '/aunt/resume-list', title: '阿姨简历库' },
+              { path: '/aunt/list', title: '阿姨简历库' },
               { title: '简历详情' },
             ],
           },

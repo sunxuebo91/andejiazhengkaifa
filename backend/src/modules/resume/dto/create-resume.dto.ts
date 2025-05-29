@@ -388,18 +388,18 @@ export class CreateResumeDto {
       try {
         const parsed = JSON.parse(value);
         return Array.isArray(parsed) ? parsed.map(exp => ({
-          ...exp,
           startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
-          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
+          endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined,
+          description: exp.description
         })) : [];
       } catch {
         return [];
       }
     }
     return Array.isArray(value) ? value.map(exp => ({
-      ...exp,
       startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
-      endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined
+      endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined,
+      description: exp.description
     })) : [];
   })
   workExperiences?: Array<{

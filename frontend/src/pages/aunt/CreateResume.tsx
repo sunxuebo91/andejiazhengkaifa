@@ -1650,7 +1650,6 @@ const CreateResume = () => {
                     <Form.Item
                       label="体检时间"
                       name="medicalExamDate"
-                      rules={[{ required: true, message: '请选择体检日期' }]}
                       getValueProps={(value: string | undefined) => ({
                         value: value ? dayjs(value) : undefined
                       })}

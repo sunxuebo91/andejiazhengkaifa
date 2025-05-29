@@ -160,7 +160,7 @@ export const apiService = {
   // 检查后端服务健康状态
   checkHealth: async () => {
     try {
-      const response = await axios.get('/api/health', { timeout: 5000 });
+      const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 5000 });
       return response.status === 200;
     } catch (error) {
       console.error('后端服务健康检查失败');

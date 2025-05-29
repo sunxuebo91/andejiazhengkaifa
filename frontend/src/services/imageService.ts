@@ -156,8 +156,8 @@ export class ImageService {
       const formData = new FormData();
       formData.append('file', file);
       
-      console.log('发送OCR请求到:', '/ocr/idcard');
-      const response = await api.post('/ocr/idcard', formData, {
+      console.log('发送OCR请求到:', '/api/ocr/idcard');
+      const response = await api.post('/api/ocr/idcard', formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
           'Accept': 'application/json'

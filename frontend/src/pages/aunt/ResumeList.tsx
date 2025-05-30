@@ -5,6 +5,7 @@ import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined } from '@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -39,6 +40,7 @@ interface ResumeData {
 const ResumeList = () => {
   const [form] = Form.useForm();
   const { message: messageApi } = App.useApp();
+  const { user } = useAuth();  // 获取当前登录用户信息
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpVisible, setFollowUpVisible] = useState(false);
   const [followUpForm] = Form.useForm();
@@ -238,21 +240,34 @@ const ResumeList = () => {
       setFollowUpLoading(true);
       const values = await followUpForm.validateFields();
       
-      // 构建跟进记录数据
+      if (!user?.name) {
+        messageApi.error('无法获取当前用户信息，请重新登录');
+        return;
+      }
+      
+      // 构建跟进记录数据，使用当前登录用户的名字
       const followUpData = {
         id: Date.now().toString(), // 生成临时ID
         resumeId: currentResumeId,
         type: values.type,
         content: values.content,
         createdAt: new Date().toISOString(),
-        createdBy: 'current_user', // 应当从登录信息中获取
+        createdBy: user.name, // 直接使用用户名，不再使用默认值
       };
       
       // 从localStorage获取现有记录
       const existingRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
       
+      // 更新旧记录中的 createdBy 字段（如果存在）
+      const updatedExistingRecords = existingRecords.map((record: any) => {
+        if (record.createdBy === 'current_user') {
+          return { ...record, createdBy: user.name };
+        }
+        return record;
+      });
+      
       // 添加新记录
-      const updatedRecords = [...existingRecords, followUpData];
+      const updatedRecords = [...updatedExistingRecords, followUpData];
       
       // 保存回localStorage
       localStorage.setItem('followUpRecords', JSON.stringify(updatedRecords));
@@ -272,6 +287,24 @@ const ResumeList = () => {
       messageApi.error('添加跟进记录失败，请重试');
     } finally {
       setFollowUpLoading(false);
+    }
+  };
+
+  // 获取跟进记录
+  const getFollowUpRecords = (resumeId: string) => {
+    try {
+      const records = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
+      // 过滤出当前简历的记录，并确保使用正确的用户名
+      return records
+        .filter((record: any) => record.resumeId === resumeId)
+        .map((record: any) => ({
+          ...record,
+          // 如果记录中的用户名是 'current_user'，则使用当前登录用户名
+          createdBy: record.createdBy === 'current_user' ? (user?.name || '未知用户') : record.createdBy
+        }));
+    } catch (error) {
+      console.error('获取跟进记录失败:', error);
+      return [];
     }
   };
 

@@ -301,17 +301,21 @@ export class ResumeController {
       photoFiles?: Express.Multer.File[],
       certificateFiles?: Express.Multer.File[],
       medicalReportFiles?: Express.Multer.File[]
-    },
+    } | undefined,
     @Req() req: any,
   ) {
     try {
+      // 确保files对象存在，避免undefined访问错误
+      const safeFiles = files || {};
+      
       this.logger.debug('更新简历 - 接收到的文件数据:', {
-        idCardFront: files.idCardFront?.length || 0,
-        idCardBack: files.idCardBack?.length || 0,
-        photoFiles: files.photoFiles?.length || 0,
-        certificateFiles: files.certificateFiles?.length || 0,
-        medicalReportFiles: files.medicalReportFiles?.length || 0,
-        rawBody: Object.keys(req.body),
+        idCardFront: safeFiles.idCardFront?.length || 0,
+        idCardBack: safeFiles.idCardBack?.length || 0,
+        photoFiles: safeFiles.photoFiles?.length || 0,
+        certificateFiles: safeFiles.certificateFiles?.length || 0,
+        medicalReportFiles: safeFiles.medicalReportFiles?.length || 0,
+        rawBody: Object.keys(req.body || {}),
+        hasFiles: !!files
       });
 
       // 将分类的文件重新组合成单一数组，并生成对应的文件类型数组
@@ -319,33 +323,33 @@ export class ResumeController {
       const fileTypes: string[] = [];
 
       // 添加身份证正面
-      if (files.idCardFront && files.idCardFront.length > 0) {
-        filesArray.push(...files.idCardFront);
-        fileTypes.push(...files.idCardFront.map(() => 'idCardFront'));
+      if (safeFiles.idCardFront && safeFiles.idCardFront.length > 0) {
+        filesArray.push(...safeFiles.idCardFront);
+        fileTypes.push(...safeFiles.idCardFront.map(() => 'idCardFront'));
       }
 
       // 添加身份证背面
-      if (files.idCardBack && files.idCardBack.length > 0) {
-        filesArray.push(...files.idCardBack);
-        fileTypes.push(...files.idCardBack.map(() => 'idCardBack'));
+      if (safeFiles.idCardBack && safeFiles.idCardBack.length > 0) {
+        filesArray.push(...safeFiles.idCardBack);
+        fileTypes.push(...safeFiles.idCardBack.map(() => 'idCardBack'));
       }
 
       // 添加个人照片
-      if (files.photoFiles && files.photoFiles.length > 0) {
-        filesArray.push(...files.photoFiles);
-        fileTypes.push(...files.photoFiles.map(() => 'personalPhoto'));
+      if (safeFiles.photoFiles && safeFiles.photoFiles.length > 0) {
+        filesArray.push(...safeFiles.photoFiles);
+        fileTypes.push(...safeFiles.photoFiles.map(() => 'personalPhoto'));
       }
 
       // 添加技能证书
-      if (files.certificateFiles && files.certificateFiles.length > 0) {
-        filesArray.push(...files.certificateFiles);
-        fileTypes.push(...files.certificateFiles.map(() => 'certificate'));
+      if (safeFiles.certificateFiles && safeFiles.certificateFiles.length > 0) {
+        filesArray.push(...safeFiles.certificateFiles);
+        fileTypes.push(...safeFiles.certificateFiles.map(() => 'certificate'));
       }
 
       // 添加体检报告
-      if (files.medicalReportFiles && files.medicalReportFiles.length > 0) {
-        filesArray.push(...files.medicalReportFiles);
-        fileTypes.push(...files.medicalReportFiles.map(() => 'medicalReport'));
+      if (safeFiles.medicalReportFiles && safeFiles.medicalReportFiles.length > 0) {
+        filesArray.push(...safeFiles.medicalReportFiles);
+        fileTypes.push(...safeFiles.medicalReportFiles.map(() => 'medicalReport'));
       }
       
       this.logger.debug('更新简历 - 解析后的文件信息:', {
@@ -423,7 +427,21 @@ export class ResumeController {
     @Param('id') id: string,
     @Param('fileId') fileId: string,
   ) {
-    return this.resumeService.removeFile(id, fileId);
+    try {
+      const result = await this.resumeService.removeFile(id, decodeURIComponent(fileId));
+      return {
+        success: true,
+        data: result,
+        message: '删除文件成功'
+      };
+    } catch (error) {
+      this.logger.error(`删除文件失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `删除文件失败: ${error.message}`
+      };
+    }
   }
 
   @Post(':id/upload')
@@ -463,30 +481,6 @@ export class ResumeController {
         success: false,
         data: null,
         message: `上传文件失败: ${error.message}`
-      };
-    }
-  }
-
-  @Delete(':id/files/:fileId')
-  @ApiOperation({ summary: '删除简历文件' })
-  async deleteFile(
-    @Param('id') id: string,
-    @Param('fileId') fileId: string,
-    @Body('type') type: string,
-  ) {
-    try {
-      const result = await this.resumeService.removeFile(id, fileId);
-      return {
-        success: true,
-        data: result,
-        message: '删除文件成功'
-      };
-    } catch (error) {
-      this.logger.error(`删除文件失败: ${error.message}`);
-      return {
-        success: false,
-        data: null,
-        message: `删除文件失败: ${error.message}`
       };
     }
   }

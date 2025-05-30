@@ -140,6 +140,10 @@ export const apiService = {
     return request<T>({ ...config, method: 'PUT', url, data });
   },
   
+  patch: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+    return request<T>({ ...config, method: 'PATCH', url, data });
+  },
+  
   delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
     return request<T>({ ...config, method: 'DELETE', url });
   },

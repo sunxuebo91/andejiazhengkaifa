@@ -1,66 +1,59 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectConnection } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
-import { GridFSBucket, ObjectId } from 'mongodb';
-import { Readable } from 'stream';
+import { CosService } from './cos.service';
+
+interface CosMetadata {
+  'x-cos-meta-mimetype'?: string;
+  'x-cos-meta-size'?: string;
+  'x-cos-meta-uploadtime'?: string;
+  'x-cos-meta-type'?: string;
+}
 
 @Injectable()
 export class UploadService {
   private readonly logger = new Logger(UploadService.name);
-  private bucket: GridFSBucket;
 
-  constructor(@InjectConnection() private connection: Connection) {
-    this.bucket = new GridFSBucket(this.connection.db, {
-      bucketName: 'documents'
-    });
-  }
+  constructor(private readonly cosService: CosService) {}
 
   async uploadFile(file: Express.Multer.File, metadata: any = {}): Promise<string> {
     try {
-      const uploadStream = this.bucket.openUploadStream(file.originalname, {
-        metadata: {
-          ...metadata,
-          mimeType: file.mimetype,
-          size: file.size,
-          uploadTime: new Date(),
-          type: metadata.type || 'other' // 添加文件类型分类
-        }
-      });
-
-      return new Promise((resolve, reject) => {
-        const readable = new Readable();
-        readable._read = () => {}; // _read is required but you can noop it
-        readable.push(file.buffer);
-        readable.push(null);
-
-        readable.pipe(uploadStream)
-          .on('error', (error) => {
-            this.logger.error(`文件上传失败: ${error.message}`);
-            reject(error);
-          })
-          .on('finish', () => {
-            this.logger.log(`文件上传成功: ${uploadStream.id}`);
-            resolve(uploadStream.id.toString());
-          });
-      });
+      // 生成文件存储路径
+      const key = this.cosService.generateFileKey(file.originalname, metadata.type || 'other');
+      
+      // 上传到 COS
+      const fileUrl = await this.cosService.uploadFile(file, key);
+      
+      this.logger.log(`文件上传成功: ${fileUrl}`);
+      return fileUrl;
     } catch (error) {
       this.logger.error(`文件上传过程出错: ${error.message}`);
       throw error;
     }
   }
 
-  async getFile(fileId: string): Promise<{ stream: Readable; metadata: any }> {
+  async getFile(fileUrl: string): Promise<{ url: string; metadata: any }> {
     try {
-      const objectId = new ObjectId(fileId);
-      const files = await this.bucket.find({ _id: objectId }).toArray();
-      if (files.length === 0) {
-        throw new Error('文件不存在');
-      }
-
-      const downloadStream = this.bucket.openDownloadStream(objectId);
+      // 从 URL 中提取文件 key
+      const urlObj = new URL(fileUrl);
+      const key = urlObj.pathname.substring(1); // 移除开头的斜杠
+      
+      // 获取文件元数据
+      const metadata = await this.cosService.getFileInfo(key);
+      
+      // 获取带签名的访问 URL
+      const signedUrl = await this.cosService.getSignedUrl(key);
+      
+      // 从 COS 元数据中提取信息
+      const cosMetadata = metadata.headers as CosMetadata;
+      
       return {
-        stream: downloadStream,
-        metadata: files[0].metadata
+        url: signedUrl,
+        metadata: {
+          filename: key.split('/').pop(),
+          mimeType: cosMetadata['x-cos-meta-mimetype'] || 'application/octet-stream',
+          size: parseInt(cosMetadata['x-cos-meta-size'] || '0', 10),
+          uploadTime: cosMetadata['x-cos-meta-uploadtime'] ? new Date(cosMetadata['x-cos-meta-uploadtime']) : new Date(),
+          type: cosMetadata['x-cos-meta-type'] || key.split('/')[0] // 从元数据或路径中提取类型
+        }
       };
     } catch (error) {
       this.logger.error(`获取文件失败: ${error.message}`);
@@ -68,11 +61,14 @@ export class UploadService {
     }
   }
 
-  async deleteFile(fileId: string): Promise<void> {
+  async deleteFile(fileUrl: string): Promise<void> {
     try {
-      const objectId = new ObjectId(fileId);
-      await this.bucket.delete(objectId);
-      this.logger.log(`文件删除成功: ${fileId}`);
+      // 从 URL 中提取文件 key
+      const urlObj = new URL(fileUrl);
+      const key = urlObj.pathname.substring(1); // 移除开头的斜杠
+      
+      await this.cosService.deleteFile(key);
+      this.logger.log(`文件删除成功: ${fileUrl}`);
     } catch (error) {
       this.logger.error(`文件删除失败: ${error.message}`);
       throw error;

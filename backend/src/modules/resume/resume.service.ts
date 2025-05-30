@@ -234,58 +234,75 @@ export class ResumeService {
   }
 
   async addFileWithType(id: string, file: Express.Multer.File, fileType: string) {
-    const resume = await this.resumeModel.findById(new Types.ObjectId(id));
-    if (!resume) {
-      throw new NotFoundException('简历不存在');
+    try {
+      this.logger.debug(`开始处理文件上传: id=${id}, type=${fileType}, filename=${file.originalname}`);
+      
+      // 验证 ID 格式
+      if (!Types.ObjectId.isValid(id)) {
+        this.logger.error(`无效的简历ID格式: ${id}`);
+        throw new BadRequestException('无效的简历ID格式');
+      }
+
+      const resumeId = new Types.ObjectId(id);
+      const resumeDoc = await this.resumeModel.findById(resumeId);
+      
+      if (!resumeDoc) {
+        this.logger.error(`简历不存在: id=${id}`);
+        throw new NotFoundException('简历不存在');
+      }
+
+      // 上传文件
+      this.logger.debug('开始上传文件到存储服务');
+      const uploadedFileId = await this.uploadService.uploadFile(file, { type: fileType });
+      this.logger.debug(`文件上传成功: fileId=${uploadedFileId}`);
+
+      const uploadedFileInfo = {
+        url: `/api/upload/file/${uploadedFileId}`,
+        filename: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size
+      };
+
+      // 根据文件类型分类存储
+      switch (fileType) {
+        case 'idCardFront':
+          resumeDoc.idCardFront = uploadedFileInfo;
+          break;
+        case 'idCardBack':
+          resumeDoc.idCardBack = uploadedFileInfo;
+          break;
+        case 'personalPhoto':
+          if (!resumeDoc.photoUrls) resumeDoc.photoUrls = [];
+          resumeDoc.photoUrls.push(`/api/upload/file/${uploadedFileId}`);
+          break;
+        case 'certificate':
+          if (!resumeDoc.certificates) resumeDoc.certificates = [];
+          resumeDoc.certificates.push(uploadedFileInfo);
+          if (!resumeDoc.certificateUrls) resumeDoc.certificateUrls = [];
+          resumeDoc.certificateUrls.push(`/api/upload/file/${uploadedFileId}`);
+          break;
+        case 'medicalReport':
+          if (!resumeDoc.reports) resumeDoc.reports = [];
+          resumeDoc.reports.push(uploadedFileInfo);
+          if (!resumeDoc.medicalReportUrls) resumeDoc.medicalReportUrls = [];
+          resumeDoc.medicalReportUrls.push(`/api/upload/file/${uploadedFileId}`);
+          break;
+        default:
+          // 默认归类为个人照片
+          if (!resumeDoc.photoUrls) resumeDoc.photoUrls = [];
+          resumeDoc.photoUrls.push(`/api/upload/file/${uploadedFileId}`);
+          break;
+      }
+
+      this.logger.debug('保存更新后的简历信息');
+      const savedResume = await resumeDoc.save();
+      this.logger.debug('简历更新成功');
+
+      return savedResume;
+    } catch (error) {
+      this.logger.error(`文件上传处理失败: ${error.message}`, error.stack);
+      throw error;
     }
-
-    // 上传文件
-    const fileId = await this.uploadService.uploadFile(file, { type: fileType });
-    const objectId = new Types.ObjectId(fileId);
-    
-    // 添加到fileIds数组
-    resume.fileIds.push(objectId);
-
-    const fileInfo = {
-      url: `/api/upload/file/${fileId}`,
-      filename: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size
-    };
-
-    // 根据文件类型分类存储
-    switch (fileType) {
-      case 'idCardFront':
-        resume.idCardFront = fileInfo;
-        break;
-      case 'idCardBack':
-        resume.idCardBack = fileInfo;
-        break;
-      case 'personalPhoto':
-        resume.personalPhoto = fileInfo;
-        if (!resume.photoUrls) resume.photoUrls = [];
-        resume.photoUrls.push(`/api/upload/file/${fileId}`);
-        break;
-      case 'certificate':
-        if (!resume.certificates) resume.certificates = [];
-        resume.certificates.push(fileInfo);
-        if (!resume.certificateUrls) resume.certificateUrls = [];
-        resume.certificateUrls.push(`/api/upload/file/${fileId}`);
-        break;
-      case 'medicalReport':
-        if (!resume.reports) resume.reports = [];
-        resume.reports.push(fileInfo);
-        if (!resume.medicalReportUrls) resume.medicalReportUrls = [];
-        resume.medicalReportUrls.push(`/api/upload/file/${fileId}`);
-        break;
-      default:
-        // 默认归类为个人照片
-        if (!resume.photoUrls) resume.photoUrls = [];
-        resume.photoUrls.push(`/api/upload/file/${fileId}`);
-        break;
-    }
-
-    return resume.save();
   }
 
   async removeFile(id: string, fileId: string) {

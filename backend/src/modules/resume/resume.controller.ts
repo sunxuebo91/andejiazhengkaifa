@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger, UploadedFile, BadRequestException, Req } from '@nestjs/common';
-import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody, ApiParam } from '@nestjs/swagger';
 import { ResumeService } from './resume.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
@@ -22,27 +22,52 @@ export class ResumeController {
   ) {}
 
   @Post()
-  @UseInterceptors(FilesInterceptor('files'))
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'idCardFront', maxCount: 1 },
+    { name: 'idCardBack', maxCount: 1 },
+    { name: 'photoFiles', maxCount: 10 },
+    { name: 'certificateFiles', maxCount: 10 },
+    { name: 'medicalReportFiles', maxCount: 10 }
+  ]))
   @ApiOperation({ summary: '创建简历' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        files: {
+        idCardFront: {
+          type: 'string',
+          format: 'binary',
+          description: '身份证正面照片'
+        },
+        idCardBack: {
+          type: 'string',
+          format: 'binary',
+          description: '身份证背面照片'
+        },
+        photoFiles: {
           type: 'array',
           items: {
             type: 'string',
             format: 'binary',
           },
+          description: '个人照片'
         },
-        fileTypes: {
+        certificateFiles: {
           type: 'array',
           items: {
             type: 'string',
-            enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport', 'other'],
-            description: '文件类型：idCardFront(身份证正面)、idCardBack(身份证背面)、personalPhoto(个人照片)、certificate(证书)、medicalReport(体检报告)、other(其他)'
-          }
+            format: 'binary',
+          },
+          description: '技能证书'
+        },
+        medicalReportFiles: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+          description: '体检报告'
         },
         title: { type: 'string' },
         content: { type: 'string' },
@@ -51,43 +76,66 @@ export class ResumeController {
   })
   async create(
     @Body() dto: CreateResumeDto,
-    @UploadedFiles() files: Express.Multer.File[] = [],
+    @UploadedFiles() files: { 
+      idCardFront?: Express.Multer.File[],
+      idCardBack?: Express.Multer.File[],
+      photoFiles?: Express.Multer.File[],
+      certificateFiles?: Express.Multer.File[],
+      medicalReportFiles?: Express.Multer.File[]
+    },
     @Req() req,
   ) {
     let resume = null;
     let fileErrors = [];
 
     try {
-      // 从请求体中提取文件类型数组
-      let fileTypes: string[] = [];
-      if (req.body.fileTypes) {
-        if (Array.isArray(req.body.fileTypes)) {
-          fileTypes = req.body.fileTypes;
-        } else if (typeof req.body.fileTypes === 'string') {
-          try {
-            fileTypes = JSON.parse(req.body.fileTypes);
-          } catch {
-            fileTypes = [req.body.fileTypes];
-          }
-        }
-      }
-
-      this.logger.debug('接收到的原始请求数据:', {
-        jobType: dto.jobType,
-        rawBody: req.body,
-        contentType: req.headers['content-type'],
-        fileTypes,
-        filesCount: files?.length || 0
+      this.logger.debug('接收到的文件数据:', {
+        idCardFront: files.idCardFront?.length || 0,
+        idCardBack: files.idCardBack?.length || 0,
+        photoFiles: files.photoFiles?.length || 0,
+        certificateFiles: files.certificateFiles?.length || 0,
+        medicalReportFiles: files.medicalReportFiles?.length || 0,
+        rawBody: Object.keys(req.body),
       });
 
-      const filesArray = files || [];
+      // 将分类的文件重新组合成单一数组，并生成对应的文件类型数组
+      const filesArray: Express.Multer.File[] = [];
+      const fileTypes: string[] = [];
+
+      // 添加身份证正面
+      if (files.idCardFront && files.idCardFront.length > 0) {
+        filesArray.push(...files.idCardFront);
+        fileTypes.push(...files.idCardFront.map(() => 'idCardFront'));
+      }
+
+      // 添加身份证背面
+      if (files.idCardBack && files.idCardBack.length > 0) {
+        filesArray.push(...files.idCardBack);
+        fileTypes.push(...files.idCardBack.map(() => 'idCardBack'));
+      }
+
+      // 添加个人照片
+      if (files.photoFiles && files.photoFiles.length > 0) {
+        filesArray.push(...files.photoFiles);
+        fileTypes.push(...files.photoFiles.map(() => 'personalPhoto'));
+      }
+
+      // 添加技能证书
+      if (files.certificateFiles && files.certificateFiles.length > 0) {
+        filesArray.push(...files.certificateFiles);
+        fileTypes.push(...files.certificateFiles.map(() => 'certificate'));
+      }
+
+      // 添加体检报告
+      if (files.medicalReportFiles && files.medicalReportFiles.length > 0) {
+        filesArray.push(...files.medicalReportFiles);
+        fileTypes.push(...files.medicalReportFiles.map(() => 'medicalReport'));
+      }
       
-      this.logger.debug('解析后的 DTO 对象:', {
+      this.logger.debug('解析后的文件信息:', {
         jobType: dto.jobType,
-        jobTypeType: typeof dto.jobType,
-        dtoKeys: Object.keys(dto),
-        fileTypesLength: fileTypes.length,
-        filesLength: filesArray.length
+        filesCount: filesArray.length,
+        fileTypes: fileTypes
       });
 
       // 尝试创建简历
@@ -234,43 +282,81 @@ export class ResumeController {
   }
 
   @Patch(':id')
-  @UseInterceptors(FilesInterceptor('files'))
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'idCardFront', maxCount: 1 },
+    { name: 'idCardBack', maxCount: 1 },
+    { name: 'photoFiles', maxCount: 10 },
+    { name: 'certificateFiles', maxCount: 10 },
+    { name: 'medicalReportFiles', maxCount: 10 }
+  ]))
   @ApiOperation({ summary: '更新简历' })
   @ApiConsumes('multipart/form-data')
   @ApiResponse({ status: 200, description: '更新成功' })
-  @Patch(':id')
-  @UseInterceptors(FilesInterceptor('files'))
   async update(
     @Param('id') id: string,
     @Body() updateResumeDto: UpdateResumeDto,
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles() files: { 
+      idCardFront?: Express.Multer.File[],
+      idCardBack?: Express.Multer.File[],
+      photoFiles?: Express.Multer.File[],
+      certificateFiles?: Express.Multer.File[],
+      medicalReportFiles?: Express.Multer.File[]
+    },
     @Req() req: any,
   ) {
     try {
-      console.log('更新简历 - 请求体:', req.body);
-      console.log('更新简历 - DTO验证后:', updateResumeDto);
-      
-      // 处理 fileTypes
-      let fileTypes: string[] = [];
-      if (req.body.fileTypes) {
-        if (typeof req.body.fileTypes === 'string') {
-          try {
-            fileTypes = JSON.parse(req.body.fileTypes);
-          } catch {
-            fileTypes = [req.body.fileTypes];
-          }
-        } else if (Array.isArray(req.body.fileTypes)) {
-          fileTypes = req.body.fileTypes;
-        }
+      this.logger.debug('更新简历 - 接收到的文件数据:', {
+        idCardFront: files.idCardFront?.length || 0,
+        idCardBack: files.idCardBack?.length || 0,
+        photoFiles: files.photoFiles?.length || 0,
+        certificateFiles: files.certificateFiles?.length || 0,
+        medicalReportFiles: files.medicalReportFiles?.length || 0,
+        rawBody: Object.keys(req.body),
+      });
+
+      // 将分类的文件重新组合成单一数组，并生成对应的文件类型数组
+      const filesArray: Express.Multer.File[] = [];
+      const fileTypes: string[] = [];
+
+      // 添加身份证正面
+      if (files.idCardFront && files.idCardFront.length > 0) {
+        filesArray.push(...files.idCardFront);
+        fileTypes.push(...files.idCardFront.map(() => 'idCardFront'));
+      }
+
+      // 添加身份证背面
+      if (files.idCardBack && files.idCardBack.length > 0) {
+        filesArray.push(...files.idCardBack);
+        fileTypes.push(...files.idCardBack.map(() => 'idCardBack'));
+      }
+
+      // 添加个人照片
+      if (files.photoFiles && files.photoFiles.length > 0) {
+        filesArray.push(...files.photoFiles);
+        fileTypes.push(...files.photoFiles.map(() => 'personalPhoto'));
+      }
+
+      // 添加技能证书
+      if (files.certificateFiles && files.certificateFiles.length > 0) {
+        filesArray.push(...files.certificateFiles);
+        fileTypes.push(...files.certificateFiles.map(() => 'certificate'));
+      }
+
+      // 添加体检报告
+      if (files.medicalReportFiles && files.medicalReportFiles.length > 0) {
+        filesArray.push(...files.medicalReportFiles);
+        fileTypes.push(...files.medicalReportFiles.map(() => 'medicalReport'));
       }
       
-      console.log('更新简历 - 文件类型:', fileTypes);
-      console.log('更新简历 - 上传文件数量:', files?.length || 0);
+      this.logger.debug('更新简历 - 解析后的文件信息:', {
+        filesCount: filesArray.length,
+        fileTypes: fileTypes
+      });
       
       const result = await this.resumeService.updateWithFiles(
         id,
         updateResumeDto,
-        files || [],
+        filesArray,
         fileTypes,
       );
       
@@ -404,12 +490,4 @@ export class ResumeController {
       };
     }
   }
-  // 删除从这里开始的重复代码：
-  // @Patch(':id')
-  // async update(
-  //   @Param('id') id: string,
-  //   @Body() updateResumeDto: UpdateResumeDto,
-  // ) {
-  //   ...
-  // }
 }

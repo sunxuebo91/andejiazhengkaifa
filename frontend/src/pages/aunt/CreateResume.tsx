@@ -3,7 +3,7 @@ import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typograph
 import { useState, useEffect } from 'react';
 import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { UploadFile, RcFile } from 'antd/es/upload/interface';
+import type { UploadFile, RcFile, UploadProps } from 'antd/es/upload/interface';
 import type { UploadChangeParam } from 'antd/es/upload';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -219,6 +219,20 @@ const uploadButton = (
   </div>
 );
 
+// 定义预览状态类型
+interface PreviewState {
+  visible: boolean;
+  image: string;
+  title: string;
+}
+
+// 定义文件上传状态类型
+interface FileUploadState {
+  photo: { files: CustomUploadFile[] };
+  certificate: { files: CustomUploadFile[] };
+  medical: { files: CustomUploadFile[] };
+}
+
 const CreateResume: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
@@ -234,11 +248,7 @@ const CreateResume: React.FC = () => {
   const [photoFiles, setPhotoFiles] = useState<CustomUploadFile[]>([]);
   const [certificateFiles, setCertificateFiles] = useState<CustomUploadFile[]>([]);
   const [medicalReportFiles, setMedicalReportFiles] = useState<CustomUploadFile[]>([]);
-  const [previewState, setPreviewState] = useState<{
-    visible: boolean;
-    image: string;
-    title: string;
-  }>({
+  const [previewState, setPreviewState] = useState<PreviewState>({
     visible: false,
     image: '',
     title: ''
@@ -305,101 +315,101 @@ const CreateResume: React.FC = () => {
       }
     };
 
-  // 修改文件预览处理函数
-  const handlePreview = (file: CustomUploadFile, setPreviewState: (state: any) => void) => {
-    if (!file) return;
-
-    if (file.type === 'application/pdf') {
-      // PDF文件在新窗口打开
-      window.open(file.url, '_blank');
-    } else {
-      // 图片文件在Modal中预览
-      setPreviewState({
-        visible: true,
-        image: file.url || '',
-        title: file.name
-      });
+  // 修改预览处理函数
+  const handlePreview = (file: UploadFile) => {
+    if (!file.url && !file.preview && file.originFileObj) {
+      file.preview = URL.createObjectURL(file.originFileObj);
     }
+    setPreviewState({
+      visible: true,
+      image: file.url || (file.preview as string) || '',
+      title: file.name || file.url?.substring(file.url.lastIndexOf('/') + 1) || ''
+    });
   };
 
-  // 添加文件上传相关的类型定义
-  interface FileUploadState {
-    files: CustomUploadFile[];
-    existingUrls: string[];
-    pdfCount: number;
-  }
-
-  // 修改文件上传状态管理
-  const [fileUploadState, setFileUploadState] = useState<{
-    photo: FileUploadState;
-    certificate: FileUploadState;
-    medical: FileUploadState;
-  }>({
-    photo: {
-      files: [],
-      existingUrls: [],
-      pdfCount: 0
-    },
-    certificate: {
-      files: [],
-      existingUrls: [],
-      pdfCount: 0
-    },
-    medical: {
-      files: [],
-      existingUrls: [],
-      pdfCount: 0
-    }
-  });
-
   // 修改文件移除处理函数
-  const handleFileRemove = (type: 'photo' | 'certificate' | 'medical') => 
-    (file: UploadFile<any>) => {
-      const customFile = file as CustomUploadFile;
-      setFileUploadState(prev => {
-        const currentState = prev[type];
-        if (customFile.isExisting) {
-          return {
-            ...prev,
-            [type]: {
-              ...currentState,
-              existingUrls: currentState.existingUrls.filter(url => url !== customFile.url)
-            }
-          };
-        } else {
-          return {
-            ...prev,
-            [type]: {
-              ...currentState,
-              files: currentState.files.filter(f => f.uid !== customFile.uid),
-              pdfCount: type === 'medical' && customFile.type === 'application/pdf' ? 
-                currentState.pdfCount - 1 : 
-                currentState.pdfCount
-            }
-          };
-        }
-      });
-      return true;
-    };
+  const handleRemoveFile = (type: 'photo' | 'certificate' | 'medical') => (file: UploadFile) => {
+    setFileUploadState(prev => ({
+      ...prev,
+      [type]: {
+        ...prev[type],
+        files: prev[type]?.files.filter(f => f.uid !== file.uid) || []
+      }
+    }));
+  };
 
-  // 修改文件上传组件的渲染
-  const renderUploadList = (type: 'photo' | 'certificate' | 'medical') => {
-    const files = type === 'photo' ? fileUploadState.photo.files :
-                 type === 'certificate' ? fileUploadState.certificate.files :
-                 fileUploadState.medical.files;
-    const maxCount = type === 'medical' ? FILE_UPLOAD_CONFIG.maxMedicalReportCount :
-                    type === 'certificate' ? FILE_UPLOAD_CONFIG.maxCertificateCount :
-                    FILE_UPLOAD_CONFIG.maxPhotoCount;
-    
-    const isMaxReached = files.length >= maxCount ||
-                        (type === 'medical' && fileUploadState.medical.pdfCount >= FILE_UPLOAD_CONFIG.maxMedicalPdfCount);
+  // 修改文件上传列表渲染函数
+  const renderUploadList = (type: keyof FileUploadState) => {
+    const currentFiles = fileUploadState[type].files;
+    const isMaxReached = (() => {
+      switch (type) {
+        case 'photo':
+          return currentFiles.length >= FILE_UPLOAD_CONFIG.maxPhotoCount;
+        case 'certificate':
+          return currentFiles.length >= FILE_UPLOAD_CONFIG.maxCertificateCount;
+        case 'medical':
+          return currentFiles.length >= FILE_UPLOAD_CONFIG.maxMedicalReportCount;
+        default:
+          return false;
+      }
+    })();
 
     return (
-      <Upload<CustomUploadFile>
+      <Upload
         listType="picture-card"
-        fileList={files}
-        onRemove={handleFileRemove(type)}
-        beforeUpload={() => false}
+        fileList={currentFiles}
+        onPreview={handlePreview}
+        onRemove={handleRemoveFile(type)}
+        beforeUpload={async (file) => {
+          // 移除"先保存基本信息"的限制
+          const formData = new FormData();
+          formData.append('file', file);
+          
+          // 如果是编辑模式且有简历ID，直接上传
+          if (editingResume?._id) {
+            try {
+              const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
+              if (response.success) {
+                const newFile = { 
+                  uid: file.uid, 
+                  name: file.name, 
+                  url: response.data?.url, 
+                  status: "done", 
+                  originFileObj: file 
+                };
+                setFileUploadState(prev => ({ 
+                  ...prev, 
+                  [type]: { 
+                    ...prev[type], 
+                    files: [...prev[type].files, newFile] 
+                  } 
+                }));
+                messageApi.success(`${file.name} 上传成功`);
+              } else {
+                messageApi.error(response.message || "上传失败");
+              }
+            } catch (err) {
+              console.error("上传文件时出错", err);
+              messageApi.error("上传文件时出错");
+            }
+          } else {
+            // 如果是新建模式，将文件添加到待上传列表
+            const newFile = { 
+              uid: file.uid, 
+              name: file.name, 
+              status: "done", 
+              originFileObj: file 
+            };
+            setFileUploadState(prev => ({ 
+              ...prev, 
+              [type]: { 
+                ...prev[type], 
+                files: [...prev[type].files, newFile] 
+              } 
+            }));
+          }
+          return false; // 阻止 antd Upload 自动上传
+        }}
         onChange={handleFileChange(type)}
         accept={type === 'medical' ? '.jpg,.jpeg,.png,.pdf' : '.jpg,.jpeg,.png'}
         multiple
@@ -874,12 +884,12 @@ const CreateResume: React.FC = () => {
     return null;
   };
 
-  // 修改 handleSubmit 函数
+  // 修改 handleSubmit 函数，一次性提交所有信息
   const handleSubmit = async (values: FormValues) => {
     try {
       setSubmitting(true);
       
-      // 获取文件对象并确保类型正确
+      // 获取所有文件对象
       const frontFile = (idCardFiles.front[0] as CustomUploadFile)?.originFileObj;
       const backFile = (idCardFiles.back[0] as CustomUploadFile)?.originFileObj;
       const photoFileList = (photoFiles as CustomUploadFile[])
@@ -892,61 +902,53 @@ const CreateResume: React.FC = () => {
         .map(file => file.originFileObj)
         .filter((file): file is RcFile => file !== undefined);
       
-      // 构建 ResumeFormData 对象
-      const resumeData: ResumeFormData = {
-        name: values.name,
-        age: values.age,
-        phone: values.phone,
-        gender: values.gender,
-        nativePlace: values.nativePlace,
-        jobType: values.jobType,
-        education: values.education,
-        experienceYears: values.experienceYears,
-        idNumber: values.idNumber,
-        wechat: values.wechat,
-        currentAddress: values.currentAddress,
-        hukouAddress: values.hukouAddress,
-        birthDate: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : undefined,
-        medicalExamDate: values.medicalExamDate ? dayjs(values.medicalExamDate).format('YYYY-MM-DD') : undefined,
-        ethnicity: values.ethnicity,
-        zodiac: values.zodiac,
-        zodiacSign: values.zodiacSign,
-        expectedSalary: values.expectedSalary,
-        serviceArea: values.serviceArea,
-        orderStatus: values.orderStatus,
-        skills: values.skills,
-        leadSource: values.leadSource,
-        workExperience: values.workExperiences?.map(exp => ({
-          startDate: exp.startDate || '',
-          endDate: exp.endDate || '',
-          description: exp.description || '',
-          company: exp.company,
-          position: exp.position
-        })) || [],
-        // 添加文件字段
-        idCardFront: frontFile as unknown as File,
-        idCardBack: backFile as unknown as File,
-        photoFiles: photoFileList as unknown as File[],
-        certificateFiles: certificateFileList as unknown as File[],
-        medicalReportFiles: medicalReportFileList as unknown as File[]
-      };
+      // 构建完整的表单数据
+      const formData = new FormData();
+      
+      // 添加基本信息
+      Object.entries(values).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          if (Array.isArray(value) || typeof value === 'object') {
+            formData.append(key, JSON.stringify(value));
+          } else {
+            formData.append(key, value.toString());
+          }
+        }
+      });
 
+      // 添加所有文件
+      if (frontFile) formData.append('idCardFront', frontFile);
+      if (backFile) formData.append('idCardBack', backFile);
+      photoFileList.forEach(file => formData.append('photoFiles', file));
+      certificateFileList.forEach(file => formData.append('certificateFiles', file));
+      medicalReportFileList.forEach(file => formData.append('medicalReportFiles', file));
+
+      // 使用 apiService 进行一次性提交所有数据
       let response;
-      if (editingResume?.id) {
-        response = await resumeService.update(editingResume.id, resumeData);
+      if (editingResume?._id) {
+        response = await apiService.upload(`/api/resumes/${editingResume._id}`, formData, 'PUT');
       } else {
-        response = await resumeService.create(resumeData);
+        response = await apiService.upload('/api/resumes', formData, 'POST');
       }
-
-      if (response?.success) {
-        messageApi.success(editingResume ? '简历更新成功' : '简历创建成功');
-        navigate('/aunt/list');  // 修改为正确的路由路径
+      
+      console.log('API响应:', response); // 添加调试日志
+      
+      if (response.success) {
+        const successMessage = editingResume ? '简历更新成功' : '简历创建成功';
+        console.log('显示成功消息:', successMessage); // 添加调试日志
+        messageApi.success(successMessage);
+        
+        // 等待一下让用户看到成功消息，然后跳转
+        setTimeout(() => {
+          navigate('/aunt/list');
+        }, 1500);
       } else {
-        throw new Error(response?.message || '操作失败');
+        throw new Error(response.message || '操作失败');
       }
-    } catch (error: any) {
-      console.error('提交简历失败:', error);
-      messageApi.error(error.message || '提交失败，请重试');
+    } catch (error: unknown) {
+      console.error('提交失败:', error);
+      const errorMessage = error instanceof Error ? error.message : '提交失败，请重试';
+      messageApi.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -1046,6 +1048,13 @@ const CreateResume: React.FC = () => {
       />
     </Form.Item>
   );
+
+  // 修改文件上传状态管理
+  const [fileUploadState, setFileUploadState] = useState<FileUploadState>({
+    photo: { files: [] },
+    certificate: { files: [] },
+    medical: { files: [] }
+  });
 
   return (
     <PageContainer
@@ -1726,7 +1735,7 @@ const CreateResume: React.FC = () => {
               if (editingResume) {
                 localStorage.removeItem('editingResume');
               }
-              navigate(-1);
+              navigate('/aunt/list');
             }}>
               取消
             </Button>

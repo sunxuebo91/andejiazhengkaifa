@@ -10,15 +10,16 @@ const { TextArea } = Input;
 const { Option } = Select;
 
 // 接单状态映射
-const orderStatusMap: Record<string, { text: string; color: string }> = {
-  accepting: { text: '想接单', color: 'green' },
-  'not-accepting': { text: '不接单', color: 'red' },
-  'on-service': { text: '已上户', color: 'blue' }
+const orderStatusMap: Record<string, { text: string; color: string; icon: string }> = {
+  accepting: { text: '想接单', color: '#52c41a', icon: '🟢' },
+  'not-accepting': { text: '不接单', color: '#ff4d4f', icon: '🔴' },
+  'on-service': { text: '已上户', color: '#1890ff', icon: '🔵' }
 };
 
 // 类型定义
 interface SearchParams {
   keyword?: string;
+  orderStatus?: keyof typeof orderStatusMap;
 }
 
 interface ResumeData {
@@ -48,6 +49,7 @@ const ResumeList = () => {
   const [loading, setLoading] = useState(false);
   const [resumeList, setResumeList] = useState<ResumeData[]>([]);
   const [total, setTotal] = useState(0);
+  const [activeStatusFilter, setActiveStatusFilter] = useState<keyof typeof orderStatusMap | undefined>(undefined);
   
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -61,6 +63,11 @@ const ResumeList = () => {
       
       // 记录搜索关键词用于前端过滤
       const searchKeyword = apiParams.keyword ? apiParams.keyword.toLowerCase() : '';
+      
+      // 确保orderStatus参数被正确传递
+      if (apiParams.orderStatus) {
+        apiParams.orderStatus = apiParams.orderStatus;
+      }
       
       console.log('开始请求简历列表，参数:', apiParams);
       // 使用正确的API路径和参数格式
@@ -103,7 +110,7 @@ const ResumeList = () => {
           formattedId,
           hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
         };
-      }).filter(Boolean); // 过滤掉无效数据
+      }).filter(Boolean);
       
       // 如果有搜索关键词，在前端进行过滤
       if (searchKeyword) {
@@ -190,10 +197,21 @@ const ResumeList = () => {
     setCurrentPage(1); // 重置到第一页
   };
 
+  // 处理状态筛选
+  const handleStatusFilter = (status: keyof typeof orderStatusMap | undefined) => {
+    setActiveStatusFilter(status);
+    setSearchParams(prev => ({
+      ...prev,
+      orderStatus: status
+    }));
+    setCurrentPage(1); // Reset to first page when filter changes
+  };
+
   // 重置搜索
   const handleReset = () => {
     form.resetFields();
     setSearchParams({});
+    setActiveStatusFilter(undefined);
     setCurrentPage(1);
   };
 
@@ -366,7 +384,6 @@ const ResumeList = () => {
             type="primary" 
             icon={<PlusOutlined />}
             onClick={() => {
-              // 清除之前保存的编辑数据，确保是新建模式
               localStorage.removeItem('editingResume');
               navigate('/aunt/create-resume');
             }}
@@ -387,6 +404,76 @@ const ResumeList = () => {
         >
           <Form.Item name="keyword" label="关键词">
             <Input placeholder="请输入姓名、手机号、身份证号或简历ID" allowClear />
+          </Form.Item>
+
+          <Form.Item label="接单状态" style={{ marginBottom: 0 }}>
+            <Select
+              style={{ 
+                width: 140,
+                borderRadius: '6px'
+              }}
+              placeholder={
+                <span style={{ color: '#666' }}>
+                  <span style={{ marginRight: 8 }}>📋</span>
+                  选择状态
+                </span>
+              }
+              value={activeStatusFilter}
+              onChange={handleStatusFilter}
+              allowClear
+              dropdownStyle={{ 
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+              }}
+              options={[
+                { 
+                  value: undefined, 
+                  label: (
+                    <span style={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      padding: '4px 0'
+                    }}>
+                      <span style={{ marginRight: 8 }}>📋</span>
+                      全部状态
+                    </span>
+                  )
+                },
+                ...Object.entries(orderStatusMap).map(([status, { text, color, icon }]) => ({
+                  value: status,
+                  label: (
+                    <span style={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      padding: '4px 0',
+                      color: activeStatusFilter === status ? color : 'inherit'
+                    }}>
+                      <span style={{ 
+                        marginRight: 8,
+                        fontSize: '14px'
+                      }}>
+                        {icon}
+                      </span>
+                      {text}
+                    </span>
+                  )
+                }))
+              ]}
+              optionLabelProp="label"
+              dropdownRender={menu => (
+                <div>
+                  <div style={{ 
+                    padding: '8px 12px', 
+                    borderBottom: '1px solid #f0f0f0',
+                    color: '#666',
+                    fontSize: '12px'
+                  }}>
+                    选择接单状态进行筛选
+                  </div>
+                  {menu}
+                </div>
+              )}
+            />
           </Form.Item>
           
           <Form.Item>

@@ -14,9 +14,9 @@ import BaiduMapCard from '../../components/BaiduMapCard';
 import apiService from '../../services/api';
 import type { ApiResponse } from '../../services/api';
 import { ImageService } from '../../services/imageService';
-import { Gender, GenderType, JobType, Education, FormValues, WorkExperience } from '../../types/resume';
+import { Gender, JobType, Education, FormValues, WorkExperience } from '../../types/resume';
 import type { Resume } from '../../services/resume.service';
-import { isLoggedIn } from '@/services/auth';
+import { isLoggedIn } from '../../services/auth';
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
 dayjs.extend(isSameOrBefore);

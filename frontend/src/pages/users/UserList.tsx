@@ -47,7 +47,7 @@ const UserList: React.FC = () => {
   const fetchUsers = async (page: number = 1, size: number = 10, search?: string) => {
     try {
       setLoading(true);
-      const response = await apiService.get<UserListData>('/users', {
+      const response = await apiService.get<UserListData>('/api/users', {
         page,
         pageSize: size,
         search
@@ -72,7 +72,7 @@ const UserList: React.FC = () => {
   // 删除用户
   const handleDelete = async (id: string) => {
     try {
-      const response = await apiService.delete(`/users/${id}`);
+      const response = await apiService.delete(`/api/users/${id}`);
 
       if (response.success) {
         message.success('删除用户成功');

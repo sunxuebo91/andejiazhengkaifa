@@ -33,7 +33,7 @@ const EditUser: React.FC = () => {
       
       setLoading(true);
       try {
-        const response = await apiService.get(`/users/${id}`);
+        const response = await apiService.get(`/api/users/${id}`);
 
         if (response.success && response.data) {
           const user = response.data;
@@ -64,7 +64,7 @@ const EditUser: React.FC = () => {
     if (!id) return Promise.reject(new Error('用户ID不存在'));
     
     try {
-      const response = await apiService.patch(`/users/${id}`, values);
+      const response = await apiService.patch(`/api/users/${id}`, values);
 
       if (response.success) {
         console.log('更新用户成功:', response);

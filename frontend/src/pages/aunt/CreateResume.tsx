@@ -345,11 +345,32 @@ const CreateResume: React.FC = () => {
     if (!file.url && !file.preview && file.originFileObj) {
       file.preview = URL.createObjectURL(file.originFileObj);
     }
-    setPreviewState({
-      visible: true,
-      image: file.url || (file.preview as string) || '',
-      title: file.name || file.url?.substring(file.url.lastIndexOf('/') + 1) || ''
-    });
+    
+    const fileUrl = file.url || (file.preview as string) || '';
+    const fileName = file.name || file.url?.substring(file.url.lastIndexOf('/') + 1) || '';
+    
+    // 判断是否为PDF文件
+    const isPdf = file.type === 'application/pdf' || 
+                  fileName.toLowerCase().endsWith('.pdf') || 
+                  fileUrl.toLowerCase().includes('.pdf');
+    
+    if (isPdf) {
+      // PDF文件直接下载，不预览
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = fileName;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      // 图片文件预览
+      setPreviewState({
+        visible: true,
+        image: fileUrl,
+        title: fileName
+      });
+    }
   };
 
   // 修改文件移除处理函数
@@ -1878,8 +1899,9 @@ const CreateResume: React.FC = () => {
       
       <Modal
         open={previewState.visible}
-        title={previewState.title}
+        title={previewState.title ? `预览图片 - ${previewState.title}` : '预览图片'}
         footer={null}
+        width={800}
         onCancel={() => setPreviewState(prev => ({ ...prev, visible: false }))}
       >
         <img alt="预览图片" style={{ width: '100%' }} src={previewState.image} />

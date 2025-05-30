@@ -28,7 +28,7 @@ export interface Resume {
   orderStatus?: string;
   skills?: string[];
   leadSource?: string;
-  workExperience?: { 
+  workExperiences?: { 
     startDate: string; 
     endDate: string; 
     description: string;

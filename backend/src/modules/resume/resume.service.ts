@@ -46,7 +46,6 @@ export class ResumeService {
 
     // 确保files是数组
     const filesArray = Array.isArray(files) ? files : [];
-    const fileIds: Types.ObjectId[] = [];
     const fileUploadErrors: string[] = [];
     
     // 分类存储文件信息
@@ -69,13 +68,14 @@ export class ResumeService {
         
         if (file) {  // 确保文件存在
           try {
-            const fileId = await this.uploadService.uploadFile(file, { type: fileType });
-            if (fileId) {
-              const objectId = new Types.ObjectId(fileId);
-              fileIds.push(objectId);
+            // uploadService.uploadFile 返回完整的COS URL
+            const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
+            
+            if (fileUrl) {
+              this.logger.debug(`文件上传成功，URL: ${fileUrl}`);
               
               const fileInfo = {
-                url: `/api/upload/file/${fileId}`,
+                url: fileUrl,  // 直接使用返回的完整URL
                 filename: file.originalname,
                 mimetype: file.mimetype,
                 size: file.size
@@ -90,19 +90,19 @@ export class ResumeService {
                   categorizedFiles.idCardBack = fileInfo;
                   break;
                 case 'personalPhoto':
-                  categorizedFiles.photoUrls.push(`/api/upload/file/${fileId}`);
+                  categorizedFiles.photoUrls.push(fileUrl);
                   break;
                 case 'certificate':
                   categorizedFiles.certificates.push(fileInfo);
-                  categorizedFiles.certificateUrls.push(`/api/upload/file/${fileId}`);
+                  categorizedFiles.certificateUrls.push(fileUrl);
                   break;
                 case 'medicalReport':
                   categorizedFiles.reports.push(fileInfo);
-                  categorizedFiles.medicalReportUrls.push(`/api/upload/file/${fileId}`);
+                  categorizedFiles.medicalReportUrls.push(fileUrl);
                   break;
                 default:
                   // 默认归类为个人照片
-                  categorizedFiles.photoUrls.push(`/api/upload/file/${fileId}`);
+                  categorizedFiles.photoUrls.push(fileUrl);
                   break;
               }
             }
@@ -117,7 +117,7 @@ export class ResumeService {
     // 创建简历对象
     const resumeData = {
       ...createResumeDto,
-      fileIds,
+      fileIds: [], // 暂时清空fileIds，因为我们现在直接使用URL
       idCardFront: categorizedFiles.idCardFront,
       idCardBack: categorizedFiles.idCardBack,
       photoUrls: categorizedFiles.photoUrls,
@@ -131,10 +131,20 @@ export class ResumeService {
       const resume = new this.resumeModel(resumeData);
       const savedResume = await resume.save();
       
+      this.logger.log(`简历创建成功，文件信息: ${JSON.stringify({
+        idCardFront: !!savedResume.idCardFront,
+        idCardBack: !!savedResume.idCardBack,
+        photoCount: savedResume.photoUrls?.length || 0,
+        certificateCount: savedResume.certificates?.length || 0,
+        reportCount: savedResume.reports?.length || 0
+      })}`);
+      
       return {
         success: true,
         data: savedResume,
-        message: '简历创建成功'
+        message: fileUploadErrors.length > 0 
+          ? `简历创建成功，但部分文件上传失败: ${fileUploadErrors.join(', ')}`
+          : '简历创建成功'
       };
     } catch (error) {
       this.logger.error('保存简历失败:', error);
@@ -251,13 +261,13 @@ export class ResumeService {
         throw new NotFoundException('简历不存在');
       }
 
-      // 上传文件
+      // 上传文件，获取完整的COS URL
       this.logger.debug('开始上传文件到存储服务');
-      const uploadedFileId = await this.uploadService.uploadFile(file, { type: fileType });
-      this.logger.debug(`文件上传成功: fileId=${uploadedFileId}`);
+      const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
+      this.logger.debug(`文件上传成功: fileUrl=${fileUrl}`);
 
       const uploadedFileInfo = {
-        url: `/api/upload/file/${uploadedFileId}`,
+        url: fileUrl,  // 直接使用返回的完整URL
         filename: file.originalname,
         mimetype: file.mimetype,
         size: file.size
@@ -273,24 +283,24 @@ export class ResumeService {
           break;
         case 'personalPhoto':
           if (!resumeDoc.photoUrls) resumeDoc.photoUrls = [];
-          resumeDoc.photoUrls.push(`/api/upload/file/${uploadedFileId}`);
+          resumeDoc.photoUrls.push(fileUrl);
           break;
         case 'certificate':
           if (!resumeDoc.certificates) resumeDoc.certificates = [];
           resumeDoc.certificates.push(uploadedFileInfo);
           if (!resumeDoc.certificateUrls) resumeDoc.certificateUrls = [];
-          resumeDoc.certificateUrls.push(`/api/upload/file/${uploadedFileId}`);
+          resumeDoc.certificateUrls.push(fileUrl);
           break;
         case 'medicalReport':
           if (!resumeDoc.reports) resumeDoc.reports = [];
           resumeDoc.reports.push(uploadedFileInfo);
           if (!resumeDoc.medicalReportUrls) resumeDoc.medicalReportUrls = [];
-          resumeDoc.medicalReportUrls.push(`/api/upload/file/${uploadedFileId}`);
+          resumeDoc.medicalReportUrls.push(fileUrl);
           break;
         default:
           // 默认归类为个人照片
           if (!resumeDoc.photoUrls) resumeDoc.photoUrls = [];
-          resumeDoc.photoUrls.push(`/api/upload/file/${uploadedFileId}`);
+          resumeDoc.photoUrls.push(fileUrl);
           break;
       }
 
@@ -398,7 +408,6 @@ export class ResumeService {
   
     // 处理文件上传
     const categorizedFiles: any = {};
-    const fileIds = [...(resume.fileIds || [])];
     const filesArray = Array.isArray(files) ? files : [];
     const fileTypesArray = Array.isArray(fileTypes) ? fileTypes : [];
   
@@ -407,13 +416,13 @@ export class ResumeService {
       const file = filesArray[i];
       const fileType = fileTypesArray[i] || 'personalPhoto'; // 默认为个人照片
   
-      // 上传文件
-      const fileId = await this.uploadService.uploadFile(file, { type: fileType });
-      const objectId = new Types.ObjectId(fileId);
-      fileIds.push(objectId);
+      // 上传文件，获取完整的COS URL
+      const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
+      
+      this.logger.debug(`更新简历文件上传成功，URL: ${fileUrl}`);
   
       const fileInfo = {
-        url: `/api/upload/file/${fileId}`,
+        url: fileUrl,  // 直接使用返回的完整URL
         filename: file.originalname,
         mimetype: file.mimetype,
         size: file.size
@@ -428,9 +437,6 @@ export class ResumeService {
   
     // 更新简历基本信息
     Object.assign(resume, updateResumeDto);
-    
-    // 更新文件ID列表
-    resume.fileIds = fileIds;
     
     // 更新分类文件信息
     Object.keys(categorizedFiles).forEach(type => {
@@ -468,6 +474,14 @@ export class ResumeService {
   
     // 保存更新后的简历
     const savedResume = await resume.save();
+    
+    this.logger.log(`简历更新成功，文件信息: ${JSON.stringify({
+      idCardFront: !!savedResume.idCardFront,
+      idCardBack: !!savedResume.idCardBack,
+      photoCount: savedResume.photoUrls?.length || 0,
+      certificateCount: savedResume.certificates?.length || 0,
+      reportCount: savedResume.reports?.length || 0
+    })}`);
     
     return {
       success: true,

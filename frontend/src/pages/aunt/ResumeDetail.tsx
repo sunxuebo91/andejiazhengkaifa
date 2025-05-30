@@ -602,9 +602,9 @@ const ResumeDetail = () => {
   };
 
   // 改进的文件预览渲染函数
-  const renderFilePreview = (file: FileInfo | string, index: number) => {
+  const renderFilePreview = (file: FileInfo | string, index: number, context: string = 'file') => {
     if (typeof file === 'string') {
-      return renderLegacyFilePreview(file, index);
+      return renderLegacyFilePreview(file, index, context);
     }
 
     // 处理FileInfo对象，使用url字段而不是fileId
@@ -613,24 +613,103 @@ const ResumeDetail = () => {
     const isPdf = isPdfFile(file);
     const uniqueKey = `file-${file.fileId || index}-${index}`;
 
-    // 如果 fileUrl 为空或无效，则直接不渲染任何内容
+    // 如果 fileUrl 为空或无效，则显示错误提示
     if (!fileUrl) {
-      console.log('文件URL无效，跳过渲染:', file);
-      return null;
+      console.log('文件URL无效，显示错误提示:', file);
+      return (
+        <div key={uniqueKey} style={{ 
+          display: 'inline-block', 
+          margin: '8px', 
+          padding: '20px',
+          border: '1px dashed #ff4d4f',
+          borderRadius: '6px',
+          color: '#ff4d4f',
+          textAlign: 'center',
+          minWidth: '150px'
+        }}>
+          <p>文件URL无效</p>
+          <small>{file.filename || '未知文件'}</small>
+        </div>
+      );
     }
+
+    // 根据上下文生成PDF文件名
+    const getPdfDisplayName = (context: string) => {
+      switch (context) {
+        case 'certificate':
+          return '证书PDF文件';
+        case 'report':
+          return '体检报告PDF文件';
+        case 'idCard':
+          return '身份证PDF文件';
+        default:
+          return 'PDF文件';
+      }
+    };
+
+    // 处理文件下载
+    const handleDownload = (url: string, filename?: string) => {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || 'download';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
 
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
         {isPdf ? (
-          <div style={{ position: 'relative' }}>
-            <Button
-              type="primary"
-              icon={<FilePdfOutlined />}
-              onClick={() => handlePreview(fileUrl)}
-              style={{ height: '60px', width: '120px' }}
-            >
-              {file.filename || '查看文件'}
-            </Button>
+          <div style={{ 
+            position: 'relative',
+            width: '200px',
+            height: '200px',
+            border: '2px dashed #1890ff',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+          onClick={() => handleDownload(fileUrl, file.filename)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#40a9ff';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(24, 144, 255, 0.15)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#1890ff';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          >
+            <FilePdfOutlined style={{ 
+              fontSize: '48px', 
+              color: '#1890ff',
+              marginBottom: '12px'
+            }} />
+            <div style={{
+              textAlign: 'center',
+              color: '#1890ff',
+              fontSize: '14px',
+              fontWeight: '500',
+              marginBottom: '8px',
+              wordBreak: 'break-all',
+              padding: '0 8px'
+            }}>
+              {getPdfDisplayName(context)}
+            </div>
+            <div style={{
+              fontSize: '12px',
+              color: '#666',
+              textAlign: 'center'
+            }}>
+              点击下载
+            </div>
           </div>
         ) : (
           <div style={{ position: 'relative' }}>
@@ -652,10 +731,14 @@ const ResumeDetail = () => {
               )}
               fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
               onError={(e) => {
-                console.log('图片加载失败，将不显示:', fileUrl);
-                const imgContainer = (e.target as HTMLElement).closest('div[style*="position: relative"]');
-                if (imgContainer && imgContainer instanceof HTMLElement) {
-                  imgContainer.style.display = 'none';
+                console.error('图片加载失败:', fileUrl, e);
+                // 替换为错误提示图片
+                const imgElement = e.target as HTMLImageElement;
+                if (imgElement) {
+                  const errorDiv = document.createElement('div');
+                  errorDiv.style.cssText = 'background: #fff2f0; border: 1px dashed #ff4d4f; width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; color: #ff4d4f; flex-direction: column; font-size: 12px;';
+                  errorDiv.innerHTML = `<p>图片加载失败</p><small style="word-break: break-all;">${file.filename || '未知文件'}</small><br><small style="word-break: break-all; color: #999;">${fileUrl}</small>`;
+                  imgElement.parentNode?.replaceChild(errorDiv, imgElement);
                 }
               }}
             />
@@ -666,29 +749,121 @@ const ResumeDetail = () => {
   };
 
   // 更新渲染旧版文件预览的函数
-  const renderLegacyFilePreview = (url: string, index: number) => {
-    // 如果URL为空或无效，直接返回null
+  const renderLegacyFilePreview = (url: string, index: number, context: string = 'file') => {
+    // 如果URL为空或无效，显示错误提示
     if (!url || url === '/api/upload/file/' || url === '/api/upload/file') {
-      console.log('无效的文件URL，跳过渲染:', url);
-      return null;
+      console.log('无效的文件URL，显示错误提示:', url);
+      return (
+        <div key={`legacy-error-${index}`} style={{ 
+          display: 'inline-block', 
+          margin: '8px', 
+          padding: '20px',
+          border: '1px dashed #ff4d4f',
+          borderRadius: '6px',
+          color: '#ff4d4f',
+          textAlign: 'center',
+          minWidth: '150px'
+        }}>
+          <p>文件URL无效</p>
+          <small>{url || '空URL'}</small>
+        </div>
+      );
     }
 
-    const fileUrl = url.startsWith('/api/upload/file/') ? url : `/api/upload/file/${url}`;
+    // 修复URL处理逻辑：如果是完整的HTTPS URL，直接使用；否则构造本地API路径
+    let fileUrl: string;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // 已经是完整的URL（如COS URL），直接使用
+      fileUrl = url;
+      console.log('使用完整URL:', fileUrl);
+    } else if (url.startsWith('/api/upload/file/')) {
+      // 已经是本地API路径，直接使用
+      fileUrl = url;
+    } else {
+      // 只是文件ID，需要构造本地API路径
+      fileUrl = `/api/upload/file/${url}`;
+    }
+    
     const uniqueKey = `legacy-file-${index}`;
     const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
+
+    // 根据上下文生成PDF文件名
+    const getPdfDisplayName = (context: string) => {
+      switch (context) {
+        case 'certificate':
+          return '证书PDF文件';
+        case 'report':
+          return '体检报告PDF文件';
+        case 'idCard':
+          return '身份证PDF文件';
+        default:
+          return 'PDF文件';
+      }
+    };
+
+    // 处理文件下载
+    const handleDownload = (url: string, filename?: string) => {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || 'download';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
 
     return (
       <div key={uniqueKey} style={{ display: 'inline-block', margin: '8px', position: 'relative' }}>
         {isPdf ? (
-          <div style={{ position: 'relative' }}>
-            <Button
-              type="primary"
-              icon={<FilePdfOutlined />}
-              onClick={() => handlePreview(fileUrl)}
-              style={{ height: '60px', width: '120px' }}
-            >
-              查看文件
-            </Button>
+          <div style={{ 
+            position: 'relative',
+            width: '200px',
+            height: '200px',
+            border: '2px dashed #1890ff',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+          onClick={() => handleDownload(fileUrl, url.split('/').pop()?.split('?')[0])}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#40a9ff';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(24, 144, 255, 0.15)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#1890ff';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          >
+            <FilePdfOutlined style={{ 
+              fontSize: '48px', 
+              color: '#1890ff',
+              marginBottom: '12px'
+            }} />
+            <div style={{
+              textAlign: 'center',
+              color: '#1890ff',
+              fontSize: '14px',
+              fontWeight: '500',
+              marginBottom: '8px',
+              wordBreak: 'break-all',
+              padding: '0 8px'
+            }}>
+              {getPdfDisplayName(context)}
+            </div>
+            <div style={{
+              fontSize: '12px',
+              color: '#666',
+              textAlign: 'center'
+            }}>
+              点击下载
+            </div>
           </div>
         ) : (
           <div style={{ position: 'relative' }}>
@@ -710,10 +885,14 @@ const ResumeDetail = () => {
               )}
               fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
               onError={(e) => {
-                console.log('图片加载失败，将不显示:', fileUrl);
-                const imgContainer = (e.target as HTMLElement).closest('div[style*="position: relative"]');
-                if (imgContainer && imgContainer instanceof HTMLElement) {
-                  imgContainer.style.display = 'none';
+                console.error('旧版图片加载失败:', fileUrl, e);
+                // 替换为错误提示图片
+                const imgElement = e.target as HTMLImageElement;
+                if (imgElement) {
+                  const errorDiv = document.createElement('div');
+                  errorDiv.style.cssText = 'background: #fff2f0; border: 1px dashed #ff4d4f; width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; color: #ff4d4f; flex-direction: column; font-size: 12px;';
+                  errorDiv.innerHTML = `<p>图片加载失败</p><small style="word-break: break-all;">${fileUrl}</small>`;
+                  imgElement.parentNode?.replaceChild(errorDiv, imgElement);
                 }
               }}
             />
@@ -944,13 +1123,51 @@ const ResumeDetail = () => {
   // 在组件加载时打印图片URL信息
   useEffect(() => {
     if (resume) {
-      console.log('简历图片URL信息:', {
-        idCardFrontUrl: resume.idCardFrontUrl,
-        idCardBackUrl: resume.idCardBackUrl,
-        photoUrls: resume.photoUrls,
-        certificateUrls: resume.certificateUrls,
-        medicalReportUrls: resume.medicalReportUrls
-      });
+      console.log('=== 简历图片URL详细信息 ===');
+      console.log('简历ID:', resume._id);
+      console.log('简历姓名:', resume.name);
+      
+      // 检查新格式文件信息
+      console.log('新格式文件信息:');
+      console.log('  - idCardFront:', resume.idCardFront);
+      console.log('  - idCardBack:', resume.idCardBack);
+      console.log('  - personalPhoto:', resume.personalPhoto);
+      console.log('  - certificates:', resume.certificates);
+      console.log('  - reports:', resume.reports);
+      
+      // 检查旧格式URL数组
+      console.log('旧格式URL数组:');
+      console.log('  - idCardFrontUrl:', resume.idCardFrontUrl);
+      console.log('  - idCardBackUrl:', resume.idCardBackUrl);
+      console.log('  - photoUrls:', resume.photoUrls);
+      console.log('  - certificateUrls:', resume.certificateUrls);
+      console.log('  - medicalReportUrls:', resume.medicalReportUrls);
+      
+      // 统计文件数量
+      const fileCounts = {
+        idCard: (resume.idCardFront ? 1 : 0) + (resume.idCardBack ? 1 : 0),
+        photos: (resume.personalPhoto ? (Array.isArray(resume.personalPhoto) ? resume.personalPhoto.length : 1) : 0) + 
+                (resume.photoUrls ? resume.photoUrls.filter(Boolean).length : 0),
+        certificates: (resume.certificates ? resume.certificates.length : 0) + 
+                     (resume.certificateUrls ? resume.certificateUrls.filter(Boolean).length : 0),
+        reports: (resume.reports ? resume.reports.length : 0) + 
+                (resume.medicalReportUrls ? resume.medicalReportUrls.filter(Boolean).length : 0)
+      };
+      
+      console.log('文件统计:', fileCounts);
+      
+      const totalFiles = Object.values(fileCounts).reduce((sum, count) => sum + count, 0);
+      if (totalFiles === 0) {
+        console.warn('⚠️ 该简历没有任何文件，这可能是因为:');
+        console.warn('1. 创建简历时没有上传任何文件');
+        console.warn('2. 文件上传过程中出现错误');
+        console.warn('3. 这是一个测试简历');
+        console.warn('建议: 可以通过编辑简历功能重新上传文件');
+      } else {
+        console.log(`✅ 找到 ${totalFiles} 个文件`);
+      }
+      
+      console.log('=== 简历图片URL信息结束 ===');
     }
   }, [resume]);
 
@@ -1133,8 +1350,34 @@ const ResumeDetail = () => {
 
           <Card title="身份证照片" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              {resume?.idCardFront && renderFilePreview(resume.idCardFront, 0)}
-              {resume?.idCardBack && renderFilePreview(resume.idCardBack, 1)}
+              {resume?.idCardFront ? (
+                renderFilePreview(resume.idCardFront, 0, 'idCard')
+              ) : (
+                <div style={{ 
+                  padding: '40px', 
+                  textAlign: 'center', 
+                  border: '1px dashed #d9d9d9', 
+                  borderRadius: '6px',
+                  color: '#999',
+                  minWidth: '200px'
+                }}>
+                  <p>未上传身份证正面</p>
+                </div>
+              )}
+              {resume?.idCardBack ? (
+                renderFilePreview(resume.idCardBack, 1, 'idCard')
+              ) : (
+                <div style={{ 
+                  padding: '40px', 
+                  textAlign: 'center', 
+                  border: '1px dashed #d9d9d9', 
+                  borderRadius: '6px',
+                  color: '#999',
+                  minWidth: '200px'
+                }}>
+                  <p>未上传身份证背面</p>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -1145,19 +1388,33 @@ const ResumeDetail = () => {
                 Array.isArray(resume.personalPhoto) 
                   ? resume.personalPhoto.map((photo: FileInfo, index: number) => (
                       <div key={`photo-${photo.url}-${index}`}>
-                        {renderFilePreview(photo, index)}
+                        {renderFilePreview(photo, index, 'photo')}
                       </div>
                     ))
-                  : renderFilePreview(resume.personalPhoto, 0)
+                  : renderFilePreview(resume.personalPhoto, 0, 'photo')
               )}
               {/* 处理旧版 photoUrls，但排除已经在新格式中显示过的 URL */}
               {resume?.photoUrls?.filter(Boolean).filter((url: FileUrl) => 
                 !isUrlInNewFormat(url, resume.personalPhoto)
               ).map((url: FileUrl, index: number) => (
                 <div key={`photo-legacy-${url}-${index}`}>
-                  {renderFilePreview(url, index)}
+                  {renderFilePreview(url, index, 'photo')}
                 </div>
               ))}
+              {/* 如果没有任何照片，显示提示信息 */}
+              {(!resume?.personalPhoto || (Array.isArray(resume.personalPhoto) && resume.personalPhoto.length === 0)) && 
+               (!resume?.photoUrls || resume.photoUrls.length === 0) && (
+                <div style={{ 
+                  padding: '40px', 
+                  textAlign: 'center', 
+                  border: '1px dashed #d9d9d9', 
+                  borderRadius: '6px',
+                  color: '#999',
+                  width: '100%'
+                }}>
+                  <p>未上传个人照片</p>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -1166,7 +1423,7 @@ const ResumeDetail = () => {
               {/* 优先使用新格式的 certificates */}
               {resume?.certificates?.map((cert: FileInfo, index: number) => (
                 <div key={`cert-${cert.url}-${index}`}>
-                  {renderFilePreview(cert, index)}
+                  {renderFilePreview(cert, index, 'certificate')}
                 </div>
               ))}
               {/* 处理旧版 certificateUrls，但排除已经在新格式中显示过的 URL */}
@@ -1174,9 +1431,23 @@ const ResumeDetail = () => {
                 !isUrlInNewFormat(url, resume.certificates)
               ).map((url: FileUrl, index: number) => (
                 <div key={`cert-legacy-${url}-${index}`}>
-                  {renderFilePreview(url, index)}
+                  {renderFilePreview(url, index, 'certificate')}
                 </div>
               ))}
+              {/* 如果没有任何证书，显示提示信息 */}
+              {(!resume?.certificates || resume.certificates.length === 0) && 
+               (!resume?.certificateUrls || resume.certificateUrls.length === 0) && (
+                <div style={{ 
+                  padding: '40px', 
+                  textAlign: 'center', 
+                  border: '1px dashed #d9d9d9', 
+                  borderRadius: '6px',
+                  color: '#999',
+                  width: '100%'
+                }}>
+                  <p>未上传证书照片</p>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -1185,7 +1456,7 @@ const ResumeDetail = () => {
               {/* 优先使用新格式的 reports */}
               {resume?.reports?.map((report: FileInfo, index: number) => (
                 <div key={`report-${report.url}-${index}`}>
-                  {renderFilePreview(report, index)}
+                  {renderFilePreview(report, index, 'report')}
                 </div>
               ))}
               {/* 处理旧版 medicalReportUrls，但排除已经在新格式中显示过的 URL */}
@@ -1193,9 +1464,23 @@ const ResumeDetail = () => {
                 !isUrlInNewFormat(url, resume.reports)
               ).map((url: FileUrl, index: number) => (
                 <div key={`report-legacy-${url}-${index}`}>
-                  {renderFilePreview(url, index)}
+                  {renderFilePreview(url, index, 'report')}
                 </div>
               ))}
+              {/* 如果没有任何体检报告，显示提示信息 */}
+              {(!resume?.reports || resume.reports.length === 0) && 
+               (!resume?.medicalReportUrls || resume.medicalReportUrls.length === 0) && (
+                <div style={{ 
+                  padding: '40px', 
+                  textAlign: 'center', 
+                  border: '1px dashed #d9d9d9', 
+                  borderRadius: '6px',
+                  color: '#999',
+                  width: '100%'
+                }}>
+                  <p>未上传体检报告</p>
+                </div>
+              )}
             </div>
           </Card>
 

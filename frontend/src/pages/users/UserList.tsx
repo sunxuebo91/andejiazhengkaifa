@@ -3,140 +3,109 @@ import { PageContainer } from '@ant-design/pro-components';
 import { Card, Table, Button, Space, Tag, Popconfirm, Input, App } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
+import apiService from '../../services/api';
 
 interface User {
-  id: string;
+  _id: string;
   username: string;
   name: string;
-  phone: string;
+  phone?: string;
   role: string;
+  permissions: string[];
+  active: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
-// 角色映射
-const roleMap = {
-  admin: { text: '管理员', color: 'red' },
-  manager: { text: '经理', color: 'orange' },
-  employee: { text: '普通员工', color: 'green' }
-};
+interface UserListData {
+  items: User[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
 
-// 模拟用户数据存储
-const mockUsersData = [
-  {
-    id: '1',
-    username: 'admin',
-    name: '管理员',
-    phone: '13800000000',
-    role: 'admin',
-    createdAt: '2023-01-01 12:00:00'
-  },
-  {
-    id: '2',
-    username: 'manager',
-    name: '张经理',
-    phone: '13811111111',
-    role: 'manager',
-    createdAt: '2023-01-02 10:00:00'
-  },
-  {
-    id: '3',
-    username: 'employee1',
-    name: '李员工',
-    phone: '13822222222',
-    role: 'employee',
-    createdAt: '2023-01-03 09:00:00'
-  },
-  {
-    id: '4',
-    username: 'employee2',
-    name: '王员工',
-    phone: '13833333333',
-    role: 'employee',
-    createdAt: '2023-01-04 08:00:00'
-  }
-];
-
-// 获取用户列表 - 全局函数，供其他组件调用
-export const getUsersList = () => {
-  return [...mockUsersData];
-};
-
-// 添加用户 - 全局函数，供其他组件调用
-export const addUserToList = (user: Omit<User, 'id' | 'createdAt'>) => {
-  const newUser = {
-    ...user,
-    id: String(mockUsersData.length + 1),
-    createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
-  };
-  mockUsersData.push(newUser);
-  return newUser;
-};
-
-// 更新用户 - 全局函数，供其他组件调用
-export const updateUserInList = (userId: string, userData: Partial<User>) => {
-  const index = mockUsersData.findIndex(user => user.id === userId);
-  if (index !== -1) {
-    mockUsersData[index] = { ...mockUsersData[index], ...userData };
-    return true;
-  }
-  return false;
-};
+interface UserListResponse {
+  success: boolean;
+  data: UserListData;
+  message: string;
+  timestamp: number;
+}
 
 const UserList: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [keyword, setKeyword] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [searchText, setSearchText] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const { message } = App.useApp();
 
-  // 检查是否是从创建页面返回
-  useEffect(() => {
-    if (location.state && location.state.refresh) {
-      fetchUsers();
-    }
-  }, [location]);
-
   // 获取用户列表
-  const fetchUsers = () => {
-    setLoading(true);
-    // 模拟API调用
-    setTimeout(() => {
-      setUsers(getUsersList());
-      setLoading(false);
-    }, 500);
-  };
+  const fetchUsers = async (page: number = 1, size: number = 10, search?: string) => {
+    try {
+      setLoading(true);
+      const response = await apiService.get<UserListData>('/users', {
+        page,
+        pageSize: size,
+        search
+      });
 
-  // 模拟删除用户
-  const handleDelete = (id: string) => {
-    setLoading(true);
-    // 模拟API调用
-    setTimeout(() => {
-      const index = mockUsersData.findIndex(user => user.id === id);
-      if (index !== -1) {
-        mockUsersData.splice(index, 1);
+      if (response.success && response.data) {
+        setUsers(response.data.items);
+        setTotal(response.data.total);
+        setCurrentPage(response.data.page);
+        setPageSize(response.data.pageSize);
+      } else {
+        message.error(response.message || '获取用户列表失败');
       }
-      setUsers(getUsersList());
-      message.success('用户删除成功');
+    } catch (error: any) {
+      console.error('获取用户列表失败:', error);
+      message.error(error.response?.data?.message || '获取用户列表失败');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
-  // 搜索用户
+  // 删除用户
+  const handleDelete = async (id: string) => {
+    try {
+      const response = await apiService.delete(`/users/${id}`);
+
+      if (response.success) {
+        message.success('删除用户成功');
+        fetchUsers(currentPage, pageSize, searchText);
+      } else {
+        message.error(response.message || '删除用户失败');
+      }
+    } catch (error: any) {
+      console.error('删除用户失败:', error);
+      message.error(error.response?.data?.message || '删除用户失败');
+    }
+  };
+
+  // 处理搜索
   const handleSearch = (value: string) => {
-    setKeyword(value);
+    setSearchText(value);
+    fetchUsers(1, pageSize, value);
   };
 
-  // 过滤用户
-  const filteredUsers = users.filter(user => 
-    user.username.includes(keyword) || 
-    user.name.includes(keyword) || 
-    user.phone.includes(keyword)
-  );
+  // 处理分页变化
+  const handleTableChange = (pagination: any) => {
+    fetchUsers(pagination.current, pagination.pageSize, searchText);
+  };
 
+  // 初始加载和路由状态变化时刷新数据
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    const shouldRefresh = location.state?.refresh;
+    fetchUsers(currentPage, pageSize, searchText);
+    // 清除路由状态
+    if (shouldRefresh) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state?.refresh]);
 
   const columns = [
     {
@@ -150,7 +119,7 @@ const UserList: React.FC = () => {
       key: 'name',
     },
     {
-      title: '电话',
+      title: '手机号',
       dataIndex: 'phone',
       key: 'phone',
     },
@@ -159,39 +128,50 @@ const UserList: React.FC = () => {
       dataIndex: 'role',
       key: 'role',
       render: (role: string) => {
-        const roleInfo = roleMap[role as keyof typeof roleMap] || { text: '未知', color: 'default' };
-        return <Tag color={roleInfo.color}>{roleInfo.text}</Tag>;
+        const roleMap: { [key: string]: { text: string; color: string } } = {
+          admin: { text: '管理员', color: 'red' },
+          manager: { text: '经理', color: 'blue' },
+          employee: { text: '员工', color: 'green' },
+        };
+        const { text, color } = roleMap[role] || { text: role, color: 'default' };
+        return <Tag color={color}>{text}</Tag>;
       },
+    },
+    {
+      title: '状态',
+      dataIndex: 'active',
+      key: 'active',
+      render: (active: boolean) => (
+        <Tag color={active ? 'green' : 'red'}>
+          {active ? '启用' : '禁用'}
+        </Tag>
+      ),
     },
     {
       title: '创建时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
+      render: (date: string) => new Date(date).toLocaleString(),
     },
     {
       title: '操作',
       key: 'action',
       render: (_: any, record: User) => (
         <Space size="middle">
-          <Button 
-            type="primary" 
-            size="small"
+          <Button
+            type="link"
             icon={<EditOutlined />}
-            onClick={() => navigate(`/users/edit/${record.id}`)}
+            onClick={() => navigate(`/users/edit/${record._id}`)}
           >
             编辑
           </Button>
           <Popconfirm
-            title="确定要删除此用户吗？"
-            onConfirm={() => handleDelete(record.id)}
+            title="确定要删除这个用户吗？"
+            onConfirm={() => handleDelete(record._id)}
             okText="确定"
             cancelText="取消"
           >
-            <Button 
-              danger 
-              size="small"
-              icon={<DeleteOutlined />}
-            >
+            <Button type="link" danger icon={<DeleteOutlined />}>
               删除
             </Button>
           </Popconfirm>
@@ -204,36 +184,42 @@ const UserList: React.FC = () => {
     <PageContainer
       header={{
         title: '员工管理',
-      }}
-    >
-      <Card variant="outlined">
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-          <Input.Search
-            placeholder="搜索用户名/姓名/电话"
-            onSearch={handleSearch}
-            onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 300 }}
-            allowClear
-            enterButton={<SearchOutlined />}
-          />
+        extra: [
           <Button
+            key="create"
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => navigate('/users/create')}
           >
-            新建员工
-          </Button>
+            创建员工
+          </Button>,
+        ],
+      }}
+    >
+      <Card>
+        <div style={{ marginBottom: 16 }}>
+          <Input.Search
+            placeholder="搜索用户名、姓名、手机号"
+            allowClear
+            enterButton
+            onSearch={handleSearch}
+            style={{ width: 300 }}
+          />
         </div>
         <Table
           columns={columns}
-          dataSource={filteredUsers}
-          rowKey="id"
+          dataSource={users}
+          rowKey="_id"
           loading={loading}
-          pagination={{ 
+          pagination={{
+            current: currentPage,
+            pageSize: pageSize,
+            total: total,
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`
+            showTotal: (total) => `共 ${total} 条记录`,
           }}
+          onChange={handleTableChange}
         />
       </Card>
     </PageContainer>

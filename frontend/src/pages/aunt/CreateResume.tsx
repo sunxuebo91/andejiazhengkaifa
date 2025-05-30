@@ -3,7 +3,7 @@ import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typograph
 import { useState, useEffect } from 'react';
 import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { UploadFile, RcFile, UploadProps } from 'antd/es/upload/interface';
+import type { UploadFile, RcFile } from 'antd/es/upload/interface';
 import type { UploadChangeParam } from 'antd/es/upload';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -12,13 +12,11 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import BaiduMapCard from '../../components/BaiduMapCard';
 import apiService from '../../services/api';
+import type { ApiResponse } from '../../services/api';
 import { ImageService } from '../../services/imageService';
 import { Gender, GenderType, JobType, Education, FormValues, WorkExperience } from '../../types/resume';
 import type { Resume } from '../../services/resume.service';
-import type { ApiResponse } from '@/services/api';
 import { isLoggedIn } from '@/services/auth';
-import resumeService, { ResumeFormData } from '../../services/resume.service';
-
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
 dayjs.extend(isSameOrBefore);
@@ -785,20 +783,28 @@ const CreateResume: React.FC = () => {
       const resumeId = params.get('id');
 
       if (isEditMode && resumeId) {
+        // 明确的编辑模式：通过URL参数加载指定简历
         await loadResumeData(resumeId);
       } else {
-        const savedData = localStorage.getItem('editingResume');
-        if (savedData) {
-          try {
-            const parsedData = JSON.parse(savedData) as ExtendedResume;
-            form.setFieldsValue(parsedData);
-            setEditingResume(parsedData);
-            setMessageState({ type: 'success', content: '已恢复未完成的编辑' });
-          } catch (error) {
-            console.error('恢复编辑数据失败:', error);
-            localStorage.removeItem('editingResume');
-          }
-        }
+        // 非编辑模式：确保是空白的创建页面
+        console.log('🆕 进入创建模式，清除所有编辑数据');
+        
+        // 清除localStorage中的编辑数据
+        localStorage.removeItem('editingResume');
+        
+        // 重置所有相关状态
+        setEditingResume(null);
+        form.resetFields();
+        
+        // 重置文件状态
+        setIdCardFiles({ front: [], back: [] });
+        setPhotoFiles([]);
+        setCertificateFiles([]);
+        setMedicalReportFiles([]);
+        setExistingIdCardFrontUrl('');
+        setExistingIdCardBackUrl('');
+        
+        console.log('✅ 创建模式初始化完成');
       }
     };
 

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import apiService, { api } from './api';
 import Cookies from 'react-cookies';
 import { jwtDecode } from 'jwt-decode';
 
@@ -41,7 +41,7 @@ export const setToken = (token: string, remember: boolean = false): void => {
     }
 
     // 设置axios默认请求头
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   } catch (error) {
     console.error('Error setting token:', error);
     removeToken(); // 清除可能存在的无效token
@@ -55,7 +55,7 @@ export const removeToken = (): void => {
   localStorage.removeItem(USER_KEY);
   
   // 移除axios默认请求头
-  delete axios.defaults.headers.common['Authorization'];
+  delete api.defaults.headers.common['Authorization'];
 };
 
 // 检查token是否有效或已过期
@@ -115,19 +115,19 @@ export const hasRole = (role: string): boolean => {
 export const login = async (username: string, password: string): Promise<any> => {
   try {
     console.log('Attempting login for username:', username);
-    const response = await axios.post('/api/auth/login', { username, password });
-    console.log('Login response:', response.data);
+    const response = await apiService.post('/api/auth/login', { username, password });
+    console.log('Login response:', response);
     
-    // 检查响应格式
-    if (!response.data || !response.data.success) {
-      console.error('Invalid login response format:', response.data);
-      throw new Error(response.data?.message || '登录失败');
+    // 检查响应格式 - 注意：axios拦截器已经返回了response.data
+    if (!response || !response.success) {
+      console.error('Invalid login response format:', response);
+      throw new Error(response?.message || '登录失败');
     }
     
-    const { token, user } = response.data.data;
+    const { token, user } = response.data;
     
     if (!token || !user) {
-      console.error('Missing token or user data:', response.data.data);
+      console.error('Missing token or user data:', response.data);
       throw new Error('登录响应数据不完整');
     }
     
@@ -135,7 +135,7 @@ export const login = async (username: string, password: string): Promise<any> =>
     setToken(token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     
-    return response.data.data;
+    return response.data;
   } catch (error: any) {
     console.error('Login failed:', error);
     if (error.response) {
@@ -163,7 +163,7 @@ export const login = async (username: string, password: string): Promise<any> =>
 export const logout = async (): Promise<void> => {
   try {
     // 调用后端登出接口
-    await axios.post('/api/auth/logout');
+    await apiService.post('/api/auth/logout');
   } catch (error) {
     console.error('Logout API call failed:', error);
   } finally {

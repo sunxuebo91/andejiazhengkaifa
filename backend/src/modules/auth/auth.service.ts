@@ -1,18 +1,10 @@
-import { Injectable, UnauthorizedException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-
-// 登录日志模型
-interface LoginLog {
-  userId: string;
-  timestamp: Date;
-  ip: string;
-  userAgent: string;
-  status: 'success' | 'failed';
-}
+import { LoginLog } from './models/login-log.entity';
 
 @Injectable()
 export class AuthService {
@@ -23,67 +15,96 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
-    @InjectModel('LoginLog') private loginLogModel: Model<LoginLog>,
+    @InjectModel(LoginLog.name) private loginLogModel: Model<LoginLog>,
   ) {}
 
-  async validateUser(username: string, password: string, ip: string, userAgent: string): Promise<any> {
-    // 检查登录尝试次数
-    const attempts = this.loginAttempts.get(username) || { count: 0, lastAttempt: new Date() };
-    if (attempts.count >= this.MAX_LOGIN_ATTEMPTS) {
-      const timeSinceLastAttempt = Date.now() - attempts.lastAttempt.getTime();
-      if (timeSinceLastAttempt < this.LOGIN_ATTEMPT_WINDOW) {
-        throw new UnauthorizedException('登录尝试次数过多，请稍后再试');
-      }
-      // 重置尝试次数
-      this.loginAttempts.delete(username);
-    }
-
-    const user = await this.usersService.findByUsername(username);
-    const isValid = user && await bcrypt.compare(password, user.password);
-
-    // 记录登录尝试
-    await this.loginLogModel.create({
-      userId: user?._id,
-      timestamp: new Date(),
-      ip,
-      userAgent,
-      status: isValid ? 'success' : 'failed'
-    });
-
-    if (!isValid) {
-      // 更新登录尝试次数
-      this.loginAttempts.set(username, {
-        count: attempts.count + 1,
-        lastAttempt: new Date()
+  private async logLoginAttempt(userId: string | null, ip: string, userAgent: string, status: 'success' | 'failed'): Promise<void> {
+    try {
+      await this.loginLogModel.create({
+        userId: userId || 'unknown',
+        timestamp: new Date(),
+        ip,
+        userAgent,
+        status
       });
-      return null;
+    } catch (error) {
+      // 记录日志失败不应该影响登录流程
+      console.error('Failed to log login attempt:', error);
     }
+  }
 
-    // 登录成功，清除尝试记录
-    this.loginAttempts.delete(username);
-    const { password: _, ...result } = user.toObject();
-    return result;
+  async validateUser(username: string, password: string, ip: string, userAgent: string): Promise<any> {
+    try {
+      // 检查登录尝试次数
+      const attempts = this.loginAttempts.get(username) || { count: 0, lastAttempt: new Date() };
+      if (attempts.count >= this.MAX_LOGIN_ATTEMPTS) {
+        const timeSinceLastAttempt = Date.now() - attempts.lastAttempt.getTime();
+        if (timeSinceLastAttempt < this.LOGIN_ATTEMPT_WINDOW) {
+          await this.logLoginAttempt(null, ip, userAgent, 'failed');
+          throw new UnauthorizedException('登录尝试次数过多，请稍后再试');
+        }
+        // 重置尝试次数
+        this.loginAttempts.delete(username);
+      }
+
+      const user = await this.usersService.findByUsername(username);
+      if (!user) {
+        await this.logLoginAttempt(null, ip, userAgent, 'failed');
+        return null;
+      }
+
+      const isValid = await bcrypt.compare(password, user.password);
+      await this.logLoginAttempt(user._id.toString(), ip, userAgent, isValid ? 'success' : 'failed');
+
+      if (!isValid) {
+        // 更新登录尝试次数
+        this.loginAttempts.set(username, {
+          count: attempts.count + 1,
+          lastAttempt: new Date()
+        });
+        return null;
+      }
+
+      // 登录成功，清除尝试记录
+      this.loginAttempts.delete(username);
+      const { password: _, ...result } = user.toObject();
+      return result;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      console.error('Login validation error:', error);
+      throw new InternalServerErrorException('登录验证过程中发生错误');
+    }
   }
 
   async login(username: string, password: string, ip: string, userAgent: string) {
-    const user = await this.validateUser(username, password, ip, userAgent);
-    if (!user) {
-      throw new UnauthorizedException('用户名或密码错误');
+    try {
+      const user = await this.validateUser(username, password, ip, userAgent);
+      if (!user) {
+        throw new UnauthorizedException('用户名或密码错误');
+      }
+      
+      const payload = { username: user.username, sub: user._id };
+      const token = this.jwtService.sign(payload);
+      
+      return {
+        token,
+        user: {
+          id: user._id,
+          username: user.username,
+          role: user.role,
+          permissions: user.permissions,
+          name: user.name
+        },
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      console.error('Login error:', error);
+      throw new InternalServerErrorException('登录过程中发生错误');
     }
-    
-    const payload = { username: user.username, sub: user._id };
-    const token = this.jwtService.sign(payload);
-    
-    return {
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        role: user.role,
-        permissions: user.permissions,
-        name: user.name
-      },
-    };
   }
 
   async logout(userId: string) {

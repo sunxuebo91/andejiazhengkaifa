@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -12,22 +12,16 @@ import {
   Tag,
   Typography,
   App,
-  Space,
-  Row,
-  Col,
-  Avatar,
   Tooltip,
   Select,
   Spin
 } from 'antd';
 import {
   EditOutlined,
-  CalendarOutlined,
   FilePdfOutlined
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
-import axios from 'axios';
 import apiService from '../../services/api';
 import { isPdfFile } from '../../utils/uploadHelper';
 // 添加dayjs插件
@@ -395,8 +389,6 @@ const ResumeDetail = () => {
   const [resume, setResume] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const { message: messageApi } = App.useApp();
-  const [previewImage, setPreviewImage] = useState<string>('');
-  const [previewVisible, setPreviewVisible] = useState(false);
 
   // 跟进记录相关状态
   const [followUpRecords, setFollowUpRecords] = useState<any[]>([]);
@@ -421,29 +413,6 @@ const ResumeDetail = () => {
     }
   };
 
-  // 在组件内部处理数据前的函数，处理工作经历的日期格式
-  const formatWorkExperiences = (data: Partial<ResumeData>) => {
-    if (!data.workExperiences || !Array.isArray(data.workExperiences)) {
-      console.log('No work experiences or invalid format:', data.workExperiences);
-      return [];
-    }
-
-    return data.workExperiences.map((exp: WorkExperience) => {
-      if (!exp) {
-        console.warn('Invalid work experience entry:', exp);
-        return null;
-      }
-
-      // 保持原始日期格式，不在这里格式化
-      return {
-        ...exp,
-        startDate: exp.startDate || '-',
-        endDate: exp.endDate || '-',
-        description: exp.description || '-'
-      };
-    }).filter(Boolean);
-  };
-
   // 获取简历详情
   const fetchResumeDetail = async () => {
     if (!shortId) {
@@ -456,96 +425,14 @@ const ResumeDetail = () => {
     setError(null);
     try {
       console.log('正在获取简历详情，ID:', shortId);
-      const response = await axios.get<{ success: boolean; data: ResumeData; message?: string }>(`/api/resumes/${shortId}`);
-      console.log('原始API响应:', response.data);
-
-      if (!response.data.success) {
-        console.error('API返回错误:', response.data.message);
-        setError(response.data.message || '获取简历详情失败');
+      const response = await apiService.get<{ success: boolean; data: ResumeData; message?: string }>(`/api/resumes/${shortId}`);
+      if (response.success && response.data) {
+        console.log('原始API响应:', response.data);
+        setResume(response.data);
         setLoading(false);
-        return;
+      } else {
+        throw new Error(response.message || '获取简历详情失败');
       }
-
-      const resumeData = response.data.data;
-      console.log('获取到的简历数据:', JSON.stringify(resumeData, null, 2));
-      
-      // 专门打印文件相关信息
-      console.log('文件分类信息:', {
-        personalPhoto: resumeData.personalPhoto,
-        certificates: resumeData.certificates,
-        reports: resumeData.reports,
-        idCardFront: resumeData.idCardFront,
-        idCardBack: resumeData.idCardBack
-      });
-
-      // 打印原始图片URL信息
-      console.log('原始图片URL信息:', {
-        idCardFrontUrl: resumeData.idCardFrontUrl,
-        idCardBackUrl: resumeData.idCardBackUrl,
-        photoUrls: resumeData.photoUrls,
-        certificateUrls: resumeData.certificateUrls,
-        medicalReportUrls: resumeData.medicalReportUrls
-      });
-
-      // 处理工作经验数据
-      const formattedWorkExperience = formatWorkExperiences(resumeData);
-
-      // 处理图片URL
-      const processImageUrl = (url: string | null | undefined): string | null => {
-        if (!url) return null;
-        if (typeof url !== 'string') return null;
-        if (url.startsWith('http://') || url.startsWith('https://')) return url;
-        
-        // 如果已经是完整的API路径，直接返回
-        if (url.startsWith('/api/upload/file/')) return url;
-        
-        // 否则构建完整的API路径
-        return `/api/upload/file/${url}`;
-      };
-
-      // 处理fileIds生成图片URL
-      // const generateImageUrls = (fileIds: string[]): string[] => {
-      //   if (!Array.isArray(fileIds)) return [];
-      //   return fileIds.map(fileId => fileId);
-      // };
-
-      // 更新简历数据
-      const updatedResumeData = {
-        ...resumeData,
-        workExperiences: formattedWorkExperience,
-        id: resumeData._id.toString(),
-        religion: resumeData.religion || null,
-        medicalExamDate: resumeData.medicalExamDate ? dayjs(resumeData.medicalExamDate) : null,
-        // 处理图片URL - 优先使用现有的URL，如果没有则从fileIds生成
-        idCardFrontUrl: processImageUrl(resumeData.idCardFrontUrl),
-        idCardBackUrl: processImageUrl(resumeData.idCardBackUrl),
-        photoUrls: Array.isArray(resumeData.photoUrls) && resumeData.photoUrls.length > 0
-          ? resumeData.photoUrls.map(processImageUrl).filter(Boolean) 
-          : [],
-        certificateUrls: Array.isArray(resumeData.certificateUrls) && resumeData.certificateUrls.length > 0
-          ? resumeData.certificateUrls.map(processImageUrl).filter(Boolean) 
-          : [],
-        medicalReportUrls: Array.isArray(resumeData.medicalReportUrls) && resumeData.medicalReportUrls.length > 0
-          ? resumeData.medicalReportUrls.map(processImageUrl).filter(Boolean) 
-          : [],
-      };
-
-      // 打印处理后的图片URL信息
-      console.log('处理后的图片URL信息:', {
-        idCardFrontUrl: updatedResumeData.idCardFrontUrl,
-        idCardBackUrl: updatedResumeData.idCardBackUrl,
-        photoUrls: updatedResumeData.photoUrls,
-        certificateUrls: updatedResumeData.certificateUrls,
-        medicalReportUrls: updatedResumeData.medicalReportUrls,
-        baseUrl: import.meta.env.VITE_API_BASE_URL
-      });
-
-      // 检查环境变量
-      if (!import.meta.env.VITE_API_BASE_URL) {
-        console.warn('警告: 未配置 VITE_API_BASE_URL 环境变量');
-      }
-
-      setResume(updatedResumeData);
     } catch (error) {
       console.error('获取简历详情失败:', error);
       setError('获取简历详情失败');
@@ -599,29 +486,9 @@ const ResumeDetail = () => {
       
       console.log('准备保存到localStorage的数据:', formattedResume);
       localStorage.setItem('editingResume', JSON.stringify(formattedResume));
-      navigate(`/aunt/create-resume?edit=true&id=${resume.id}`);
+      navigate(`/aunt/create-resume?edit=true&id=${resume._id}`);
     } else {
       messageApi.error('无法获取简历数据');
-    }
-  };
-
-  // 处理图片预览
-  const handlePreview = (url: string) => {
-    console.log(`处理预览:`, url);
-    if (!url) {
-      console.warn('预览URL为空');
-      return;
-    }
-    // 判断是否为 PDF 文件（例如，通过 isPdfFile 或检查 url 是否包含"pdf"）
-    const isPdf = isPdfFile({ url });
-    if (isPdf) {
-      // 使用 Modal 打开 PDF 预览，例如使用 iframe 加载 PDF
-      setPreviewImage(url);
-      setPreviewVisible(true);
-    } else {
-      // 原有逻辑，预览图片
-      setPreviewImage(url);
-      setPreviewVisible(true);
     }
   };
 
@@ -978,7 +845,7 @@ const ResumeDetail = () => {
 
   // 获取跟进记录
   const fetchFollowUpRecords = async () => {
-    if (!resume?.id) {
+    if (!resume?._id) {
       console.log('简历ID不存在，跳过获取跟进记录');
       return;
     }
@@ -988,7 +855,7 @@ const ResumeDetail = () => {
       const allRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
       
       // 筛选出当前简历的跟进记录
-      const resumeRecords = allRecords.filter((record: any) => record.resumeId === resume.id);
+      const resumeRecords = allRecords.filter((record: any) => record.resumeId === resume._id);
       
       console.log('从localStorage获取跟进记录:', resumeRecords);
       setFollowUpRecords(resumeRecords);
@@ -1000,10 +867,10 @@ const ResumeDetail = () => {
   
   // 组件加载时获取跟进记录
   useEffect(() => {
-    if (resume?.id) {
+    if (resume?._id) {
       fetchFollowUpRecords();
     }
-  }, [resume?.id]);
+  }, [resume?._id]);
   
   // 添加跟进记录
   const handleAddFollowUp = async (values: any) => {
@@ -1013,7 +880,7 @@ const ResumeDetail = () => {
       // 创建新的跟进记录
       const followUpData = {
         id: Date.now().toString(), // 生成临时ID
-        resumeId: resume.id,
+        resumeId: resume._id,
         type: values.type,
         content: values.content,
         createdAt: new Date().toISOString(),
@@ -1310,8 +1177,8 @@ const ResumeDetail = () => {
           <Card title="基本信息" style={{ marginBottom: 24 }}>
             <Descriptions bordered column={3}>
               <Descriptions.Item label="简历ID">
-                <Tooltip title={`完整ID: ${resume?.id || '未知'}`}>
-                  <span>{resume?.id ? resume.id.substring(0, 8).padEnd(8, '0') : '-'}</span>
+                <Tooltip title={`完整ID: ${resume?._id || '未知'}`}>
+                  <span>{resume?._id ? resume._id.substring(0, 8).padEnd(8, '0') : '-'}</span>
                 </Tooltip>
               </Descriptions.Item>
               <Descriptions.Item label="姓名">{resume?.name || '-'}</Descriptions.Item>
@@ -1531,23 +1398,6 @@ const ResumeDetail = () => {
 
         {/* 添加跟进记录弹窗 */}
         <AddFollowUpModal />
-
-        <Modal
-          open={previewVisible}
-          title={previewImage ? (isPdfFile({ url: previewImage }) ? 'PDF 预览' : '图片预览') : ''}
-          footer={null}
-          onCancel={() => setPreviewVisible(false)}
-        >
-          {isPdfFile({ url: previewImage }) ? (
-            <iframe
-              src={previewImage}
-              style={{ width: '100%', height: '500px', border: 'none' }}
-              title="PDF预览"
-            />
-          ) : (
-            <img alt="预览" style={{ width: '100%' }} src={previewImage} />
-          )}
-        </Modal>
       </div>
     </>
   );

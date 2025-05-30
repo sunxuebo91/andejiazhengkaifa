@@ -2,10 +2,10 @@ import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 import { getToken, removeToken } from './auth';
 
 // API 基础 URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 // 创建axios实例
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {

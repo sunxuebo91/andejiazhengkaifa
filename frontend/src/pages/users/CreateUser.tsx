@@ -3,7 +3,7 @@ import { PageContainer } from '@ant-design/pro-components';
 import { Card, Form, Input, Button, Select, Space, Alert, App } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { UserOutlined, LockOutlined, IdcardOutlined, PhoneOutlined } from '@ant-design/icons';
-import { addUserToList } from './UserList';
+import apiService from '../../services/api';
 
 const { Option } = Select;
 
@@ -19,15 +19,22 @@ const CreateUser: React.FC = () => {
     // 从values中删除confirmPassword
     const { confirmPassword, ...userData } = values;
     
-    // 调用UserList中的全局函数添加用户
-    addUserToList(userData);
-    
-    console.log('添加用户:', values, '添加员工后员工列表将显示更新该员工');
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        resolve();
-      }, 500);
-    });
+    try {
+      const response = await apiService.post('/api/users', userData);
+      
+      if (response.success) {
+        console.log('添加用户成功:', response);
+        return response.data;
+      } else {
+        throw new Error(response.message || '创建用户失败');
+      }
+    } catch (err: any) {
+      console.error('创建用户失败:', err);
+      if (err.response?.data?.message) {
+        throw new Error(err.response.data.message);
+      }
+      throw err;
+    }
   };
 
   const handleSubmit = async (values: any) => {

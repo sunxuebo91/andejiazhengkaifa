@@ -2,6 +2,7 @@ import imageCompression from 'browser-image-compression';
 import axios from 'axios';
 import api from './api';
 import { AxiosError } from 'axios';
+import apiService from './api';
 
 // 优化压缩选项 - 提供不同场景的压缩配置
 const compressionOptions = {
@@ -120,9 +121,7 @@ export class ImageService {
       const formData = new FormData();
       formData.append('file', file);
       
-      const response = await axios.post(`/api/upload/id-card/${type}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const response = await apiService.upload(`/upload/id-card/${type}`, formData);
       
       if (!response.data.success) {
         throw new Error(response.data.message || '图片上传失败');

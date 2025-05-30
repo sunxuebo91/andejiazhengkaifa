@@ -3,15 +3,25 @@ import { PageContainer } from '@ant-design/pro-components';
 import { Card, Form, Input, Button, Select, Space, Alert, App } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
 import { UserOutlined, LockOutlined, IdcardOutlined, PhoneOutlined } from '@ant-design/icons';
-import { getUsersList, updateUserInList } from './UserList';
+import apiService from '../../services/api';
 
 const { Option } = Select;
+
+interface User {
+  _id: string;
+  username: string;
+  name: string;
+  phone?: string;
+  role: string;
+  permissions: string[];
+  active: boolean;
+}
 
 const EditUser: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [userData, setUserData] = useState<any>(null);
+  const [userData, setUserData] = useState<User | null>(null);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { message } = App.useApp();
@@ -19,13 +29,14 @@ const EditUser: React.FC = () => {
   // 获取用户数据
   useEffect(() => {
     const fetchUser = async () => {
+      if (!id) return;
+      
       setLoading(true);
       try {
-        // 从UserList模块获取用户列表
-        const usersList = getUsersList();
-        const user = usersList.find(user => user.id === id);
-        
-        if (user) {
+        const response = await apiService.get(`/users/${id}`);
+
+        if (response.success && response.data) {
+          const user = response.data;
           setUserData(user);
           // 设置表单初始值，密码字段不回显
           form.setFieldsValue({
@@ -35,32 +46,38 @@ const EditUser: React.FC = () => {
             role: user.role
           });
         } else {
-          setError('未找到该用户');
+          setError(response.message || '获取用户信息失败');
         }
       } catch (err: any) {
         console.error('获取用户信息失败:', err);
-        setError('获取用户信息失败：' + (err.message || '未知错误'));
+        setError(err.response?.data?.message || '获取用户信息失败');
       } finally {
         setLoading(false);
       }
     };
 
-    if (id) {
-      fetchUser();
-    }
+    fetchUser();
   }, [id, form]);
 
-  // 更新用户API调用
+  // 更新用户
   const updateUser = async (values: any) => {
     if (!id) return Promise.reject(new Error('用户ID不存在'));
     
-    // 调用UserList中的更新函数
-    const success = updateUserInList(id, values);
-    if (success) {
-      console.log('更新用户成功:', values);
-      return Promise.resolve();
-    } else {
-      return Promise.reject(new Error('更新用户失败，用户不存在'));
+    try {
+      const response = await apiService.patch(`/users/${id}`, values);
+
+      if (response.success) {
+        console.log('更新用户成功:', response);
+        return response.data;
+      } else {
+        throw new Error(response.message || '更新用户失败');
+      }
+    } catch (err: any) {
+      console.error('更新用户失败:', err);
+      if (err.response?.data?.message) {
+        throw new Error(err.response.data.message);
+      }
+      throw err;
     }
   };
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Row, Col, Statistic, Spin, App, Space } from 'antd';
+import { Card, Row, Col, Statistic, Spin, App } from 'antd';
 import { UserOutlined, FileAddOutlined, CheckCircleOutlined, CloseCircleOutlined, HomeOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import apiService from '../services/api';
 import dayjs from 'dayjs';
 import type { Resume } from '../services/resume.service';
 
@@ -13,22 +13,6 @@ interface Stats {
   acceptingResumes: number;
   notAcceptingResumes: number;
   onServiceResumes: number;
-}
-
-// 定义API响应接口
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
-}
-
-// 定义分页数据接口
-interface PaginatedData<T> {
-  items: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
 
 const Dashboard: React.FC = () => {
@@ -47,25 +31,20 @@ const Dashboard: React.FC = () => {
     setLoading(true);
     try {
       // 获取所有简历，设置较大的pageSize以确保获取所有数据
-      const response = await axios.get<ApiResponse<PaginatedData<Resume>>>('/api/resumes', {
-        params: {
-          page: 1,
-          pageSize: 1000 // 设置一个足够大的数值以获取所有数据
-        },
-        timeout: 10000,
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
+      const response = await apiService.get('/api/resumes', {
+        page: 1,
+        pageSize: 1000 // 设置一个足够大的数值以获取所有数据
+      }, {
+        timeout: 10000
       });
 
       // 使用后端返回的新格式
-      const { success, data } = response.data;
-      if (!success || !data) {
+      const { success, data: paginatedData } = response;
+      if (!success || !paginatedData) {
         throw new Error('获取数据失败');
       }
 
-      const { items: resumes = [], total } = data;
+      const { items: resumes = [], total } = paginatedData;
 
       // 如果返回的数据总数大于当前获取的数据量，说明还有更多数据
       if (total > resumes.length) {

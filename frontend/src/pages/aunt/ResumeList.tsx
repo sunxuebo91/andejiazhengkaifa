@@ -1,26 +1,39 @@
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip } from 'antd';
+import type { TablePaginationConfig } from 'antd';
 import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import dayjs from 'dayjs';
+import apiService from '../../services/api';
 
 const { TextArea } = Input;
 const { Option } = Select;
 
 // 接单状态映射
-const orderStatusMap = {
+const orderStatusMap: Record<string, { text: string; color: string }> = {
   accepting: { text: '想接单', color: 'green' },
   'not-accepting': { text: '不接单', color: 'red' },
   'on-service': { text: '已上户', color: 'blue' }
 };
 
-// 性别映射
-const genderMap = {
-  male: '男',
-  female: '女'
-};
+// 类型定义
+interface SearchParams {
+  keyword?: string;
+}
+
+interface ResumeData {
+  _id: string;
+  id: string;
+  formattedId: string;
+  name: string;
+  phone: string;
+  age: number;
+  gender: 'male' | 'female';
+  nativePlace: string;
+  orderStatus: keyof typeof orderStatusMap;
+  hasMedicalReport: boolean;
+  [key: string]: any;
+}
 
 const ResumeList = () => {
   const [form] = Form.useForm();
@@ -28,19 +41,19 @@ const ResumeList = () => {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpVisible, setFollowUpVisible] = useState(false);
   const [followUpForm] = Form.useForm();
-  const [currentResumeId, setCurrentResumeId] = useState(null);
+  const [currentResumeId, setCurrentResumeId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [searchParams, setSearchParams] = useState({});
+  const [searchParams, setSearchParams] = useState<SearchParams>({});
   const [loading, setLoading] = useState(false);
-  const [resumeList, setResumeList] = useState([]);
+  const [resumeList, setResumeList] = useState<ResumeData[]>([]);
   const [total, setTotal] = useState(0);
   
   const navigate = useNavigate();
-  const searchTimeoutRef = useRef(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 获取简历列表
-  const fetchResumeList = async (params = {}) => {
+  const fetchResumeList = async (params: SearchParams & { page?: number; pageSize?: number; _t?: number } = {}) => {
     setLoading(true);
     try {
       // 将关键词参数转换为后端API所需的格式
@@ -50,37 +63,25 @@ const ResumeList = () => {
       const searchKeyword = apiParams.keyword ? apiParams.keyword.toLowerCase() : '';
       
       console.log('开始请求简历列表，参数:', apiParams);
-      // 使用相对路径，让Vite代理处理
-      const response = await axios.get('/api/resumes', { 
-        params: apiParams,
-        timeout: 30000, // 增加超时时间到30秒
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
+      // 使用正确的API路径和参数格式
+      const response = await apiService.get('/api/resumes', apiParams, {
+        timeout: 30000 // 增加超时时间到30秒
       });
       
-      console.log('API响应数据:', response.data);
+      console.log('API响应数据:', response);
       
       // 检查响应格式
-      if (!response.data) {
+      if (!response || !response.data) {
         throw new Error('服务器返回数据为空');
       }
       
-      // 如果响应直接是数组，说明是旧格式，直接使用
-      let resumes = Array.isArray(response.data) ? response.data : [];
-      let totalCount = resumes.length;
-      
-      // 如果是新格式，从data.items中获取数据
-      if (response.data.data && Array.isArray(response.data.data.items)) {
-        resumes = response.data.data.items;
-        totalCount = response.data.data.total || resumes.length;
-      }
+      // 直接从响应数据中提取 items（因为 axios 拦截器已经处理过）
+      const { items: resumes = [], total: totalCount = 0 } = response.data;
       
       console.log('解析后的简历数据:', { resumesCount: resumes.length, totalCount, sampleResume: resumes[0] });
       
       // 格式化数据
-      let formattedData = resumes.map(resume => {
+      let formattedData: ResumeData[] = resumes.map((resume: any) => {
         console.log('处理简历数据:', resume);
         // 确保id存在且为字符串
         if (!resume._id) {
@@ -106,7 +107,7 @@ const ResumeList = () => {
       
       // 如果有搜索关键词，在前端进行过滤
       if (searchKeyword) {
-        formattedData = formattedData.filter(resume => {
+        formattedData = formattedData.filter((resume: ResumeData) => {
           const searchFields = [
             resume.name,
             resume.phone,
@@ -181,10 +182,10 @@ const ResumeList = () => {
   }, [searchParams, currentPage, pageSize]);
 
   // 处理搜索
-  const handleSearch = (values) => {
+  const handleSearch = (values: { keyword?: string }) => {
     const { keyword } = values;
     // 使用一个统一关键词搜索多个字段
-    const searchQuery = keyword ? { keyword } : {};
+    const searchQuery: SearchParams = keyword ? { keyword } : {};
     setSearchParams(searchQuery);
     setCurrentPage(1); // 重置到第一页
   };
@@ -197,13 +198,17 @@ const ResumeList = () => {
   };
 
   // 处理分页变化
-  const handleTableChange = (pagination) => {
-    setCurrentPage(pagination.current);
-    setPageSize(pagination.pageSize);
+  const handleTableChange = (pagination: TablePaginationConfig) => {
+    if (pagination.current) {
+      setCurrentPage(pagination.current);
+    }
+    if (pagination.pageSize) {
+      setPageSize(pagination.pageSize);
+    }
   };
 
   // 打开跟进记录弹窗
-  const handleFollowUp = (resumeId) => {
+  const handleFollowUp = (resumeId: string) => {
     setCurrentResumeId(resumeId);
     setFollowUpVisible(true);
     followUpForm.resetFields();
@@ -259,7 +264,7 @@ const ResumeList = () => {
       dataIndex: 'formattedId',
       key: 'formattedId',
       width: 120,
-      render: (text, record) => {
+      render: (text: string, record: ResumeData) => {
         console.log('渲染简历ID:', { text, record });
         const id = record.id || record._id || '';
         return (
@@ -282,7 +287,7 @@ const ResumeList = () => {
       title: '姓名',
       dataIndex: 'name',
       key: 'name',
-      render: (text) => <span>{text}</span>,
+      render: (text: string) => <span>{text}</span>,
     },
     {
       title: '手机号',
@@ -298,7 +303,7 @@ const ResumeList = () => {
       title: '性别',
       dataIndex: 'gender',
       key: 'gender',
-      render: (gender) => gender === 'male' ? '男' : gender === 'female' ? '女' : gender || '-',
+      render: (gender: 'male' | 'female') => gender === 'male' ? '男' : gender === 'female' ? '女' : gender || '-',
     },
     {
       title: '籍贯',
@@ -309,7 +314,7 @@ const ResumeList = () => {
       title: '接单状态',
       dataIndex: 'orderStatus',
       key: 'orderStatus',
-      render: (status) => {
+      render: (status: keyof typeof orderStatusMap) => {
         const statusInfo = orderStatusMap[status] || { text: '未知', color: 'default' };
         return <Tag color={statusInfo.color}>{statusInfo.text}</Tag>;
       },
@@ -318,7 +323,7 @@ const ResumeList = () => {
       title: '体检报告',
       dataIndex: 'hasMedicalReport',
       key: 'hasMedicalReport',
-      render: (hasMedicalReport) => (
+      render: (hasMedicalReport: boolean) => (
         hasMedicalReport ? 
           <Tag color="green">有</Tag> : 
           <Tag color="red">无</Tag>
@@ -327,7 +332,7 @@ const ResumeList = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_, record) => (
+      render: (_: any, record: ResumeData) => (
         <Space size="middle">
           <Tooltip title="添加跟进记录">
             <Button 
@@ -360,7 +365,11 @@ const ResumeList = () => {
             key="add" 
             type="primary" 
             icon={<PlusOutlined />}
-            onClick={() => navigate('/aunt/create-resume')}
+            onClick={() => {
+              // 清除之前保存的编辑数据，确保是新建模式
+              localStorage.removeItem('editingResume');
+              navigate('/aunt/create-resume');
+            }}
           >
             新建简历
           </Button>

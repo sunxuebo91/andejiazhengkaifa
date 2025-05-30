@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: housekeeping_mongodb_prod
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb/logs:/var/log/mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-secure_password_change_me}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-housekeeping_prod}
+    command: mongod --auth --bind_ip_all --logpath /var/log/mongodb/mongod.log --logappend
+    networks:
+      - housekeeping_network
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: housekeeping_backend_prod
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-secure_password_change_me}@mongodb:27017/${MONGO_DATABASE:-housekeeping_prod}?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_me}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      TENCENT_COS_SECRET_ID: ${TENCENT_COS_SECRET_ID}
+      TENCENT_COS_SECRET_KEY: ${TENCENT_COS_SECRET_KEY}
+      TENCENT_COS_BUCKET: ${TENCENT_COS_BUCKET}
+      TENCENT_COS_REGION: ${TENCENT_COS_REGION}
+      BAIDU_OCR_API_KEY: ${BAIDU_OCR_API_KEY}
+      BAIDU_OCR_SECRET_KEY: ${BAIDU_OCR_SECRET_KEY}
+      LOG_LEVEL: info
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+      - ./backend/cache:/app/cache
+    depends_on:
+      - mongodb
+    networks:
+      - housekeeping_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: housekeeping_frontend_prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NODE_ENV: production
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - backend
+    networks:
+      - housekeeping_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis缓存服务（可选，用于性能优化）
+  redis:
+    image: redis:7-alpine
+    container_name: housekeeping_redis_prod
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/conf:/usr/local/etc/redis:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - housekeeping_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  housekeeping_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 

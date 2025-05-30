@@ -1,10 +1,35 @@
-import { PageContainer } from '@ant-design/pro-components';
-import { Card, Descriptions, Button, Spin, App, Image, Tag, Modal, Form, Input, Select, Typography, Tooltip, Table } from 'antd';
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { EditOutlined, FilePdfOutlined } from '@ant-design/icons';
+import {
+  Card,
+  Descriptions,
+  Image,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Table,
+  Tag,
+  Typography,
+  App,
+  Space,
+  Row,
+  Col,
+  Avatar,
+  Tooltip,
+  Select,
+  Spin
+} from 'antd';
+import {
+  EditOutlined,
+  CalendarOutlined,
+  FilePdfOutlined
+} from '@ant-design/icons';
+import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
+import axios from 'axios';
+import apiService from '../../services/api';
+import { isPdfFile } from '../../utils/uploadHelper';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
@@ -16,7 +41,6 @@ dayjs.extend(customParseFormat);
 
 // import apiService from '../../services/api';
 // import type { UploadFile } from 'antd/es/upload/interface';
-import { isPdfFile } from '../../utils/uploadHelper';
 // const { Option } = Select;
 
 // 中国省份/地区常量数据

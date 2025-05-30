@@ -135,6 +135,19 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'workExperi
   medicalExamDate?: string;
   birthDate?: string;
   workExperiences?: WorkExperience[];
+  // 添加缺失的字段
+  maritalStatus?: string;
+  religion?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  // 文件相关字段
+  idCardFront?: { url: string };
+  idCardBack?: { url: string };
+  photoUrls?: string[];
+  certificateUrls?: string[];
+  medicalReportUrls?: string[];
+  idCardFrontUrl?: string;
+  idCardBackUrl?: string;
 }
 
 // 添加类型转换辅助函数
@@ -177,7 +190,7 @@ const convertToExtendedResume = (resume: Resume): ExtendedResume => {
   }
 
   // 确保工作经历数组的类型正确
-  const workExperiences: WorkExperience[] = (resume.workExperience || [])
+  const workExperiences: WorkExperience[] = (resume.workExperiences || [])
     .filter((exp: WorkExperience | null): exp is WorkExperience => exp !== null)
     .map((exp: WorkExperience) => ({
       startDate: exp.startDate || '',
@@ -294,18 +307,30 @@ const CreateResume: React.FC = () => {
         }
       }
 
-      // 更新文件列表
+      // 更新两套文件列表状态以保持兼容性
+      const customFileList = fileList as CustomUploadFile[];
+      
+      // 更新单独的状态变量（兼容旧逻辑）
       switch (type) {
         case 'photo':
-          setPhotoFiles(fileList as CustomUploadFile[]);
+          setPhotoFiles(customFileList);
           break;
         case 'certificate':
-          setCertificateFiles(fileList as CustomUploadFile[]);
+          setCertificateFiles(customFileList);
           break;
         case 'medical':
-          setMedicalReportFiles(fileList as CustomUploadFile[]);
+          setMedicalReportFiles(customFileList);
           break;
       }
+      
+      // 同时更新统一的文件上传状态
+      setFileUploadState(prev => ({
+        ...prev,
+        [type]: {
+          ...prev[type],
+          files: customFileList
+        }
+      }));
 
       // 处理上传状态
       if (file.status === 'done') {
@@ -370,13 +395,16 @@ const CreateResume: React.FC = () => {
             try {
               const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
               if (response.success) {
-                const newFile = { 
+                const newFile: CustomUploadFile = { 
                   uid: file.uid, 
                   name: file.name, 
                   url: response.data?.url, 
-                  status: "done", 
-                  originFileObj: file 
+                  status: "done" as const, 
+                  originFileObj: file,
+                  isExisting: false
                 };
+                
+                // 同时更新两套状态
                 setFileUploadState(prev => ({ 
                   ...prev, 
                   [type]: { 
@@ -384,6 +412,20 @@ const CreateResume: React.FC = () => {
                     files: [...prev[type].files, newFile] 
                   } 
                 }));
+                
+                // 同时更新单独的状态变量（兼容旧逻辑）
+                switch (type) {
+                  case 'photo':
+                    setPhotoFiles(prev => [...prev, newFile]);
+                    break;
+                  case 'certificate':
+                    setCertificateFiles(prev => [...prev, newFile]);
+                    break;
+                  case 'medical':
+                    setMedicalReportFiles(prev => [...prev, newFile]);
+                    break;
+                }
+                
                 messageApi.success(`${file.name} 上传成功`);
               } else {
                 messageApi.error(response.message || "上传失败");
@@ -394,12 +436,15 @@ const CreateResume: React.FC = () => {
             }
           } else {
             // 如果是新建模式，将文件添加到待上传列表
-            const newFile = { 
+            const newFile: CustomUploadFile = { 
               uid: file.uid, 
               name: file.name, 
-              status: "done", 
-              originFileObj: file 
+              status: "done" as const, 
+              originFileObj: file,
+              isExisting: false
             };
+            
+            // 同时更新两套状态
             setFileUploadState(prev => ({ 
               ...prev, 
               [type]: { 
@@ -407,6 +452,19 @@ const CreateResume: React.FC = () => {
                 files: [...prev[type].files, newFile] 
               } 
             }));
+            
+            // 同时更新单独的状态变量（兼容旧逻辑）
+            switch (type) {
+              case 'photo':
+                setPhotoFiles(prev => [...prev, newFile]);
+                break;
+              case 'certificate':
+                setCertificateFiles(prev => [...prev, newFile]);
+                break;
+              case 'medical':
+                setMedicalReportFiles(prev => [...prev, newFile]);
+                break;
+            }
           }
           return false; // 阻止 antd Upload 自动上传
         }}
@@ -491,17 +549,87 @@ const CreateResume: React.FC = () => {
           orderStatus: extendedResume.orderStatus,
           skills: extendedResume.skills,
           leadSource: extendedResume.leadSource,
+          // 添加缺失的字段
+          maritalStatus: extendedResume.maritalStatus,
+          religion: extendedResume.religion,
+          emergencyContactName: extendedResume.emergencyContactName,
+          emergencyContactPhone: extendedResume.emergencyContactPhone,
           workExperiences: extendedResume.workExperiences?.map(exp => ({
             startDate: exp.startDate || '',
             endDate: exp.endDate || '',
             description: exp.description || '',
             company: exp.company || undefined,
             position: exp.position || undefined
-          })) || []
+          })) || [{ startDate: '', endDate: '', description: '' }] // 确保至少有一条工作经历
         };
         
         // 设置表单值
         form.setFieldsValue(formData);
+        
+        // 设置已有文件的显示
+        if (extendedResume.idCardFrontUrl || extendedResume.idCardFront?.url) {
+          setExistingIdCardFrontUrl(extendedResume.idCardFrontUrl || extendedResume.idCardFront?.url || '');
+        }
+        
+        if (extendedResume.idCardBackUrl || extendedResume.idCardBack?.url) {
+          setExistingIdCardBackUrl(extendedResume.idCardBackUrl || extendedResume.idCardBack?.url || '');
+        }
+        
+        // 修改：统一使用 fileUploadState 管理文件状态
+        let updatedFileUploadState = {
+          photo: { files: [] as CustomUploadFile[] },
+          certificate: { files: [] as CustomUploadFile[] },
+          medical: { files: [] as CustomUploadFile[] }
+        };
+        
+        // 设置个人照片
+        if (extendedResume.photoUrls && extendedResume.photoUrls.length > 0) {
+          const existingPhotoFiles = extendedResume.photoUrls.map((url, index) => ({
+            uid: `existing-photo-${index}`,
+            name: `个人照片${index + 1}`,
+            status: 'done' as const,
+            url: url,
+            isExisting: true,
+            size: 0
+          }));
+          updatedFileUploadState.photo.files = existingPhotoFiles as CustomUploadFile[];
+          // 同时保持旧的 state 以兼容其他逻辑
+          setPhotoFiles(existingPhotoFiles as CustomUploadFile[]);
+        }
+        
+        // 设置技能证书
+        if (extendedResume.certificateUrls && extendedResume.certificateUrls.length > 0) {
+          const existingCertFiles = extendedResume.certificateUrls.map((url, index) => ({
+            uid: `existing-cert-${index}`,
+            name: `证书${index + 1}`,
+            status: 'done' as const,
+            url: url,
+            isExisting: true,
+            size: 0
+          }));
+          updatedFileUploadState.certificate.files = existingCertFiles as CustomUploadFile[];
+          // 同时保持旧的 state 以兼容其他逻辑
+          setCertificateFiles(existingCertFiles as CustomUploadFile[]);
+        }
+        
+        // 设置体检报告
+        if (extendedResume.medicalReportUrls && extendedResume.medicalReportUrls.length > 0) {
+          const existingMedicalFiles = extendedResume.medicalReportUrls.map((url, index) => ({
+            uid: `existing-medical-${index}`,
+            name: `体检报告${index + 1}`,
+            status: 'done' as const,
+            url: url,
+            isExisting: true,
+            size: 0
+          }));
+          updatedFileUploadState.medical.files = existingMedicalFiles as CustomUploadFile[];
+          // 同时保持旧的 state 以兼容其他逻辑
+          setMedicalReportFiles(existingMedicalFiles as CustomUploadFile[]);
+        }
+        
+        // 更新统一的文件上传状态
+        setFileUploadState(updatedFileUploadState);
+        
       } else {
         setMessageState({ type: 'error', content: response.message || '加载简历失败' });
       }
@@ -620,7 +748,7 @@ const CreateResume: React.FC = () => {
         messageApi.warning('未能识别到身份证信息，请手动填写');
       }
 
-      const newFile = {
+      const newFile: CustomUploadFile = {
         uid: file.uid || `-1`,
         name: file.name,
         status: 'done' as const,
@@ -995,6 +1123,11 @@ const CreateResume: React.FC = () => {
         orderStatus: editingResume.orderStatus,
         skills: editingResume.skills,
         leadSource: editingResume.leadSource,
+        // 添加缺失的字段
+        maritalStatus: editingResume.maritalStatus,
+        religion: editingResume.religion,
+        emergencyContactName: editingResume.emergencyContactName,
+        emergencyContactPhone: editingResume.emergencyContactPhone,
         workExperiences: (editingResume.workExperiences || [])
           .filter((exp: WorkExperienceItem | null): exp is WorkExperienceItem => exp !== null)
           .map((exp: WorkExperienceItem) => ({

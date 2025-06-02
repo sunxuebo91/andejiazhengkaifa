@@ -29,6 +29,9 @@ Thumbs.db
 
 # 数据库文件
 /mongodb
+mongodb_data/
+redis/
+nginx/
 *.db
 *.sqlite
 *.sqlite3

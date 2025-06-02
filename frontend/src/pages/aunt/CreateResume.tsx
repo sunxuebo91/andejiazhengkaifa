@@ -1,5 +1,5 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App } from 'antd';
+import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App, message } from 'antd';
 import { useState, useEffect } from 'react';
 import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -247,7 +247,7 @@ interface FileUploadState {
 const CreateResume: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
-  const { message: messageApi } = App.useApp();
+  const [messageApi, contextHolder] = message.useMessage();
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [editingResume, setEditingResume] = useState<ExtendedResume | null>(null);
@@ -267,6 +267,11 @@ const CreateResume: React.FC = () => {
   const [existingIdCardFrontUrl, setExistingIdCardFrontUrl] = useState<string>('');
   const [existingIdCardBackUrl, setExistingIdCardBackUrl] = useState<string>('');
   const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
+  const [fileUploadState, setFileUploadState] = useState<FileUploadState>({
+    photo: { files: [] },
+    certificate: { files: [] },
+    medical: { files: [] }
+  });
 
   // 将 validateFile 移到组件内部
   const validateFile = (file: RcFile, type: 'idCard' | 'photo' | 'certificate' | 'medical'): boolean => {
@@ -497,8 +502,29 @@ const CreateResume: React.FC = () => {
         onRemove={handleRemoveFile(type)}
         beforeUpload={async (file) => {
           // 移除"先保存基本信息"的限制
+          
+          // 🔄 添加图片压缩处理
+          let processedFile: File = file;
+          try {
+            // 压缩类型映射
+            const compressionTypeMapping = {
+              'photo': 'photo',
+              'certificate': 'certificate', 
+              'medical': 'medicalReport'
+            } as const;
+            
+            const compressionType = compressionTypeMapping[type as keyof typeof compressionTypeMapping];
+            
+            console.log(`🗜️ 开始压缩文件: ${file.name} (${(file.size / 1024).toFixed(2)}KB) - 类型: ${compressionType}`);
+            processedFile = await ImageService.compressImage(file, compressionType);
+            console.log(`✅ 压缩完成: ${processedFile.name} (${(processedFile.size / 1024).toFixed(2)}KB)`);
+          } catch (error) {
+            console.warn('⚠️ 压缩失败，使用原文件:', error);
+            processedFile = file;
+          }
+          
           const formData = new FormData();
-          formData.append('file', file);
+          formData.append('file', processedFile);
           
           // 修复文件类型参数映射
           const fileTypeMapping = {
@@ -527,7 +553,8 @@ const CreateResume: React.FC = () => {
                   name: file.name, 
                   url: response.data?.url, 
                   status: "done" as const, 
-                  originFileObj: file,
+                  originFileObj: file, // 保持原始 RcFile 类型
+                  size: processedFile.size, // 使用压缩后的大小
                   isExisting: false
                 };
                 
@@ -567,7 +594,8 @@ const CreateResume: React.FC = () => {
               uid: file.uid, 
               name: file.name, 
               status: "done" as const, 
-              originFileObj: file,
+              originFileObj: file, // 保持原始 RcFile 类型
+              size: processedFile.size, // 使用压缩后的大小
               isExisting: false
             };
             
@@ -1281,6 +1309,61 @@ const CreateResume: React.FC = () => {
           .map(file => file.originFileObj)
           .filter((file): file is RcFile => file !== undefined);
         
+        // 🔄 压缩所有图片文件
+        console.log('🗜️ 开始压缩所有文件...');
+        const compressedPhotoFiles = await Promise.all(
+          photoFileList.map(async (file) => {
+            try {
+              return await ImageService.compressImage(file, 'photo');
+            } catch (error) {
+              console.warn('⚠️ 个人照片压缩失败，使用原文件:', error);
+              return file;
+            }
+          })
+        );
+        
+        const compressedCertificateFiles = await Promise.all(
+          certificateFileList.map(async (file) => {
+            try {
+              return await ImageService.compressImage(file, 'certificate');
+            } catch (error) {
+              console.warn('⚠️ 证书压缩失败，使用原文件:', error);
+              return file;
+            }
+          })
+        );
+        
+        const compressedMedicalFiles = await Promise.all(
+          medicalReportFileList.map(async (file) => {
+            try {
+              return await ImageService.compressImage(file, 'medicalReport');
+            } catch (error) {
+              console.warn('⚠️ 体检报告压缩失败，使用原文件:', error);
+              return file;
+            }
+          })
+        );
+        
+        // 压缩身份证图片
+        let compressedFrontFile: File | undefined = frontFile;
+        let compressedBackFile: File | undefined = backFile;
+        if (frontFile) {
+          try {
+            compressedFrontFile = await ImageService.compressImage(frontFile, 'idCard');
+          } catch (error) {
+            console.warn('⚠️ 身份证正面压缩失败，使用原文件:', error);
+          }
+        }
+        if (backFile) {
+          try {
+            compressedBackFile = await ImageService.compressImage(backFile, 'idCard');
+          } catch (error) {
+            console.warn('⚠️ 身份证背面压缩失败，使用原文件:', error);
+          }
+        }
+        
+        console.log('✅ 文件压缩完成');
+        
         // 构建完整的表单数据
         const formData = new FormData();
         
@@ -1295,12 +1378,12 @@ const CreateResume: React.FC = () => {
           }
         });
 
-        // 添加所有文件
-        if (frontFile) formData.append('idCardFront', frontFile);
-        if (backFile) formData.append('idCardBack', backFile);
-        photoFileList.forEach(file => formData.append('photoFiles', file));
-        certificateFileList.forEach(file => formData.append('certificateFiles', file));
-        medicalReportFileList.forEach(file => formData.append('medicalReportFiles', file));
+        // 添加所有压缩后的文件
+        if (compressedFrontFile) formData.append('idCardFront', compressedFrontFile as File);
+        if (compressedBackFile) formData.append('idCardBack', compressedBackFile as File);
+        compressedPhotoFiles.forEach(file => formData.append('photoFiles', file as File));
+        compressedCertificateFiles.forEach(file => formData.append('certificateFiles', file as File));
+        compressedMedicalFiles.forEach(file => formData.append('medicalReportFiles', file as File));
 
         const response = await apiService.upload('/api/resumes', formData, 'POST');
         
@@ -1429,13 +1512,6 @@ const CreateResume: React.FC = () => {
     </Form.Item>
   );
 
-  // 修改文件上传状态管理
-  const [fileUploadState, setFileUploadState] = useState<FileUploadState>({
-    photo: { files: [] },
-    certificate: { files: [] },
-    medical: { files: [] }
-  });
-
   return (
     <PageContainer
       header={{
@@ -1465,6 +1541,7 @@ const CreateResume: React.FC = () => {
         ],
       }}
     >
+      {contextHolder}
       <Card
         style={{ marginBottom: 24 }}
         title={

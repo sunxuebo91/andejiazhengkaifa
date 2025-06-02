@@ -95,8 +95,18 @@ const BaiduMapCard: React.FC<BaiduMapCardProps> = ({ value, onChange }) => {
   // 初始化地图
   const initMap = () => {
     console.log('开始初始化地图组件...');
+    
+    // 增加更严格的检查和重试机制
     if (!mapContainerRef.current) {
-      console.error('地图容器引用不存在');
+      console.warn('地图容器引用不存在，500ms后重试...');
+      setTimeout(() => {
+        if (mapContainerRef.current) {
+          initMap();
+        } else {
+          console.error('地图容器引用仍然不存在，可能DOM未完全渲染');
+          setMapError('地图容器初始化失败，请刷新页面重试');
+        }
+      }, 500);
       return;
     }
     
@@ -130,7 +140,7 @@ const BaiduMapCard: React.FC<BaiduMapCardProps> = ({ value, onChange }) => {
       }
       
       // 初始化地址自动完成
-      setTimeout(initAutoComplete, 200); // 确保输入框已渲染
+      setTimeout(initAutoComplete, 300); // 增加延迟时间
     } catch (error) {
       console.error('地图初始化错误:', error);
       setMapError('地图初始化失败，请刷新页面重试');
@@ -145,7 +155,15 @@ const BaiduMapCard: React.FC<BaiduMapCardProps> = ({ value, onChange }) => {
       // 获取输入框元素
       const inputElement = document.getElementById('serviceArea');
       if (!inputElement) {
-        console.error('找不到ID为serviceArea的输入元素');
+        console.warn('找不到ID为serviceArea的输入元素，300ms后重试...');
+        setTimeout(() => {
+          const retryElement = document.getElementById('serviceArea');
+          if (retryElement) {
+            initAutoComplete();
+          } else {
+            console.error('重试后仍找不到输入元素，自动完成功能可能无法使用');
+          }
+        }, 300);
         return;
       }
       

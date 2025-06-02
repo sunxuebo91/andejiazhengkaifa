@@ -23,6 +23,7 @@ import {
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import apiService from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { isPdfFile } from '../../utils/uploadHelper';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
@@ -389,6 +390,7 @@ const ResumeDetail = () => {
   const [resume, setResume] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const { message: messageApi } = App.useApp();
+  const { user } = useAuth(); // 获取当前登录用户信息
 
   // 跟进记录相关状态
   const [followUpRecords, setFollowUpRecords] = useState<any[]>([]);
@@ -877,6 +879,11 @@ const ResumeDetail = () => {
     try {
       setFollowUpLoading(true);
       
+      if (!user?.name) {
+        messageApi.error('无法获取当前用户信息，请重新登录');
+        return;
+      }
+      
       // 创建新的跟进记录
       const followUpData = {
         id: Date.now().toString(), // 生成临时ID
@@ -884,14 +891,22 @@ const ResumeDetail = () => {
         type: values.type,
         content: values.content,
         createdAt: new Date().toISOString(),
-        createdBy: 'current_user', // 应当从登录信息中获取
+        createdBy: user.name, // 使用当前登录用户的name字段
       };
       
       // 从localStorage获取现有记录
       const existingRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
       
+      // 更新旧记录中的 createdBy 字段（如果存在）
+      const updatedExistingRecords = existingRecords.map((record: any) => {
+        if (record.createdBy === 'current_user') {
+          return { ...record, createdBy: user.name };
+        }
+        return record;
+      });
+      
       // 添加新记录
-      const updatedRecords = [...existingRecords, followUpData];
+      const updatedRecords = [...updatedExistingRecords, followUpData];
       
       // 保存回localStorage
       localStorage.setItem('followUpRecords', JSON.stringify(updatedRecords));

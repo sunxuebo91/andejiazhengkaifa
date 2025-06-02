@@ -20,19 +20,19 @@ const compressionOptions = {
     useWebWorker: true,
     quality: 0.7,
   },
-  // 证书照片 - 保持清晰度
+  // 证书照片 - 调整为100KB
   certificate: {
-    maxSizeMB: 0.15,     // 150KB
-    maxWidthOrHeight: 1000,
+    maxSizeMB: 0.1,      // 100KB (从150KB调整)
+    maxWidthOrHeight: 800, // 适当降低尺寸以确保压缩效果
     useWebWorker: true,
-    quality: 0.75,
+    quality: 0.7,        // 适当降低质量以确保压缩效果
   },
-  // 体检报告 - 保持可读性
+  // 体检报告 - 调整为100KB
   medicalReport: {
-    maxSizeMB: 0.3,      // 300KB
-    maxWidthOrHeight: 1400,
+    maxSizeMB: 0.1,      // 100KB (从300KB调整)
+    maxWidthOrHeight: 800, // 适当降低尺寸以确保压缩效果
     useWebWorker: true,
-    quality: 0.8,
+    quality: 0.7,        // 适当降低质量以确保压缩效果
   },
   // 默认压缩选项
   default: {

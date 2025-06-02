@@ -3,7 +3,6 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ResumeModule } from './modules/resume/resume.module';
 import { UploadModule } from './modules/upload/upload.module';
-import { OcrModule } from './modules/ocr/ocr.module';
 import { HealthModule } from './modules/health/health.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -32,7 +31,6 @@ import { AuthModule } from './modules/auth/auth.module';
     }),
     ResumeModule,
     UploadModule,
-    OcrModule,
     HealthModule,
     TasksModule,
     UsersModule,

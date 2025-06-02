@@ -12,7 +12,7 @@ declare global {
     BMapGL: any;
     BMap_Autocomplete: any;
     BMAP_STATUS_SUCCESS: any;
-    initBMap: () => void;
+    initBMap?: () => void;
   }
 }
 

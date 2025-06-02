@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Tabs, Form, Input, Button, Space, Switch, Select, message, App } from 'antd';
+import { Card, Tabs, Form, Input, Button, Switch, Select, App } from 'antd';
 import { UserOutlined, LockOutlined, BellOutlined, SettingOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
@@ -48,10 +48,10 @@ const AccountSettings: React.FC = () => {
               layout="vertical"
               form={form}
               initialValues={{
-                username: user?.username,
-                name: user?.name,
-                email: user?.email || '',
-                phone: user?.phone || '',
+                username: user?.username || '',
+                name: user?.name || '',
+                email: (user as any)?.email || '',
+                phone: (user as any)?.phone || '',
               }}
               onFinish={handleSubmit}
               style={{ maxWidth: 500, margin: '0 auto' }}
@@ -191,8 +191,9 @@ const AccountSettings: React.FC = () => {
               style={{ maxWidth: 500, margin: '0 auto' }}
               onFinish={handleSubmit}
               initialValues={{
-                language: 'zh_CN',
+                language: 'zh-CN',
                 theme: 'light',
+                timezone: 'Asia/Shanghai'
               }}
             >
               <Form.Item label="语言" name="language">

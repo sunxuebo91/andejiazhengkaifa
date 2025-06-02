@@ -1,5 +1,5 @@
 import imageCompression from 'browser-image-compression';
-import axios from 'axios';
+// import axios from 'axios'; // 移除未使用的导入
 import api from './api';
 import { AxiosError } from 'axios';
 import apiService from './api';

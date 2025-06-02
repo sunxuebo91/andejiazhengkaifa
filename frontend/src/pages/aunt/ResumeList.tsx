@@ -68,7 +68,7 @@ const ResumeList = () => {
       
       // 确保orderStatus参数被正确传递
       if (apiParams.orderStatus) {
-        apiParams.orderStatus = apiParams.orderStatus;
+        // orderStatus已经是正确的值，无需额外处理
       }
       
       console.log('开始请求简历列表，参数:', apiParams);
@@ -287,24 +287,6 @@ const ResumeList = () => {
       messageApi.error('添加跟进记录失败，请重试');
     } finally {
       setFollowUpLoading(false);
-    }
-  };
-
-  // 获取跟进记录
-  const getFollowUpRecords = (resumeId: string) => {
-    try {
-      const records = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
-      // 过滤出当前简历的记录，并确保使用正确的用户名
-      return records
-        .filter((record: any) => record.resumeId === resumeId)
-        .map((record: any) => ({
-          ...record,
-          // 如果记录中的用户名是 'current_user'，则使用当前登录用户名
-          createdBy: record.createdBy === 'current_user' ? (user?.name || '未知用户') : record.createdBy
-        }));
-    } catch (error) {
-      console.error('获取跟进记录失败:', error);
-      return [];
     }
   };
 

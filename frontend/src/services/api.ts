@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosRequestConfig, AxiosError } from 'axios';
 import { getToken, removeToken } from './auth';
 
 // API 基础 URL

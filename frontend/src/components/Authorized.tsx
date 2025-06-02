@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Spin } from 'antd';
 
@@ -18,7 +18,7 @@ const Authorized: React.FC<AuthorizedProps> = ({
   noMatch = <Navigate to="/unauthorized" replace />
 }) => {
   const { hasPermission, hasRole, loading } = useAuth();
-  const location = useLocation();
+  // const location = useLocation(); // 移除未使用的变量
   
   // 如果正在加载，显示加载状态
   if (loading) {

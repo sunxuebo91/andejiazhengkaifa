@@ -14,7 +14,7 @@ import BaiduMapCard from '../../components/BaiduMapCard';
 import apiService from '../../services/api';
 import type { ApiResponse } from '../../services/api';
 import { ImageService } from '../../services/imageService';
-import { Gender, JobType, Education, FormValues, WorkExperience } from '../../types/resume';
+import { Gender, GenderType, JobType, Education, FormValues, WorkExperience } from '../../types/resume';
 import type { Resume } from '../../services/resume.service';
 import { isLoggedIn } from '../../services/auth';
 // 扩展 dayjs 功能
@@ -614,7 +614,7 @@ const CreateResume: React.FC = () => {
         } else {
           setMessageState({ type: 'error', content: '后端服务暂时无法连接，请检查后端服务是否启动' });
         }
-      } catch (error) {
+      } catch (_error) {
         setMessageState({ type: 'error', content: '后端服务暂时无法连接，请检查后端服务是否启动' });
       }
     };
@@ -703,7 +703,7 @@ const CreateResume: React.FC = () => {
         }
         
         // 修改：统一使用 fileUploadState 管理文件状态
-        let updatedFileUploadState = {
+        const updatedFileUploadState = {
           photo: { files: [] as CustomUploadFile[] },
           certificate: { files: [] as CustomUploadFile[] },
           medical: { files: [] as CustomUploadFile[] }
@@ -826,8 +826,8 @@ const CreateResume: React.FC = () => {
         if (isHealthy) {
           messageApi.success('后端连接正常');
         }
-      } catch (error) {
-        messageApi.error('后端服务暂时无法连接，请检查后端服务是否启动');
+      } catch (_error) {
+        setMessageState({ type: 'error', content: '后端服务暂时无法连接，请检查后端服务是否启动' });
       }
     };
 

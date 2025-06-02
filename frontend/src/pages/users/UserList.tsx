@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Table, Button, Space, Tag, Popconfirm, Input, App } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import apiService from '../../services/api';
 
 interface User {
@@ -23,13 +23,6 @@ interface UserListData {
   page: number;
   pageSize: number;
   totalPages: number;
-}
-
-interface UserListResponse {
-  success: boolean;
-  data: UserListData;
-  message: string;
-  timestamp: number;
 }
 
 const UserList: React.FC = () => {

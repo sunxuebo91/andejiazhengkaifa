@@ -29,7 +29,7 @@ export const extractFileId = (url: string): string | null => {
   if (!url) return null;
   
   // 从URL中提取文件ID
-  const match = url.match(/\/api\/upload\/file\/([^\/\?]+)/);
+  const match = url.match(/\/api\/upload\/file\/([^/?]+)/);
   return match ? match[1] : null;
 };
 

@@ -17,7 +17,7 @@ const CreateUser: React.FC = () => {
   // 添加用户的API调用
   const addUser = async (values: any) => {
     // 从values中删除confirmPassword
-    const { confirmPassword, ...userData } = values;
+    const { confirmPassword: _confirmPassword, ...userData } = values;
     
     try {
       const response = await apiService.post('/api/users', userData);

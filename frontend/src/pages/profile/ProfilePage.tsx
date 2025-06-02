@@ -62,13 +62,13 @@ const ProfilePage: React.FC = () => {
           <Descriptions.Item label="电子邮箱">
             <Space>
               <MailOutlined />
-              {user.email || '未设置'}
+              {(user as any).email || '未设置'}
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label="手机号码">
             <Space>
               <PhoneOutlined />
-              {user.phone || '未设置'}
+              {(user as any).phone || '未设置'}
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label="角色">
@@ -80,7 +80,7 @@ const ProfilePage: React.FC = () => {
           <Descriptions.Item label="注册时间">
             <Space>
               <CalendarOutlined />
-              {new Date().toLocaleDateString()}
+              {(user as any).createdAt ? new Date((user as any).createdAt).toLocaleDateString() : '未知'}
             </Space>
           </Descriptions.Item>
         </Descriptions>

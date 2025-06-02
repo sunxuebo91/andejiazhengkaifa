@@ -1,9 +1,15 @@
-// @ts-ignore
+// @ts-expect-error
 import React, { useState, ChangeEvent } from 'react';
-// @ts-ignore
+// @ts-expect-error
 import { Card, Button } from '@/components/ui';
-// @ts-ignore
+// @ts-expect-error
 import { UploadCloud, CheckCircle, AlertCircle, FileText } from 'lucide-react';
+// @ts-expect-error Upload 组件类型暂时兼容问题
+import { Upload } from 'antd';
+// @ts-expect-error UploadFile 类型暂时兼容问题  
+import type { UploadFile } from 'antd/es/upload/interface';
+// @ts-expect-error RcFile 类型暂时兼容问题
+import type { RcFile } from 'antd/es/upload';
 
 type IdCardSide = 'front' | 'back';
 
@@ -73,8 +79,6 @@ export default function IDUploader() {
     }
   };
 
-  const isFormValid = true;
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md mx-auto">
@@ -115,7 +119,7 @@ export default function IDUploader() {
                       />
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm truncate">{frontFile.name}</span>
+                      <span className="text-sm truncate">{frontFile?.name}</span>
                       <div className="flex items-center space-x-2">
                         <span className="text-xs text-green-600">{uploadStatus.front}</span>
                         <button

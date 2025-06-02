@@ -21,7 +21,6 @@ const EditUser: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [userData, setUserData] = useState<User | null>(null);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { message } = App.useApp();
@@ -36,8 +35,7 @@ const EditUser: React.FC = () => {
         const response = await apiService.get(`/api/users/${id}`);
 
         if (response.success && response.data) {
-          const user = response.data;
-          setUserData(user);
+          const user: User = response.data;
           // 设置表单初始值，密码字段不回显
           form.setFieldsValue({
             username: user.username,

@@ -496,9 +496,39 @@ const CreateResume: React.FC = () => {
         onPreview={handlePreview}
         onRemove={handleRemoveFile(type)}
         beforeUpload={async (file) => {
-          // 移除"先保存基本信息"的限制
+          // 验证文件
+          if (!validateFile(file, type)) {
+            return false;
+          }
+          
+          let processedFile = file;
+          
+          // 如果是图片文件，进行压缩处理
+          if (file.type.startsWith('image/')) {
+            try {
+              console.log(`开始压缩图片: ${file.name} (${(file.size / 1024).toFixed(2)}KB) - 类型: ${type}`);
+              
+              // 根据文件类型选择压缩配置
+              let compressionType: 'photo' | 'certificate' | 'medicalReport' = 'photo';
+              if (type === 'certificate') {
+                compressionType = 'certificate';
+              } else if (type === 'medical') {
+                compressionType = 'medicalReport';
+              }
+              
+              processedFile = await ImageService.compressImage(file, compressionType);
+              console.log(`压缩完成: ${(processedFile.size / 1024).toFixed(2)}KB (压缩率: ${
+                ((1 - processedFile.size / file.size) * 100).toFixed(1)
+              }%)`);
+            } catch (error) {
+              console.error('图片压缩失败:', error);
+              messageApi.warning('图片压缩失败，使用原图片上传');
+              processedFile = file;
+            }
+          }
+          
           const formData = new FormData();
-          formData.append('file', file);
+          formData.append('file', processedFile);
           
           // 修复文件类型参数映射
           const fileTypeMapping = {
@@ -523,12 +553,13 @@ const CreateResume: React.FC = () => {
               const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
               if (response.success) {
                 const newFile: CustomUploadFile = { 
-                  uid: file.uid, 
-                  name: file.name, 
+                  uid: processedFile.uid || file.uid, 
+                  name: processedFile.name, 
                   url: response.data?.url, 
                   status: "done" as const, 
-                  originFileObj: file,
-                  isExisting: false
+                  originFileObj: processedFile,
+                  isExisting: false,
+                  size: processedFile.size
                 };
                 
                 // 同时更新两套状态
@@ -553,7 +584,7 @@ const CreateResume: React.FC = () => {
                     break;
                 }
                 
-                messageApi.success(`${file.name} 上传成功`);
+                messageApi.success(`${processedFile.name} 上传成功`);
               } else {
                 messageApi.error(response.message || "上传失败");
               }
@@ -564,11 +595,12 @@ const CreateResume: React.FC = () => {
           } else {
             // 如果是新建模式，将文件添加到待上传列表
             const newFile: CustomUploadFile = { 
-              uid: file.uid, 
-              name: file.name, 
+              uid: processedFile.uid || file.uid, 
+              name: processedFile.name, 
               status: "done" as const, 
-              originFileObj: file,
-              isExisting: false
+              originFileObj: processedFile,
+              isExisting: false,
+              size: processedFile.size
             };
             
             // 同时更新两套状态
@@ -873,7 +905,13 @@ const CreateResume: React.FC = () => {
 
     try {
       setIsOcrProcessing(true);
-      const ocrResult = await ImageService.ocrIdCard(file, type);
+      
+      // 添加图片压缩处理
+      console.log(`开始压缩身份证图片: ${file.name} (${(file.size / 1024).toFixed(2)}KB)`);
+      const compressedFile = await ImageService.compressImage(file, 'idCard');
+      console.log(`压缩完成: ${(compressedFile.size / 1024).toFixed(2)}KB`);
+      
+      const ocrResult = await ImageService.ocrIdCard(compressedFile, type);
       const formValues = ImageService.extractIdCardInfo(ocrResult);
       
       if (Object.keys(formValues).length > 0) {
@@ -884,13 +922,14 @@ const CreateResume: React.FC = () => {
       }
 
       const newFile: CustomUploadFile = {
-        uid: file.uid || `-1`,
-        name: file.name,
+        uid: compressedFile.uid || file.uid || `-1`,
+        name: compressedFile.name,
         status: 'done' as const,
-        url: URL.createObjectURL(file),
-        originFileObj: file,
+        url: URL.createObjectURL(compressedFile),
+        originFileObj: compressedFile,
         isExisting: false,
-        type: file.type
+        type: compressedFile.type,
+        size: compressedFile.size
       };
 
       setIdCardFiles(prev => ({

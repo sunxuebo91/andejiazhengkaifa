@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as crypto from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
+
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
+declare const process: any;
+declare const Buffer: any;
 
 type PromiseVoid = Promise<void>;
 type PromiseAny = Promise<any>;
@@ -18,14 +22,14 @@ export class ImageCacheService {
     }
   }
 
-  private generateCacheKey(buffer: Buffer, type: string): string {
+  private generateCacheKey(buffer: any, type: string): string {
     const hash = crypto.createHash('md5');
     hash.update(buffer);
     hash.update(type);
     return hash.digest('hex');
   }
 
-  async getCachedResult(buffer: Buffer, type: string): PromiseAny {
+  async getCachedResult(buffer: any, type: string): PromiseAny {
     try {
       const cacheKey = this.generateCacheKey(buffer, type);
       const cachePath = path.join(this.cacheDir, `${cacheKey}.json`);
@@ -51,7 +55,7 @@ export class ImageCacheService {
     }
   }
 
-  async setCachedResult(buffer: Buffer, type: string, result: any): PromiseVoid {
+  async setCachedResult(buffer: any, type: string, result: any): PromiseVoid {
     try {
       const cacheKey = this.generateCacheKey(buffer, type);
       const cachePath = path.join(this.cacheDir, `${cacheKey}.json`);

@@ -42,6 +42,8 @@ services:
       TENCENT_COS_SECRET_KEY: ${TENCENT_COS_SECRET_KEY}
       TENCENT_COS_BUCKET: ${TENCENT_COS_BUCKET}
       TENCENT_COS_REGION: ${TENCENT_COS_REGION}
+      TENCENT_OCR_SECRET_ID: AKIDjNmxrVs53we6JG0VllVzDArIcppZ9UZN
+      TENCENT_OCR_SECRET_KEY: czCML4XrwlJadYDcldFeojOmumPmsiJe
       BAIDU_OCR_API_KEY: ${BAIDU_OCR_API_KEY}
       BAIDU_OCR_SECRET_KEY: ${BAIDU_OCR_SECRET_KEY}
       LOG_LEVEL: info
@@ -71,9 +73,10 @@ services:
     environment:
       NODE_ENV: production
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
       - ./nginx/logs:/var/log/nginx
+      - ./frontend/dist:/usr/share/nginx/html
     depends_on:
       - backend
     networks:

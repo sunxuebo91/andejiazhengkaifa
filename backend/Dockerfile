@@ -1,5 +1,5 @@
 # 构建阶段
-FROM node:18-alpine AS builder
+FROM node:18 AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build
 
 # 生产阶段
-FROM node:18-alpine
+FROM node:18 AS production
 
 WORKDIR /app
 
@@ -30,6 +30,9 @@ RUN npm install --only=production --legacy-peer-deps
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 
+# 复制环境变量文件
+COPY --from=builder /app/.env ./.env
+
 # 创建必要的目录
 RUN mkdir -p uploads logs cache
 
@@ -40,9 +43,9 @@ ENV PORT=3000
 # 暴露端口
 EXPOSE 3000
 
-# 健康检查
+# 健康检查 - 使用curl替代wget
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+    CMD curl -f http://localhost:3000/api/health || exit 1
 
 # 启动应用
 CMD ["node", "dist/main"]

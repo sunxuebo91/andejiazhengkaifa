@@ -1,3 +1,7 @@
+// 确保crypto模块在全局可用，解决@nestjs/schedule的crypto依赖问题
+import * as crypto from 'crypto';
+(global as any).crypto = crypto;
+
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';

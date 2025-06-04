@@ -9,6 +9,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
+        TENCENT_OCR_SECRET_ID: 'AKIDjNmxrVs53we6JG0VllVzDArIcppZ9UZN',
+        TENCENT_OCR_SECRET_KEY: 'czCML4XrwlJadYDcldFeojOmumPmsiJe'
       },
       max_memory_restart: '512M',
       log_file: './logs/backend-combined.log',

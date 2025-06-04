@@ -16,7 +16,7 @@ import { FollowUpModule } from './modules/follow-up/follow-up.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env', '.env.development', '.env.production'],
+      envFilePath: ['.env'],
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],

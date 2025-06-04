@@ -77,9 +77,9 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
 
     // 启动服务器
-    const port = 3000;  // 使用固定的 3000 端口
+    const port = process.env.NODE_ENV === 'production' ? 3000 : 3001;
     await app.listen(port);
-    console.log(`应用已启动，监听端口：${port}`);
+    console.log(`应用已启动，监听端口：${port}，环境：${process.env.NODE_ENV || 'development'}`);
     console.log(`API文档地址：http://localhost:${port}/api/docs`);
   } catch (error) {
     console.error('应用启动失败:', error);

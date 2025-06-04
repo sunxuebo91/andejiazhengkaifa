@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, AxiosError } from 'axios';
 import { getToken, removeToken } from './auth';
 
 // API 基础 URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE_URL = ''; // 在生产环境中使用相对路径，让 Nginx 处理代理
 
 // 创建axios实例
 export const api = axios.create({

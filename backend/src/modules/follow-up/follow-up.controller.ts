@@ -1,23 +1,20 @@
 import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { FollowUpService } from './follow-up.service';
+import { FollowUpService, PopulatedFollowUp } from './follow-up.service';
 import { CreateFollowUpDto } from './dto/create-follow-up.dto';
 import { JwtAuthGuard } from '@auth/guards/jwt-auth.guard';
-import { RolesGuard } from '@auth/guards/roles.guard';
-import { Roles } from '@auth/decorators/roles.decorator';
 
 @ApiTags('跟进记录')
 @Controller('follow-ups')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class FollowUpController {
   constructor(private readonly followUpService: FollowUpService) {}
 
   @Post()
-  @Roles('admin', 'manager', 'employee')
   @ApiOperation({ summary: '创建跟进记录' })
   @ApiResponse({ status: 201, description: '创建成功' })
-  async create(@Body() createFollowUpDto: CreateFollowUpDto, @Request() req) {
+  async create(@Body() createFollowUpDto: CreateFollowUpDto, @Request() req): Promise<{ success: boolean; data: PopulatedFollowUp; message: string }> {
     const followUp = await this.followUpService.create(createFollowUpDto, req.user.id);
     return {
       success: true,
@@ -26,8 +23,18 @@ export class FollowUpController {
     };
   }
 
+  @Get('test-populate')
+  @ApiOperation({ summary: '测试populate功能' })
+  async testPopulate() {
+    const followUp = await this.followUpService.testPopulate();
+    return {
+      success: true,
+      data: followUp,
+      message: '测试成功'
+    };
+  }
+
   @Get('resume/:resumeId')
-  @Roles('admin', 'manager', 'employee')
   @ApiOperation({ summary: '获取简历的跟进记录' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findByResumeId(
@@ -44,7 +51,6 @@ export class FollowUpController {
   }
 
   @Get('user')
-  @Roles('admin', 'manager', 'employee')
   @ApiOperation({ summary: '获取当前用户的跟进记录' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findByUserId(
@@ -61,7 +67,6 @@ export class FollowUpController {
   }
 
   @Get('recent')
-  @Roles('admin', 'manager', 'employee')
   @ApiOperation({ summary: '获取最近的跟进记录' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getRecentFollowUps(@Query('limit') limit: number = 5) {
@@ -74,15 +79,14 @@ export class FollowUpController {
   }
 
   @Get('all')
-  @Roles('admin')
-  @ApiOperation({ summary: '获取所有跟进记录（仅管理员）' })
+  @ApiOperation({ summary: '获取所有跟进记录' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findAll(
     @Request() req,
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 10
   ) {
-    const result = await this.followUpService.findAll(page, pageSize, req.user.id);
+    const result = await this.followUpService.findAll(page, pageSize);
     return {
       success: true,
       data: result,
@@ -91,7 +95,6 @@ export class FollowUpController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'manager', 'employee')
   @ApiOperation({ summary: '删除跟进记录' })
   @ApiResponse({ status: 200, description: '删除成功' })
   async delete(@Param('id') id: string, @Request() req) {

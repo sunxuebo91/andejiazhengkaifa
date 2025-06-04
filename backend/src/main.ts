@@ -1,6 +1,14 @@
 // 确保crypto模块在全局可用，解决@nestjs/schedule的crypto依赖问题
 import * as crypto from 'crypto';
-(global as any).crypto = crypto;
+// 兼容新版本Node.js，只在crypto不存在时设置
+if (!(global as any).crypto) {
+  try {
+    (global as any).crypto = crypto;
+  } catch (error) {
+    // 忽略在新版本Node.js中的只读错误
+    console.log('Crypto already available globally');
+  }
+}
 
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';

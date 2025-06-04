@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsEnum, IsNotEmpty, IsOptional } from 'class-validator';
+import { User } from '../../users/models/user.entity';
 
 // 跟进类型枚举
 export enum FollowUpType {
@@ -18,7 +19,7 @@ export interface IFollowUp extends Document {
   resumeId: Types.ObjectId;  // 关联的简历ID
   type: FollowUpType;        // 跟进类型
   content: string;           // 跟进内容
-  createdBy: Types.ObjectId; // 创建人ID
+  createdBy: Types.ObjectId | User; // 创建人ID或用户对象
   createdAt: Date;          // 创建时间
   updatedAt: Date;          // 更新时间
 }
@@ -42,9 +43,14 @@ export class FollowUp extends Document implements IFollowUp {
   content: string;
 
   @ApiProperty({ description: '创建人ID' })
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  @Prop({ 
+    type: Types.ObjectId, 
+    ref: 'User', 
+    required: true, 
+    autopopulate: { select: 'name username' }
+  })
   @IsNotEmpty()
-  createdBy: Types.ObjectId;
+  createdBy: Types.ObjectId | User;
 
   @ApiProperty({ description: '创建时间' })
   createdAt: Date;

@@ -3,16 +3,22 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { FollowUp, FollowUpSchema } from './models/follow-up.entity';
 import { FollowUpController } from './follow-up.controller';
 import { FollowUpService } from './follow-up.service';
-import { ResumeModule } from '../resume/resume.module';
-import { UsersModule } from '../users/users.module';
+import { User, UserSchema } from '../users/models/user.entity';
+import mongooseAutopopulate from 'mongoose-autopopulate';
+// import { ResumeModule } from '../resume/resume.module';
+// import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: FollowUp.name, schema: FollowUpSchema }
+      { 
+        name: FollowUp.name, 
+        schema: FollowUpSchema.plugin(mongooseAutopopulate as any)
+      },
+      { name: 'User', schema: UserSchema }
     ]),
-    ResumeModule,
-    UsersModule,
+    // ResumeModule,
+    // UsersModule,
   ],
   controllers: [FollowUpController],
   providers: [FollowUpService],

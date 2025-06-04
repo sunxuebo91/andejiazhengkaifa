@@ -858,10 +858,25 @@ const ResumeDetail = () => {
     
     try {
       const response = await getFollowUpsByResumeId(resume._id, 1, 50);
-      setFollowUpRecords(response.items || []);
+      
+      // 添加更健壮的响应处理和调试日志
+      console.log('跟进记录API响应:', response);
+      if (response && typeof response === 'object') {
+        if (Array.isArray(response.items)) {
+          console.log('跟进记录数据示例:', response.items[0]);
+          setFollowUpRecords(response.items);
+        } else {
+          console.warn('跟进记录响应格式异常:', response);
+          setFollowUpRecords([]);
+        }
+      } else {
+        console.warn('跟进记录API响应为空或无效:', response);
+        setFollowUpRecords([]);
+      }
     } catch (error) {
       console.error('获取跟进记录失败:', error);
-      messageApi.error('获取跟进记录失败');
+      messageApi.error(error instanceof Error ? error.message : '获取跟进记录失败');
+      setFollowUpRecords([]);
     }
   };
   
@@ -875,20 +890,33 @@ const ResumeDetail = () => {
         return;
       }
       
+      console.log('准备创建跟进记录:', {
+        resumeId: resume._id,
+        type: values.type,
+        content: values.content
+      });
+      
       // 调用API创建跟进记录
-      await createFollowUp({
+      const response = await createFollowUp({
         resumeId: resume._id,
         type: values.type,
         content: values.content,
       });
       
+      console.log('跟进记录创建成功:', response);
+      
       messageApi.success('添加跟进记录成功');
       setIsAddFollowUpVisible(false);
       followUpForm.resetFields();
-      fetchFollowUpRecords(); // 刷新跟进记录列表
+      
+      // 刷新跟进记录列表
+      await fetchFollowUpRecords();
+      
+      // 验证刷新后的数据
+      console.log('刷新后的跟进记录列表:', followUpRecords);
     } catch (error) {
       console.error('添加跟进记录失败:', error);
-      messageApi.error('添加跟进记录失败');
+      messageApi.error(error instanceof Error ? error.message : '添加跟进记录失败');
     } finally {
       setFollowUpLoading(false);
     }
@@ -906,7 +934,33 @@ const ResumeDetail = () => {
       title: '跟进人员',
       dataIndex: 'createdBy',
       key: 'createdBy',
-      render: (createdBy: any) => createdBy?.name || '-',
+      render: (createdBy: any) => {
+        // 添加详细的调试日志
+        console.log('跟进人员数据详情:', {
+          raw: createdBy,
+          type: typeof createdBy,
+          hasName: createdBy?.name,
+          name: createdBy?.name,
+          id: createdBy?._id
+        });
+        
+        if (!createdBy) {
+          console.warn('跟进人员数据为空');
+          return '-';
+        }
+        
+        if (typeof createdBy === 'string') {
+          console.warn('跟进人员数据为字符串:', createdBy);
+          return createdBy;
+        }
+        
+        if (!createdBy.name) {
+          console.warn('跟进人员数据缺少name字段:', createdBy);
+          return createdBy.username || createdBy._id || '-';
+        }
+        
+        return createdBy.name;
+      },
     },
     {
       title: '跟进类型',
@@ -1013,7 +1067,7 @@ const ResumeDetail = () => {
           label="跟进内容"
           rules={[{ required: true, message: '请输入跟进内容' }]}
         >
-          <Input.TextArea rows={4} placeholder="请输入跟进内容" />
+          <Input.TextArea rows={4} placeholder="请输入跟进内容" maxLength={500} showCount />
         </Form.Item>
       </Form>
     </Modal>
@@ -1398,7 +1452,7 @@ const ResumeDetail = () => {
             <Table
               columns={followUpColumns}
               dataSource={followUpRecords}
-              rowKey="id"
+              rowKey="_id"
               pagination={{ pageSize: 5 }}
             />
           </Card>

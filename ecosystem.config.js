@@ -17,8 +17,7 @@ module.exports = {
     {
       name: 'frontend-prod',
       script: 'npx',
-      args: 'serve -s dist -l 8080',
-      cwd: './frontend',
+      args: 'serve -s frontend/dist -l 8080',
       env: {
         NODE_ENV: 'production'
       },

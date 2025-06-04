@@ -1,4 +1,4 @@
-import apiService from './api';
+import apiService, { ApiResponse } from './api';
 
 export interface FollowUpType {
   PHONE: 'phone';
@@ -34,11 +34,15 @@ export interface FollowUpRecord {
 }
 
 export interface FollowUpListResponse {
-  items: FollowUpRecord[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  success: boolean;
+  data: {
+    items: FollowUpRecord[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+  message?: string;
 }
 
 // 创建跟进记录
@@ -55,13 +59,13 @@ export const getFollowUpsByResumeId = async (
   resumeId: string, 
   page: number = 1, 
   pageSize: number = 10
-): Promise<FollowUpListResponse> => {
-  const response = await apiService.get<FollowUpListResponse>(`/api/follow-ups/resume/${resumeId}`, {
+): Promise<ApiResponse<FollowUpListResponse['data']>> => {
+  const response = await apiService.get<FollowUpListResponse['data']>(`/api/follow-ups/resume/${resumeId}`, {
     page,
     pageSize
   });
   if (response.success && response.data) {
-    return response.data;
+    return response;
   }
   throw new Error(response.message || '获取跟进记录失败');
 };

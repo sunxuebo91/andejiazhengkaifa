@@ -17,6 +17,15 @@ export interface PopulatedFollowUp extends Omit<FollowUp, 'createdBy'> {
   createdBy: PopulatedUser;
 }
 
+// 定义查询结果类型
+interface FollowUpQueryResult {
+  items: PopulatedFollowUp[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 @Injectable()
 export class FollowUpService {
   constructor(
@@ -61,47 +70,72 @@ export class FollowUpService {
   }
 
   // 获取简历的所有跟进记录
-  async findByResumeId(resumeId: string, page: number = 1, pageSize: number = 10) {
+  async findByResumeId(resumeId: string, page: number = 1, pageSize: number = 10): Promise<FollowUpQueryResult> {
     const skip = (page - 1) * pageSize;
     
-    // 添加查询前的日志
-    console.log('查询跟进记录参数:', { resumeId, page, pageSize });
-    
-    const [followUps, total] = await Promise.all([
-      this.followUpModel
-        .find({ resumeId: new Types.ObjectId(resumeId) })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(pageSize)
-        .populate({
-          path: 'createdBy',
-          select: 'name username',
-          model: 'User'
-        })
-        .lean()
-        .exec(),
-      this.followUpModel.countDocuments({ resumeId: new Types.ObjectId(resumeId) })
-    ]);
-
-    // 添加详细的调试日志
-    console.log('跟进记录查询结果:', {
-      total,
-      firstRecord: followUps[0] ? {
-        id: followUps[0]._id,
-        createdBy: followUps[0].createdBy,
-        type: followUps[0].type,
-        content: followUps[0].content,
-        createdAt: followUps[0].createdAt
-      } : null
-    });
-
-    return {
-      items: followUps,
-      total,
-      page,
+    console.log('=== 查询跟进记录开始 ===');
+    console.log('查询参数:', { 
+      resumeId, 
+      page, 
       pageSize,
-      totalPages: Math.ceil(total / pageSize)
-    };
+      skip,
+      timestamp: new Date().toISOString()
+    });
+    
+    try {
+      const [followUps, total] = await Promise.all([
+        this.followUpModel
+          .find({ resumeId: new Types.ObjectId(resumeId) })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(pageSize)
+          .populate<{ createdBy: PopulatedUser }>({
+            path: 'createdBy',
+            select: 'name username',
+            model: 'User'
+          })
+          .lean()
+          .exec(),
+        this.followUpModel.countDocuments({ resumeId: new Types.ObjectId(resumeId) })
+      ]);
+
+      console.log('查询结果统计:', {
+        total,
+        currentPage: page,
+        pageSize,
+        returnedCount: followUps.length
+      });
+
+      if (followUps.length > 0) {
+        const firstFollowUp = followUps[0] as PopulatedFollowUp;
+        console.log('第一条跟进记录详情:', {
+          id: firstFollowUp._id,
+          type: firstFollowUp.type,
+          content: firstFollowUp.content,
+          createdAt: firstFollowUp.createdAt,
+          createdBy: {
+            id: firstFollowUp.createdBy._id,
+            name: firstFollowUp.createdBy.name,
+            username: firstFollowUp.createdBy.username
+          }
+        });
+      } else {
+        console.log('没有找到跟进记录');
+      }
+
+      console.log('=== 查询跟进记录结束 ===');
+
+      return {
+        items: followUps as PopulatedFollowUp[],
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+      };
+    } catch (error) {
+      console.error('查询跟进记录时发生错误:', error);
+      throw error;
+    }
   }
 
   // 获取用户创建的所有跟进记录

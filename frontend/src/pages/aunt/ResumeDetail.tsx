@@ -426,12 +426,23 @@ const ResumeDetail = () => {
     setLoading(true);
     setError(null);
     try {
-      console.log('正在获取简历详情，ID:', shortId);
-      const response = await apiService.get<{ success: boolean; data: ResumeData; message?: string }>(`/api/resumes/${shortId}`);
-      if (response.success && response.data) {
-        console.log('原始API响应:', response.data);
-        setResume(response.data);
-        setLoading(false);
+      console.log('=== 开始获取简历详情 ===');
+      console.log('简历ID:', shortId);
+      
+      const response = await apiService.get<ResumeData>(`/api/resumes/${shortId}`);
+      const resumeData = response.data;
+      
+      console.log('简历详情API响应:', {
+        success: response.success,
+        hasData: !!resumeData,
+        resumeId: resumeData?._id,
+        resumeName: resumeData?.name
+      });
+      
+      if (response.success && resumeData) {
+        console.log('设置简历数据:', resumeData);
+        setResume(resumeData);
+        console.log('简历数据设置完成，_id:', resumeData._id);
       } else {
         throw new Error(response.message || '获取简历详情失败');
       }
@@ -441,6 +452,7 @@ const ResumeDetail = () => {
       messageApi.error('获取简历详情失败');
     } finally {
       setLoading(false);
+      console.log('=== 获取简历详情完成 ===');
     }
   };
 
@@ -854,27 +866,51 @@ const ResumeDetail = () => {
 
   // 获取跟进记录
   const fetchFollowUpRecords = async () => {
-    if (!resume?._id) return;
+    if (!resume?._id) {
+      console.warn('无法获取跟进记录：简历ID不存在');
+      return;
+    }
     
     try {
+      console.log('=== 开始获取跟进记录 ===');
+      console.log('简历ID:', resume._id);
+      
       const response = await getFollowUpsByResumeId(resume._id, 1, 50);
       
-      // 添加更健壮的响应处理和调试日志
       console.log('跟进记录API响应:', response);
-      if (response && typeof response === 'object') {
-        if (Array.isArray(response.items)) {
-          console.log('跟进记录数据示例:', response.items[0]);
-          setFollowUpRecords(response.items);
+      
+      if (response.success && response.data) {
+        const { items } = response.data;
+        console.log('跟进记录列表:', items);
+        setFollowUpRecords(items || []);
+        
+        if (items && items.length > 0) {
+          const firstRecord = items[0];
+          console.log('第一条跟进记录详情:', {
+            id: firstRecord._id,
+            type: firstRecord.type,
+            content: firstRecord.content,
+            createdAt: firstRecord.createdAt,
+            createdBy: firstRecord.createdBy
+          });
         } else {
-          console.warn('跟进记录响应格式异常:', response);
-          setFollowUpRecords([]);
+          console.log('没有找到跟进记录');
         }
       } else {
-        console.warn('跟进记录API响应为空或无效:', response);
+        console.warn('跟进记录响应格式异常:', response);
         setFollowUpRecords([]);
       }
+      
+      console.log('=== 获取跟进记录完成 ===');
     } catch (error) {
       console.error('获取跟进记录失败:', error);
+      if (error instanceof Error) {
+        console.error('错误详情:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+      }
       messageApi.error(error instanceof Error ? error.message : '获取跟进记录失败');
       setFollowUpRecords([]);
     }
@@ -932,34 +968,11 @@ const ResumeDetail = () => {
     },
     {
       title: '跟进人员',
-      dataIndex: 'createdBy',
+      dataIndex: ['createdBy', 'name'],
       key: 'createdBy',
-      render: (createdBy: any) => {
-        // 添加详细的调试日志
-        console.log('跟进人员数据详情:', {
-          raw: createdBy,
-          type: typeof createdBy,
-          hasName: createdBy?.name,
-          name: createdBy?.name,
-          id: createdBy?._id
-        });
-        
-        if (!createdBy) {
-          console.warn('跟进人员数据为空');
-          return '-';
-        }
-        
-        if (typeof createdBy === 'string') {
-          console.warn('跟进人员数据为字符串:', createdBy);
-          return createdBy;
-        }
-        
-        if (!createdBy.name) {
-          console.warn('跟进人员数据缺少name字段:', createdBy);
-          return createdBy.username || createdBy._id || '-';
-        }
-        
-        return createdBy.name;
+      render: (_: string, record: FollowUpRecord) => {
+        if (!record.createdBy) return '-';
+        return record.createdBy.name || record.createdBy.username || '-';
       },
     },
     {

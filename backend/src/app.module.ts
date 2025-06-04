@@ -10,6 +10,7 @@ import { AppService } from './app.service';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { FollowUpModule } from './modules/follow-up/follow-up.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AuthModule } from './modules/auth/auth.module';
     TasksModule,
     UsersModule,
     AuthModule,
+    FollowUpModule,
   ],
   controllers: [AppController],
   providers: [AppService],

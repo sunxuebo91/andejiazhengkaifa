@@ -9,6 +9,15 @@ import { UploadService } from '../upload/upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UseGuards } from '@nestjs/common';
 import { ConflictException } from '@nestjs/common';
+import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
+
+// Multer 配置
+const multerConfig: MulterOptions = {
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB
+    fieldSize: 50 * 1024 * 1024, // 50MB
+  },
+};
 
 @ApiTags('简历管理')
 @Controller('resumes')
@@ -28,7 +37,7 @@ export class ResumeController {
     { name: 'photoFiles', maxCount: 10 },
     { name: 'certificateFiles', maxCount: 10 },
     { name: 'medicalReportFiles', maxCount: 10 }
-  ]))
+  ], multerConfig))
   @ApiOperation({ summary: '创建简历' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -288,7 +297,7 @@ export class ResumeController {
     { name: 'photoFiles', maxCount: 10 },
     { name: 'certificateFiles', maxCount: 10 },
     { name: 'medicalReportFiles', maxCount: 10 }
-  ]))
+  ], multerConfig))
   @ApiOperation({ summary: '更新简历' })
   @ApiConsumes('multipart/form-data')
   @ApiResponse({ status: 200, description: '更新成功' })
@@ -397,7 +406,7 @@ export class ResumeController {
   }
 
   @Post(':id/files')
-  @UseInterceptors(FilesInterceptor('files'))
+  @UseInterceptors(FilesInterceptor('files', 30, multerConfig))
   @ApiOperation({ summary: '上传简历文件' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -445,7 +454,7 @@ export class ResumeController {
   }
 
   @Post(':id/upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerConfig))
   @ApiOperation({ summary: '上传简历文件' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({

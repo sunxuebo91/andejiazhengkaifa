@@ -96,56 +96,66 @@ const BaiduMapCard: React.FC<BaiduMapCardProps> = ({ value, onChange }) => {
   const initMap = () => {
     console.log('开始初始化地图组件...');
     
-    // 增加更严格的检查和重试机制
-    if (!mapContainerRef.current) {
-      console.warn('地图容器引用不存在，500ms后重试...');
-      setTimeout(() => {
-        if (mapContainerRef.current) {
-          initMap();
+    // 改进的DOM准备状态检查
+    const checkDOMReady = (retryCount = 0) => {
+      if (!mapContainerRef.current) {
+        if (retryCount < 10) { // 最多重试10次，共5秒
+          console.log(`地图容器引用不存在，${500}ms后重试... (${retryCount + 1}/10)`);
+          setTimeout(() => checkDOMReady(retryCount + 1), 500);
+          return;
         } else {
-          console.error('地图容器引用仍然不存在，可能DOM未完全渲染');
+          console.error('地图容器引用仍然不存在，DOM可能未完全渲染，停止重试');
           setMapError('地图容器初始化失败，请刷新页面重试');
+          return;
         }
-      }, 500);
-      return;
-    }
-    
-    if (!window.BMap) {
-      console.error('BMap对象不存在，百度地图SDK未正确加载');
-      setMapError('百度地图未正确加载，请刷新页面重试');
-      return;
-    }
-    
-    try {
-      // 创建地图实例
-      console.log('创建百度地图实例');
-      const map = new window.BMap.Map(mapContainerRef.current);
-      
-      // 初始中心点设置为北京
-      const point = new window.BMap.Point(116.404, 39.915);
-      map.centerAndZoom(point, 15);
-      
-      // 添加控件
-      map.addControl(new window.BMap.NavigationControl());
-      map.addControl(new window.BMap.ScaleControl());
-      map.enableScrollWheelZoom();
-      
-      // 保存地图实例
-      mapInstanceRef.current = map;
-      console.log('地图实例已创建并保存');
-      
-      // 如果有初始地址，则搜索并标记
-      if (address) {
-        searchAddress(address);
       }
       
-      // 初始化地址自动完成
-      setTimeout(initAutoComplete, 300); // 增加延迟时间
-    } catch (error) {
-      console.error('地图初始化错误:', error);
-      setMapError('地图初始化失败，请刷新页面重试');
-      messageApi.error('地图初始化失败');
-    }
+      // DOM准备就绪，开始初始化地图
+      initializeMapInstance();
+    };
+    
+    // 单独的地图实例初始化函数
+    const initializeMapInstance = () => {
+      if (!window.BMap) {
+        console.error('BMap对象不存在，百度地图SDK未正确加载');
+        setMapError('百度地图未正确加载，请刷新页面重试');
+        return;
+      }
+      
+      try {
+        // 创建地图实例
+        console.log('创建百度地图实例');
+        const map = new window.BMap.Map(mapContainerRef.current);
+        
+        // 初始中心点设置为北京
+        const point = new window.BMap.Point(116.404, 39.915);
+        map.centerAndZoom(point, 15);
+        
+        // 添加控件
+        map.addControl(new window.BMap.NavigationControl());
+        map.addControl(new window.BMap.ScaleControl());
+        map.enableScrollWheelZoom();
+        
+        // 保存地图实例
+        mapInstanceRef.current = map;
+        console.log('地图实例已创建并保存');
+        
+        // 如果有初始地址，则搜索并标记
+        if (address) {
+          searchAddress(address);
+        }
+        
+        // 初始化地址自动完成
+        setTimeout(initAutoComplete, 300); // 增加延迟时间
+      } catch (error) {
+        console.error('地图初始化错误:', error);
+        setMapError('地图初始化失败，请刷新页面重试');
+        messageApi.error('地图初始化失败');
+      }
+    };
+    
+    // 开始检查DOM准备状态
+    checkDOMReady();
   };
   
   // 初始化地址自动完成

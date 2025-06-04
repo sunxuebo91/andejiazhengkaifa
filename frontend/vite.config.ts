@@ -21,5 +21,19 @@ export default defineConfig({
         secure: false
       }
     }
+  },
+  preview: {
+    port: 4173,
+    strictPort: true,
+    host: '0.0.0.0', // 允许外部访问
+    allowedHosts: true,
+    proxy: {
+      // 后端API代理
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false
+      }
+    }
   }
 });

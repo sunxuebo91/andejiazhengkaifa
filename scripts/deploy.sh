@@ -1,421 +1,306 @@
 #!/bin/bash
 
-# 安得家政CRM系统生产环境部署脚本
-# 使用方法: ./scripts/deploy.sh [domain]
+# 安得家政CRM生产部署脚本
+# 支持：代码更新、构建、无缝部署、回滚
 
-set -e  # 遇到错误立即停止
+set -e
 
-# 颜色定义
+PROJECT_ROOT="/home/ubuntu/andejiazhengcrm"
+BACKUP_DIR="/home/ubuntu/backups"
+DATE=$(date +"%Y%m%d_%H%M%S")
+
+cd "$PROJECT_ROOT"
+
+# 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 日志函数
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
 }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+warn() {
+    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
 }
 
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+error() {
+    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
 }
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+# 创建备份
+backup_current() {
+    log "创建当前版本备份..."
+    mkdir -p "$BACKUP_DIR"
+    
+    # 备份前端构建产物
+    if [ -d "frontend/dist" ]; then
+        cp -r frontend/dist "$BACKUP_DIR/frontend_dist_$DATE"
+    fi
+    
+    # 备份后端构建产物
+    if [ -d "backend/dist" ]; then
+        cp -r backend/dist "$BACKUP_DIR/backend_dist_$DATE"
+    fi
+    
+    # 备份当前运行状态
+    pm2 save --force
+    cp ~/.pm2/dump.pm2 "$BACKUP_DIR/pm2_dump_$DATE.pm2"
+    
+    log "备份完成: $BACKUP_DIR/*_$DATE"
 }
 
-# 检查是否为root用户
-check_root() {
-    if [ "$EUID" -eq 0 ]; then
-        log_warning "正在以root用户运行，建议使用普通用户+sudo"
-        read -p "继续执行? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+# 更新代码
+update_code() {
+    log "更新代码..."
+    
+    # 如果是Git仓库，拉取最新代码
+    if [ -d ".git" ]; then
+        git stash push -m "deploy_backup_$DATE" || true
+        git pull origin main || git pull origin master
+        log "代码更新完成"
+    else
+        warn "非Git仓库，跳过代码更新"
     fi
 }
 
-# 检查依赖
-check_dependencies() {
-    log_info "检查系统依赖..."
+# 安装依赖
+install_dependencies() {
+    log "检查并安装依赖..."
     
-    local deps=("docker" "docker-compose" "nginx" "certbot")
-    local missing_deps=()
-    
-    for dep in "${deps[@]}"; do
-        if ! command -v "$dep" &> /dev/null; then
-            missing_deps+=("$dep")
-        fi
-    done
-    
-    if [ ${#missing_deps[@]} -ne 0 ]; then
-        log_error "缺少依赖: ${missing_deps[*]}"
-        log_info "请运行以下命令安装依赖:"
-        echo "sudo apt update"
-        echo "sudo apt install docker.io docker-compose nginx certbot python3-certbot-nginx -y"
-        exit 1
+    # 后端依赖
+    if [ -f "backend/package.json" ]; then
+        log "安装后端依赖..."
+        cd backend
+        npm ci --production=false
+        cd ..
     fi
     
-    log_success "所有依赖已安装"
-}
-
-# 检查环境变量文件
-check_env_file() {
-    log_info "检查环境变量配置..."
-    
-    if [ ! -f ".env.production" ]; then
-        log_warning "未找到 .env.production 文件"
-        
-        if [ -f "env.production.example" ]; then
-            log_info "复制示例配置文件..."
-            cp env.production.example .env.production
-            log_warning "请编辑 .env.production 文件，填入真实的配置值"
-            read -p "配置完成后按回车继续..."
-        else
-            log_error "未找到配置文件模板"
-            exit 1
-        fi
+    # 前端依赖
+    if [ -f "frontend/package.json" ]; then
+        log "安装前端依赖..."
+        cd frontend
+        npm ci
+        cd ..
     fi
-    
-    # 检查关键配置项
-    local required_vars=("MONGO_ROOT_PASSWORD" "JWT_SECRET" "DOMAIN")
-    local missing_vars=()
-    
-    source .env.production
-    
-    for var in "${required_vars[@]}"; do
-        if [ -z "${!var}" ] || [[ "${!var}" == *"your_"* ]]; then
-            missing_vars+=("$var")
-        fi
-    done
-    
-    if [ ${#missing_vars[@]} -ne 0 ]; then
-        log_error "以下配置项需要设置真实值: ${missing_vars[*]}"
-        log_info "请编辑 .env.production 文件"
-        exit 1
-    fi
-    
-    log_success "环境变量配置检查通过"
-}
-
-# 创建必要的目录
-create_directories() {
-    log_info "创建必要的目录..."
-    
-    local dirs=(
-        "mongodb/logs"
-        "nginx/conf.d"
-        "nginx/ssl"
-        "nginx/logs"
-        "backend/uploads"
-        "backend/logs"
-        "backend/cache"
-        "redis/conf"
-        "backups"
-    )
-    
-    for dir in "${dirs[@]}"; do
-        mkdir -p "$dir"
-    done
-    
-    log_success "目录创建完成"
-}
-
-# 配置Nginx
-setup_nginx() {
-    local domain=${1:-localhost}
-    
-    log_info "配置Nginx..."
-    
-    # 创建Nginx配置文件
-    cat > nginx/conf.d/housekeeping.conf << EOF
-server {
-    listen 80;
-    server_name $domain www.$domain;
-    
-    # 临时配置，用于SSL证书申请
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-    
-    # HTTP重定向到HTTPS（SSL证书申请后启用）
-    # return 301 https://\$server_name\$request_uri;
-    
-    # 临时API代理（SSL证书申请前）
-    location /api/ {
-        proxy_pass http://backend:3000/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
-    
-    location / {
-        root /usr/share/nginx/html;
-        index index.html index.htm;
-        try_files \$uri \$uri/ /index.html;
-    }
-}
-
-# HTTPS配置（SSL证书申请后启用）
-# server {
-#     listen 443 ssl http2;
-#     server_name $domain www.$domain;
-# 
-#     ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;
-#     ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;
-#     ssl_protocols TLSv1.2 TLSv1.3;
-#     ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512;
-#     ssl_prefer_server_ciphers off;
-# 
-#     add_header X-Frame-Options DENY;
-#     add_header X-Content-Type-Options nosniff;
-#     add_header X-XSS-Protection "1; mode=block";
-# 
-#     location /api/ {
-#         proxy_pass http://backend:3000/api/;
-#         proxy_http_version 1.1;
-#         proxy_set_header Upgrade \$http_upgrade;
-#         proxy_set_header Connection 'upgrade';
-#         proxy_set_header Host \$host;
-#         proxy_set_header X-Real-IP \$remote_addr;
-#         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-#         proxy_set_header X-Forwarded-Proto \$scheme;
-#         proxy_cache_bypass \$http_upgrade;
-#     }
-# 
-#     location / {
-#         root /usr/share/nginx/html;
-#         index index.html index.htm;
-#         try_files \$uri \$uri/ /index.html;
-#         
-#         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
-#             expires 1y;
-#             add_header Cache-Control "public, immutable";
-#         }
-#     }
-# 
-#     client_max_body_size 50M;
-# }
-EOF
-    
-    log_success "Nginx配置完成"
 }
 
 # 构建项目
 build_project() {
-    log_info "构建项目..."
+    log "构建项目..."
     
-    # 检查Docker服务状态
-    if ! systemctl is-active --quiet docker; then
-        log_info "启动Docker服务..."
-        sudo systemctl start docker
-    fi
+    # 构建后端
+    log "构建后端..."
+    cd backend
+    npm run build
+    cd ..
     
-    # 构建镜像
-    log_info "构建Docker镜像..."
-    docker-compose -f docker-compose.prod.yml build --no-cache
+    # 构建前端
+    log "构建前端..."
+    cd frontend
+    npm run build
+    cd ..
     
-    log_success "项目构建完成"
+    log "构建完成"
 }
 
-# 部署服务
+# 数据库迁移（如果需要）
+migrate_database() {
+    log "检查数据库迁移..."
+    # 这里可以添加数据库迁移逻辑
+    # 例如：npm run migration:run
+    log "数据库检查完成"
+}
+
+# 无缝部署
 deploy_services() {
-    log_info "部署服务..."
+    log "开始无缝部署..."
     
-    # 停止现有服务
-    log_info "停止现有服务..."
-    docker-compose -f docker-compose.prod.yml down 2>/dev/null || true
+    # 重启后端（集群模式，会逐个重启实例）
+    log "重启后端服务..."
+    pm2 reload backend
     
-    # 启动新服务
-    log_info "启动新服务..."
-    docker-compose -f docker-compose.prod.yml up -d
+    # 等待后端启动
+    sleep 5
     
-    # 等待服务启动
-    log_info "等待服务启动..."
-    sleep 30
+    # 重启前端
+    log "重启前端服务..."
+    pm2 restart frontend
     
-    log_success "服务部署完成"
+    log "服务部署完成"
 }
 
 # 健康检查
 health_check() {
-    log_info "执行健康检查..."
+    log "执行健康检查..."
     
-    local max_attempts=30
-    local attempt=1
-    
-    while [ $attempt -le $max_attempts ]; do
-        log_info "健康检查尝试 $attempt/$max_attempts"
-        
-        # 检查MongoDB
-        if docker exec housekeeping_mongodb_prod mongo --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
-            log_success "MongoDB运行正常"
-        else
-            log_warning "MongoDB未就绪"
-        fi
-        
-        # 检查后端API
-        if curl -f http://localhost:3000/api/health >/dev/null 2>&1; then
-            log_success "后端API运行正常"
-        else
-            log_warning "后端API未就绪"
-        fi
-        
-        # 检查前端
-        if curl -f http://localhost/ >/dev/null 2>&1; then
-            log_success "前端服务运行正常"
-            break
-        else
-            log_warning "前端服务未就绪"
-        fi
-        
-        if [ $attempt -eq $max_attempts ]; then
-            log_error "健康检查失败，请检查服务状态"
-            docker-compose -f docker-compose.prod.yml logs
-            exit 1
-        fi
-        
-        sleep 10
-        ((attempt++))
-    done
-    
-    log_success "所有服务运行正常"
-}
-
-# SSL证书申请（可选）
-setup_ssl() {
-    local domain=${1:-localhost}
-    
-    if [ "$domain" = "localhost" ]; then
-        log_warning "跳过SSL证书申请（使用localhost）"
-        return
+    # 检查服务状态
+    if ! pm2 list | grep -q "online"; then
+        error "服务启动失败！"
+        return 1
     fi
     
-    log_info "申请SSL证书..."
-    
-    # 停止nginx避免端口冲突
-    sudo systemctl stop nginx 2>/dev/null || true
-    
-    # 申请证书
-    sudo certbot certonly --standalone -d "$domain" -d "www.$domain" --non-interactive --agree-tos --email "admin@$domain"
-    
-    if [ $? -eq 0 ]; then
-        log_success "SSL证书申请成功"
-        
-        # 启用HTTPS配置
-        log_info "启用HTTPS配置..."
-        sed -i 's/# return 301/return 301/' nginx/conf.d/housekeeping.conf
-        sed -i 's/# server {/server {/' nginx/conf.d/housekeeping.conf
-        sed -i 's/# }/}/' nginx/conf.d/housekeeping.conf
-        sed -i 's/# //' nginx/conf.d/housekeeping.conf
-        
-        # 重启前端容器以应用新配置
-        docker-compose -f docker-compose.prod.yml restart frontend
-        
-        log_success "HTTPS配置已启用"
+    # 检查后端API
+    if curl -f -s http://localhost:3000/api/health >/dev/null 2>&1; then
+        log "后端API健康检查通过"
     else
-        log_warning "SSL证书申请失败，将使用HTTP"
+        warn "后端API健康检查失败，但可能是正常情况（如果没有health端点）"
+    fi
+    
+    # 检查前端
+    if curl -f -s http://localhost:4173 >/dev/null 2>&1; then
+        log "前端服务健康检查通过"
+    else
+        error "前端服务健康检查失败！"
+        return 1
+    fi
+    
+    log "所有健康检查通过 ✅"
+}
+
+# 回滚功能
+rollback() {
+    error "部署失败，开始回滚..."
+    
+    # 查找最新的备份
+    LATEST_BACKEND=$(ls -t "$BACKUP_DIR"/backend_dist_* 2>/dev/null | head -1)
+    LATEST_FRONTEND=$(ls -t "$BACKUP_DIR"/frontend_dist_* 2>/dev/null | head -1)
+    LATEST_PM2=$(ls -t "$BACKUP_DIR"/pm2_dump_* 2>/dev/null | head -1)
+    
+    if [ -n "$LATEST_BACKEND" ] && [ -n "$LATEST_FRONTEND" ]; then
+        log "恢复到上一个版本..."
+        
+        # 恢复构建产物
+        rm -rf backend/dist frontend/dist
+        cp -r "$LATEST_BACKEND" backend/dist
+        cp -r "$LATEST_FRONTEND" frontend/dist
+        
+        # 恢复PM2状态
+        if [ -n "$LATEST_PM2" ]; then
+            cp "$LATEST_PM2" ~/.pm2/dump.pm2
+            pm2 resurrect
+        else
+            pm2 restart all
+        fi
+        
+        log "回滚完成"
+    else
+        error "没有找到备份文件，无法回滚！"
+        exit 1
     fi
 }
 
-# 创建备份脚本
-create_backup_script() {
-    log_info "创建备份脚本..."
+# 清理旧备份
+cleanup_backups() {
+    log "清理旧备份..."
     
-    cat > scripts/backup.sh << 'EOF'
-#!/bin/bash
-
-# 备份脚本
-BACKUP_DIR="/backup/housekeeping"
-DATE=$(date +%Y%m%d_%H%M%S)
-
-mkdir -p "$BACKUP_DIR"
-
-# 备份数据库
-echo "备份数据库..."
-docker exec housekeeping_mongodb_prod mongodump --out "/tmp/db_$DATE"
-docker cp "housekeeping_mongodb_prod:/tmp/db_$DATE" "$BACKUP_DIR/"
-
-# 备份文件
-echo "备份上传文件..."
-tar -czf "$BACKUP_DIR/files_$DATE.tar.gz" ./backend/uploads
-
-# 清理7天前的备份
-find "$BACKUP_DIR" -name "*.tar.gz" -mtime +7 -delete
-find "$BACKUP_DIR" -name "db_*" -mtime +7 -exec rm -rf {} \;
-
-echo "备份完成: $BACKUP_DIR"
-EOF
+    # 保留最近7天的备份
+    find "$BACKUP_DIR" -name "*_*" -mtime +7 -delete 2>/dev/null || true
     
-    chmod +x scripts/backup.sh
-    
-    # 添加到crontab
-    (crontab -l 2>/dev/null; echo "0 2 * * * $(pwd)/scripts/backup.sh") | crontab -
-    
-    log_success "备份脚本创建完成，已添加到定时任务"
+    log "备份清理完成"
 }
 
-# 显示部署信息
-show_deployment_info() {
-    local domain=${1:-localhost}
+# 主部署流程
+main_deploy() {
+    log "🚀 开始生产部署流程..."
     
-    log_success "部署完成！"
-    echo
-    echo "🌐 访问地址:"
-    echo "   前端: http://$domain"
-    echo "   API文档: http://$domain/api/docs"
-    echo
-    echo "🐳 Docker容器状态:"
-    docker-compose -f docker-compose.prod.yml ps
-    echo
-    echo "📊 系统监控:"
-    echo "   查看日志: docker-compose -f docker-compose.prod.yml logs -f"
-    echo "   服务状态: docker-compose -f docker-compose.prod.yml ps"
-    echo "   重启服务: docker-compose -f docker-compose.prod.yml restart"
-    echo
-    echo "🔧 维护命令:"
-    echo "   备份数据: ./scripts/backup.sh"
-    echo "   更新代码: git pull && ./scripts/deploy.sh $domain"
-    echo
-}
-
-# 主函数
-main() {
-    local domain=${1:-localhost}
+    # 创建备份
+    backup_current
     
-    echo "🚀 开始部署安得家政CRM系统"
-    echo "域名: $domain"
-    echo
+    # 更新代码
+    update_code
     
-    check_root
-    check_dependencies
-    check_env_file
-    create_directories
-    setup_nginx "$domain"
+    # 安装依赖
+    install_dependencies
+    
+    # 构建项目
     build_project
+    
+    # 数据库迁移
+    migrate_database
+    
+    # 部署服务
     deploy_services
-    health_check
     
-    if [ "$domain" != "localhost" ]; then
-        setup_ssl "$domain"
+    # 健康检查
+    if health_check; then
+        log "🎉 部署成功！"
+        cleanup_backups
+        
+        # 显示服务状态
+        pm2 list
+    else
+        error "❌ 部署失败！"
+        rollback
+        exit 1
     fi
-    
-    create_backup_script
-    show_deployment_info "$domain"
 }
 
-# 脚本入口
-if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
-    main "$@"
-fi 
+# 快速重启（不更新代码）
+quick_restart() {
+    log "🔄 快速重启服务..."
+    pm2 restart all
+    health_check
+    log "✅ 快速重启完成"
+}
+
+# 回滚到指定版本
+rollback_to() {
+    if [ -z "$1" ]; then
+        error "请指定回滚日期，格式：YYYYMMDD_HHMMSS"
+        exit 1
+    fi
+    
+    BACKUP_DATE="$1"
+    log "🔙 回滚到版本: $BACKUP_DATE"
+    
+    # 查找指定备份
+    BACKEND_BACKUP="$BACKUP_DIR/backend_dist_$BACKUP_DATE"
+    FRONTEND_BACKUP="$BACKUP_DIR/frontend_dist_$BACKUP_DATE"
+    
+    if [ -d "$BACKEND_BACKUP" ] && [ -d "$FRONTEND_BACKUP" ]; then
+        rm -rf backend/dist frontend/dist
+        cp -r "$BACKEND_BACKUP" backend/dist
+        cp -r "$FRONTEND_BACKUP" frontend/dist
+        
+        pm2 restart all
+        health_check
+        
+        log "✅ 回滚完成"
+    else
+        error "❌ 指定的备份不存在！"
+        exit 1
+    fi
+}
+
+# 命令行参数处理
+case "$1" in
+    deploy)
+        main_deploy
+        ;;
+    quick)
+        quick_restart
+        ;;
+    rollback)
+        rollback_to "$2"
+        ;;
+    backup)
+        backup_current
+        ;;
+    *)
+        echo "用法: $0 {deploy|quick|rollback|backup}"
+        echo ""
+        echo "命令说明："
+        echo "  deploy              - 完整部署流程（代码更新+构建+部署）"
+        echo "  quick               - 快速重启服务"
+        echo "  rollback [日期]     - 回滚到指定版本"
+        echo "  backup              - 手动创建备份"
+        echo ""
+        echo "示例："
+        echo "  $0 deploy           # 完整部署"
+        echo "  $0 quick            # 快速重启"
+        echo "  $0 rollback 20240604_102530  # 回滚到指定版本"
+        exit 1
+        ;;
+esac 

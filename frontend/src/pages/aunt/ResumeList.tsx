@@ -5,7 +5,7 @@ import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined } from '@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
+import { createFollowUp } from '@/services/followUp.service';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -40,7 +40,6 @@ interface ResumeData {
 const ResumeList = () => {
   const [form] = Form.useForm();
   const { message: messageApi } = App.useApp();
-  const { user } = useAuth();  // 获取当前登录用户信息
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpVisible, setFollowUpVisible] = useState(false);
   const [followUpForm] = Form.useForm();
@@ -234,43 +233,23 @@ const ResumeList = () => {
     followUpForm.resetFields();
   };
 
-  // 提交跟进记录 - 使用localStorage代替API
+  // 提交跟进记录 - 使用API代替localStorage
   const handleFollowUpSubmit = async () => {
     try {
       setFollowUpLoading(true);
       const values = await followUpForm.validateFields();
       
-      if (!user?.name) {
-        messageApi.error('无法获取当前用户信息，请重新登录');
+      if (!currentResumeId) {
+        messageApi.error('简历ID不存在');
         return;
       }
       
-      // 构建跟进记录数据，使用当前登录用户的名字
-      const followUpData = {
-        id: Date.now().toString(), // 生成临时ID
+      // 调用API创建跟进记录
+      await createFollowUp({
         resumeId: currentResumeId,
         type: values.type,
         content: values.content,
-        createdAt: new Date().toISOString(),
-        createdBy: user.name, // 直接使用用户名，不再使用默认值
-      };
-      
-      // 从localStorage获取现有记录
-      const existingRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
-      
-      // 更新旧记录中的 createdBy 字段（如果存在）
-      const updatedExistingRecords = existingRecords.map((record: any) => {
-        if (record.createdBy === 'current_user') {
-          return { ...record, createdBy: user.name };
-        }
-        return record;
       });
-      
-      // 添加新记录
-      const updatedRecords = [...updatedExistingRecords, followUpData];
-      
-      // 保存回localStorage
-      localStorage.setItem('followUpRecords', JSON.stringify(updatedRecords));
       
       messageApi.success('添加跟进记录成功');
       setFollowUpVisible(false);
@@ -555,9 +534,10 @@ const ResumeList = () => {
           >
             <Select>
               <Option value="phone">电话沟通</Option>
-              <Option value="interview">面试</Option>
-              <Option value="offer">录用</Option>
-              <Option value="reject">拒绝</Option>
+              <Option value="wechat">微信沟通</Option>
+              <Option value="visit">到店沟通</Option>
+              <Option value="interview">面试沟通</Option>
+              <Option value="signed">已签单</Option>
               <Option value="other">其他</Option>
             </Select>
           </Form.Item>

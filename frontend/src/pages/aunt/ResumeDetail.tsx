@@ -23,7 +23,8 @@ import {
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import apiService from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
+import { getCurrentUser } from '@/services/auth';
+import { createFollowUp, getFollowUpsByResumeId, deleteFollowUp, followUpTypeMap, type FollowUpRecord } from '@/services/followUp.service';
 import { isPdfFile } from '../../utils/uploadHelper';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
@@ -390,7 +391,6 @@ const ResumeDetail = () => {
   const [resume, setResume] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const { message: messageApi } = App.useApp();
-  const { user } = useAuth(); // 获取当前登录用户信息
 
   // 跟进记录相关状态
   const [followUpRecords, setFollowUpRecords] = useState<any[]>([]);
@@ -449,6 +449,13 @@ const ResumeDetail = () => {
       fetchResumeDetail();
     }
   }, [shortId]);
+
+  // 组件加载时获取跟进记录
+  useEffect(() => {
+    if (resume?._id) {
+      fetchFollowUpRecords();
+    }
+  }, [resume?._id]);
 
   // 处理编辑操作
   const handleEdit = () => {
@@ -847,69 +854,33 @@ const ResumeDetail = () => {
 
   // 获取跟进记录
   const fetchFollowUpRecords = async () => {
-    if (!resume?._id) {
-      console.log('简历ID不存在，跳过获取跟进记录');
-      return;
-    }
-
+    if (!resume?._id) return;
+    
     try {
-      // 从localStorage获取所有跟进记录
-      const allRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
-      
-      // 筛选出当前简历的跟进记录
-      const resumeRecords = allRecords.filter((record: any) => record.resumeId === resume._id);
-      
-      console.log('从localStorage获取跟进记录:', resumeRecords);
-      setFollowUpRecords(resumeRecords);
+      const response = await getFollowUpsByResumeId(resume._id, 1, 50);
+      setFollowUpRecords(response.items || []);
     } catch (error) {
       console.error('获取跟进记录失败:', error);
       messageApi.error('获取跟进记录失败');
     }
   };
   
-  // 组件加载时获取跟进记录
-  useEffect(() => {
-    if (resume?._id) {
-      fetchFollowUpRecords();
-    }
-  }, [resume?._id]);
-  
   // 添加跟进记录
   const handleAddFollowUp = async (values: any) => {
     try {
       setFollowUpLoading(true);
       
-      if (!user?.name) {
-        messageApi.error('无法获取当前用户信息，请重新登录');
+      if (!resume?._id) {
+        messageApi.error('简历ID不存在');
         return;
       }
       
-      // 创建新的跟进记录
-      const followUpData = {
-        id: Date.now().toString(), // 生成临时ID
+      // 调用API创建跟进记录
+      await createFollowUp({
         resumeId: resume._id,
         type: values.type,
         content: values.content,
-        createdAt: new Date().toISOString(),
-        createdBy: user.name, // 使用当前登录用户的name字段
-      };
-      
-      // 从localStorage获取现有记录
-      const existingRecords = JSON.parse(localStorage.getItem('followUpRecords') || '[]');
-      
-      // 更新旧记录中的 createdBy 字段（如果存在）
-      const updatedExistingRecords = existingRecords.map((record: any) => {
-        if (record.createdBy === 'current_user') {
-          return { ...record, createdBy: user.name };
-        }
-        return record;
       });
-      
-      // 添加新记录
-      const updatedRecords = [...updatedExistingRecords, followUpData];
-      
-      // 保存回localStorage
-      localStorage.setItem('followUpRecords', JSON.stringify(updatedRecords));
       
       messageApi.success('添加跟进记录成功');
       setIsAddFollowUpVisible(false);
@@ -935,22 +906,13 @@ const ResumeDetail = () => {
       title: '跟进人员',
       dataIndex: 'createdBy',
       key: 'createdBy',
+      render: (createdBy: any) => createdBy?.name || '-',
     },
     {
       title: '跟进类型',
       dataIndex: 'type',
       key: 'type',
-      render: (text: string) => {
-        const typeMap: any = {
-          'phone': '电话沟通',
-          'wechat': '微信沟通',
-          'visit': '到店沟通',
-          'interview': '面试沟通',
-          'signed': '已签单',
-          'other': '其他'
-        };
-        return typeMap[text] || text;
-      }
+      render: (text: string) => followUpTypeMap[text as keyof typeof followUpTypeMap] || text,
     },
     {
       title: '跟进内容',
@@ -965,7 +927,38 @@ const ResumeDetail = () => {
         </Tooltip>
       ),
     },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_: any, record: FollowUpRecord) => {
+        const currentUser = getCurrentUser();
+        const canDelete = currentUser?.role === 'admin' || record.createdBy._id === currentUser?.id;
+        
+        return canDelete ? (
+          <Button 
+            type="link" 
+            danger
+            size="small"
+            onClick={() => handleDeleteFollowUp(record._id)}
+          >
+            删除
+          </Button>
+        ) : null;
+      },
+    },
   ];
+
+  // 删除跟进记录
+  const handleDeleteFollowUp = async (id: string) => {
+    try {
+      await deleteFollowUp(id);
+      messageApi.success('删除跟进记录成功');
+      fetchFollowUpRecords(); // 刷新列表
+    } catch (error) {
+      console.error('删除跟进记录失败:', error);
+      messageApi.error('删除跟进记录失败');
+    }
+  };
 
   // 添加跟进记录表单
   const AddFollowUpModal = () => (

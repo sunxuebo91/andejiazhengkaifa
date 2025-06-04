@@ -9,13 +9,35 @@ on:
 
 env:
   NODE_VERSION: '18'
-  SERVER_HOST: ${{ secrets.SERVER_HOST }}
-  SERVER_USER: ${{ secrets.SERVER_USER }}
+  SERVER_HOST: ${{ vars.SERVER_HOST || secrets.SERVER_HOST }}
+  SERVER_USER: ${{ vars.SERVER_USER || secrets.SERVER_USER }}
   SERVER_KEY: ${{ secrets.SERVER_SSH_KEY }}
 
 jobs:
+  # 环境检查
+  environment-check:
+    runs-on: ubuntu-latest
+    name: 🔍 Environment Check
+    steps:
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ env.SERVER_HOST }}" ]; then
+            echo "::error::SERVER_HOST is not set"
+            exit 1
+          fi
+          if [ -z "${{ env.SERVER_USER }}" ]; then
+            echo "::error::SERVER_USER is not set"
+            exit 1
+          fi
+          if [ -z "${{ env.SERVER_KEY }}" ]; then
+            echo "::error::SERVER_SSH_KEY is not set"
+            exit 1
+          fi
+          echo "✅ All required secrets are set"
+
   # 代码质量检查
   quality-check:
+    needs: environment-check
     runs-on: ubuntu-latest
     name: 🔍 Code Quality Check
     
@@ -61,9 +83,9 @@ jobs:
 
   # 构建检查
   build-check:
+    needs: [environment-check, quality-check]
     runs-on: ubuntu-latest
     name: 🔨 Build Check
-    needs: quality-check
     
     steps:
     - name: 📥 Checkout code
@@ -97,9 +119,9 @@ jobs:
 
   # 生产部署
   deploy-production:
+    needs: [environment-check, quality-check, build-check]
     runs-on: ubuntu-latest
     name: 🚀 Deploy to Production
-    needs: [quality-check, build-check]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     
     steps:
@@ -164,7 +186,6 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     name: 🧪 Deploy to Staging
-    needs: [quality-check, build-check]
     if: github.event_name == 'pull_request'
     
     steps:

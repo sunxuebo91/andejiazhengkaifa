@@ -15,7 +15,7 @@ export class FollowUpController {
   @ApiOperation({ summary: '创建跟进记录' })
   @ApiResponse({ status: 201, description: '创建成功' })
   async create(@Body() createFollowUpDto: CreateFollowUpDto, @Request() req): Promise<{ success: boolean; data: PopulatedFollowUp; message: string }> {
-    const followUp = await this.followUpService.create(createFollowUpDto, req.user.id);
+    const followUp = await this.followUpService.create(createFollowUpDto, req.user.userId);
     return {
       success: true,
       data: followUp,
@@ -58,7 +58,7 @@ export class FollowUpController {
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 10
   ) {
-    const result = await this.followUpService.findByUserId(req.user.id, page, pageSize);
+    const result = await this.followUpService.findByUserId(req.user.userId, page, pageSize);
     return {
       success: true,
       data: result,
@@ -98,7 +98,7 @@ export class FollowUpController {
   @ApiOperation({ summary: '删除跟进记录' })
   @ApiResponse({ status: 200, description: '删除成功' })
   async delete(@Param('id') id: string, @Request() req) {
-    await this.followUpService.delete(id, req.user.id);
+    await this.followUpService.delete(id, req.user.userId);
     return {
       success: true,
       message: '删除跟进记录成功'

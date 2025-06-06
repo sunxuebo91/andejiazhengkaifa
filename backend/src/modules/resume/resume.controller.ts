@@ -246,28 +246,86 @@ export class ResumeController {
   @ApiOperation({ summary: '获取简历列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findAll(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe) pageSize: number,
+    @Query('page') pageStr: string = '1',
+    @Query('pageSize') pageSizeStr: string = '10',
     @Query('keyword') keyword?: string,
     @Query('jobType') jobType?: string,
     @Query('orderStatus') orderStatus?: string,
-    @Query('maxAge', new ParseIntPipe({ optional: true })) maxAge?: number,
+    @Query('maxAge') maxAgeStr?: string,
     @Query('nativePlace') nativePlace?: string,
     @Query('ethnicity') ethnicity?: string,
+    @Query('_t') timestamp?: string, // 时间戳参数
+    @Req() req?: any
   ) {
     try {
-      this.logger.log(`获取简历列表: page=${page}, pageSize=${pageSize}, keyword=${keyword}, jobType=${jobType}, orderStatus=${orderStatus}, maxAge=${maxAge}, nativePlace=${nativePlace}, ethnicity=${ethnicity}`);
-      const result = await this.resumeService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity);
+      // 手动解析数字参数，避免使用ParseIntPipe
+      let page = 1;
+      let pageSize = 10;
+      let maxAge: number | undefined = undefined;
+
+      // 详细记录请求信息
+      this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}`);
+      
+      // 安全地解析页码
+      try {
+        if (pageStr) {
+          const parsed = parseInt(pageStr, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            page = parsed;
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`页码解析错误: ${e.message}`);
+      }
+      
+      // 安全地解析每页条数
+      try {
+        if (pageSizeStr) {
+          const parsed = parseInt(pageSizeStr, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            pageSize = Math.min(parsed, 100); // 限制最大为100
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`每页条数解析错误: ${e.message}`);
+      }
+      
+      // 安全地解析最大年龄
+      try {
+        if (maxAgeStr) {
+          const parsed = parseInt(maxAgeStr, 10);
+          if (!isNaN(parsed)) {
+            maxAge = parsed;
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`最大年龄解析错误: ${e.message}`);
+      }
+      
+      this.logger.log(`解析后的参数: page=${page}, pageSize=${pageSize}, maxAge=${maxAge}`);
+      
+      // 调用服务获取数据
+      const result = await this.resumeService.findAll(
+        page, 
+        pageSize, 
+        keyword, 
+        jobType,
+        orderStatus,
+        maxAge,
+        nativePlace,
+        ethnicity
+      );
+      
       return {
         success: true,
         data: result,
         message: '获取简历列表成功'
       };
     } catch (error) {
-      this.logger.error(`获取简历列表失败: ${error.message}`);
+      this.logger.error(`获取简历列表失败: ${error.message}`, error.stack);
       return {
         success: false,
-        data: { items: [], total: 0 },
+        data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 },
         message: `获取简历列表失败: ${error.message}`
       };
     }

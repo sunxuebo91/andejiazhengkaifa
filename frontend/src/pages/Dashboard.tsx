@@ -30,10 +30,10 @@ const Dashboard: React.FC = () => {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      // 获取所有简历，设置较大的pageSize以确保获取所有数据
+      // 获取所有简历，设置合理的pageSize
       const response = await apiService.get('/api/resumes', {
         page: 1,
-        pageSize: 1000 // 设置一个足够大的数值以获取所有数据
+        pageSize: 100 // 设置合理的值，避免后端参数验证错误
       }, {
         timeout: 10000
       });

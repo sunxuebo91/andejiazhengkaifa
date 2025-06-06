@@ -2,7 +2,8 @@ import axios, { AxiosRequestConfig, AxiosError } from 'axios';
 import { getToken, removeToken } from './auth';
 
 // API 基础 URL
-const API_BASE_URL = ''; // 在生产环境中使用相对路径，让 Nginx 处理代理
+const isDev = import.meta.env.DEV;
+const API_BASE_URL = isDev ? 'http://localhost:3001' : ''; // 开发环境指向3001端口，生产环境使用相对路径
 
 // 创建axios实例
 export const api = axios.create({

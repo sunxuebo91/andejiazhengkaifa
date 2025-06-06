@@ -1,5 +1,5 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip } from 'antd';
+import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber } from 'antd';
 import type { TablePaginationConfig } from 'antd';
 import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
@@ -17,9 +17,25 @@ const orderStatusMap: Record<string, { text: string; color: string; icon: string
   'on-service': { text: '已上户', color: '#1890ff', icon: '🔵' }
 };
 
+// 工种映射
+const jobTypeMap: Record<string, string> = {
+  yuexin: '月嫂',
+  'zhujia-yuer': '住家育儿嫂',
+  'baiban-yuer': '白班育儿',
+  baojie: '保洁',
+  'baiban-baomu': '白班保姆',
+  'zhujia-baomu': '住家保姆',
+  yangchong: '养宠',
+  xiaoshi: '小时工'
+};
+
 // 类型定义
 interface SearchParams {
   keyword?: string;
+  jobType?: string;
+  maxAge?: number;
+  nativePlace?: string;
+  ethnicity?: string;
   orderStatus?: keyof typeof orderStatusMap;
 }
 
@@ -33,6 +49,7 @@ interface ResumeData {
   gender: 'male' | 'female';
   nativePlace: string;
   orderStatus: keyof typeof orderStatusMap;
+  jobType: string;
   hasMedicalReport: boolean;
   [key: string]: any;
 }
@@ -50,31 +67,36 @@ const ResumeList = () => {
   const [loading, setLoading] = useState(false);
   const [resumeList, setResumeList] = useState<ResumeData[]>([]);
   const [total, setTotal] = useState(0);
-  const [activeStatusFilter, setActiveStatusFilter] = useState<keyof typeof orderStatusMap | undefined>(undefined);
+  const [nativePlaceOptions, setNativePlaceOptions] = useState<string[]>([]);
+  const [ethnicityOptions, setEthnicityOptions] = useState<string[]>([]);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 获取简历列表
   const fetchResumeList = async (params: SearchParams & { page?: number; pageSize?: number; _t?: number } = {}) => {
     setLoading(true);
+    
+    // 添加超时控制
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+      messageApi.error('请求超时，请重试');
+    }, 10000); // 10秒超时
+    
     try {
-      // 将关键词参数转换为后端API所需的格式
+      // 将所有筛选参数传递给后端API
       const apiParams = { ...params };
-      
-      // 记录搜索关键词用于前端过滤
-      const searchKeyword = apiParams.keyword ? apiParams.keyword.toLowerCase() : '';
-      
-      // 确保orderStatus参数被正确传递
-      if (apiParams.orderStatus) {
-        // orderStatus已经是正确的值，无需额外处理
-      }
       
       console.log('开始请求简历列表，参数:', apiParams);
       // 使用正确的API路径和参数格式
       const response = await apiService.get('/api/resumes', apiParams, {
         timeout: 30000 // 增加超时时间到30秒
       });
+      
+      // 清除超时计时器
+      clearTimeout(timeoutId);
       
       console.log('API响应数据:', response);
       
@@ -90,7 +112,6 @@ const ResumeList = () => {
       
       // 格式化数据
       let formattedData: ResumeData[] = resumes.map((resume: any) => {
-        console.log('处理简历数据:', resume);
         // 确保id存在且为字符串
         if (!resume._id) {
           console.error('简历数据缺少ID字段:', resume);
@@ -98,12 +119,9 @@ const ResumeList = () => {
         }
         
         const resumeId = resume._id.toString();
-        console.log('简历ID:', resumeId);
         
         // 格式化ID显示
         const formattedId = resumeId.substring(0, 8).padEnd(8, '0');
-        
-        console.log('格式化后的ID:', formattedId);
         
         return {
           ...resume,
@@ -113,37 +131,79 @@ const ResumeList = () => {
         };
       }).filter(Boolean);
       
-      // 如果有搜索关键词，在前端进行过滤
-      if (searchKeyword) {
-        formattedData = formattedData.filter((resume: ResumeData) => {
-          const searchFields = [
-            resume.name,
-            resume.phone,
-            resume.idNumber,
-            resume.id,
-            resume.formattedId
-          ].map(field => (field || '').toLowerCase());
-          
-          return searchFields.some(field => field.includes(searchKeyword));
-        });
-        
-        if (formattedData.length === 0) {
-          messageApi.info('没有找到匹配的简历');
-        }
+      // 收集所有不同的籍贯和民族选项，用于下拉列表
+      const nativePlaces = new Set<string>();
+      const ethnicities = new Set<string>();
+      
+      formattedData.forEach((resume) => {
+        if (resume.nativePlace) nativePlaces.add(resume.nativePlace);
+        if (resume.ethnicity) ethnicities.add(resume.ethnicity);
+      });
+      
+      setNativePlaceOptions(Array.from(nativePlaces).sort());
+      setEthnicityOptions(Array.from(ethnicities).sort());
+      
+      // 应用前端筛选
+      let filteredData = [...formattedData]; // 创建副本，避免引用问题
+      
+      // 1. 关键词筛选已经在后端处理，这里只进行额外的前端筛选
+      
+      // 2. 工种筛选
+      if (params.jobType) {
+        filteredData = filteredData.filter(resume => 
+          resume.jobType === params.jobType
+        );
       }
       
-      console.log('最终处理后的数据:', formattedData.slice(0, 2)); // 只打印前两条记录用于调试
-      setResumeList(formattedData);
-      setTotal(totalCount);
+      // 3. 年龄筛选 (≤X岁)
+      if (params.maxAge !== undefined && params.maxAge !== null) {
+        filteredData = filteredData.filter(resume => 
+          resume.age !== undefined && resume.age <= params.maxAge!
+        );
+      }
       
-      // 保存完整的简历列表到localStorage
+      // 4. 籍贯筛选
+      if (params.nativePlace) {
+        filteredData = filteredData.filter(resume => 
+          resume.nativePlace === params.nativePlace
+        );
+      }
+      
+      // 5. 民族筛选
+      if (params.ethnicity) {
+        filteredData = filteredData.filter(resume => 
+          resume.ethnicity === params.ethnicity
+        );
+      }
+      
+      // 6. 接单状态筛选
+      if (params.orderStatus) {
+        filteredData = filteredData.filter(resume => 
+          resume.orderStatus === params.orderStatus
+        );
+      }
+      
+      if (formattedData.length > 0 && filteredData.length === 0) {
+        messageApi.info('没有找到匹配的简历');
+      }
+      
+      console.log('最终处理后的数据:', filteredData.slice(0, 2)); // 只打印前两条记录用于调试
+      setResumeList(filteredData);
+      setTotal(filteredData.length); // 只显示筛选后的总数
+      
+      // 保存原始简历列表到localStorage
       localStorage.setItem('resumeList', JSON.stringify(formattedData));
     } catch (error) {
+      // 清除超时计时器
+      clearTimeout(timeoutId);
+      
       console.error('获取简历列表失败:', error);
       messageApi.error('获取简历列表失败，请稍后重试');
       setResumeList([]);
       setTotal(0);
     } finally {
+      // 清除超时计时器
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -161,7 +221,7 @@ const ResumeList = () => {
         page: currentPage,
         pageSize
       });
-    }, 300);
+    }, 500); // 增加到500ms的防抖时间
     
     return () => {
       if (searchTimeoutRef.current) {
@@ -172,48 +232,90 @@ const ResumeList = () => {
 
   // 添加定时刷新功能
   useEffect(() => {
-    // 设置定时器，每60秒刷新一次数据，检查是否有新简历
-    const intervalId = setInterval(() => {
-      console.log('定时检查新简历...');
-      fetchResumeList({
-        ...searchParams,
-        page: currentPage,
-        pageSize,
-        _t: Date.now() // 添加时间戳防止缓存
-      });
-    }, 60000); // 1分钟刷新一次
+    // 清除之前的定时器
+    if (autoRefreshIntervalRef.current) {
+      clearInterval(autoRefreshIntervalRef.current);
+      autoRefreshIntervalRef.current = null;
+    }
+    
+    // 只有在启用自动刷新且没有筛选条件时才设置定时器
+    if (autoRefreshEnabled && Object.keys(searchParams).length === 0) {
+      console.log('启动定时检查新简历...');
+      // 设置定时器，每60秒刷新一次数据，检查是否有新简历
+      autoRefreshIntervalRef.current = setInterval(() => {
+        console.log('定时检查新简历...');
+        // 只使用分页参数，不带筛选条件
+        fetchResumeList({
+          page: currentPage,
+          pageSize,
+          _t: Date.now() // 添加时间戳防止缓存
+        });
+      }, 60000); // 1分钟刷新一次
+    }
     
     // 组件卸载时清除定时器
     return () => {
-      clearInterval(intervalId);
+      if (autoRefreshIntervalRef.current) {
+        clearInterval(autoRefreshIntervalRef.current);
+        autoRefreshIntervalRef.current = null;
+      }
     };
-  }, [searchParams, currentPage, pageSize]);
+  }, [autoRefreshEnabled, searchParams, currentPage, pageSize]);
 
-  // 处理搜索
-  const handleSearch = (values: { keyword?: string }) => {
-    const { keyword } = values;
-    // 使用一个统一关键词搜索多个字段
-    const searchQuery: SearchParams = keyword ? { keyword } : {};
-    setSearchParams(searchQuery);
-    setCurrentPage(1); // 重置到第一页
+  // 切换自动刷新
+  const toggleAutoRefresh = () => {
+    setAutoRefreshEnabled(prev => !prev);
   };
 
-  // 处理状态筛选
-  const handleStatusFilter = (status: keyof typeof orderStatusMap | undefined) => {
-    setActiveStatusFilter(status);
-    setSearchParams(prev => ({
-      ...prev,
-      orderStatus: status
-    }));
-    setCurrentPage(1); // Reset to first page when filter changes
+  // 处理搜索
+  const handleSearch = (values: {
+    keyword?: string;
+    jobType?: string;
+    maxAge?: number;
+    nativePlace?: string;
+    ethnicity?: string;
+    orderStatus?: keyof typeof orderStatusMap;
+  }) => {
+    // 如果正在加载，不处理
+    if (loading) return;
+    
+    const { keyword, jobType, maxAge, nativePlace, ethnicity, orderStatus } = values;
+    
+    // 构建搜索参数
+    const searchQuery: SearchParams = {};
+    
+    if (keyword) searchQuery.keyword = keyword;
+    if (jobType) searchQuery.jobType = jobType;
+    if (maxAge !== undefined && maxAge !== null) searchQuery.maxAge = maxAge;
+    if (nativePlace) searchQuery.nativePlace = nativePlace;
+    if (ethnicity) searchQuery.ethnicity = ethnicity;
+    if (orderStatus) searchQuery.orderStatus = orderStatus;
+    
+    // 如果有筛选条件，自动禁用自动刷新
+    if (Object.keys(searchQuery).length > 0 && autoRefreshEnabled) {
+      setAutoRefreshEnabled(false);
+      messageApi.info('已应用筛选条件，自动刷新已暂停');
+    }
+    
+    console.log('搜索参数:', searchQuery);
+    
+    setSearchParams(searchQuery);
+    setCurrentPage(1); // 重置到第一页
   };
 
   // 重置搜索
   const handleReset = () => {
     form.resetFields();
     setSearchParams({});
-    setActiveStatusFilter(undefined);
     setCurrentPage(1);
+    
+    // 恢复自动刷新
+    if (!autoRefreshEnabled) {
+      setAutoRefreshEnabled(true);
+      messageApi.success('已重置筛选条件，自动刷新已恢复');
+    } else {
+      messageApi.success('已重置筛选条件');
+    }
   };
 
   // 处理分页变化
@@ -307,6 +409,12 @@ const ResumeList = () => {
       key: 'phone',
     },
     {
+      title: '工种',
+      dataIndex: 'jobType',
+      key: 'jobType',
+      render: (jobType: string) => jobTypeMap[jobType] || jobType || '-',
+    },
+    {
       title: '年龄',
       dataIndex: 'age',
       key: 'age',
@@ -361,10 +469,26 @@ const ResumeList = () => {
 
   // 显示自动刷新状态的组件
   const AutoRefreshIndicator = () => (
-    <div style={{ textAlign: 'right', marginBottom: 8 }}>
-      <Tag color="processing" icon={<ReloadOutlined spin />}>
-        自动检查新简历
-      </Tag>
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8, alignItems: 'center' }}>
+      <Button 
+        type={autoRefreshEnabled ? "primary" : "default"}
+        size="small"
+        icon={<ReloadOutlined spin={autoRefreshEnabled} />}
+        onClick={toggleAutoRefresh}
+        style={{ marginRight: 8 }}
+      >
+        {autoRefreshEnabled ? '自动刷新已开启' : '自动刷新已关闭'}
+      </Button>
+      {autoRefreshEnabled && (
+        <Tag color="processing" icon={<ReloadOutlined spin />}>
+          每60秒自动检查新简历
+        </Tag>
+      )}
+      {Object.keys(searchParams).length > 0 && (
+        <Tag color="warning" icon={<SearchOutlined />}>
+          已应用筛选条件
+        </Tag>
+      )}
     </div>
   );
 
@@ -391,95 +515,80 @@ const ResumeList = () => {
       <Card style={{ marginBottom: 16 }}>
         <Form
           form={form}
-          name="resumeSearch"
-          layout="inline"
           onFinish={handleSearch}
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 8 }}
         >
-          <Form.Item name="keyword" label="关键词">
-            <Input placeholder="请输入姓名、手机号、身份证号或简历ID" allowClear />
-          </Form.Item>
-
-          <Form.Item label="接单状态" style={{ marginBottom: 0 }}>
-            <Select
-              style={{ 
-                width: 140,
-                borderRadius: '6px'
-              }}
-              placeholder={
-                <span style={{ color: '#666' }}>
-                  <span style={{ marginRight: 8 }}>📋</span>
-                  选择状态
-                </span>
-              }
-              value={activeStatusFilter}
-              onChange={handleStatusFilter}
-              allowClear
-              dropdownStyle={{ 
-                borderRadius: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-              }}
-              options={[
-                { 
-                  value: undefined, 
-                  label: (
-                    <span style={{ 
-                      display: 'flex', 
-                      alignItems: 'center',
-                      padding: '4px 0'
-                    }}>
-                      <span style={{ marginRight: 8 }}>📋</span>
-                      全部状态
-                    </span>
-                  )
-                },
-                ...Object.entries(orderStatusMap).map(([status, { text, color, icon }]) => ({
-                  value: status,
-                  label: (
-                    <span style={{ 
-                      display: 'flex', 
-                      alignItems: 'center',
-                      padding: '4px 0',
-                      color: activeStatusFilter === status ? color : 'inherit'
-                    }}>
-                      <span style={{ 
-                        marginRight: 8,
-                        fontSize: '14px'
-                      }}>
-                        {icon}
-                      </span>
-                      {text}
-                    </span>
-                  )
-                }))
-              ]}
-              optionLabelProp="label"
-              dropdownRender={menu => (
-                <div>
-                  <div style={{ 
-                    padding: '8px 12px', 
-                    borderBottom: '1px solid #f0f0f0',
-                    color: '#666',
-                    fontSize: '12px'
-                  }}>
-                    选择接单状态进行筛选
-                  </div>
-                  {menu}
-                </div>
-              )}
-            />
-          </Form.Item>
-          
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" icon={<SearchOutlined />}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+            <Form.Item name="keyword" style={{ marginBottom: 0 }}>
+              <Input
+                placeholder="关键词(姓名/手机号)"
+                prefix={<SearchOutlined />}
+                allowClear
+                style={{ width: '180px' }}
+              />
+            </Form.Item>
+            
+            <Form.Item name="jobType" style={{ marginBottom: 0 }}>
+              <Select 
+                placeholder="工种" 
+                allowClear
+                options={Object.entries(jobTypeMap).map(([value, label]) => ({ value, label }))}
+                style={{ width: '140px' }}
+              />
+            </Form.Item>
+            
+            <Form.Item name="maxAge" style={{ marginBottom: 0 }}>
+              <InputNumber
+                placeholder="≤年龄"
+                min={0}
+                max={100}
+                style={{ width: '100px' }}
+              />
+            </Form.Item>
+            
+            <Form.Item name="nativePlace" style={{ marginBottom: 0 }}>
+              <Select 
+                placeholder="籍贯" 
+                allowClear
+                options={nativePlaceOptions.map(value => ({ value, label: value }))}
+                style={{ width: '140px' }}
+                showSearch
+                filterOption={(input, option) =>
+                  (option?.label as string).toLowerCase().includes(input.toLowerCase())
+                }
+              />
+            </Form.Item>
+            
+            <Form.Item name="ethnicity" style={{ marginBottom: 0 }}>
+              <Select 
+                placeholder="民族" 
+                allowClear
+                options={ethnicityOptions.map(value => ({ value, label: value }))}
+                style={{ width: '120px' }}
+              />
+            </Form.Item>
+            
+            <Form.Item name="orderStatus" style={{ marginBottom: 0 }}>
+              <Select 
+                placeholder="接单状态" 
+                allowClear
+                options={Object.entries(orderStatusMap).map(([value, { text }]) => ({ value, label: text }))}
+                style={{ width: '120px' }}
+              />
+            </Form.Item>
+            
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
                 查询
               </Button>
-              <Button onClick={handleReset} icon={<ReloadOutlined />}>
+            </Form.Item>
+            
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button onClick={handleReset} icon={<ReloadOutlined />} disabled={loading}>
                 重置
               </Button>
-            </Space>
-          </Form.Item>
+            </Form.Item>
+          </div>
         </Form>
       </Card>
       

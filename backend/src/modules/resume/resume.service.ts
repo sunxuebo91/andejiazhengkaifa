@@ -152,16 +152,43 @@ export class ResumeService {
     }
   }
 
-  async findAll(page: number, pageSize: number, search?: string) {
-    const query = search
-      ? {
-          $or: [
-            { name: { $regex: search, $options: 'i' } },
-            { phone: { $regex: search, $options: 'i' } },
-            { expectedPosition: { $regex: search, $options: 'i' } }
-          ]
-        }
-      : {};
+  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string) {
+    // 构建查询条件
+    const query: any = {};
+    
+    // 添加关键词搜索
+    if (keyword) {
+      query.$or = [
+        { name: { $regex: keyword, $options: 'i' } },
+        { phone: { $regex: keyword, $options: 'i' } },
+        { expectedPosition: { $regex: keyword, $options: 'i' } }
+      ];
+    }
+    
+    // 添加工种筛选
+    if (jobType) {
+      query.jobType = jobType;
+    }
+    
+    // 添加接单状态筛选
+    if (orderStatus) {
+      query.orderStatus = orderStatus;
+    }
+    
+    // 添加最大年龄筛选
+    if (maxAge !== undefined && maxAge !== null) {
+      query.age = { $lte: maxAge };
+    }
+    
+    // 添加籍贯筛选
+    if (nativePlace) {
+      query.nativePlace = nativePlace;
+    }
+    
+    // 添加民族筛选
+    if (ethnicity) {
+      query.ethnicity = ethnicity;
+    }
 
     const [items, total] = await Promise.all([
       this.resumeModel

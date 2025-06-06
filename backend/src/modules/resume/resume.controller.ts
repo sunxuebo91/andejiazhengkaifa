@@ -248,11 +248,16 @@ export class ResumeController {
   async findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe) pageSize: number,
-    @Query('search') search?: string,
+    @Query('keyword') keyword?: string,
+    @Query('jobType') jobType?: string,
+    @Query('orderStatus') orderStatus?: string,
+    @Query('maxAge', new ParseIntPipe({ optional: true })) maxAge?: number,
+    @Query('nativePlace') nativePlace?: string,
+    @Query('ethnicity') ethnicity?: string,
   ) {
     try {
-      this.logger.log(`获取简历列表: page=${page}, pageSize=${pageSize}, search=${search}`);
-      const result = await this.resumeService.findAll(page, pageSize, search);
+      this.logger.log(`获取简历列表: page=${page}, pageSize=${pageSize}, keyword=${keyword}, jobType=${jobType}, orderStatus=${orderStatus}, maxAge=${maxAge}, nativePlace=${nativePlace}, ethnicity=${ethnicity}`);
+      const result = await this.resumeService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity);
       return {
         success: true,
         data: result,

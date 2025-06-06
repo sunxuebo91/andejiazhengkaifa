@@ -18,7 +18,7 @@ export interface PopulatedFollowUp extends Omit<FollowUp, 'createdBy'> {
 }
 
 // 定义查询结果类型
-interface FollowUpQueryResult {
+export interface FollowUpQueryResult {
   items: PopulatedFollowUp[];
   total: number;
   page: number;

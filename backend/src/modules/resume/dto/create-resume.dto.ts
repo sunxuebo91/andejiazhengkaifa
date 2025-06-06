@@ -76,7 +76,8 @@ export enum JobType {
   BAIBAN_BAOMU = 'baiban-baomu',
   ZHUJIA_BAOMU = 'zhujia-baomu',
   YANGCHONG = 'yangchong',
-  XIAOSHI = 'xiaoshi'
+  XIAOSHI = 'xiaoshi',
+  ZHUJIA_HULAO = 'zhujia-hulao'
 }
 
 export enum OrderStatus {
@@ -101,7 +102,11 @@ export enum Skill {
   SHOUYI = 'shouyi',
   MUYING = 'muying',
   CUIRU = 'cuiru',
-  YUEZICAN = 'yuezican'
+  YUEZICAN = 'yuezican',
+  YINGYANG = 'yingyang',
+  LILIAO_KANGFU = 'liliao-kangfu',
+  SHUANGTAI_HULI = 'shuangtai-huli',
+  YANGLAO_HULI = 'yanglao-huli'
 }
 
 export enum LeadSource {

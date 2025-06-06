@@ -106,7 +106,8 @@ const JOB_TYPE_MAP = {
   'zhujia-baomu': '住家保姆',
   'yangchong': '养宠',
   'xiaoshi': '小时工',
-  'yuexin': '月薪'
+  'yuexin': '月嫂',
+  'zhujia-hulao': '住家护老'
 } as const;
 
 // 添加学历映射常量
@@ -1978,6 +1979,10 @@ const CreateResume: React.FC = () => {
                       <Option value="mianshi">面食</Option>
                       <Option value="jiashi">驾驶</Option>
                       <Option value="shouyi">整理收纳</Option>
+                      <Option value="yingyang">营养师</Option>
+                      <Option value="liliao-kangfu">理疗康复</Option>
+                      <Option value="shuangtai-huli">双胎护理</Option>
+                      <Option value="yanglao-huli">养老护理</Option>
                     </Select>
                   </Form.Item>
                 </Col>

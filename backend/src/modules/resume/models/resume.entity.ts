@@ -114,7 +114,7 @@ export class Resume extends Document implements IResume {
   wechat?: string;
 
   @ApiProperty({ description: '身份证号' })
-  @Prop({ unique: true, nullable: true })
+  @Prop({ unique: true, sparse: true, nullable: true })
   @IsString()
   @IsOptional()
   idNumber?: string;
@@ -265,3 +265,6 @@ export class Resume extends Document implements IResume {
 }
 
 export const ResumeSchema = SchemaFactory.createForClass(Resume);
+
+// 确保idNumber字段的索引是稀疏的，这样null值不会参与唯一性检查
+ResumeSchema.index({ idNumber: 1 }, { unique: true, sparse: true });

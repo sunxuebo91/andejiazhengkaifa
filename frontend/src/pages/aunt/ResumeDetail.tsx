@@ -146,6 +146,7 @@ type JobTypeMapType = {
   'zhujia-baomu': string;
   yangchong: string;
   xiaoshi: string;
+  'zhujia-hulao': string;
 };
 
 type OrderStatusMapType = {
@@ -183,6 +184,10 @@ type SkillsMapType = {
   muying: string;
   cuiru: string;
   yuezican: string;
+  yingyang: string;
+  'liliao-kangfu': string;
+  'shuangtai-huli': string;
+  'yanglao-huli': string;
 };
 
 // 声明映射对象的类型
@@ -262,7 +267,8 @@ const jobTypeMap: JobTypeMapType = {
   'baiban-baomu': '白班保姆',
   'zhujia-baomu': '住家保姆',
   yangchong: '养宠',
-  xiaoshi: '小时工'
+  xiaoshi: '小时工',
+  'zhujia-hulao': '住家护老'
 };
 
 // 接单状态映射
@@ -289,7 +295,11 @@ const skillsMap: SkillsMapType = {
   shouyi: '整理收纳',
   muying: '母婴护理师',
   cuiru: '催乳',
-  yuezican: '月子餐'
+  yuezican: '月子餐',
+  yingyang: '营养师',
+  'liliao-kangfu': '理疗康复',
+  'shuangtai-huli': '双胎护理',
+  'yanglao-huli': '养老护理'
 };
 
 // 线索来源映射

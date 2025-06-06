@@ -26,7 +26,8 @@ const jobTypeMap: Record<string, string> = {
   'baiban-baomu': '白班保姆',
   'zhujia-baomu': '住家保姆',
   yangchong: '养宠',
-  xiaoshi: '小时工'
+  xiaoshi: '小时工',
+  'zhujia-hulao': '住家护老'
 };
 
 // 类型定义

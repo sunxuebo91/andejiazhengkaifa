@@ -1962,6 +1962,9 @@ const CreateResume: React.FC = () => {
                       placeholder="请选择技能标签"
                       style={{ width: '100%' }}
                     >
+                      <Option value="muying">母婴护理师</Option>
+                      <Option value="cuiru">催乳</Option>
+                      <Option value="yuezican">月子餐</Option>
                       <Option value="chanhou">产后修复</Option>
                       <Option value="teshu-yinger">特殊婴儿护理</Option>
                       <Option value="yiliaobackground">医疗背景</Option>

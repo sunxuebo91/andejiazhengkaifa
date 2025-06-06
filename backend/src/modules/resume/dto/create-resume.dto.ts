@@ -98,7 +98,10 @@ export enum Skill {
   XICAN = 'xican',
   MIANSHI = 'mianshi',
   JIASHI = 'jiashi',
-  SHOUYI = 'shouyi'
+  SHOUYI = 'shouyi',
+  MUYING = 'muying',
+  CUIRU = 'cuiru',
+  YUEZICAN = 'yuezican'
 }
 
 export enum LeadSource {

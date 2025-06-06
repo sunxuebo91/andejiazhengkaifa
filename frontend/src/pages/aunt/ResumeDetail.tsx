@@ -180,6 +180,9 @@ type SkillsMapType = {
   mianshi: string;
   jiashi: string;
   shouyi: string;
+  muying: string;
+  cuiru: string;
+  yuezican: string;
 };
 
 // 声明映射对象的类型
@@ -283,7 +286,10 @@ const skillsMap: SkillsMapType = {
   xican: '西餐',
   mianshi: '面食',
   jiashi: '驾驶',
-  shouyi: '整理收纳'
+  shouyi: '整理收纳',
+  muying: '母婴护理师',
+  cuiru: '催乳',
+  yuezican: '月子餐'
 };
 
 // 线索来源映射

@@ -222,6 +222,9 @@ export class User {
 - `on-service`: 已上户
 
 ### 技能标签 (skills)
+- `muying`: 母婴护理师
+- `cuiru`: 催乳
+- `yuezican`: 月子餐
 - `chanhou`: 产后修复
 - `teshu-yinger`: 特殊婴儿护理
 - `yiliaobackground`: 医疗背景

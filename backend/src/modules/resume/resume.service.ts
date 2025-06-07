@@ -127,6 +127,12 @@ export class ResumeService {
       reports: categorizedFiles.reports
     };
 
+    // 如果idNumber为null、空字符串或undefined，则删除它，避免唯一索引问题
+    if (resumeData.idNumber === null || resumeData.idNumber === '' || resumeData.idNumber === undefined) {
+      delete resumeData.idNumber;
+      this.logger.log('检测到空的idNumber字段，已从数据中删除');
+    }
+
     try {
       const resume = new this.resumeModel(resumeData);
       const savedResume = await resume.save();
@@ -486,9 +492,19 @@ export class ResumeService {
     // 检查手机号唯一性
     const exist = await this.resumeModel.findOne({ phone: createResumeDto.phone });
     if (exist) {
-      throw new BadRequestException('手机号已存在');
+      throw new ConflictException('该手机号已被使用');
     }
-    const resume = new this.resumeModel(createResumeDto);
+    
+    // 复制DTO以避免修改原始对象
+    const resumeData = { ...createResumeDto };
+    
+    // 如果idNumber为null、空字符串或undefined，则删除它，避免唯一索引问题
+    if (resumeData.idNumber === null || resumeData.idNumber === '' || resumeData.idNumber === undefined) {
+      delete resumeData.idNumber;
+      this.logger.log('检测到空的idNumber字段，已从数据中删除');
+    }
+    
+    const resume = new this.resumeModel(resumeData);
     return resume.save();
   }
 

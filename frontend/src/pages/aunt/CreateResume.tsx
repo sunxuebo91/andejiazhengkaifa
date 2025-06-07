@@ -1182,11 +1182,12 @@ const CreateResume: React.FC = () => {
       setSubmitting(true);
       
       console.log('🚀 开始提交表单，模式:', editingResume?._id ? '编辑' : '创建');
-      console.log('📊 当前文件状态:', {
-        photoFiles: photoFiles.length,
-        certificateFiles: certificateFiles.length,
-        medicalReportFiles: medicalReportFiles.length
-      });
+      console.log('📊 当前文件状态:', values);
+      
+      // 处理空字符串的idNumber，将其转换为undefined
+      if (values.idNumber === '') {
+        values.idNumber = undefined;
+      }
       
       if (editingResume?._id) {
         // 编辑模式：只处理基本信息更新和新文件上传
@@ -1310,6 +1311,12 @@ const CreateResume: React.FC = () => {
           .map(file => file.originFileObj)
           .filter((file): file is RcFile => file !== undefined);
         
+        // 处理表单值，确保idNumber为空字符串时被转为undefined
+        const formValues = { ...values };
+        if (formValues.idNumber === '') {
+          formValues.idNumber = undefined;
+        }
+        
         // 🔄 压缩所有图片文件
         console.log('🗜️ 开始压缩所有文件...');
         const compressedPhotoFiles = await Promise.all(
@@ -1369,7 +1376,7 @@ const CreateResume: React.FC = () => {
         const formData = new FormData();
         
         // 添加基本信息
-        Object.entries(values).forEach(([key, value]) => {
+        Object.entries(formValues).forEach(([key, value]) => {
           if (value !== null && value !== undefined) {
             if (Array.isArray(value) || typeof value === 'object') {
               formData.append(key, JSON.stringify(value));
@@ -1378,14 +1385,14 @@ const CreateResume: React.FC = () => {
             }
           }
         });
-
+        
         // 添加所有压缩后的文件
         if (compressedFrontFile) formData.append('idCardFront', compressedFrontFile as File);
         if (compressedBackFile) formData.append('idCardBack', compressedBackFile as File);
         compressedPhotoFiles.forEach(file => formData.append('photoFiles', file as File));
         compressedCertificateFiles.forEach(file => formData.append('certificateFiles', file as File));
         compressedMedicalFiles.forEach(file => formData.append('medicalReportFiles', file as File));
-
+        
         const response = await apiService.upload('/api/resumes', formData, 'POST');
         
         console.log('🆕 创建API响应:', response);

@@ -267,4 +267,6 @@ export class Resume extends Document implements IResume {
 export const ResumeSchema = SchemaFactory.createForClass(Resume);
 
 // 确保idNumber字段的索引是稀疏的，这样null值不会参与唯一性检查
-ResumeSchema.index({ idNumber: 1 }, { unique: true, sparse: true });
+// 移除之前的索引定义
+// 显式指定索引选项，确保null值不参与唯一性验证
+ResumeSchema.index({ idNumber: 1 }, { unique: true, sparse: true, background: true });

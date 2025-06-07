@@ -392,6 +392,28 @@ export class ResumeController {
     }
   }
 
+  @Get('options')
+  @ApiOperation({ summary: '获取简历筛选选项' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async getOptions() {
+    try {
+      const options = await this.resumeService.getFilterOptions();
+      
+      return {
+        success: true,
+        data: options,
+        message: '获取筛选选项成功'
+      };
+    } catch (error) {
+      this.logger.error(`获取筛选选项失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `获取筛选选项失败: ${error.message}`
+      };
+    }
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '获取简历详情' })
   @ApiResponse({ status: 200, description: '获取成功' })

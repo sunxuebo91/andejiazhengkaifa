@@ -629,6 +629,38 @@ export class ResumeService {
   }
 
   /**
+   * 获取所有简历的筛选选项
+   * 包括籍贯和民族列表
+   */
+  async getFilterOptions() {
+    // 获取所有简历记录
+    const resumes = await this.resumeModel.find({}, { nativePlace: 1, ethnicity: 1 }).exec();
+    
+    // 手动收集不同的籍贯和民族
+    const nativePlaceSet = new Set<string>();
+    const ethnicitySet = new Set<string>();
+    
+    resumes.forEach(resume => {
+      if (resume.nativePlace && typeof resume.nativePlace === 'string' && resume.nativePlace.trim() !== '') {
+        nativePlaceSet.add(resume.nativePlace.trim());
+      }
+      
+      if (resume.ethnicity && typeof resume.ethnicity === 'string' && resume.ethnicity.trim() !== '') {
+        ethnicitySet.add(resume.ethnicity.trim());
+      }
+    });
+    
+    // 转换为数组并排序
+    const nativePlaces = Array.from(nativePlaceSet).sort();
+    const ethnicities = Array.from(ethnicitySet).sort();
+
+    return {
+      nativePlaces,
+      ethnicities
+    };
+  }
+
+  /**
    * 从Excel文件导入简历数据
    * @param filePath Excel文件路径
    * @param userId 当前用户ID

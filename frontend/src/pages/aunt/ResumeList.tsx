@@ -83,6 +83,28 @@ const ResumeList = () => {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 获取筛选选项
+  const fetchFilterOptions = async () => {
+    try {
+      const response = await apiService.get('/api/resumes/options');
+      
+      if (response.success && response.data) {
+        setNativePlaceOptions(response.data.nativePlaces || []);
+        setEthnicityOptions(response.data.ethnicities || []);
+        console.log('获取筛选选项成功:', response.data);
+      } else {
+        console.error('获取筛选选项失败:', response.message);
+      }
+    } catch (error) {
+      console.error('获取筛选选项失败:', error);
+    }
+  };
+
+  // 组件加载时获取筛选选项
+  useEffect(() => {
+    fetchFilterOptions();
+  }, []);
+
   // 获取简历列表
   const fetchResumeList = async (params: SearchParams & { page?: number; pageSize?: number; _t?: number } = {}) => {
     setLoading(true);
@@ -139,62 +161,10 @@ const ResumeList = () => {
         };
       }).filter(Boolean);
       
-      // 收集所有不同的籍贯和民族选项，用于下拉列表
-      const nativePlaces = new Set<string>();
-      const ethnicities = new Set<string>();
-      
-      formattedData.forEach((resume) => {
-        if (resume.nativePlace) nativePlaces.add(resume.nativePlace);
-        if (resume.ethnicity) ethnicities.add(resume.ethnicity);
-      });
-      
-      setNativePlaceOptions(Array.from(nativePlaces).sort());
-      setEthnicityOptions(Array.from(ethnicities).sort());
-      
       // 应用前端筛选
       let filteredData = [...formattedData]; // 创建副本，避免引用问题
       
-      // 1. 关键词筛选已经在后端处理，这里只进行额外的前端筛选
-      
-      // 2. 工种筛选
-      if (params.jobType) {
-        filteredData = filteredData.filter(resume => 
-          resume.jobType === params.jobType
-        );
-      }
-      
-      // 3. 年龄筛选 (≤X岁)
-      if (params.maxAge !== undefined && params.maxAge !== null) {
-        filteredData = filteredData.filter(resume => 
-          resume.age !== undefined && resume.age <= params.maxAge!
-        );
-      }
-      
-      // 4. 籍贯筛选
-      if (params.nativePlace) {
-        filteredData = filteredData.filter(resume => 
-          resume.nativePlace === params.nativePlace
-        );
-      }
-      
-      // 5. 民族筛选
-      if (params.ethnicity) {
-        filteredData = filteredData.filter(resume => 
-          resume.ethnicity === params.ethnicity
-        );
-      }
-      
-      // 6. 接单状态筛选
-      if (params.orderStatus) {
-        filteredData = filteredData.filter(resume => 
-          resume.orderStatus === params.orderStatus
-        );
-      }
-      
-      if (formattedData.length > 0 && filteredData.length === 0) {
-        messageApi.info('没有找到匹配的简历');
-      }
-      
+      // 所有筛选操作已在后端完成，前端不再需要重复筛选
       console.log('最终处理后的数据:', filteredData.slice(0, 2)); // 只打印前两条记录用于调试
       setResumeList(filteredData);
       setTotal(totalCount); // 使用后端返回的总记录数，而不是前端筛选后的数据长度

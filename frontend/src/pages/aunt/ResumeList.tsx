@@ -1,7 +1,7 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber } from 'antd';
-import type { TablePaginationConfig } from 'antd';
-import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined } from '@ant-design/icons';
+import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber, Upload } from 'antd';
+import type { TablePaginationConfig, UploadProps } from 'antd';
+import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
@@ -71,6 +71,13 @@ const ResumeList = () => {
   const [nativePlaceOptions, setNativePlaceOptions] = useState<string[]>([]);
   const [ethnicityOptions, setEthnicityOptions] = useState<string[]>([]);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: number;
+    fail: number;
+    errors: string[];
+  } | null>(null);
   
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -190,7 +197,7 @@ const ResumeList = () => {
       
       console.log('最终处理后的数据:', filteredData.slice(0, 2)); // 只打印前两条记录用于调试
       setResumeList(filteredData);
-      setTotal(filteredData.length); // 只显示筛选后的总数
+      setTotal(totalCount); // 使用后端返回的总记录数，而不是前端筛选后的数据长度
       
       // 保存原始简历列表到localStorage
       localStorage.setItem('resumeList', JSON.stringify(formattedData));
@@ -372,6 +379,100 @@ const ResumeList = () => {
     }
   };
 
+  // 处理Excel导入
+  const handleExcelImport: UploadProps['customRequest'] = async (options) => {
+    setImportLoading(true);
+    setImportResult(null);
+    
+    try {
+      const { file } = options;
+      const uploadFile = file as File;
+      
+      // 验证文件类型
+      const isExcel = 
+        uploadFile.name.endsWith('.xlsx') || 
+        uploadFile.name.endsWith('.xls') ||
+        uploadFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+        uploadFile.type === 'application/vnd.ms-excel';
+      
+      if (!isExcel) {
+        messageApi.error('只支持Excel文件(.xlsx, .xls)');
+        setImportLoading(false);
+        return;
+      }
+      
+      // 准备表单数据
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      
+      // 发送请求
+      const response = await apiService.upload('/api/resumes/import-excel', formData);
+      
+      if (response.success) {
+        messageApi.success(response.message || '导入成功');
+        setImportResult(response.data);
+        
+        // 刷新列表
+        fetchResumeList({
+          ...searchParams,
+          page: 1,
+          pageSize,
+          _t: Date.now() // 添加时间戳防止缓存
+        });
+        
+        // 如果导入全部成功且没有错误，自动关闭弹窗
+        if (response.data.success > 0 && response.data.fail === 0) {
+          setTimeout(() => {
+            setImportModalVisible(false);
+          }, 2000);
+        }
+      } else {
+        messageApi.error(response.message || '导入失败');
+      }
+    } catch (error) {
+      console.error('导入Excel失败:', error);
+      messageApi.error('导入失败，请检查文件格式或网络连接');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  // 下载Excel导入模板
+  const downloadExcelTemplate = () => {
+    const columns = ['姓名', '手机号', '工种', '性别', '年龄', '籍贯', '民族', '期望薪资', '工作经验', '学历', '接单状态', '身份证号', '微信'];
+    const data = [
+      ['张三', '13800138000', '月嫂', '女', '35', '四川成都', '汉族', '8000', '5', '高中', '想接单', '', 'wx123'],
+      ['李四', '13900139000', '住家育儿嫂', '女', '42', '湖南长沙', '汉族', '9000', '8', '初中', '想接单', '', '']
+    ];
+    
+    // 创建CSV内容
+    let csv = columns.join(',') + '\n';
+    data.forEach(row => {
+      csv += row.join(',') + '\n';
+    });
+    
+    // 创建Blob并下载
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    // 创建下载链接
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', '简历导入模板.csv');
+    link.style.visibility = 'hidden';
+    
+    // 触发下载
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 关闭导入结果并重置状态
+  const handleCloseImport = () => {
+    setImportModalVisible(false);
+    setImportResult(null);
+  };
+
   // 表格列定义
   const columns = [
     {
@@ -498,6 +599,14 @@ const ResumeList = () => {
       header={{
         title: '简历列表',
         extra: [
+          <Button 
+            key="import" 
+            icon={<UploadOutlined />}
+            onClick={() => setImportModalVisible(true)}
+            style={{ marginRight: 8 }}
+          >
+            批量导入
+          </Button>,
           <Button 
             key="add" 
             type="primary" 
@@ -659,6 +768,78 @@ const ResumeList = () => {
             <TextArea rows={4} placeholder="请输入跟进内容" maxLength={500} showCount />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Excel导入弹窗 */}
+      <Modal
+        title="批量导入简历"
+        open={importModalVisible}
+        onCancel={handleCloseImport}
+        footer={[
+          <Button key="download" onClick={downloadExcelTemplate}>
+            下载模板
+          </Button>,
+          <Button key="cancel" onClick={handleCloseImport}>
+            关闭
+          </Button>,
+        ]}
+        destroyOnClose
+      >
+        {!importResult ? (
+          <div>
+            <p>请上传Excel文件，文件第一行必须包含以下列：姓名、手机号、工种</p>
+            <p>其他可选列：年龄、性别、期望薪资、工作经验、学历、籍贯、民族、接单状态等</p>
+            <p><a onClick={downloadExcelTemplate} style={{ color: '#1890ff', cursor: 'pointer' }}>点击下载模板</a></p>
+            
+            <Upload.Dragger
+              name="file"
+              multiple={false}
+              showUploadList={false}
+              customRequest={handleExcelImport}
+              disabled={importLoading}
+            >
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined />
+              </p>
+              <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
+              <p className="ant-upload-hint">
+                支持 .xlsx, .xls 格式
+              </p>
+            </Upload.Dragger>
+          </div>
+        ) : (
+          <div>
+            <h3>导入结果</h3>
+            <p>成功导入: <span style={{ color: 'green', fontWeight: 'bold' }}>{importResult.success}</span> 条</p>
+            <p>导入失败: <span style={{ color: 'red', fontWeight: 'bold' }}>{importResult.fail}</span> 条</p>
+            
+            {importResult.errors.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <h4>错误信息:</h4>
+                <ul style={{ maxHeight: '200px', overflow: 'auto' }}>
+                  {importResult.errors.map((error, index) => (
+                    <li key={index} style={{ color: 'red' }}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            <div style={{ marginTop: 16 }}>
+              <Button onClick={() => setImportResult(null)} style={{ marginRight: 8 }}>
+                再次上传
+              </Button>
+              <Button type="primary" onClick={() => fetchResumeList({ ...searchParams, _t: Date.now() })}>
+                刷新列表
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {importLoading && (
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <p>正在导入，请稍候...</p>
+          </div>
+        )}
       </Modal>
     </PageContainer>
   );

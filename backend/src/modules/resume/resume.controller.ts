@@ -10,6 +10,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UseGuards } from '@nestjs/common';
 import { ConflictException } from '@nestjs/common';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 
 // Multer 配置
 const multerConfig: MulterOptions = {
@@ -238,6 +240,65 @@ export class ResumeController {
         success: false,
         data: null,
         message: `创建简历失败: ${error.message}`
+      };
+    }
+  }
+
+  @Post('import-excel')
+  @ApiOperation({ summary: '批量导入简历（Excel格式）' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Excel文件',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './uploads/temp',
+      filename: (req, file, callback) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const extension = extname(file.originalname);
+        callback(null, `excel-${uniqueSuffix}${extension}`);
+      },
+    }),
+    fileFilter: (req, file, callback) => {
+      const ext = extname(file.originalname).toLowerCase();
+      if (!['.xlsx', '.xls'].includes(ext)) {
+        return callback(new BadRequestException('仅支持 .xlsx 或 .xls 格式的Excel文件'), false);
+      }
+      callback(null, true);
+    },
+  }))
+  async importExcel(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req,
+  ) {
+    try {
+      if (!file) {
+        throw new BadRequestException('请上传Excel文件');
+      }
+
+      this.logger.log(`开始处理Excel导入，文件名: ${file.originalname}`);
+      const importResults = await this.resumeService.importFromExcel(file.path, req.user.userId);
+      
+      return {
+        success: true,
+        data: importResults,
+        message: `成功导入 ${importResults.success} 条简历，失败 ${importResults.fail} 条`
+      };
+    } catch (error) {
+      this.logger.error(`Excel导入失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `Excel导入失败: ${error.message}`
       };
     }
   }

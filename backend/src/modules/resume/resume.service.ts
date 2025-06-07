@@ -6,6 +6,8 @@ import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Logger } from '@nestjs/common';
 import { UploadService } from '../upload/upload.service';
+import * as ExcelJS from 'exceljs';
+import * as fs from 'fs';
 
 @Injectable()
 export class ResumeService {
@@ -624,5 +626,208 @@ export class ResumeService {
       data: savedResume,
       message: '简历更新成功'
     };
+  }
+
+  /**
+   * 从Excel文件导入简历数据
+   * @param filePath Excel文件路径
+   * @param userId 当前用户ID
+   */
+  async importFromExcel(filePath: string, userId: string): Promise<{ success: number; fail: number; errors: string[] }> {
+    this.logger.log(`开始处理Excel文件导入: ${filePath}`);
+    
+    // 统计结果
+    const result = {
+      success: 0,
+      fail: 0,
+      errors: [] as string[]
+    };
+    
+    try {
+      // 使用ExcelJS读取文件
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+      
+      // 获取第一个工作表
+      const worksheet = workbook.getWorksheet(1);
+      if (!worksheet) {
+        throw new BadRequestException('Excel文件中没有找到工作表');
+      }
+      
+      // 检查是否有数据
+      if (worksheet.rowCount <= 1) {
+        throw new BadRequestException('Excel文件中没有数据');
+      }
+      
+      // 获取表头
+      const headerRow = worksheet.getRow(1);
+      const headers: string[] = [];
+      headerRow.eachCell((cell, colNumber) => {
+        headers[colNumber - 1] = cell.value?.toString().trim() || '';
+      });
+      
+      // 检查必需的列是否存在
+      const requiredColumns = ['姓名', '手机号', '工种'];
+      const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+      
+      if (missingColumns.length > 0) {
+        throw new BadRequestException(`Excel文件缺少必需的列: ${missingColumns.join(', ')}`);
+      }
+      
+      // 解析每一行数据
+      const promises = [];
+      
+      // 从第二行开始，跳过表头
+      for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+        const row = worksheet.getRow(rowNumber);
+        const rowData: Record<string, any> = {};
+        
+        // 获取每个单元格的值
+        row.eachCell((cell, colNumber) => {
+          const header = headers[colNumber - 1];
+          if (header) {
+            rowData[header] = cell.value;
+          }
+        });
+        
+        // 检查必填字段
+        if (!rowData['姓名'] || !rowData['手机号'] || !rowData['工种']) {
+          result.fail++;
+          result.errors.push(`第 ${rowNumber} 行缺少必填字段`);
+          continue;
+        }
+        
+        // 转换数据为DTO格式
+        const resumeData = this.mapExcelRowToResumeDto(rowData, userId);
+        
+        // 创建简历(异步)
+        promises.push(
+          this.create(resumeData)
+            .then(() => {
+              result.success++;
+            })
+            .catch(error => {
+              result.fail++;
+              result.errors.push(`第 ${rowNumber} 行导入失败: ${error.message}`);
+            })
+        );
+      }
+      
+      // 等待所有创建操作完成
+      await Promise.all(promises);
+      
+      // 清理临时文件
+      fs.unlinkSync(filePath);
+      
+      this.logger.log(`Excel导入完成，成功: ${result.success}, 失败: ${result.fail}`);
+      return result;
+    } catch (error) {
+      // 清理临时文件
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      
+      this.logger.error(`Excel导入过程中发生错误: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * 将Excel行数据映射到简历DTO
+   */
+  private mapExcelRowToResumeDto(rowData: Record<string, any>, userId: string): CreateResumeDto {
+    // 工种映射
+    const jobTypeMap: Record<string, string> = {
+      '月嫂': 'yuexin',
+      '住家育儿嫂': 'zhujia-yuer',
+      '白班育儿': 'baiban-yuer',
+      '保洁': 'baojie',
+      '白班保姆': 'baiban-baomu',
+      '住家保姆': 'zhujia-baomu',
+      '养宠': 'yangchong',
+      '小时工': 'xiaoshi',
+      '住家护老': 'zhujia-hulao'
+    };
+    
+    // 性别映射
+    const genderMap: Record<string, string> = {
+      '男': 'male',
+      '女': 'female'
+    };
+    
+    // 学历映射
+    const educationMap: Record<string, string> = {
+      '小学': 'primary',
+      '初中': 'juniorHigh',
+      '高中': 'highSchool',
+      '中专': 'technicalSchool',
+      '大专': 'associateDegree',
+      '本科': 'bachelor',
+      '硕士': 'master',
+      '博士': 'doctorate'
+    };
+    
+    // 创建基本数据
+    const dto: any = {
+      userId,
+      name: rowData['姓名']?.toString().trim(),
+      phone: rowData['手机号']?.toString().trim(),
+      jobType: jobTypeMap[rowData['工种']?.toString().trim()] || rowData['工种']?.toString().trim(),
+      status: 'pending'
+    };
+    
+    // 可选字段
+    if (rowData['性别']) {
+      dto.gender = genderMap[rowData['性别']?.toString().trim()] || 'female';
+    }
+    
+    if (rowData['年龄']) {
+      dto.age = Number(rowData['年龄']) || 0;
+    }
+    
+    if (rowData['身份证号']) {
+      dto.idNumber = rowData['身份证号']?.toString().trim();
+    }
+    
+    if (rowData['微信']) {
+      dto.wechat = rowData['微信']?.toString().trim();
+    }
+    
+    if (rowData['期望职位']) {
+      dto.expectedPosition = rowData['期望职位']?.toString().trim();
+    }
+    
+    if (rowData['工作经验']) {
+      dto.experienceYears = Number(rowData['工作经验']) || 0;
+      dto.workExperience = Number(rowData['工作经验']) || 0;
+    }
+    
+    if (rowData['学历']) {
+      dto.education = educationMap[rowData['学历']?.toString().trim()] || 'juniorHigh';
+    }
+    
+    if (rowData['期望薪资']) {
+      dto.expectedSalary = Number(rowData['期望薪资']) || 0;
+    }
+    
+    if (rowData['籍贯']) {
+      dto.nativePlace = rowData['籍贯']?.toString().trim();
+    }
+    
+    if (rowData['民族']) {
+      dto.ethnicity = rowData['民族']?.toString().trim();
+    }
+    
+    if (rowData['接单状态']) {
+      const statusMap: Record<string, string> = {
+        '想接单': 'accepting',
+        '不接单': 'not-accepting',
+        '已上户': 'on-service'
+      };
+      dto.orderStatus = statusMap[rowData['接单状态']?.toString().trim()] || 'accepting';
+    }
+    
+    // 返回转换后的DTO
+    return dto as CreateResumeDto;
   }
 }

@@ -38,7 +38,7 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       merge_logs: true,
       time: true,
-      env_file: '.env'
+      env_file: '.env.dev'
     },
     // 前端生产环境 - 使用serve静态部署
     {
@@ -67,7 +67,8 @@ module.exports = {
       args: 'run dev',
       env: {
         NODE_ENV: 'development',
-        PORT: 5173
+        PORT: 5173,
+        VITE_API_BASE_URL: 'http://localhost:3001/api'
       },
       instances: 1,
       exec_mode: 'fork',

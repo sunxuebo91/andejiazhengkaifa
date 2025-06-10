@@ -11,6 +11,12 @@ export class Customer {
   @Prop({ required: true, unique: true })
   phone: string;
 
+  @Prop()
+  wechatId: string;
+
+  @Prop()
+  idCardNumber: string;
+
   @Prop({ 
     required: true,
     enum: ['美团', '抖音', '快手', '小红书社群线索', '转介绍', '其他']
@@ -18,7 +24,6 @@ export class Customer {
   leadSource: string;
 
   @Prop({
-    required: true,
     enum: ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老']
   })
   serviceCategory: string;
@@ -30,30 +35,28 @@ export class Customer {
   contractStatus: string;
 
   @Prop({
-    required: true,
     enum: ['A类', 'B类', 'C类', 'D类']
   })
   leadLevel: string;
 
-  @Prop({ required: true })
+  @Prop()
   salaryBudget: number;
 
-  @Prop({ required: true })
+  @Prop()
   expectedStartDate: Date;
 
-  @Prop({ required: true })
+  @Prop()
   homeArea: number;
 
-  @Prop({ required: true })
+  @Prop()
   familySize: number;
 
   @Prop({
-    required: true,
     enum: ['单休', '双休', '无休', '调休', '待定']
   })
   restSchedule: string;
 
-  @Prop({ required: true })
+  @Prop()
   address: string;
 
   @Prop()
@@ -65,8 +68,16 @@ export class Customer {
   @Prop()
   originRequirement: string;
 
+  @Prop({
+    enum: ['无学历', '小学', '初中', '中专', '职高', '高中', '大专', '本科', '研究生及以上']
+  })
+  educationRequirement: string;
+
   @Prop()
   expectedDeliveryDate: Date;
+
+  @Prop()
+  remarks: string;
 
   @Prop({ required: true })
   createdBy: string;

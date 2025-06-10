@@ -16,6 +16,7 @@ import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
+import { CreateCustomerFollowUpDto } from './dto/create-customer-follow-up.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiResponse } from '../../common/interfaces/api-response.interface';
 
@@ -113,6 +114,32 @@ export class CustomersController {
       return this.createResponse(true, '客户删除成功');
     } catch (error) {
       return this.createResponse(false, '客户删除失败', null, error.message);
+    }
+  }
+
+  // 创建客户跟进记录
+  @Post(':id/follow-ups')
+  async createFollowUp(
+    @Param('id') id: string,
+    @Body() createFollowUpDto: CreateCustomerFollowUpDto,
+    @Request() req: any,
+  ): Promise<ApiResponse> {
+    try {
+      const followUp = await this.customersService.createFollowUp(id, createFollowUpDto, req.user.userId);
+      return this.createResponse(true, '跟进记录创建成功', followUp);
+    } catch (error) {
+      return this.createResponse(false, '跟进记录创建失败', null, error.message);
+    }
+  }
+
+  // 获取客户跟进记录
+  @Get(':id/follow-ups')
+  async getFollowUps(@Param('id') id: string): Promise<ApiResponse> {
+    try {
+      const followUps = await this.customersService.getFollowUps(id);
+      return this.createResponse(true, '跟进记录获取成功', followUps);
+    } catch (error) {
+      return this.createResponse(false, '跟进记录获取失败', null, error.message);
     }
   }
 } 

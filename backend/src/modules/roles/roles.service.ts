@@ -91,19 +91,19 @@ export class RolesService implements OnModuleInit {
       {
         name: '系统管理员',
         description: '拥有系统所有权限',
-        permissions: ['admin:all', 'resume:all', 'user:all'],
+        permissions: ['admin:all', 'resume:all', 'customer:all', 'user:all'],
         active: true
       },
       {
         name: '经理',
-        description: '可以管理团队和阿姨资源',
-        permissions: ['resume:all', 'user:view'],
+        description: '可以管理团队、阿姨资源和客户管理',
+        permissions: ['resume:all', 'customer:all', 'user:view'],
         active: true
       },
       {
         name: '普通员工',
-        description: '只能管理自己创建的阿姨资源',
-        permissions: ['resume:view', 'resume:create'],
+        description: '可以管理阿姨资源和客户',
+        permissions: ['resume:view', 'resume:create', 'customer:view', 'customer:create'],
         active: true
       }
     ];

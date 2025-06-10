@@ -1,8 +1,12 @@
+import { CustomerFollowUp } from './customer-follow-up.types';
+
 export interface Customer {
   _id: string;
   customerId: string;
   name: string;
   phone: string;
+  wechatId?: string;
+  idCardNumber?: string;
   leadSource: '美团' | '抖音' | '快手' | '小红书社群线索' | '转介绍' | '其他';
   serviceCategory: '月嫂' | '住家育儿嫂' | '保洁' | '住家保姆' | '养宠' | '小时工' | '白班育儿' | '白班保姆' | '住家护老';
   contractStatus: '已签约' | '匹配中' | '流失客户' | '已退款' | '退款中' | '待定';
@@ -16,8 +20,12 @@ export interface Customer {
   ageRequirement?: string;
   genderRequirement?: string;
   originRequirement?: string;
+  educationRequirement?: string;
   expectedDeliveryDate?: string;
+  remarks?: string;
   createdBy: string;
+  createdByUser?: { name: string; username: string } | null;
+  followUps?: CustomerFollowUp[];
   createdAt: string;
   updatedAt: string;
 }
@@ -25,19 +33,24 @@ export interface Customer {
 export interface CreateCustomerData {
   name: string;
   phone: string;
+  wechatId?: string;
+  idCardNumber?: string;
   leadSource: string;
-  serviceCategory: string;
-  leadLevel: string;
-  salaryBudget: number;
-  expectedStartDate: string;
-  homeArea: number;
-  familySize: number;
-  restSchedule: string;
-  address: string;
+  serviceCategory?: string;
+  contractStatus: string;
+  leadLevel?: string;
+  salaryBudget?: number;
+  expectedStartDate?: string;
+  homeArea?: number;
+  familySize?: number;
+  restSchedule?: string;
+  address?: string;
   ageRequirement?: string;
   genderRequirement?: string;
   originRequirement?: string;
+  educationRequirement?: string;
   expectedDeliveryDate?: string;
+  remarks?: string;
 }
 
 export interface CustomerQuery {
@@ -80,4 +93,8 @@ export const CONTRACT_STATUSES = ['已签约', '匹配中', '流失客户', '已
 
 export const LEAD_LEVELS = ['A类', 'B类', 'C类', 'D类'] as const;
 
-export const REST_SCHEDULES = ['单休', '双休', '无休', '调休', '待定'] as const; 
+export const REST_SCHEDULES = ['单休', '双休', '无休', '调休', '待定'] as const;
+
+export const EDUCATION_REQUIREMENTS = [
+  '无学历', '小学', '初中', '中专', '职高', '高中', '大专', '本科', '研究生及以上'
+] as const; 

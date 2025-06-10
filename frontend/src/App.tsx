@@ -12,6 +12,10 @@ const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const ResumeList = React.lazy(() => import('./pages/aunt/ResumeList'));
 const CreateResume = React.lazy(() => import('./pages/aunt/CreateResume'));
 const ResumeDetail = React.lazy(() => import('./pages/aunt/ResumeDetail'));
+const CustomerList = React.lazy(() => import('./pages/customers/CustomerList'));
+const CreateCustomer = React.lazy(() => import('./pages/customers/CreateCustomer'));
+const CustomerDetail = React.lazy(() => import('./pages/customers/CustomerDetail'));
+const EditCustomer = React.lazy(() => import('./pages/customers/EditCustomer'));
 const UserList = React.lazy(() => import('./pages/users/UserList'));
 const CreateUser = React.lazy(() => import('./pages/users/CreateUser'));
 const EditUser = React.lazy(() => import('./pages/users/EditUser'));
@@ -92,6 +96,28 @@ export default function App({ children }: AppProps) {
                       path="resumes/detail/:id" 
                       element={<AuthorizedRoute element={<ResumeDetail />} authority="resume:view" />} 
                     />
+                  </Route>
+                  
+                  {/* 客户管理模块 - 需要customer相关权限 */}
+                  <Route path="customers">
+                    <Route 
+                      path="list" 
+                      element={<AuthorizedRoute element={<CustomerList />} />} 
+                    />
+                    <Route 
+                      path="create" 
+                      element={<AuthorizedRoute element={<CreateCustomer />} />} 
+                    />
+                    <Route 
+                      path=":id" 
+                      element={<AuthorizedRoute element={<CustomerDetail />} />} 
+                    />
+                    <Route 
+                      path="edit/:id" 
+                      element={<AuthorizedRoute element={<EditCustomer />} />} 
+                    />
+                    {/* 重定向 /customers 到 /customers/list */}
+                    <Route index element={<Navigate to="list" replace />} />
                   </Route>
                   
                   {/* 用户管理模块 - 需要管理员权限 */}

@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps } from 'antd';
 import { useMemo } from 'react';
@@ -58,6 +58,36 @@ const BasicLayout = () => {
       }
 
       baseMenus.push(resumeMenu);
+    }
+
+    // 客户管理菜单 - 需要客户相关权限  
+    if (true || hasPermission('customer:view') || hasPermission('customer:create')) {
+      const customerMenu: MenuRoute = {
+        path: '/customers',
+        name: '客户管理',
+        icon: <ContactsOutlined />,
+        routes: [],
+      };
+
+      // 客户列表 - 需要客户查看权限
+      if (true || hasPermission('customer:view')) {
+        customerMenu.routes!.push({
+          path: '/customers/list',
+          name: '客户列表',
+          icon: <UnorderedListOutlined />,
+        });
+      }
+
+      // 创建客户 - 需要客户创建权限
+      if (true || hasPermission('customer:create')) {
+        customerMenu.routes!.push({
+          path: '/customers/create',
+          name: '创建客户',
+          icon: <FileAddOutlined />,
+        });
+      }
+
+      baseMenus.push(customerMenu);
     }
 
     // 用户管理菜单 - 仅管理员可见

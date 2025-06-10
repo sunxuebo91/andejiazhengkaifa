@@ -2,14 +2,19 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Customer, CustomerDocument } from './models/customer.model';
+import { CustomerFollowUp } from './models/customer-follow-up.entity';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
+import { CreateCustomerFollowUpDto } from './dto/create-customer-follow-up.dto';
+import { User } from '../users/models/user.entity';
 
 @Injectable()
 export class CustomersService {
   constructor(
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    @InjectModel('User') private userModel: Model<User>,
+    @InjectModel(CustomerFollowUp.name) private customerFollowUpModel: Model<CustomerFollowUp>,
   ) {}
 
   // 生成客户ID
@@ -36,8 +41,9 @@ export class CustomersService {
       ...createCustomerDto,
       customerId,
       createdBy: userId,
-      contractStatus: '待定', // 默认状态
-      expectedStartDate: new Date(createCustomerDto.expectedStartDate),
+      expectedStartDate: createCustomerDto.expectedStartDate 
+        ? new Date(createCustomerDto.expectedStartDate)
+        : undefined,
       expectedDeliveryDate: createCustomerDto.expectedDeliveryDate 
         ? new Date(createCustomerDto.expectedDeliveryDate) 
         : undefined,
@@ -108,13 +114,35 @@ export class CustomersService {
     };
   }
 
-  // 根据ID获取客户详情
-  async findOne(id: string): Promise<Customer> {
+  // 根据ID获取客户详情（包含跟进记录）
+  async findOne(id: string): Promise<Customer & { 
+    createdByUser?: { name: string; username: string } | null;
+    followUps?: CustomerFollowUp[];
+  }> {
     const customer = await this.customerModel.findById(id).exec();
     if (!customer) {
       throw new NotFoundException('客户不存在');
     }
-    return customer;
+
+    // 获取创建人信息
+    const createdByUser = await this.userModel
+      .findById(customer.createdBy)
+      .select('name username')
+      .lean()
+      .exec();
+
+    // 获取跟进记录
+    const followUps = await this.customerFollowUpModel
+      .find({ customerId: id })
+      .populate('createdBy', 'name username')
+      .sort({ createdAt: -1 })
+      .exec();
+
+    return {
+      ...customer.toObject(),
+      createdByUser: createdByUser ? { name: createdByUser.name, username: createdByUser.username } : null,
+      followUps: followUps
+    };
   }
 
   // 根据客户ID获取客户详情
@@ -202,5 +230,36 @@ export class CustomersService {
         return acc;
       }, {}),
     };
+  }
+
+  // 创建客户跟进记录
+  async createFollowUp(customerId: string, createFollowUpDto: CreateCustomerFollowUpDto, userId: string): Promise<CustomerFollowUp> {
+    // 验证客户是否存在
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException('客户不存在');
+    }
+
+    const followUp = new this.customerFollowUpModel({
+      customerId,
+      ...createFollowUpDto,
+      createdBy: userId,
+    });
+
+    return await followUp.save();
+  }
+
+  // 获取客户跟进记录
+  async getFollowUps(customerId: string): Promise<CustomerFollowUp[]> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException('客户不存在');
+    }
+
+    return await this.customerFollowUpModel
+      .find({ customerId })
+      .populate('createdBy', 'name username')
+      .sort({ createdAt: -1 })
+      .exec();
   }
 } 

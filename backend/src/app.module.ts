@@ -11,6 +11,7 @@ import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { FollowUpModule } from './modules/follow-up/follow-up.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { FollowUpModule } from './modules/follow-up/follow-up.module';
     UsersModule,
     AuthModule,
     FollowUpModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

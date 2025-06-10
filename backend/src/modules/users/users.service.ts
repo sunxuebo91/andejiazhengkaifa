@@ -122,11 +122,11 @@ export class UsersService {
       case 'admin':
         return ['*']; // 管理员拥有所有权限
       case 'manager':
-        return ['resume:all', 'user:view'];
+        return ['resume:all', 'customer:all', 'user:view'];
       case 'employee':
-        return ['resume:view', 'resume:create'];
+        return ['resume:view', 'resume:create', 'customer:view', 'customer:create'];
       default:
-        return ['resume:view'];
+        return ['resume:view', 'customer:view'];
     }
   }
 }

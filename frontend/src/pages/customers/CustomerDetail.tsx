@@ -11,38 +11,48 @@ import {
   Row,
   Col,
   Divider,
+  Timeline,
+  Empty,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
 import { Customer } from '../../types/customer.types';
+import { CustomerFollowUp, FOLLOW_UP_TYPE_OPTIONS } from '../../types/customer-follow-up.types';
+import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // 获取客户详情
-  const fetchCustomerDetail = async () => {
-    if (!id) return;
-    
-    setLoading(true);
-    try {
-      const customerData = await customerService.getCustomerById(id);
-      setCustomer(customerData);
-    } catch (error) {
-      message.error('获取客户详情失败');
-      console.error('获取客户详情错误:', error);
-      // 如果获取失败，返回列表页
-      navigate('/customers');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [followUpModal, setFollowUpModal] = useState({
+    visible: false,
+    customerId: '',
+    customerName: ''
+  });
 
   useEffect(() => {
     fetchCustomerDetail();
   }, [id]);
+
+  const fetchCustomerDetail = async () => {
+    if (!id) {
+      message.error('无效的客户ID');
+      navigate('/customers');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await customerService.getCustomerById(id);
+      setCustomer(response);
+    } catch (error) {
+      console.error('获取客户详情失败:', error);
+      message.error('获取客户详情失败');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 返回客户列表
   const handleBack = () => {
@@ -73,9 +83,49 @@ const CustomerDetail: React.FC = () => {
     return colors[level] || 'default';
   };
 
-  // 格式化日期
+  // 格式化日期（精确到分钟）
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // 格式化日期（仅日期）
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('zh-CN');
+  };
+
+  // 处理添加跟进
+  const handleAddFollowUp = () => {
+    if (customer) {
+      setFollowUpModal({
+        visible: true,
+        customerId: customer._id,
+        customerName: customer.name
+      });
+    }
+  };
+
+  // 处理跟进成功
+  const handleFollowUpSuccess = () => {
+    setFollowUpModal({
+      visible: false,
+      customerId: '',
+      customerName: ''
+    });
+    // 刷新客户数据
+    fetchCustomerDetail();
+  };
+
+  // 获取跟进方式的中文标签
+  const getFollowUpTypeLabel = (type: string) => {
+    const option = FOLLOW_UP_TYPE_OPTIONS.find(opt => opt.value === type);
+    return option ? option.label : type;
   };
 
   if (loading) {
@@ -151,6 +201,14 @@ const CustomerDetail: React.FC = () => {
                   {customer.phone}
                 </Descriptions.Item>
                 
+                <Descriptions.Item label="微信号" span={1}>
+                  {customer.wechatId || '未设置'}
+                </Descriptions.Item>
+                
+                <Descriptions.Item label="身份证号" span={1}>
+                  {customer.idCardNumber || '未设置'}
+                </Descriptions.Item>
+                
                 <Descriptions.Item label="线索来源" span={1}>
                   <Tag>{customer.leadSource}</Tag>
                 </Descriptions.Item>
@@ -175,21 +233,25 @@ const CustomerDetail: React.FC = () => {
             <Card type="inner" title="服务需求" style={{ marginBottom: '16px' }}>
               <Descriptions column={3} bordered>
                 <Descriptions.Item label="需求品类" span={1}>
-                  <Tag color="blue">{customer.serviceCategory}</Tag>
+                  {customer.serviceCategory ? (
+                    <Tag color="blue">{customer.serviceCategory}</Tag>
+                  ) : (
+                    '未设置'
+                  )}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="薪资预算" span={1}>
                   <span style={{ fontWeight: 'bold', color: '#52c41a' }}>
-                    ¥{customer.salaryBudget.toLocaleString()}
+                    {customer.salaryBudget ? `¥${customer.salaryBudget.toLocaleString()}` : '未设置'}
                   </span>
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="休息方式" span={1}>
-                  {customer.restSchedule}
+                  {customer.restSchedule || '未设置'}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="期望上户日期" span={1}>
-                  {formatDate(customer.expectedStartDate)}
+                  {customer.expectedStartDate ? formatDate(customer.expectedStartDate) : '未设置'}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="预产期" span={2}>
@@ -207,15 +269,15 @@ const CustomerDetail: React.FC = () => {
             <Card type="inner" title="家庭信息" style={{ marginBottom: '16px' }}>
               <Descriptions column={3} bordered>
                 <Descriptions.Item label="家庭面积" span={1}>
-                  {customer.homeArea}平方米
+                  {customer.homeArea ? `${customer.homeArea}平方米` : '未设置'}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="家庭人口" span={1}>
-                  {customer.familySize}人
+                  {customer.familySize ? `${customer.familySize}人` : '未设置'}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="客户地址" span={1}>
-                  {customer.address}
+                  {customer.address || '未设置'}
                 </Descriptions.Item>
               </Descriptions>
             </Card>
@@ -236,26 +298,99 @@ const CustomerDetail: React.FC = () => {
                 <Descriptions.Item label="籍贯要求" span={1}>
                   {customer.originRequirement || '无特殊要求'}
                 </Descriptions.Item>
+                
+                <Descriptions.Item label="学历要求" span={1}>
+                  {customer.educationRequirement || '无特殊要求'}
+                </Descriptions.Item>
               </Descriptions>
             </Card>
           </Col>
 
+          {/* 备注信息 */}
+          {customer.remarks && (
+            <Col span={24}>
+              <Card type="inner" title="备注信息" style={{ marginBottom: '16px' }}>
+                <Descriptions column={1} bordered>
+                  <Descriptions.Item label="备注">
+                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                      {customer.remarks}
+                    </div>
+                  </Descriptions.Item>
+                </Descriptions>
+              </Card>
+            </Col>
+          )}
+
           {/* 系统信息 */}
           <Col span={24}>
-            <Card type="inner" title="系统信息">
+            <Card type="inner" title="系统信息" style={{ marginBottom: '16px' }}>
               <Descriptions column={2} bordered>
                 <Descriptions.Item label="线索创建人" span={1}>
-                  {customer.createdBy}
+                  {customer.createdByUser ? customer.createdByUser.name : customer.createdBy}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="创建时间" span={1}>
-                  {formatDate(customer.createdAt)}
+                  {formatDateTime(customer.createdAt)}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="最后更新时间" span={2}>
-                  {formatDate(customer.updatedAt)}
+                  {formatDateTime(customer.updatedAt)}
                 </Descriptions.Item>
               </Descriptions>
+            </Card>
+          </Col>
+
+          {/* 跟进记录 */}
+          <Col span={24}>
+            <Card 
+              type="inner" 
+              title={
+                <Space>
+                  <ClockCircleOutlined />
+                  <span>跟进记录</span>
+                </Space>
+              }
+              extra={
+                <Button 
+                  type="primary" 
+                  size="small"
+                  icon={<MessageOutlined />}
+                  onClick={handleAddFollowUp}
+                >
+                  添加跟进记录
+                </Button>
+              }
+            >
+              {customer.followUps && customer.followUps.length > 0 ? (
+                <Timeline mode="left">
+                  {customer.followUps.map((followUp, index) => (
+                    <Timeline.Item
+                      key={followUp._id}
+                      color={index === 0 ? 'green' : 'blue'}
+                      label={formatDateTime(followUp.createdAt)}
+                    >
+                      <Card size="small" style={{ backgroundColor: '#fafafa' }}>
+                        <Space direction="vertical" style={{ width: '100%' }}>
+                          <Space>
+                            <Tag color="blue">{getFollowUpTypeLabel(followUp.type)}</Tag>
+                            <span style={{ fontSize: '12px', color: '#666' }}>
+                              by {followUp.createdBy.name}
+                            </span>
+                          </Space>
+                          <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                            {followUp.content}
+                          </div>
+                        </Space>
+                      </Card>
+                    </Timeline.Item>
+                  ))}
+                </Timeline>
+              ) : (
+                <Empty 
+                  description="暂无跟进记录" 
+                  style={{ padding: '40px 0' }}
+                />
+              )}
             </Card>
           </Col>
         </Row>
@@ -278,6 +413,15 @@ const CustomerDetail: React.FC = () => {
           </Space>
         </div>
       </Card>
+
+      {/* 添加跟进记录弹窗 */}
+      <CustomerFollowUpModal
+        visible={followUpModal.visible}
+        customerId={followUpModal.customerId}
+        customerName={followUpModal.customerName}
+        onCancel={() => setFollowUpModal({ visible: false, customerId: '', customerName: '' })}
+        onSuccess={handleFollowUpSuccess}
+      />
     </div>
   );
 };

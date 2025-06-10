@@ -29,10 +29,6 @@ export const getDatabaseConfig = (configService: ConfigService): MongooseModuleO
       // 安全配置
       authSource: configService.get('DB_AUTH_SOURCE', 'admin'),
       ssl: configService.get('DB_SSL') === 'true',
-      sslValidate: configService.get('DB_SSL_VALIDATE') === 'true',
-      
-      // 日志配置 - 生产环境关闭详细日志
-      loggerLevel: 'error',
       
       // 应用名称识别
       appName: 'andejiazheng-crm-prod',
@@ -64,7 +60,6 @@ export const getDatabaseConfig = (configService: ConfigService): MongooseModuleO
     serverSelectionTimeoutMS: 5000,
     heartbeatFrequencyMS: 10000,
     appName: 'andejiazheng-crm-dev',
-    loggerLevel: configService.get('DB_LOG_LEVEL', 'info'),
     
     // 开发环境可以启用详细日志
     ...(nodeEnv === 'development' && {

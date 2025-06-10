@@ -577,13 +577,49 @@ export class ResumeController {
   }
 
   @Delete(':id/files/:fileId')
-  @ApiOperation({ summary: '删除简历文件' })
+  @ApiOperation({ summary: '删除简历文件（URL参数方式）' })
   async removeFile(
     @Param('id') id: string,
     @Param('fileId') fileId: string,
   ) {
     try {
       const result = await this.resumeService.removeFile(id, decodeURIComponent(fileId));
+      return {
+        success: true,
+        data: result,
+        message: '删除文件成功'
+      };
+    } catch (error) {
+      this.logger.error(`删除文件失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `删除文件失败: ${error.message}`
+      };
+    }
+  }
+
+  @Post(':id/files/delete')
+  @ApiOperation({ summary: '删除简历文件（请求体方式）' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        fileUrl: {
+          type: 'string',
+          description: '要删除的文件URL'
+        }
+      },
+      required: ['fileUrl']
+    }
+  })
+  async removeFileByBody(
+    @Param('id') id: string,
+    @Body('fileUrl') fileUrl: string,
+  ) {
+    try {
+      this.logger.log(`删除文件请求: resumeId=${id}, fileUrl=${fileUrl}`);
+      const result = await this.resumeService.removeFile(id, fileUrl);
       return {
         success: true,
         data: result,

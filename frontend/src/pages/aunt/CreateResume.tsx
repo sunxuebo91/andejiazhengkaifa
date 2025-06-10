@@ -392,9 +392,9 @@ const CreateResume: React.FC = () => {
       if (editingResume?._id && file.url && (file as CustomUploadFile).isExisting) {
         console.log('🔄 调用后端删除API...');
         
-        // 调用后端API删除文件
-        const deleteUrl = `/api/resumes/${editingResume._id}/files/${encodeURIComponent(file.url)}`;
-        const response = await apiService.delete(deleteUrl);
+        // 调用后端API删除文件 - 使用POST请求避免URL过长问题
+        const deleteUrl = `/api/resumes/${editingResume._id}/files/delete`;
+        const response = await apiService.post(deleteUrl, { fileUrl: file.url });
         
         console.log('📝 后端删除API响应:', response);
         

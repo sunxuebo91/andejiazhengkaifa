@@ -2,8 +2,8 @@ import axios, { AxiosRequestConfig, AxiosError } from 'axios';
 import { getToken, removeToken } from './auth';
 
 // API 基础 URL
-const isDev = import.meta.env.DEV;
-const API_BASE_URL = isDev ? 'http://localhost:3001' : ''; // 开发环境指向3001端口，生产环境使用相对路径
+// 统一使用空字符串作为baseURL，API调用时直接使用/api/xxx路径
+const API_BASE_URL = ''; // 开发和生产环境都使用空baseURL，API路径统一为/api/xxx
 
 // 创建axios实例
 export const api = axios.create({

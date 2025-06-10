@@ -1,0 +1,185 @@
+{
+  "name": "config-guard",
+  "version": "1.0.0",
+  "description": "Configuration protection MCP server for preventing AI mismodification",
+  "type": "mcp-server",
+  "main": "mcp-config-guard-server.js",
+  "author": "Config Protection System",
+  "license": "MIT",
+  "mcpVersion": "1.0",
+  "capabilities": {
+    "tools": [
+      {
+        "name": "check_config_protection",
+        "description": "Check if configuration files are protected and get protection status",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Optional file path to check specific file protection"
+            }
+          }
+        }
+      },
+      {
+        "name": "request_config_modification",
+        "description": "Request permission to modify a protected configuration file",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Path to the configuration file to modify"
+            },
+            "reason": {
+              "type": "string", 
+              "description": "Reason for the modification request"
+            },
+            "changes": {
+              "type": "string",
+              "description": "Description of the changes to be made"
+            }
+          },
+          "required": ["filePath", "reason"]
+        }
+      },
+      {
+        "name": "get_protection_policy",
+        "description": "Get current protection policies and protected file lists",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "verify_config_integrity",
+        "description": "Verify integrity of protected configuration files",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "generateReport": {
+              "type": "boolean",
+              "description": "Whether to generate a detailed integrity report",
+              "default": false
+            }
+          }
+        }
+      }
+    ],
+    "resources": [
+      {
+        "uri": "config://protection-status",
+        "name": "Configuration Protection Status",
+        "description": "Current status of configuration protection system",
+        "mimeType": "application/json"
+      },
+      {
+        "uri": "config://protected-files",
+        "name": "Protected Files List", 
+        "description": "List of files under protection",
+        "mimeType": "application/json"
+      },
+      {
+        "uri": "config://protection-logs",
+        "name": "Protection Logs",
+        "description": "Recent protection activity logs",
+        "mimeType": "text/plain"
+      }
+    ]
+  },
+  "server": {
+    "command": "node",
+    "args": ["mcp-config-guard-server.js"],
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  "configuration": {
+    "protectionEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable or disable configuration protection"
+    },
+    "strictMode": {
+      "type": "boolean", 
+      "default": false,
+      "description": "Enable strict mode (reject all AI modifications)"
+    },
+    "aiDetectionEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable AI activity detection"
+    },
+    "protectedFiles": {
+      "type": "object",
+      "properties": {
+        "critical": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Critical files that absolutely cannot be modified by AI"
+        },
+        "sensitive": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sensitive files that require confirmation for AI modifications"
+        },
+        "development": {
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "Development files with relaxed protection"
+        }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "webhook": {
+          "type": "string",
+          "description": "Webhook URL for notifications"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address for critical alerts"
+        }
+      }
+    }
+  },
+  "usage": {
+    "examples": [
+      {
+        "title": "Check protection status",
+        "description": "Check if configuration protection is active",
+        "tool": "check_config_protection",
+        "input": {}
+      },
+      {
+        "title": "Request file modification",
+        "description": "Request permission to modify a protected configuration file",
+        "tool": "request_config_modification", 
+        "input": {
+          "filePath": "ecosystem.config.js",
+          "reason": "Update PM2 configuration for new deployment strategy",
+          "changes": "Add new environment variables and memory limits"
+        }
+      },
+      {
+        "title": "Verify configuration integrity",
+        "description": "Check if all protected files maintain their integrity",
+        "tool": "verify_config_integrity",
+        "input": {
+          "generateReport": true
+        }
+      }
+    ]
+  },
+  "install": {
+    "dependencies": [
+      "chokidar@^3.5.3",
+      "crypto",
+      "fs",
+      "path"
+    ],
+    "setup": "bash setup-config-protection.sh install"
+  }
+} 

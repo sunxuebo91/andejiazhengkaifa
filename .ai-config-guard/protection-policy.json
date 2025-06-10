@@ -1,0 +1,29 @@
+{
+  "criticalFiles": [
+    "ecosystem.config.js",
+    "deploy.sh",
+    "pm2-deploy.sh",
+    "startup.sh",
+    "backend/src/main.ts",
+    "backend/src/modules/auth/jwt.strategy.ts",
+    "backend/src/modules/auth/auth.module.ts"
+  ],
+  "sensitiveFiles": [
+    "frontend/.env.prod",
+    "backend/.env.prod",
+    "frontend/vite.config.ts",
+    "backend/src/config/database.config.ts",
+    "nginx/conf.d/prod.conf"
+  ],
+  "devFiles": [
+    "frontend/.env.dev",
+    "backend/.env.dev",
+    "nginx/conf.d/dev.conf"
+  ],
+  "description": {
+    "criticalFiles": "绝对不允许修改的核心文件",
+    "sensitiveFiles": "需要确认才能修改的敏感文件",
+    "devFiles": "开发环境相对宽松的文件"
+  },
+  "lastUpdated": "2025-06-10T03:01:44.061Z"
+}

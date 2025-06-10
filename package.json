@@ -1,0 +1,12 @@
+{
+  "name": "config-protection-system",
+  "version": "1.0.0",
+  "description": "Configuration protection system for preventing AI mismodification",
+  "dependencies": {
+    "chokidar": "^3.6.0"
+  },
+  "scripts": {
+    "guard": "node config-guard.js",
+    "ai-guard": "node ai-config-guard.js"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "你的GitHub Token - 需要替换"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "env": {
+        "ALLOWED_DIRECTORIES": "你的项目路径 - 可选配置"
+      }
+    },
+    "sentry": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sentry"],
+      "env": {
+        "SENTRY_AUTH_TOKEN": "你的Sentry Token - 需要替换",
+        "SENTRY_ORG": "你的组织名 - 可选",
+        "SENTRY_PROJECT": "你的项目名 - 可选"
+      }
+    },
+    "atomic-dev": {
+      "command": "node",
+      "args": ["atomic-dev-guard.js"],
+      "env": {
+        "NODE_ENV": "development",
+        "ATOMIC_DEV_MODE": "true"
+      }
+    }
+  }
+} 

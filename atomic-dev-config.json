@@ -1,0 +1,79 @@
+{
+  "atomicDevelopment": {
+    "maxAttempts": 3,
+    "autoRollback": true,
+    "strictMode": true,
+    "validationRules": {
+      "typescript": {
+        "enabled": true,
+        "command": "npx tsc --noEmit",
+        "weight": 10,
+        "required": true
+      },
+      "eslint": {
+        "enabled": true,
+        "command": "npx eslint --ext .ts,.js",
+        "weight": 8,
+        "autoFix": false
+      },
+      "tests": {
+        "enabled": true,
+        "command": "npm run test:module",
+        "weight": 10,
+        "required": true,
+        "timeout": 30000
+      },
+      "prettier": {
+        "enabled": true,
+        "command": "npx prettier --check",
+        "weight": 5,
+        "autoFix": true
+      },
+      "imports": {
+        "enabled": true,
+        "checkUnused": true,
+        "checkMissing": true,
+        "weight": 7
+      }
+    },
+    "moduleTypes": {
+      "nestjs-module": {
+        "requiredFiles": [
+          "*.module.ts",
+          "*.controller.ts", 
+          "*.service.ts",
+          "dto/*.dto.ts"
+        ],
+        "optionalFiles": [
+          "*.entity.ts",
+          "*.schema.ts",
+          "__tests__/*.spec.ts"
+        ],
+        "validationCommands": [
+          "npm run test:unit",
+          "npm run test:e2e:module"
+        ]
+      },
+      "api-endpoint": {
+        "requiredFiles": [
+          "*.controller.ts",
+          "dto/*.dto.ts"
+        ],
+        "validationCommands": [
+          "npm run test:api"
+        ]
+      }
+    },
+    "rollbackStrategy": {
+      "backupBeforeStart": true,
+      "gitIntegration": true,
+      "preserveLogs": true,
+      "cleanupOnSuccess": false
+    },
+    "notifications": {
+      "onSuccess": "✅ 模块验证通过，已提交保留",
+      "onFailure": "❌ 模块验证失败，正在回滚重新生成",
+      "onMaxAttempts": "🚫 达到最大尝试次数，请手动检查"
+    }
+  }
+} 

@@ -1,0 +1,92 @@
+{
+  "frontend/.env.dev": {
+    "hash": "d186a2fea19a49ef5e92d881bb1bc1c59becefae46c2f3dd984c79e8c80f3e58",
+    "size": 143,
+    "mtime": "2025-06-04T11:18:52.393Z",
+    "protected": true
+  },
+  "backend/.env.dev": {
+    "hash": "c3d57bd85a464773083d4ab5655bffaa896a393721e49204bff3c942eb6154ea",
+    "size": 600,
+    "mtime": "2025-06-10T02:35:21.302Z",
+    "protected": true
+  },
+  "ecosystem.config.js": {
+    "hash": "d79bf0f1e839aef9a614f917e67f7adb01e6b653c88e88fce12543dd50733912",
+    "size": 2163,
+    "mtime": "2025-06-07T03:23:23.968Z",
+    "protected": true
+  },
+  "frontend/ecosystem.config.js": {
+    "hash": "a843d5d5c68e2de9bc500fc0c597f7daafca8b2888f91c3801db08a9ac66c56c",
+    "size": 565,
+    "mtime": "2025-06-06T05:52:16.319Z",
+    "protected": true
+  },
+  "backend/ecosystem.config.js": {
+    "hash": "152de9ffa4b6839ad67a8d78471f52197c5be9f45844550a11d16bba3de4d879",
+    "size": 1042,
+    "mtime": "2025-06-06T05:52:14.949Z",
+    "protected": true
+  },
+  "deploy.sh": {
+    "hash": "d4cf88407c9815a36b0deb96ac3d4ba750b036b6288720100beeebbeec8fe65a",
+    "size": 5242,
+    "mtime": "2025-06-06T05:52:16.318Z",
+    "protected": true
+  },
+  "pm2-deploy.sh": {
+    "hash": "7e0198c5f143ef0fc147570e2b4809a8f067ae55fd3c456076831409c7b1bbac",
+    "size": 4125,
+    "mtime": "2025-06-06T10:24:15.584Z",
+    "protected": true
+  },
+  "startup.sh": {
+    "hash": "29a7e36e9a4f3781332ac730ac330ef18817f2b8419a8ab1f971674bd7214377",
+    "size": 511,
+    "mtime": "2025-06-07T02:32:09.565Z",
+    "protected": true
+  },
+  "backend/src/modules/auth/jwt.strategy.ts": {
+    "hash": "3de9be46bf8ab75554daf031ba43b5453aebcb46fd89c1a0003ebef203be8769",
+    "size": 557,
+    "mtime": "2025-06-09T06:25:58.850Z",
+    "protected": true
+  },
+  "backend/src/modules/auth/auth.module.ts": {
+    "hash": "ebe27141f442037dce1746c4aa99b7fc7a951d29115ebf535d01a14e852909b5",
+    "size": 924,
+    "mtime": "2025-06-06T05:52:14.956Z",
+    "protected": true
+  },
+  "backend/src/main.ts": {
+    "hash": "3f10c66dcc793793f2e1f5ea8f011acffac1c6504c7b69ddf0f4aa4bf0aba1e4",
+    "size": 3060,
+    "mtime": "2025-06-07T09:19:44.908Z",
+    "protected": true
+  },
+  "frontend/vite.config.ts": {
+    "hash": "e47579c129d2f8276dc3088277453420b71cc520fba717e4b2d9dd84afe2a740",
+    "size": 780,
+    "mtime": "2025-06-10T02:14:14.427Z",
+    "protected": true
+  },
+  "package.json": {
+    "hash": "44541efc418984bc3004f925dccc8dabc1f0a208c2c3c7933c4bfbaf0ea39e7e",
+    "size": 298,
+    "mtime": "2025-06-10T03:01:35.623Z",
+    "protected": true
+  },
+  "frontend/package.json": {
+    "hash": "e5e5c85cd63e1e198e47fd63245a8e079da25083361d50e006b68768b48cea7b",
+    "size": 2119,
+    "mtime": "2025-06-06T05:52:16.319Z",
+    "protected": true
+  },
+  "backend/package.json": {
+    "hash": "ce0e49d9775efad7901b8f4fe4a44850fd897b90d3f138dbc9d8e401e7c42119",
+    "size": 3917,
+    "mtime": "2025-06-07T03:30:28.051Z",
+    "protected": true
+  }
+}

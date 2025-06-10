@@ -17,7 +17,7 @@ import {
 import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
 import { Customer } from '../../types/customer.types';
-import { CustomerFollowUp, FOLLOW_UP_TYPE_OPTIONS } from '../../types/customer-follow-up.types';
+import { FOLLOW_UP_TYPE_OPTIONS } from '../../types/customer-follow-up.types';
 import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
 
 const CustomerDetail: React.FC = () => {

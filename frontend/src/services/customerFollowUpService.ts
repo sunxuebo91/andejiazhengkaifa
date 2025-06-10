@@ -1,8 +1,7 @@
 import { apiService } from './api';
 import { 
   CustomerFollowUp, 
-  CreateCustomerFollowUpData, 
-  CustomerFollowUpResponse 
+  CreateCustomerFollowUpData
 } from '../types/customer-follow-up.types';
 
 export const customerFollowUpService = {

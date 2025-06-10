@@ -44,8 +44,8 @@ module.exports = {
     {
       name: 'frontend-prod',
       cwd: './frontend',
-      script: 'npx',
-      args: 'serve -s dist -l 8080',
+      script: 'npm',
+      args: 'run start:prod',
       env: {
         NODE_ENV: 'production',
         PORT: 8080

@@ -7,18 +7,15 @@ import {
   Button, 
   Select, 
   Space, 
-  Tag, 
-  Pagination,
+  Tag,
   message,
   Row,
-  Col,
-  DatePicker
+  Col
 } from 'antd';
 import { SearchOutlined, PlusOutlined, MessageOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
 import { 
   Customer, 
-  CustomerQuery, 
   LEAD_SOURCES, 
   SERVICE_CATEGORIES, 
   CONTRACT_STATUSES,
@@ -28,7 +25,6 @@ import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
 
 const { Search } = Input;
 const { Option } = Select;
-const { RangePicker } = DatePicker;
 
 const CustomerList: React.FC = () => {
   const navigate = useNavigate();

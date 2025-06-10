@@ -140,7 +140,7 @@ export class CustomersService {
       }
     }
 
-    const updateData = { ...updateCustomerDto };
+    const updateData: any = { ...updateCustomerDto };
     if (updateCustomerDto.expectedStartDate) {
       updateData.expectedStartDate = new Date(updateCustomerDto.expectedStartDate);
     }

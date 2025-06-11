@@ -1222,10 +1222,12 @@ const CreateResume: React.FC = () => {
         // 上传新文件
         const uploadPromises: Promise<any>[] = [];
         
+        // 🚫 身份证文件上传逻辑需要保留，因为身份证在handleIdCardUpload中处理，不是在beforeUpload
         if (newIdCardFrontFile) {
           console.log('📤 上传新身份证正面');
           const formData = new FormData();
           formData.append('file', newIdCardFrontFile);
+          formData.append('type', 'idCardFront');
           uploadPromises.push(
             apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData)
               .then(res => console.log('✅ 身份证正面上传完成:', res))
@@ -1236,41 +1238,52 @@ const CreateResume: React.FC = () => {
           console.log('📤 上传新身份证背面');
           const formData = new FormData();
           formData.append('file', newIdCardBackFile);
+          formData.append('type', 'idCardBack');
           uploadPromises.push(
             apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData)
               .then(res => console.log('✅ 身份证背面上传完成:', res))
           );
         }
         
-        newPhotoFiles.forEach((file, index) => {
-          console.log(`📤 上传新个人照片 ${index + 1}`);
-          const formData = new FormData();
-          formData.append('file', file.originFileObj!);
-          uploadPromises.push(
-            apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData)
-              .then(res => console.log(`✅ 个人照片 ${index + 1} 上传完成:`, res))
-          );
-        });
+        // 🚫 删除重复上传逻辑 - 个人照片在beforeUpload中已经上传
+        console.log('ℹ️ 编辑模式：个人照片文件已在选择时上传，跳过重复上传');
         
-        newCertificateFiles.forEach((file, index) => {
-          console.log(`📤 上传新证书 ${index + 1}`);
-          const formData = new FormData();
-          formData.append('file', file.originFileObj!);
-          uploadPromises.push(
-            apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData)
-              .then(res => console.log(`✅ 证书 ${index + 1} 上传完成:`, res))
-          );
-        });
+        // newPhotoFiles.forEach((file, index) => {
+        //   console.log(`📤 上传新个人照片 ${index + 1}`);
+        //   const formData = new FormData();
+        //   formData.append('file', file.originFileObj!);
+        //   formData.append('type', 'personalPhoto');
+        //   uploadPromises.push(
+        //     apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData)
+        //       .then(res => console.log(`✅ 个人照片 ${index + 1} 上传完成:`, res))
+        //   );
+        // });
         
-        newMedicalFiles.forEach((file, index) => {
-          console.log(`📤 上传新体检报告 ${index + 1}`);
-          const formData = new FormData();
-          formData.append('file', file.originFileObj!);
-          uploadPromises.push(
-            apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData)
-              .then(res => console.log(`✅ 体检报告 ${index + 1} 上传完成:`, res))
-          );
-        });
+        // 🚫 删除重复上传逻辑 - 证书和体检报告在beforeUpload中已经上传
+        // 编辑模式下，文件在选择时已通过beforeUpload立即上传，无需在此处重复上传
+        console.log('ℹ️ 编辑模式：证书和体检报告文件已在选择时上传，跳过重复上传');
+        
+        // newCertificateFiles.forEach((file, index) => {
+        //   console.log(`📤 上传新证书 ${index + 1}`);
+        //   const formData = new FormData();
+        //   formData.append('file', file.originFileObj!);
+        //   formData.append('type', 'certificate');
+        //   uploadPromises.push(
+        //     apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData)
+        //       .then(res => console.log(`✅ 证书 ${index + 1} 上传完成:`, res))
+        //   );
+        // });
+        
+        // newMedicalFiles.forEach((file, index) => {
+        //   console.log(`📤 上传新体检报告 ${index + 1}`);
+        //   const formData = new FormData();
+        //   formData.append('file', file.originFileObj!);
+        //   formData.append('type', 'medicalReport');
+        //   uploadPromises.push(
+        //     apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData)
+        //       .then(res => console.log(`✅ 体检报告 ${index + 1} 上传完成:`, res))
+        //   );
+        // });
         
         // 等待所有新文件上传完成
         if (uploadPromises.length > 0) {

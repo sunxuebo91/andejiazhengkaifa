@@ -330,16 +330,7 @@ type FileInfo = {
   fileId?: string; // 添加fileId属性
 };
 
-// 添加工具函数来检查URL是否在新格式数据中
-const isUrlInNewFormat = (url: FileUrl, newFormatData: FileInfo | FileInfo[] | undefined): boolean => {
-  if (!newFormatData) return false;
-  
-  if (Array.isArray(newFormatData)) {
-    return newFormatData.some(file => file.url === url);
-  }
-  
-  return newFormatData.url === url;
-};
+
 
 // interface FollowUpRecord {
 //   id: string;
@@ -1115,7 +1106,17 @@ const ResumeDetail = () => {
       console.log('  - idCardBack:', resume.idCardBack);
       console.log('  - personalPhoto:', resume.personalPhoto);
       console.log('  - certificates:', resume.certificates);
+      if (resume.certificates) {
+        resume.certificates.forEach((cert: FileInfo, index: number) => {
+          console.log(`    证书${index + 1}: ${cert.filename} (${cert.url})`);
+        });
+      }
       console.log('  - reports:', resume.reports);
+      if (resume.reports) {
+        resume.reports.forEach((report: FileInfo, index: number) => {
+          console.log(`    体检报告${index + 1}: ${report.filename} (${report.url})`);
+        });
+      }
       
       // 检查旧格式URL数组
       console.log('旧格式URL数组:');
@@ -1365,24 +1366,47 @@ const ResumeDetail = () => {
 
           <Card title="个人照片" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              {/* 优先使用新格式的 personalPhoto */}
-              {resume?.personalPhoto && (
-                Array.isArray(resume.personalPhoto) 
-                  ? resume.personalPhoto.map((photo: FileInfo, index: number) => (
-                      <div key={`photo-${photo.url}-${index}`}>
-                        {renderFilePreview(photo, index, 'photo')}
+              {/* 去重显示：优先新格式，排除旧格式重复 */}
+              {(() => {
+                const displayedUrls = new Set<string>();
+                const photoElements: React.ReactNode[] = [];
+                
+                // 首先显示新格式个人照片
+                if (resume?.personalPhoto) {
+                  if (Array.isArray(resume.personalPhoto)) {
+                    resume.personalPhoto.forEach((photo: FileInfo, index: number) => {
+                      displayedUrls.add(photo.url);
+                      photoElements.push(
+                        <div key={`photo-new-${photo.url}-${index}`}>
+                          {renderFilePreview(photo, index, 'photo')}
+                        </div>
+                      );
+                    });
+                  } else {
+                    displayedUrls.add(resume.personalPhoto.url);
+                    photoElements.push(
+                      <div key={`photo-new-${resume.personalPhoto.url}-0`}>
+                        {renderFilePreview(resume.personalPhoto, 0, 'photo')}
                       </div>
-                    ))
-                  : renderFilePreview(resume.personalPhoto, 0, 'photo')
-              )}
-              {/* 处理旧版 photoUrls，但排除已经在新格式中显示过的 URL */}
-              {resume?.photoUrls?.filter(Boolean).filter((url: FileUrl) => 
-                !isUrlInNewFormat(url, resume.personalPhoto)
-              ).map((url: FileUrl, index: number) => (
-                <div key={`photo-legacy-${url}-${index}`}>
-                  {renderFilePreview(url, index, 'photo')}
-                </div>
-              ))}
+                    );
+                  }
+                }
+                
+                // 然后显示旧格式中未重复的个人照片
+                resume?.photoUrls?.filter(Boolean).forEach((url: FileUrl, index: number) => {
+                  if (!displayedUrls.has(url)) {
+                    displayedUrls.add(url);
+                    photoElements.push(
+                      <div key={`photo-legacy-${url}-${index}`}>
+                        {renderFilePreview(url, index, 'photo')}
+                      </div>
+                    );
+                  }
+                });
+                
+                return photoElements;
+              })()}
+              
               {/* 如果没有任何照片，显示提示信息 */}
               {(!resume?.personalPhoto || (Array.isArray(resume.personalPhoto) && resume.personalPhoto.length === 0)) && 
                (!resume?.photoUrls || resume.photoUrls.length === 0) && (
@@ -1402,20 +1426,36 @@ const ResumeDetail = () => {
 
           <Card title="证书照片" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              {/* 优先使用新格式的 certificates */}
-              {resume?.certificates?.map((cert: FileInfo, index: number) => (
-                <div key={`cert-${cert.url}-${index}`}>
-                  {renderFilePreview(cert, index, 'certificate')}
-                </div>
-              ))}
-              {/* 处理旧版 certificateUrls，但排除已经在新格式中显示过的 URL */}
-              {resume?.certificateUrls?.filter(Boolean).filter((url: FileUrl) => 
-                !isUrlInNewFormat(url, resume.certificates)
-              ).map((url: FileUrl, index: number) => (
-                <div key={`cert-legacy-${url}-${index}`}>
-                  {renderFilePreview(url, index, 'certificate')}
-                </div>
-              ))}
+              {/* 去重显示：优先新格式，排除旧格式重复 */}
+              {(() => {
+                const displayedUrls = new Set<string>();
+                const certificateElements: React.ReactNode[] = [];
+                
+                // 首先显示新格式证书
+                resume?.certificates?.forEach((cert: FileInfo, index: number) => {
+                  displayedUrls.add(cert.url);
+                  certificateElements.push(
+                    <div key={`cert-new-${cert.url}-${index}`}>
+                      {renderFilePreview(cert, index, 'certificate')}
+                    </div>
+                  );
+                });
+                
+                // 然后显示旧格式中未重复的证书
+                resume?.certificateUrls?.filter(Boolean).forEach((url: FileUrl, index: number) => {
+                  if (!displayedUrls.has(url)) {
+                    displayedUrls.add(url);
+                    certificateElements.push(
+                      <div key={`cert-legacy-${url}-${index}`}>
+                        {renderFilePreview(url, index, 'certificate')}
+                      </div>
+                    );
+                  }
+                });
+                
+                return certificateElements;
+              })()}
+              
               {/* 如果没有任何证书，显示提示信息 */}
               {(!resume?.certificates || resume.certificates.length === 0) && 
                (!resume?.certificateUrls || resume.certificateUrls.length === 0) && (
@@ -1435,20 +1475,36 @@ const ResumeDetail = () => {
 
           <Card title="体检报告" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              {/* 优先使用新格式的 reports */}
-              {resume?.reports?.map((report: FileInfo, index: number) => (
-                <div key={`report-${report.url}-${index}`}>
-                  {renderFilePreview(report, index, 'report')}
-                </div>
-              ))}
-              {/* 处理旧版 medicalReportUrls，但排除已经在新格式中显示过的 URL */}
-              {resume?.medicalReportUrls?.filter(Boolean).filter((url: FileUrl) => 
-                !isUrlInNewFormat(url, resume.reports)
-              ).map((url: FileUrl, index: number) => (
-                <div key={`report-legacy-${url}-${index}`}>
-                  {renderFilePreview(url, index, 'report')}
-                </div>
-              ))}
+              {/* 去重显示：优先新格式，排除旧格式重复 */}
+              {(() => {
+                const displayedUrls = new Set<string>();
+                const reportElements: React.ReactNode[] = [];
+                
+                // 首先显示新格式体检报告
+                resume?.reports?.forEach((report: FileInfo, index: number) => {
+                  displayedUrls.add(report.url);
+                  reportElements.push(
+                    <div key={`report-new-${report.url}-${index}`}>
+                      {renderFilePreview(report, index, 'report')}
+                    </div>
+                  );
+                });
+                
+                // 然后显示旧格式中未重复的体检报告
+                resume?.medicalReportUrls?.filter(Boolean).forEach((url: FileUrl, index: number) => {
+                  if (!displayedUrls.has(url)) {
+                    displayedUrls.add(url);
+                    reportElements.push(
+                      <div key={`report-legacy-${url}-${index}`}>
+                        {renderFilePreview(url, index, 'report')}
+                      </div>
+                    );
+                  }
+                });
+                
+                return reportElements;
+              })()}
+              
               {/* 如果没有任何体检报告，显示提示信息 */}
               {(!resume?.reports || resume.reports.length === 0) && 
                (!resume?.medicalReportUrls || resume.medicalReportUrls.length === 0) && (

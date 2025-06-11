@@ -30,11 +30,27 @@ export class UploadService {
     }
   }
 
-  async getFile(fileUrl: string): Promise<{ url: string; metadata: any }> {
+  async getFile(fileUrlOrId: string): Promise<{ url: string; metadata: any }> {
     try {
-      // 从 URL 中提取文件 key
-      const urlObj = new URL(fileUrl);
-      const key = urlObj.pathname.substring(1); // 移除开头的斜杠
+      let key: string;
+      
+      // 判断输入是完整URL还是文件ID/key
+      if (fileUrlOrId.startsWith('http://') || fileUrlOrId.startsWith('https://')) {
+        // 完整URL：从 URL 中提取文件 key
+        const urlObj = new URL(fileUrlOrId);
+        key = urlObj.pathname.substring(1); // 移除开头的斜杠
+        this.logger.log(`从完整URL提取key: ${key}`);
+      } else if (fileUrlOrId.includes('/')) {
+        // 包含路径的key，直接使用
+        key = fileUrlOrId;
+        this.logger.log(`使用路径key: ${key}`);
+      } else {
+        // 纯文件ID，需要在COS中查找
+        // 这种情况下，我们可能需要搜索文件或者假设它在某个默认路径下
+        // 由于我们不知道具体的文件路径结构，这里抛出更清晰的错误
+        this.logger.error(`无效的文件标识符: ${fileUrlOrId}`);
+        throw new Error(`无效的文件标识符，需要完整的URL或文件路径: ${fileUrlOrId}`);
+      }
       
       // 获取文件元数据
       const metadata = await this.cosService.getFileInfo(key);

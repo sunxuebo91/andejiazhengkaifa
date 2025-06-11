@@ -41,6 +41,17 @@ interface ErrorResponseData {
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    // 检查业务逻辑是否成功
+    if (response.data && response.data.success === false) {
+      // 如果业务逻辑失败，抛出错误
+      const error = new Error(response.data.message || '请求失败');
+      // 附加响应数据到错误对象上
+      (error as any).response = {
+        status: response.status,
+        data: response.data
+      };
+      throw error;
+    }
     // 直接返回数据部分
     return response.data;
   },

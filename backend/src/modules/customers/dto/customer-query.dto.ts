@@ -15,7 +15,7 @@ export class CustomerQueryDto {
   caregiverPhone?: string; // 阿姨手机号
 
   @IsOptional()
-  @IsEnum(['美团', '抖音', '快手', '小红书社群线索', '转介绍', '其他'])
+  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '其他'])
   leadSource?: string;
 
   @IsOptional()

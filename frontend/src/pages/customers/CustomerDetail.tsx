@@ -14,11 +14,12 @@ import {
   Timeline,
   Empty,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
 import { Customer } from '../../types/customer.types';
 import { FOLLOW_UP_TYPE_OPTIONS } from '../../types/customer-follow-up.types';
 import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
+import CreateContractModal from '../../components/CreateContractModal';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +31,7 @@ const CustomerDetail: React.FC = () => {
     customerId: '',
     customerName: ''
   });
+  const [contractModal, setContractModal] = useState(false);
 
   useEffect(() => {
     fetchCustomerDetail();
@@ -120,6 +122,19 @@ const CustomerDetail: React.FC = () => {
     });
     // 刷新客户数据
     fetchCustomerDetail();
+  };
+
+  // 处理发起合同
+  const handleCreateContract = () => {
+    setContractModal(true);
+  };
+
+  // 处理合同创建成功
+  const handleContractSuccess = (contractId: string) => {
+    setContractModal(false);
+    message.success('合同创建成功！');
+    // 可以跳转到合同详情页
+    navigate(`/contracts/${contractId}`);
   };
 
   // 获取跟进方式的中文标签
@@ -410,6 +425,15 @@ const CustomerDetail: React.FC = () => {
             >
               编辑客户信息
             </Button>
+            <Button 
+              type="primary" 
+              size="large" 
+              icon={<FileTextOutlined />}
+              onClick={handleCreateContract}
+              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+            >
+              发起合同
+            </Button>
           </Space>
         </div>
       </Card>
@@ -422,6 +446,16 @@ const CustomerDetail: React.FC = () => {
         onCancel={() => setFollowUpModal({ visible: false, customerId: '', customerName: '' })}
         onSuccess={handleFollowUpSuccess}
       />
+
+      {/* 创建合同弹窗 */}
+      {customer && (
+        <CreateContractModal
+          visible={contractModal}
+          customer={customer}
+          onCancel={() => setContractModal(false)}
+          onSuccess={handleContractSuccess}
+        />
+      )}
     </div>
   );
 };

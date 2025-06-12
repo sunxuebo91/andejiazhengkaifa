@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps } from 'antd';
 import { useMemo } from 'react';
@@ -88,6 +88,27 @@ const BasicLayout = () => {
       }
 
       baseMenus.push(customerMenu);
+    }
+
+    // 合同管理菜单 - 需要合同相关权限
+    if (true || hasPermission('contract:view') || hasPermission('contract:create')) {
+      const contractMenu: MenuRoute = {
+        path: '/contracts',
+        name: '合同管理',
+        icon: <FileTextOutlined />,
+        routes: [],
+      };
+
+      // 合同列表 - 需要合同查看权限
+      if (true || hasPermission('contract:view')) {
+        contractMenu.routes!.push({
+          path: '/contracts/list',
+          name: '合同列表',
+          icon: <UnorderedListOutlined />,
+        });
+      }
+
+      baseMenus.push(contractMenu);
     }
 
     // 用户管理菜单 - 仅管理员可见

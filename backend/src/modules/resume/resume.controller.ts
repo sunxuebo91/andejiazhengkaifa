@@ -12,6 +12,7 @@ import { ConflictException } from '@nestjs/common';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { Public } from '../auth/decorators/public.decorator';
 
 // Multer 配置
 const multerConfig: MulterOptions = {
@@ -410,6 +411,60 @@ export class ResumeController {
         success: false,
         data: null,
         message: `获取筛选选项失败: ${error.message}`
+      };
+    }
+  }
+
+  @Get('search-workers')
+  @Public()
+  @ApiOperation({ summary: '搜索服务人员' })
+  @ApiResponse({ status: 200, description: '搜索成功' })
+  async searchWorkers(
+    @Query('phone') phone?: string,
+    @Query('name') name?: string,
+    @Query('limit') limitStr: string = '10',
+  ) {
+    try {
+      const limit = parseInt(limitStr);
+      const workers = await this.resumeService.searchWorkers(phone, name, limit);
+      return {
+        success: true,
+        data: workers,
+        message: '搜索服务人员成功'
+      };
+    } catch (error) {
+      this.logger.error(`搜索服务人员失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: error.message || '搜索服务人员失败'
+      };
+    }
+  }
+
+  @Get('test-search-workers')
+  @Public()
+  @ApiOperation({ summary: '测试搜索服务人员（无认证）' })
+  @ApiResponse({ status: 200, description: '测试成功' })
+  async testSearchWorkers(
+    @Query('phone') phone?: string,
+    @Query('name') name?: string,
+    @Query('limit') limitStr: string = '10',
+  ) {
+    try {
+      const limit = parseInt(limitStr);
+      const workers = await this.resumeService.searchWorkers(phone, name, limit);
+      return {
+        success: true,
+        data: workers,
+        message: '测试搜索服务人员成功'
+      };
+    } catch (error) {
+      this.logger.error(`测试搜索服务人员失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: error.message || '测试搜索服务人员失败'
       };
     }
   }

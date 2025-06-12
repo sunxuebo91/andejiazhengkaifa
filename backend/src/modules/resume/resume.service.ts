@@ -661,6 +661,45 @@ export class ResumeService {
   }
 
   /**
+   * 搜索服务人员
+   * 根据手机号或姓名搜索简历库中的服务人员
+   */
+  async searchWorkers(phone?: string, name?: string, limit: number = 10) {
+    try {
+      const query: any = {};
+      
+      if (phone) {
+        query.phone = { $regex: phone, $options: 'i' };
+      }
+      
+      if (name) {
+        query.name = { $regex: name, $options: 'i' };
+      }
+      
+      // 如果没有搜索条件，返回空数组
+      if (!phone && !name) {
+        return [];
+      }
+      
+      this.logger.log(`搜索服务人员，查询条件: ${JSON.stringify(query)}`);
+      
+      const workers = await this.resumeModel
+        .find(query)
+        .select('_id name phone idNumber age jobType nativePlace')
+        .limit(limit)
+        .sort({ createdAt: -1 })
+        .exec();
+      
+      this.logger.log(`搜索结果: ${JSON.stringify(workers, null, 2)}`);
+      
+      return workers;
+    } catch (error) {
+      this.logger.error(`搜索服务人员失败: ${error.message}`, error.stack);
+      throw new Error('搜索服务人员失败');
+    }
+  }
+
+  /**
    * 从Excel文件导入简历数据
    * @param filePath Excel文件路径
    * @param userId 当前用户ID

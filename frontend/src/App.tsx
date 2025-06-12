@@ -16,6 +16,8 @@ const CustomerList = React.lazy(() => import('./pages/customers/CustomerList'));
 const CreateCustomer = React.lazy(() => import('./pages/customers/CreateCustomer'));
 const CustomerDetail = React.lazy(() => import('./pages/customers/CustomerDetail'));
 const EditCustomer = React.lazy(() => import('./pages/customers/EditCustomer'));
+const ContractList = React.lazy(() => import('./pages/contracts/ContractList'));
+const ContractDetail = React.lazy(() => import('./pages/contracts/ContractDetail'));
 const UserList = React.lazy(() => import('./pages/users/UserList'));
 const CreateUser = React.lazy(() => import('./pages/users/CreateUser'));
 const EditUser = React.lazy(() => import('./pages/users/EditUser'));
@@ -117,6 +119,20 @@ export default function App({ children }: AppProps) {
                       element={<AuthorizedRoute element={<EditCustomer />} />} 
                     />
                     {/* 重定向 /customers 到 /customers/list */}
+                    <Route index element={<Navigate to="list" replace />} />
+                  </Route>
+                  
+                  {/* 合同管理模块 - 需要contract相关权限 */}
+                  <Route path="contracts">
+                    <Route 
+                      path="list" 
+                      element={<AuthorizedRoute element={<ContractList />} />} 
+                    />
+                    <Route 
+                      path=":id" 
+                      element={<AuthorizedRoute element={<ContractDetail />} />} 
+                    />
+                    {/* 重定向 /contracts 到 /contracts/list */}
                     <Route index element={<Navigate to="list" replace />} />
                   </Route>
                   

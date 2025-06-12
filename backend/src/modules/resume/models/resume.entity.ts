@@ -114,7 +114,7 @@ export class Resume extends Document implements IResume {
   wechat?: string;
 
   @ApiProperty({ description: '身份证号' })
-  @Prop({ unique: true, sparse: true, nullable: true })
+  @Prop({ sparse: true, nullable: true })
   @IsString()
   @IsOptional()
   idNumber?: string;

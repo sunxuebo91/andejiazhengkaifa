@@ -17,9 +17,8 @@ import {
 } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { contractService } from '../services/contractService';
-import { CreateContractData, ContractType, CONTRACT_TYPES, Worker } from '../types/contract.types';
+import { CreateContractData, CONTRACT_TYPES, Worker } from '../types/contract.types';
 import { Customer } from '../types/customer.types';
-import dayjs from 'dayjs';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -341,7 +340,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({
                 style={{ width: '100%' }}
                 min={0}
                 formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={value => parseFloat(value!.replace(/¥\s?|(,*)/g, '')) || 0}
+                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
               />
             </Form.Item>
           </Col>
@@ -356,7 +355,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({
                 style={{ width: '100%' }}
                 min={0}
                 formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={value => parseFloat(value!.replace(/¥\s?|(,*)/g, '')) || 0}
+                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
               />
             </Form.Item>
           </Col>
@@ -370,7 +369,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({
                 style={{ width: '100%' }}
                 min={0}
                 formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={value => value!.replace(/¥\s?|(,*)/g, '')}
+                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
               />
             </Form.Item>
           </Col>
@@ -387,7 +386,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({
                 style={{ width: '100%' }}
                 min={0}
                 formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={value => value!.replace(/¥\s?|(,*)/g, '')}
+                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
               />
             </Form.Item>
           </Col>
@@ -401,7 +400,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({
                 style={{ width: '100%' }}
                 min={0}
                 formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={value => value!.replace(/¥\s?|(,*)/g, '')}
+                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
               />
             </Form.Item>
           </Col>

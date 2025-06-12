@@ -1,12 +1,3 @@
-[2025-06-10T03:01:44.062Z] [INFO] AI配置守护初始化完成
-[2025-06-10T03:01:44.064Z] [INFO] 开始监控 10 个配置文件...
-[2025-06-10T03:01:44.070Z] [INFO] ✅ AI配置守护已启动，监控 10 个文件
-[2025-06-10T12:00:47.486Z] [INFO] 检测到文件变更: ecosystem.config.js
-[2025-06-10T12:00:47.543Z] [INFO] 文件保护检查: ecosystem.config.js [等级: critical]
-[2025-06-10T12:00:47.551Z] [INFO] ✅ 允许文件修改: ecosystem.config.js - normal_modification
-[2025-06-10T12:00:47.575Z] [INFO] 检测到文件变更: ecosystem.config.js
-[2025-06-10T12:00:47.584Z] [INFO] 文件保护检查: ecosystem.config.js [等级: critical]
-[2025-06-10T12:00:47.585Z] [INFO] ✅ 允许文件修改: ecosystem.config.js - normal_modification
-[2025-06-10T12:00:50.622Z] [INFO] 检测到文件变更: ecosystem.config.js
-[2025-06-10T12:00:50.632Z] [INFO] 文件保护检查: ecosystem.config.js [等级: critical]
-[2025-06-10T12:00:50.632Z] [INFO] ✅ 允许文件修改: ecosystem.config.js - normal_modification
+[2025-06-12T06:58:15.364Z] [INFO] AI配置守护初始化完成
+[2025-06-12T06:58:15.367Z] [INFO] 开始监控 8 个配置文件...
+[2025-06-12T06:58:15.371Z] [INFO] ✅ AI配置守护已启动，监控 8 个文件

@@ -1,0 +1,315 @@
+{
+  "name": "esign-server",
+  "version": "1.0.0",
+  "description": "爱签电子签名 MCP 服务器 - 提供完整的电子签名功能",
+  "type": "mcp-server",
+  "main": "mcp-esign-server.js",
+  "author": "AndejiazhengCRM Team",
+  "license": "MIT",
+  "mcpVersion": "1.0",
+  "capabilities": {
+    "tools": [
+      {
+        "name": "create_contract_template",
+        "description": "使用爱签模板创建合同",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "templateNo": {
+              "type": "string",
+              "description": "爱签模板编号"
+            },
+            "contractName": {
+              "type": "string",
+              "description": "合同名称"
+            },
+            "templateParams": {
+              "type": "object",
+              "description": "模板参数键值对"
+            }
+          },
+          "required": ["templateNo", "contractName", "templateParams"]
+        }
+      },
+      {
+        "name": "add_contract_signers",
+        "description": "为合同添加签署人",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "contractNo": {
+              "type": "string",
+              "description": "合同编号"
+            },
+            "signers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "account": {"type": "string"},
+                  "name": {"type": "string"},
+                  "phone": {"type": "string"},
+                  "idCard": {"type": "string"},
+                  "signType": {"type": "string", "enum": ["PERSONAL", "COMPANY"]}
+                },
+                "required": ["account", "name", "phone", "idCard"]
+              },
+              "description": "签署人信息列表"
+            }
+          },
+          "required": ["contractNo", "signers"]
+        }
+      },
+      {
+        "name": "create_signing_flow",
+        "description": "创建完整的签署流程",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "contractNo": {
+              "type": "string",
+              "description": "合同编号"
+            },
+            "contractName": {
+              "type": "string",
+              "description": "合同名称"
+            },
+            "templateNo": {
+              "type": "string",
+              "description": "模板编号"
+            },
+            "templateParams": {
+              "type": "object",
+              "description": "模板参数"
+            },
+            "signers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "account": {"type": "string"},
+                  "name": {"type": "string"},
+                  "phone": {"type": "string"},
+                  "idCard": {"type": "string"}
+                }
+              },
+              "description": "签署人列表"
+            }
+          },
+          "required": ["contractNo", "contractName", "templateNo", "signers"]
+        }
+      },
+      {
+        "name": "get_template_preview",
+        "description": "获取合同模板预览",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "templateNo": {
+              "type": "string",
+              "description": "模板编号"
+            },
+            "templateParams": {
+              "type": "object",
+              "description": "模板参数"
+            }
+          },
+          "required": ["templateNo", "templateParams"]
+        }
+      },
+      {
+        "name": "register_user",
+        "description": "在爱签平台预注册用户",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "phone": {
+              "type": "string",
+              "description": "手机号"
+            },
+            "name": {
+              "type": "string",
+              "description": "用户姓名"
+            },
+            "idCard": {
+              "type": "string",
+              "description": "身份证号"
+            }
+          },
+          "required": ["phone", "name", "idCard"]
+        }
+      },
+      {
+        "name": "create_enterprise_seal",
+        "description": "创建企业印章",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "account": {
+              "type": "string",
+              "description": "企业账户"
+            },
+            "sealName": {
+              "type": "string",
+              "description": "印章名称"
+            },
+            "redirectUrl": {
+              "type": "string",
+              "description": "完成后跳转URL"
+            }
+          },
+          "required": ["account"]
+        }
+      },
+      {
+        "name": "get_signing_status",
+        "description": "查询签署状态",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "contractNo": {
+              "type": "string",
+              "description": "合同编号"
+            }
+          },
+          "required": ["contractNo"]
+        }
+      },
+      {
+        "name": "download_signed_contract",
+        "description": "下载已签署的合同",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "contractNo": {
+              "type": "string",
+              "description": "合同编号"
+            }
+          },
+          "required": ["contractNo"]
+        }
+      },
+      {
+        "name": "get_template_list",
+        "description": "获取可用的合同模板列表",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "test_esign_connection",
+        "description": "测试爱签API连接状态",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "resources": [
+      {
+        "uri": "esign://templates",
+        "name": "合同模板列表",
+        "description": "可用的爱签合同模板",
+        "mimeType": "application/json"
+      },
+      {
+        "uri": "esign://contracts/status",
+        "name": "合同状态",
+        "description": "当前合同签署状态",
+        "mimeType": "application/json"
+      },
+      {
+        "uri": "esign://config",
+        "name": "爱签配置信息",
+        "description": "当前爱签API配置状态",
+        "mimeType": "application/json"
+      }
+    ]
+  },
+  "server": {
+    "command": "node",
+    "args": ["mcp-esign-server.js"],
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  "configuration": {
+    "esignAppId": {
+      "type": "string",
+      "description": "爱签应用ID",
+      "required": true
+    },
+    "esignHost": {
+      "type": "string", 
+      "default": "https://prev.asign.cn",
+      "description": "爱签API域名"
+    },
+    "esignPrivateKey": {
+      "type": "string",
+      "description": "爱签私钥",
+      "required": true
+    },
+    "notifyUrl": {
+      "type": "string",
+      "description": "签署完成回调地址"
+    }
+  },
+  "usage": {
+    "examples": [
+      {
+        "title": "创建劳动合同签署流程",
+        "description": "使用劳动合同模板创建完整的签署流程",
+        "tool": "create_signing_flow",
+        "input": {
+          "contractNo": "LAB_2024_001",
+          "contractName": "张三劳动合同",
+          "templateNo": "TPL_LABOR_001",
+          "templateParams": {
+            "employeeName": "张三",
+            "position": "软件工程师",
+            "salary": "15000"
+          },
+          "signers": [
+            {
+              "account": "13800138000",
+              "name": "张三",
+              "phone": "13800138000", 
+              "idCard": "330106199001011234"
+            }
+          ]
+        }
+      },
+      {
+        "title": "预注册用户",
+        "description": "在爱签平台预注册新用户",
+        "tool": "register_user",
+        "input": {
+          "phone": "13800138000",
+          "name": "张三",
+          "idCard": "330106199001011234"
+        }
+      },
+      {
+        "title": "获取模板预览",
+        "description": "预览填充参数后的合同模板",
+        "tool": "get_template_preview",
+        "input": {
+          "templateNo": "TPL_LABOR_001",
+          "templateParams": {
+            "employeeName": "张三",
+            "position": "软件工程师"
+          }
+        }
+      }
+    ]
+  },
+  "install": {
+    "dependencies": [
+      "axios@^1.9.0",
+      "crypto",
+      "form-data@^4.0.0"
+    ],
+    "setup": "确保已配置爱签API密钥和应用ID"
+  }
+} 

@@ -17,6 +17,7 @@ import { ImageService } from '../../services/imageService';
 import { Gender, GenderType, JobType, Education, FormValues, WorkExperience } from '../../types/resume';
 import type { Resume } from '../../services/resume.service';
 import { isLoggedIn } from '../../services/auth';
+import { JOB_TYPE_MAP } from '../../constants/jobTypes'; // 引入共享的工种映射
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
 dayjs.extend(isSameOrBefore);
@@ -97,20 +98,7 @@ function debugLog(...args: unknown[]): void {
   if (DEBUG_MODE) console.log(...args);
 }
 
-// 修改工种映射常量
-const JOB_TYPE_MAP = {
-  'zhujia-yuer': '住家育儿',
-  'baiban-yuer': '白班育儿',
-  'baojie': '保洁',
-  'baiban-baomu': '白班保姆',
-  'zhujia-baomu': '住家保姆',
-  'yangchong': '养宠',
-  'xiaoshi': '小时工',
-  'yuexin': '月嫂',
-  'zhujia-hulao': '住家护老'
-} as const;
-
-// 添加学历映射常量
+// 修改学历映射常量
 const EDUCATION_MAP = {
   'no': '无学历',
   'primary': '小学',

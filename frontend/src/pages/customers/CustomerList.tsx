@@ -234,12 +234,18 @@ const CustomerList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 200,
       fixed: 'right' as const,
       render: (_: any, record: Customer) => (
         <Space size="small">
           <Button
             type="primary"
+            size="small"
+            onClick={() => navigate(`/contracts/create?customerId=${record._id}`)}
+          >
+            发起合同
+          </Button>
+          <Button
             size="small"
             icon={<MessageOutlined />}
             onClick={() => handleAddFollowUp(record)}

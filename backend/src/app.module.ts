@@ -13,6 +13,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { FollowUpModule } from './modules/follow-up/follow-up.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
+import { ESignModule } from './modules/esign/esign.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ContractsModule } from './modules/contracts/contracts.module';
     FollowUpModule,
     CustomersModule,
     ContractsModule,
+    ESignModule,
   ],
   controllers: [AppController],
   providers: [AppService],

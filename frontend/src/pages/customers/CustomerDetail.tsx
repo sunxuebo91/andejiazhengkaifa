@@ -19,7 +19,6 @@ import { customerService } from '../../services/customerService';
 import { Customer } from '../../types/customer.types';
 import { FOLLOW_UP_TYPE_OPTIONS } from '../../types/customer-follow-up.types';
 import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
-import CreateContractModal from '../../components/CreateContractModal';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -31,7 +30,6 @@ const CustomerDetail: React.FC = () => {
     customerId: '',
     customerName: ''
   });
-  const [contractModal, setContractModal] = useState(false);
 
   useEffect(() => {
     fetchCustomerDetail();
@@ -126,15 +124,9 @@ const CustomerDetail: React.FC = () => {
 
   // 处理发起合同
   const handleCreateContract = () => {
-    setContractModal(true);
-  };
-
-  // 处理合同创建成功
-  const handleContractSuccess = (contractId: string) => {
-    setContractModal(false);
-    message.success('合同创建成功！');
-    // 可以跳转到合同详情页
-    navigate(`/contracts/${contractId}`);
+    if (customer) {
+      navigate(`/contracts/create?customerId=${customer._id}`);
+    }
   };
 
   // 获取跟进方式的中文标签
@@ -446,16 +438,6 @@ const CustomerDetail: React.FC = () => {
         onCancel={() => setFollowUpModal({ visible: false, customerId: '', customerName: '' })}
         onSuccess={handleFollowUpSuccess}
       />
-
-      {/* 创建合同弹窗 */}
-      {customer && (
-        <CreateContractModal
-          visible={contractModal}
-          customer={customer}
-          onCancel={() => setContractModal(false)}
-          onSuccess={handleContractSuccess}
-        />
-      )}
     </div>
   );
 };

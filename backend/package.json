@@ -39,6 +39,7 @@
     "@nestjsx/crud-typeorm": "^4.1.0",
     "@types/bcrypt": "^5.0.2",
     "@types/passport-jwt": "^4.0.1",
+    "@types/uuid": "^10.0.0",
     "axios": "^1.9.0",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
@@ -72,6 +73,7 @@
     "tencentcloud-sdk-nodejs-ocr": "^4.1.50",
     "typeorm": "^0.3.23",
     "typeorm-ts-node-commonjs": "^0.3.20",
+    "uuid": "^11.1.0",
     "validator": "^13.15.0",
     "webidl-conversions": "^7.0.0"
   },

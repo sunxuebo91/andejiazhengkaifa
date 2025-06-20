@@ -12,6 +12,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const AuntResumeList = lazy(() => import('./pages/aunt/ResumeList'));
 const AuntCreateResume = lazy(() => import('./pages/aunt/CreateResume'));
 const AuntResumeDetail = lazy(() => import('./pages/aunt/ResumeDetail'));
+const ESignaturePage = lazy(() => import('./pages/esign/ESignaturePage'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 export interface RouteConfig {
@@ -56,6 +57,11 @@ export const basicLayoutRoutes: RouteConfig[] = [
         path: 'aunt/resumes/detail/:id',
         name: '简历详情',
         element: <AuntResumeDetail />,
+      },
+      {
+        path: 'esign',
+        name: '电子签名',
+        element: <ESignaturePage />,
       },
     ],
   },

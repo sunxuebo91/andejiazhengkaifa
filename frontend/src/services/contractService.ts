@@ -78,16 +78,22 @@ export const contractService = {
   },
 
   // 搜索服务人员
-  async searchWorkers(phone?: string, name?: string, limit: number = 10): Promise<Worker[]> {
+  async searchWorkers(searchText: string, limit: number = 10): Promise<Worker[]> {
     const params: any = { limit };
-    if (phone) {
-      params.phone = phone;
-    }
-    if (name) {
-      params.name = name;
+    
+    // 使用同一个搜索文本作为电话和姓名进行搜索
+    if (searchText) {
+      params.phone = searchText;
+      params.name = searchText;
     }
     
     const response = await apiService.get('/api/resumes/search-workers', params);
-    return response.data;
+    
+    // 后端返回的数据结构是 { success, data, message }，我们需要的是 data 字段
+    if (response && response.data) {
+      return response.data;
+    }
+    
+    return [];
   },
 }; 

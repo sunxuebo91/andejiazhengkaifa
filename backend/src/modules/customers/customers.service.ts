@@ -69,7 +69,19 @@ export class CustomersService {
     if (search) {
       searchConditions.$or = [
         { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
+        { phone: { $regex: search, $options: 'i' } },
+        { phone: search.trim() }  // 添加精确匹配
+      ];
+    }
+
+    // 按名字或手机号精确搜索
+    if (query.name) {
+      searchConditions.name = { $regex: query.name, $options: 'i' };
+    }
+    if (query.phone) {
+      searchConditions.$or = [
+        { phone: { $regex: query.phone, $options: 'i' } },
+        { phone: query.phone.trim() }  // 添加精确匹配
       ];
     }
 

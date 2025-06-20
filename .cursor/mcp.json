@@ -30,6 +30,16 @@
         "NODE_ENV": "development",
         "ATOMIC_DEV_MODE": "true"
       }
+    },
+    "esign": {
+      "command": "node",
+      "args": ["mcp-esign-server.js"],
+      "env": {
+        "NODE_ENV": "production",
+        "ESIGN_APP_ID": "141496759",
+        "ESIGN_HOST": "https://prev.asign.cn",
+        "ESIGN_NOTIFY_URL": "https://crm.andejiazheng.com/api/esign/callback"
+      }
     }
   }
 } 

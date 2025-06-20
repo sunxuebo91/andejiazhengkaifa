@@ -4,7 +4,15 @@ import { Transform } from 'class-transformer';
 export class CustomerQueryDto {
   @IsOptional()
   @IsString()
-  search?: string; // 支持客户姓名、客户手机号搜索
+  search?: string; // 支持客户姓名、客户手机号模糊搜索
+
+  @IsOptional()
+  @IsString()
+  name?: string; // 按客户姓名搜索
+
+  @IsOptional()
+  @IsString()
+  phone?: string; // 按客户手机号搜索
 
   @IsOptional()
   @IsString()

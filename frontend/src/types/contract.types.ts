@@ -66,4 +66,5 @@ export interface Worker {
   age: number;
   jobType: string;
   nativePlace: string;
+  currentAddress?: string;
 } 

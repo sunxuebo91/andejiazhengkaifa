@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps } from 'antd';
 import { useMemo } from 'react';
@@ -108,7 +108,25 @@ const BasicLayout = () => {
         });
       }
 
+      // 创建合同 - 需要合同创建权限
+      if (true || hasPermission('contract:create')) {
+        contractMenu.routes!.push({
+          path: '/contracts/create',
+          name: '创建合同',
+          icon: <FileAddOutlined />,
+        });
+      }
+
       baseMenus.push(contractMenu);
+    }
+
+    // 电子签名菜单 - 需要签名相关权限
+    if (true || hasPermission('esign:view')) {
+      baseMenus.push({
+        path: '/esign',
+        name: '电子签名',
+        icon: <SafetyCertificateOutlined />,
+      });
     }
 
     // 用户管理菜单 - 仅管理员可见

@@ -17,6 +17,7 @@ const CreateCustomer = React.lazy(() => import('./pages/customers/CreateCustomer
 const CustomerDetail = React.lazy(() => import('./pages/customers/CustomerDetail'));
 const EditCustomer = React.lazy(() => import('./pages/customers/EditCustomer'));
 const ContractList = React.lazy(() => import('./pages/contracts/ContractList'));
+const CreateContract = React.lazy(() => import('./pages/contracts/CreateContract'));
 const ContractDetail = React.lazy(() => import('./pages/contracts/ContractDetail'));
 const UserList = React.lazy(() => import('./pages/users/UserList'));
 const CreateUser = React.lazy(() => import('./pages/users/CreateUser'));
@@ -127,6 +128,10 @@ export default function App({ children }: AppProps) {
                     <Route 
                       path="list" 
                       element={<AuthorizedRoute element={<ContractList />} />} 
+                    />
+                    <Route 
+                      path="create" 
+                      element={<AuthorizedRoute element={<CreateContract />} />} 
                     />
                     <Route 
                       path=":id" 

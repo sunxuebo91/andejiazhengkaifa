@@ -28,6 +28,8 @@ const ProfilePage = React.lazy(() => import('./pages/profile/ProfilePage'));
 const AccountSettings = React.lazy(() => import('./pages/settings/AccountSettings'));
 const NotFound = React.lazy(() => import('./pages/NotFound'));
 const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
+const ESignaturePage = React.lazy(() => import('./pages/esign/ESignaturePage'));
+const SignContractPage = React.lazy(() => import('./pages/esign/SignContractPage'));
 
 interface AppProps {
   children?: ReactNode;
@@ -139,6 +141,22 @@ export default function App({ children }: AppProps) {
                     />
                     {/* 重定向 /contracts 到 /contracts/list */}
                     <Route index element={<Navigate to="list" replace />} />
+                  </Route>
+                  
+                  {/* 电子签约模块 - 需要esign相关权限 */}
+                  <Route path="esign">
+                    <Route 
+                      index 
+                      element={<AuthorizedRoute element={<ESignaturePage />} />} 
+                    />
+                    <Route 
+                      path="contracts" 
+                      element={<AuthorizedRoute element={<ESignaturePage />} />} 
+                    />
+                    <Route 
+                      path="sign/:contractId" 
+                      element={<AuthorizedRoute element={<SignContractPage />} />} 
+                    />
                   </Route>
                   
                   {/* 用户管理模块 - 需要管理员权限 */}

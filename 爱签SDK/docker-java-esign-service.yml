@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  esign-java-service:
+    build:
+      context: ./demo
+      dockerfile: Dockerfile
+    container_name: esign-java-service
+    ports:
+      - "8088:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - ESIGN_APP_ID=${ESIGN_APP_ID}
+      - ESIGN_PRIVATE_KEY=${ESIGN_PRIVATE_KEY}
+      - ESIGN_HOST=https://prev.asign.cn
+    volumes:
+      - ./demo/uploads:/app/uploads
+    networks:
+      - esign-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  esign-network:
+    driver: bridge
+
+# 使用方法：
+# 1. cd 爱签SDK
+# 2. docker-compose -f docker-java-esign-service.yml up -d
+# 3. 在主应用中通过HTTP调用: http://localhost:8088/api/esign/xxx 

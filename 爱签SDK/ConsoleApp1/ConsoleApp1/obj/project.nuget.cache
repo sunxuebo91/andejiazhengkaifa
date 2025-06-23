@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "HTVy897ZWJfGdF9Lhx6iYyik4lDAavg/OzPYS/Gp9JFDhGRoYURuyQbTgzubLX5vilOKvzgBLaeyOu7w3AaUpg==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\PC\\Desktop\\netsdk\\ConsoleApp1\\ConsoleApp1\\ConsoleApp1.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\PC\\.nuget\\packages\\bouncycastle.netcore\\2.2.1\\bouncycastle.netcore.2.2.1.nupkg.sha512",
+    "C:\\Users\\PC\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512"
+  ],
+  "logs": []
+}

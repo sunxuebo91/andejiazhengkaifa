@@ -13,6 +13,7 @@ const AuntResumeList = lazy(() => import('./pages/aunt/ResumeList'));
 const AuntCreateResume = lazy(() => import('./pages/aunt/CreateResume'));
 const AuntResumeDetail = lazy(() => import('./pages/aunt/ResumeDetail'));
 const ESignaturePage = lazy(() => import('./pages/esign/ESignaturePage'));
+const SignContractPage = lazy(() => import('./pages/esign/SignContractPage'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 export interface RouteConfig {
@@ -58,10 +59,33 @@ export const basicLayoutRoutes: RouteConfig[] = [
         name: '简历详情',
         element: <AuntResumeDetail />,
       },
+      // 电子签约相关路由
       {
         path: 'esign',
-        name: '电子签名',
+        name: '电子签约',
         element: <ESignaturePage />,
+        meta: {
+          title: '电子签约管理',
+          description: '基于爱签平台的电子合同签署系统'
+        }
+      },
+      {
+        path: 'esign/contracts',
+        name: '合同管理',
+        element: <ESignaturePage />,
+        meta: {
+          title: '合同管理',
+          description: '查看和管理所有电子合同'
+        }
+      },
+      {
+        path: 'esign/sign/:contractId',
+        name: '签署合同',
+        element: <SignContractPage />,
+        meta: {
+          title: '签署合同',
+          description: '在线签署电子合同'
+        }
       },
     ],
   },

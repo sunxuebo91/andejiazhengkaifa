@@ -7,6 +7,7 @@ import {
   UseGuards,
   BadRequestException,
   Logger,
+  Query,
 } from '@nestjs/common';
 import { ESignService } from './esign.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -341,9 +342,18 @@ export class ESignController {
     contractName: string;
     templateNo: string;
     templateParams: Record<string, any>;
-    signerName: string;
-    signerMobile: string;
-    signerIdCard: string;
+    // 支持多个签署人
+    signers?: Array<{
+      name: string;
+      mobile: string;
+      idCard: string;
+      signType?: 'auto' | 'manual';
+      validateType?: 'sms' | 'password' | 'face';
+    }>;
+    // 兼容旧版本单个签署人参数
+    signerName?: string;
+    signerMobile?: string;
+    signerIdCard?: string;
     validityTime?: number;
     signOrder?: number;
   }) {
@@ -359,6 +369,9 @@ export class ESignController {
         contractName: contractData.contractName,
         templateNo: contractData.templateNo,
         templateParams: contractData.templateParams,
+        // 传递新的多签署人参数
+        signers: contractData.signers,
+        // 兼容旧版本参数
         signerName: contractData.signerName,
         signerMobile: contractData.signerMobile,
         signerIdCard: contractData.signerIdCard,
@@ -371,6 +384,7 @@ export class ESignController {
         data: {
           contractNo: result.contractNo,
           signUrl: result.signUrl,
+          signUrls: result.signUrls,
           message: result.message
         },
         message: result.success ? '合同创建成功' : '合同创建失败'
@@ -488,6 +502,10 @@ export class ESignController {
       signX?: number;
       signY?: number;
       signType?: number;
+      sealNo?: number;
+      canDrag?: number;
+      offsetX?: number;
+      offsetY?: number;
     }>;
     signStrikeList?: Array<{
       attachNo: number;
@@ -572,10 +590,12 @@ export class ESignController {
    */
   @Get('contract-status/:contractNo')
   async getContractStatus(@Param('contractNo') contractNo: string) {
-    this.logger.log('调用 contract-status 端点');
+    this.logger.log('调用 contract-status 端点, contractNo:', contractNo);
     
     try {
       const result = await this.esignService.getContractStatus(contractNo);
+      
+      this.logger.log('获取合同状态成功:', result);
       
       return {
         success: true,
@@ -585,22 +605,125 @@ export class ESignController {
     } catch (error) {
       this.logger.error('获取合同状态失败', error.stack);
       
+      // 处理爱签API的特定错误码
+      let errorMessage = '获取合同状态失败';
+      if (error.response?.data?.code) {
+        const errorCode = error.response.data.code;
+        const errorMsg = error.response.data.msg;
+        
+        switch (errorCode) {
+          case 100056:
+            errorMessage = '参数错误：合同编号为空';
+            break;
+          case 100066:
+            errorMessage = '合同不存在';
+            break;
+          case 100613:
+            errorMessage = '合同已删除';
+            break;
+          default:
+            errorMessage = `爱签API错误 (${errorCode}): ${errorMsg}`;
+        }
+        
+        this.logger.warn(`爱签API错误 - 错误码: ${errorCode}, 错误信息: ${errorMsg}`);
+      }
+      
       return {
         success: false,
-        message: error.message || '获取合同状态失败',
+        message: errorMessage,
+        errorCode: error.response?.data?.code,
+        originalError: error.response?.data,
+        // 添加状态映射信息，方便前端处理
+        statusInfo: this.getContractStatusInfo(error.response?.data?.code)
       };
     }
   }
 
   /**
-   * 下载已签署合同
+   * 获取合同状态信息映射
+   */
+  private getContractStatusInfo(errorCode?: number): any {
+    const statusMap = {
+      0: { name: '等待签约', color: 'orange', description: '合同已创建，等待签署方签约' },
+      1: { name: '签约中', color: 'blue', description: '合同正在签署过程中' },
+      2: { name: '已签约', color: 'green', description: '合同已完成签署' },
+      3: { name: '过期', color: 'red', description: '合同已过期' },
+      4: { name: '拒签', color: 'red', description: '签署方拒绝签署合同' },
+      6: { name: '作废', color: 'gray', description: '合同已作废' },
+      7: { name: '撤销', color: 'gray', description: '合同已撤销' }
+    };
+
+    const errorMap = {
+      100056: { name: '参数错误', color: 'red', description: '合同编号为空或格式错误' },
+      100066: { name: '合同不存在', color: 'orange', description: '该合同编号不存在，请检查合同编号是否正确' },
+      100613: { name: '合同已删除', color: 'gray', description: '该合同已被删除' }
+    };
+
+    if (errorCode && errorMap[errorCode]) {
+      return errorMap[errorCode];
+    }
+
+    return { name: '未知状态', color: 'gray', description: '无法获取合同状态信息' };
+  }
+
+  /**
+   * 同步合同状态 - 批量查询多个合同状态
+   */
+  @Post('sync-contract-status')
+  async syncContractStatus(@Body() body: { contractNos: string[] }) {
+    this.logger.log('批量同步合同状态:', body.contractNos);
+    
+    const results = [];
+    
+    for (const contractNo of body.contractNos) {
+      try {
+        const result = await this.esignService.getContractStatus(contractNo);
+        results.push({
+          contractNo,
+          success: true,
+          data: result,
+          statusInfo: this.getContractStatusInfo(result.data?.status)
+        });
+      } catch (error) {
+        const errorCode = error.response?.data?.code;
+        results.push({
+          contractNo,
+          success: false,
+          message: error.message || '获取合同状态失败',
+          errorCode,
+          statusInfo: this.getContractStatusInfo(errorCode)
+        });
+      }
+    }
+
+    return {
+      success: true,
+      data: results,
+      message: `已处理 ${results.length} 个合同状态查询`
+    };
+  }
+
+  /**
+   * 下载已签署合同（完善版本）
+   * 支持查询参数：force、downloadFileType、outfile
    */
   @Get('download-contract/:contractNo')
-  async downloadContract(@Param('contractNo') contractNo: string) {
-    this.logger.log('调用 download-contract 端点');
+  async downloadContract(
+    @Param('contractNo') contractNo: string,
+    @Query('force') force?: string,
+    @Query('downloadFileType') downloadFileType?: string,
+    @Query('outfile') outfile?: string
+  ) {
+    this.logger.log('调用 download-contract 端点，参数:', { contractNo, force, downloadFileType, outfile });
     
     try {
-      const result = await this.esignService.downloadSignedContract(contractNo);
+      const options = {
+        force: force ? parseInt(force) : undefined,
+        downloadFileType: downloadFileType ? parseInt(downloadFileType) : undefined,
+        outfile: outfile || undefined
+      };
+
+      const result = await this.esignService.downloadSignedContract(contractNo, options);
       
       return {
         success: true,
@@ -772,6 +895,89 @@ export class ESignController {
         success: false,
         message: error.message || '批量添加用户失败',
         error: error
+      };
+    }
+  }
+
+  /**
+   * 预览合同信息
+   * 支持GET和POST两种方式，POST可以传入自定义的签署方配置
+   */
+  @Get('preview-contract/:contractNo')
+  async previewContract(@Param('contractNo') contractNo: string) {
+    this.logger.log('调用 preview-contract 端点 (GET)');
+    
+    try {
+      const result = await this.esignService.previewContract(contractNo);
+      
+      return result;
+    } catch (error) {
+      this.logger.error('获取合同预览信息失败', error.stack);
+      
+      return {
+        success: false,
+        message: error.message || '获取合同预览信息失败',
+      };
+    }
+  }
+
+  /**
+   * 预览合同信息（带自定义签署方配置）
+   */
+  @Post('preview-contract/:contractNo')
+  async previewContractWithSigners(
+    @Param('contractNo') contractNo: string,
+    @Body() body: {
+      signers?: Array<{
+        account: string;
+        signStrategyList: Array<{
+          attachNo: number;
+          locationMode: number;
+          signPage: number;
+          signX: number;
+          signY: number;
+          signKey?: string;
+        }>;
+        isWrite?: number;
+      }>;
+    }
+  ) {
+    this.logger.log('调用 preview-contract 端点 (POST)');
+    
+    try {
+      const result = await this.esignService.previewContract(contractNo, body.signers);
+      
+      return result;
+    } catch (error) {
+      this.logger.error('获取合同预览信息失败', error.stack);
+      
+      return {
+        success: false,
+        message: error.message || '获取合同预览信息失败',
+      };
+    }
+  }
+
+  /**
+   * 撤销合同
+   */
+  @Post('withdraw-contract/:contractNo')
+  async withdrawContract(
+    @Param('contractNo') contractNo: string,
+    @Body() body: { reason?: string }
+  ) {
+    this.logger.log('调用 withdraw-contract 端点');
+    
+    try {
+      const result = await this.esignService.withdrawContract(contractNo, body.reason);
+      
+      return result;
+    } catch (error) {
+      this.logger.error('撤销合同失败', error.stack);
+      
+      return {
+        success: false,
+        message: error.message || '撤销合同失败',
       };
     }
   }

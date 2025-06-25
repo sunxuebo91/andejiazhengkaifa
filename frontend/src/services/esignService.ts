@@ -67,6 +67,12 @@ export interface TemplateField {
   locationY?: number;
   signUser?: string;
   signUserType?: number;
+  options?: Array<{
+    label: string;
+    value: string;
+    selected: boolean;
+    index: number;
+  }>;
 }
 
 export interface TemplateDataResponse {
@@ -119,6 +125,9 @@ interface ContractStatusResponse {
   success: boolean;
   data?: any;
   message: string;
+  errorCode?: number;
+  originalError?: any;
+  statusInfo?: any;
 }
 
 // 添加甲乙双方用户请求接口
@@ -341,8 +350,8 @@ class ESignService {
     }
   }
 
-  // 预览合同文件
-  async previewContract(contractId: string): Promise<string> {
+  // 预览合同文件（旧版本，用于预览URL）
+  async previewContractFile(contractId: string): Promise<string> {
     try {
       const response = await apiClient.get<ESignResponse<{ previewUrl: string }>>(`/api/esign/contracts/${contractId}/preview`);
       if (!response.data?.data?.previewUrl) {
@@ -534,6 +543,10 @@ class ESignService {
       signX?: number;
       signY?: number;
       signType?: number;
+      sealNo?: number;
+      canDrag?: number;
+      offsetX?: number;
+      offsetY?: number;
     }>;
     signStrikeList?: Array<{
       attachNo: number;
@@ -609,15 +622,89 @@ class ESignService {
   }
 
   /**
-   * 下载已签署合同
+   * 批量同步合同状态
    */
-  async downloadSignedContract(contractNo: string): Promise<any> {
+  async syncContractStatus(contractNos: string[]): Promise<any> {
     try {
-      const response = await apiClient.get(`/api/esign/download-contract/${contractNo}`);
+      const response = await apiClient.post('/api/esign/sync-contract-status', { contractNos });
       return response.data;
     } catch (error) {
-      console.error('下载合同失败:', error);
+      console.error('批量同步合同状态失败:', error);
       throw error;
+    }
+  }
+
+  /**
+   * 下载已签署合同（完善版本）
+   * 支持多种下载选项
+   */
+  async downloadSignedContract(contractNo: string, options?: {
+    force?: number; // 强制下载标识：0（默认）：未签署完的无法下载，1：无论什么状态都强制下载
+    downloadFileType?: number; // 下载文件类型：1：PDF文件，2：多个单张PNG文件，含PDF文件，3：分页PNG压缩文件，含PDF文件，4：合同单张图片，不含PDF文件，5：所有分页图片，不含PDF文件
+    outfile?: string; // 文件本地路径（可选）
+  }): Promise<any> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.force !== undefined) params.append('force', options.force.toString());
+      if (options?.downloadFileType !== undefined) params.append('downloadFileType', options.downloadFileType.toString());
+      if (options?.outfile) params.append('outfile', options.outfile);
+      
+      const queryString = params.toString();
+      const url = `/api/esign/download-contract/${contractNo}${queryString ? '?' + queryString : ''}`;
+      
+      const response = await apiClient.get(url);
+      return response.data;
+    } catch (error) {
+      console.error('下载已签署合同失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 下载base64文件数据到本地
+   * @param base64Data base64编码的文件数据
+   * @param fileName 文件名
+   * @param fileType 文件类型（用于确定MIME类型）
+   */
+  downloadBase64File(base64Data: string, fileName: string, fileType?: number): void {
+    try {
+      // 根据文件类型确定MIME类型
+      let mimeType = 'application/octet-stream';
+      if (fileType === 1 || fileName.toLowerCase().endsWith('.pdf')) {
+        mimeType = 'application/pdf';
+      } else if (fileName.toLowerCase().endsWith('.zip')) {
+        mimeType = 'application/zip';
+      } else if (fileName.toLowerCase().endsWith('.png')) {
+        mimeType = 'image/png';
+      }
+
+      // 创建Blob对象
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: mimeType });
+
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      
+      // 触发下载
+      document.body.appendChild(link);
+      link.click();
+      
+      // 清理
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      console.log('文件下载成功:', fileName);
+    } catch (error) {
+      console.error('下载文件失败:', error);
+      throw new Error('下载文件失败');
     }
   }
 
@@ -661,6 +748,54 @@ class ESignService {
       return response.data as CreateContractStep2Response;
     } catch (error) {
       console.error('创建合同失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 预览合同信息
+   */
+  async previewContract(contractNo: string, signers?: Array<{
+    account: string;
+    signStrategyList: Array<{
+      attachNo: number;
+      locationMode: number;
+      signPage: number;
+      signX: number;
+      signY: number;
+      signKey?: string;
+    }>;
+    isWrite?: number;
+  }>): Promise<any> {
+    try {
+      let response;
+      
+      if (signers && signers.length > 0) {
+        // 如果提供了签署方配置，使用POST请求
+        response = await apiClient.post(`/api/esign/preview-contract/${contractNo}`, { signers });
+      } else {
+        // 否则使用GET请求（使用默认配置）
+        response = await apiClient.get(`/api/esign/preview-contract/${contractNo}`);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('预览合同失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 撤销合同
+   */
+  async withdrawContract(contractNo: string, reason?: string): Promise<any> {
+    try {
+      const response = await apiClient.post(`/api/esign/withdraw-contract/${contractNo}`, { 
+        reason: reason || '用户主动撤销合同' 
+      });
+      return response.data;
+    } catch (error) {
+      console.error('撤销合同失败:', error);
       throw error;
     }
   }

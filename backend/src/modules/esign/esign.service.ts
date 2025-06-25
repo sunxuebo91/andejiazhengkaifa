@@ -1261,8 +1261,15 @@ export class ESignService {
       signStrategyList?: Array<{
         attachNo: number;
         locationMode: number;
-        signKey: string;
+        signKey?: string;
+        signPage?: number;
+        signX?: number;
+        signY?: number;
         signType?: number;
+        sealNo?: number;
+        canDrag?: number;
+        offsetX?: number;
+        offsetY?: number;
       }>;
     }>;
   }): Promise<any> {
@@ -1292,9 +1299,10 @@ export class ESignService {
         signStrategyList: signer.signStrategyList || [
           {
             attachNo: 1,
-            locationMode: 4, // 关键字定位
+            locationMode: 4, // 模板坐标签章（仅支持模板文件）
             signKey: `sign_${signer.account}`,
-            signType: 1 // 签名
+            signType: 1, // 签名/签章
+            canDrag: 0 // 不允许拖动
           }
         ]
       }));
@@ -1422,9 +1430,10 @@ export class ESignService {
                 signStrategyList: [
                   {
                     attachNo: 1,
-                    locationMode: 4,
+                    locationMode: 4, // 模板坐标签章
                     signKey: `sign_${signer.account}`,
-                    signType: 1
+                    signType: 1, // 签名/签章
+                    canDrag: 0 // 不允许拖动
                   }
                 ]
               }
@@ -2604,8 +2613,11 @@ export class ESignService {
     }>;
     receiverFillStrategyList?: Array<{
       attachNo: number;
-      signKey: string;
-      defaultValue?: string;
+      key?: string; // 兼容多行文本填充
+      signKey?: string; // 原有的signKey
+      value?: string; // 多行文本的值
+      defaultValue?: string; // 原有的defaultValue
+      fillStage?: number; // 填充阶段：2=即时填充，3=页面填充
     }>;
     authConfig?: {
       idType?: string;
@@ -2687,49 +2699,120 @@ export class ESignService {
       };
     }>;
     signOrder?: 'sequential' | 'parallel'; // 签署顺序
+    templateParams?: Record<string, any>; // 添加模板参数，用于处理多行文本填充
   }): Promise<any> {
     try {
       console.log('🔄 简化版添加签署方:', params);
 
       const signersData = params.signers.map((signer, index) => {
-        // 转换签署类型
+        // 签署类型：2-无感知签章，3-有感知签章
         const signType = signer.signType === 'auto' ? 2 : 3;
         
-        // 转换验证类型
-        let validateType = 1; // 默认短信验证码
+        // 验证方式：1-短信验证码，2-签约密码，3-人脸识别
+        let validateType = 1; // 默认短信验证
         if (signer.validateType === 'password') validateType = 2;
         if (signer.validateType === 'face') validateType = 3;
 
         // 构建签章策略
-        const signStrategyList = [];
+        const signStrategyList: any[] = [];
+        
         if (signer.signPosition) {
           if (signer.signPosition.keyword) {
-            // 关键字定位
+            // 关键字签章
             signStrategyList.push({
               attachNo: 1,
-              locationMode: 1, // 关键字定位
-              signKey: signer.signPosition.keyword
+              locationMode: 3, // 关键字签章
+              signKey: signer.signPosition.keyword,
+              canDrag: 0, // 不允许拖动
+              signType: 1 // 签名/签章
             });
-          } else {
-            // 坐标定位
+          } else if (signer.signPosition.page && signer.signPosition.x !== undefined && signer.signPosition.y !== undefined) {
+            // 坐标签章
             signStrategyList.push({
               attachNo: 1,
-              locationMode: 2, // 坐标定位
-              signPage: signer.signPosition.page || 1,
-              signX: signer.signPosition.x || 0.25,
-              signY: signer.signPosition.y || 0.55
+              locationMode: 2, // 坐标签章
+              signPage: signer.signPosition.page,
+              signX: parseFloat((signer.signPosition.x || 0.25).toFixed(2)),
+              signY: parseFloat((signer.signPosition.y || 0.55).toFixed(2)),
+              canDrag: 0, // 不允许拖动
+              signType: 1 // 签名/签章
             });
           }
         } else {
-          // 默认签章位置
+          // 使用坐标签章（基于模板控件的实际坐标）
+          // 根据签署人顺序确定签章位置
+          let signKey: string;
+          
+          if (index === 0) {
+            // 第一个签署人通常是甲方（客户）
+            signKey = '甲方签名区';
+          } else if (index === 1) {
+            // 第二个签署人通常是乙方（阿姨）
+            signKey = '乙方签名区';
+          } else {
+            // 第三个及以后的签署人（企业）
+            signKey = '丙方签章区';
+          }
+
           signStrategyList.push({
             attachNo: 1,
-            locationMode: 2,
-            signPage: 1,
-            signX: index === 0 ? 0.25 : 0.75, // 甲方左边，乙方右边
-            signY: 0.55
+            locationMode: 4, // 模板坐标签章（官方文档推荐，仅支持模板文件）
+            signKey: signKey, // 模板中设置的签署区名称
+            signType: 1 // 签名/签章
           });
         }
+
+        // 构建接收方模板填充策略（用于多行文本等控件）
+        // 只在第一个签署人中添加模板填充策略，避免重复
+        let receiverFillStrategyList: Array<{
+          attachNo: number;
+          key: string;
+          value: string;
+          fillStage?: number;
+        }> = [];
+
+        // 处理服务备注等多行文本字段（只在第一个签署人中处理）
+        console.log(`🔍 处理签署人 ${index + 1}/${params.signers.length}: ${signer.name}`);
+        console.log(`📋 templateParams存在: ${!!params.templateParams}`);
+        
+        if (index === 0 && params.templateParams) {
+          console.log(`✅ 开始处理第一个签署人的模板填充策略`);
+          
+          Object.entries(params.templateParams).forEach(([key, value]) => {
+            console.log(`🔍 检查字段: ${key} = ${typeof value === 'string' ? value.substring(0, 30) + '...' : value}`);
+            
+            if (key === '服务备注' || key.includes('服务备注') || key.includes('服务内容') || key.includes('服务项目')) {
+              console.log(`✅ 字段匹配: ${key}`);
+              
+              if (value && typeof value === 'string' && value.trim()) {
+                console.log(`✅ 值有效: ${typeof value}, 长度: ${value.length}`);
+                
+                // 对于多行文本，将分号分隔的内容转换为换行符分隔
+                const multiLineContent = value.split('；')
+                  .filter(item => item.trim())
+                  .join('\n'); // 使用换行符连接多个服务项目
+                
+                receiverFillStrategyList.push({
+                  attachNo: 1, // 合同附件序号
+                  key: key, // 模板中的字段key
+                  value: multiLineContent, // 多行文本内容
+                  fillStage: 2 // 2=即时填充（接口调用时填充）
+                });
+                
+                console.log(`🔄 添加多行文本填充策略: ${key} -> ${multiLineContent.substring(0, 50)}...`);
+                console.log(`📝 完整的多行文本内容:\n${multiLineContent}`);
+              } else {
+                console.log(`❌ 值无效: ${typeof value}, 值: "${value}"`);
+              }
+            } else {
+              console.log(`❌ 字段不匹配: ${key}`);
+            }
+          });
+        } else {
+          console.log(`❌ 跳过填充策略处理: index=${index}, templateParams=${!!params.templateParams}`);
+        }
+        
+        console.log(`📊 最终receiverFillStrategyList长度: ${receiverFillStrategyList.length}`);
 
         return {
           contractNo: params.contractNo,
@@ -2742,6 +2825,7 @@ export class ESignService {
           autoSms: 1,
           customSignFlag: 0,
           signStrategyList: signStrategyList,
+          ...(receiverFillStrategyList.length > 0 && { receiverFillStrategyList }),
           signMark: `${signer.name}_${Date.now()}`
         };
       });
@@ -2757,7 +2841,7 @@ export class ESignService {
 
   /**
    * 步骤4：获取合同状态和签署链接
-   * API: /contract/getContractStatus
+   * API: /contract/status (根据官方文档)
    */
   async getContractStatus(contractNo: string): Promise<any> {
     try {
@@ -2767,10 +2851,11 @@ export class ESignService {
         contractNo: contractNo
       };
 
-      const response = await this.callESignAPI('/contract/getContractStatus', bizData);
-      console.log('✅ 获取合同状态成功:', response.data);
+      // 使用正确的API端点：/contract/status（根据官方文档）
+      const response = await this.callESignAPI('/contract/status', bizData);
+      console.log('✅ 获取合同状态成功:', response);
       
-      return response.data;
+      return response;
     } catch (error) {
       console.error('❌ 获取合同状态失败:', error);
       throw error;
@@ -2778,21 +2863,46 @@ export class ESignService {
   }
 
   /**
-   * 步骤5：下载已签署合同
+   * 步骤5：下载已签署合同（完善版本）
    * API: /contract/downloadContract
+   * 支持官方文档中的所有参数
    */
-  async downloadSignedContract(contractNo: string): Promise<any> {
+  async downloadSignedContract(contractNo: string, options?: {
+    force?: number; // 强制下载标识：0（默认）：未签署完的无法下载，1：无论什么状态都强制下载
+    downloadFileType?: number; // 下载文件类型：1：PDF文件，2：多个单张PNG文件，含PDF文件，3：分页PNG压缩文件，含PDF文件，4：合同单张图片，不含PDF文件，5：所有分页图片，不含PDF文件
+    outfile?: string; // 文件本地路径（可选）
+  }): Promise<any> {
     try {
-      console.log('🔄 步骤5：下载已签署合同:', contractNo);
+      console.log('🔄 步骤5：下载已签署合同:', contractNo, options);
 
       const bizData = {
         contractNo: contractNo,
-        force: 1, // 强制下载
-        downloadFileType: 1 // 1：PDF文件
+        force: options?.force ?? 1, // 默认强制下载
+        downloadFileType: options?.downloadFileType ?? 1, // 默认PDF文件
+        ...(options?.outfile && { outfile: options.outfile })
       };
 
       const response = await this.callESignAPI('/contract/downloadContract', bizData);
       console.log('✅ 下载合同成功:', response.data);
+      
+      // 如果返回的是base64数据，我们需要处理
+      if (response.data && response.data.data) {
+        const downloadData = {
+          ...response.data,
+          // 提供额外的处理信息
+          downloadInfo: {
+            contractNo,
+            fileName: response.data.fileName || `${contractNo}.pdf`,
+            size: response.data.size,
+            md5: response.data.md5,
+            fileType: response.data.fileType,
+            downloadFileType: bizData.downloadFileType,
+            isBase64: !!response.data.data
+          }
+        };
+        
+        return downloadData;
+      }
       
       return response.data;
     } catch (error) {
@@ -2931,10 +3041,18 @@ export class ESignService {
     contractName: string;
     templateNo: string;
     templateParams: Record<string, any>;
-    // 签署人信息
-    signerName: string;
-    signerMobile: string;
-    signerIdCard: string;
+    // 签署人信息（支持多个签署人）
+    signers?: Array<{
+      name: string;
+      mobile: string;
+      idCard: string;
+      signType?: 'auto' | 'manual';
+      validateType?: 'sms' | 'password' | 'face';
+    }>;
+    // 兼容旧版本单个签署人参数
+    signerName?: string;
+    signerMobile?: string;
+    signerIdCard?: string;
     // 可选参数
     validityTime?: number;
     signOrder?: number;
@@ -2942,23 +3060,69 @@ export class ESignService {
     success: boolean;
     contractNo: string;
     signUrl?: string;
+    signUrls?: Array<{ name: string; mobile: string; signUrl: string }>;
     message: string;
   }> {
     try {
       console.log('🚀 开始完整的合同创建和签署流程:', params);
 
-      const signerAccount = `account_${Date.now()}`; // 生成唯一账户标识
+      // 处理签署人信息（支持新旧两种格式）
+      let signersData: Array<{
+        name: string;
+        mobile: string;
+        idCard: string;
+        signType: 'auto' | 'manual';
+        validateType: 'sms' | 'password' | 'face';
+      }> = [];
 
-      // 步骤1：添加陌生用户
-      await this.addStranger({
-        account: signerAccount,
-        userType: 2, // 个人用户
-        name: params.signerName,
-        mobile: params.signerMobile,
-        idCard: params.signerIdCard,
-        isNotice: 1, // 开启短信通知
-        isSignPwdNotice: 0 // 不通知签约密码
-      });
+      if (params.signers && params.signers.length > 0) {
+        // 新格式：多个签署人
+        signersData = params.signers.map(signer => ({
+          name: signer.name,
+          mobile: signer.mobile,
+          idCard: signer.idCard,
+          signType: signer.signType || 'manual',
+          validateType: signer.validateType || 'sms'
+        }));
+      } else if (params.signerName && params.signerMobile && params.signerIdCard) {
+        // 旧格式：单个签署人（向后兼容）
+        signersData = [{
+          name: params.signerName,
+          mobile: params.signerMobile,
+          idCard: params.signerIdCard,
+          signType: 'manual',
+          validateType: 'sms'
+        }];
+      } else {
+        throw new Error('缺少签署人信息，请提供signers数组或signerName/signerMobile/signerIdCard');
+      }
+
+      console.log('📝 处理后的签署人信息:', signersData);
+
+      // 步骤1：为每个签署人添加陌生用户
+      const signerAccounts: Array<{ name: string; mobile: string; account: string }> = [];
+      
+      for (const [index, signer] of signersData.entries()) {
+        const signerAccount = `account_${Date.now()}_${index}`;
+        
+        await this.addStranger({
+          account: signerAccount,
+          userType: 2, // 个人用户
+          name: signer.name,
+          mobile: signer.mobile,
+          idCard: signer.idCard,
+          isNotice: 1, // 开启短信通知
+          isSignPwdNotice: 0 // 不通知签约密码
+        });
+
+        signerAccounts.push({
+          name: signer.name,
+          mobile: signer.mobile,
+          account: signerAccount
+        });
+
+        console.log(`✅ 签署人 ${signer.name} 添加成功，账户: ${signerAccount}`);
+      }
 
       // 步骤2：创建合同
       await this.createContractWithTemplate({
@@ -2970,30 +3134,49 @@ export class ESignService {
         signOrder: params.signOrder
       });
 
-             // 步骤3：添加签署方
-               const signerResult = await this.addSimpleContractSigners({
-         contractNo: params.contractNo,
-         signers: [{
-           account: signerAccount,
-           name: params.signerName,
-           mobile: params.signerMobile,
-           signType: 'manual', // 有感知签约
-           validateType: 'sms' // 短信验证码
-         }],
-         signOrder: 'parallel' // 并行签署
-       });
-
-      // 从返回结果中提取签署链接
-      const signUrl = signerResult?.signUrl || `https://prev.asign.cn/sign/${params.contractNo}`;
-
-      console.log('✅ 完整流程执行成功，签署链接:', signUrl);
-
-      return {
-        success: true,
+      // 步骤3：添加所有签署方（使用模板坐标签章）
+      const signerResult = await this.addSimpleContractSigners({
         contractNo: params.contractNo,
-        signUrl: signUrl,
-        message: '合同创建成功，签署链接已生成'
-      };
+        signers: signerAccounts.map((signerAccount, index) => ({
+          account: signerAccount.account,
+          name: signerAccount.name,
+          mobile: signerAccount.mobile,
+          signType: signersData[index].signType,
+          validateType: signersData[index].validateType
+        })),
+        signOrder: 'parallel', // 并行签署
+        templateParams: params.templateParams // 传递模板参数用于多行文本填充
+      });
+
+      // 处理返回结果
+      if (signersData.length === 1) {
+        // 单个签署人：返回单个签署链接（向后兼容）
+        const signUrl = signerResult?.signUrl || `https://prev.asign.cn/sign/${params.contractNo}`;
+        console.log('✅ 完整流程执行成功，签署链接:', signUrl);
+
+        return {
+          success: true,
+          contractNo: params.contractNo,
+          signUrl: signUrl,
+          message: '合同创建成功，签署链接已生成'
+        };
+      } else {
+        // 多个签署人：返回多个签署链接
+        const signUrls = signerAccounts.map(signerAccount => ({
+          name: signerAccount.name,
+          mobile: signerAccount.mobile,
+          signUrl: `https://prev.asign.cn/sign/${params.contractNo}?account=${signerAccount.account}`
+        }));
+
+        console.log('✅ 完整流程执行成功，多个签署链接:', signUrls);
+
+        return {
+          success: true,
+          contractNo: params.contractNo,
+          signUrls: signUrls,
+          message: `合同创建成功，已为${signersData.length}个签署人生成签署链接`
+        };
+      }
 
     } catch (error) {
       console.error('❌ 完整流程执行失败:', error);
@@ -3022,6 +3205,10 @@ export class ESignService {
       console.log('🔄 开始创建模板合同（官方API）:', contractData);
 
       // 构建请求参数，严格按照官方API文档
+      console.log('🔥🔥🔥 即将调用convertToFillData方法');
+      const fillData = this.convertToFillData(contractData.templateParams);
+      console.log('🔥🔥🔥 convertToFillData调用完成，结果:', JSON.stringify(fillData, null, 2));
+      
       const requestParams = {
         contractNo: contractData.contractNo,
         contractName: contractData.contractName,
@@ -3029,7 +3216,7 @@ export class ESignService {
         validityTime: contractData.validityTime || 15, // 合同有效期（天）
         templates: [{
           templateNo: contractData.templateNo, // 平台分配的模板编号
-          fillData: this.convertToFillData(contractData.templateParams), // 文本类填充
+          fillData: fillData, // 文本类填充
           componentData: this.convertToComponentData(contractData.templateParams) // 选择类填充
         }]
       };
@@ -3053,17 +3240,83 @@ export class ESignService {
   /**
    * 转换模板参数为fillData格式（文本类填充）
    */
-  private convertToFillData(templateParams: Record<string, any>): Record<string, string> {
-    const fillData: Record<string, string> = {};
+  private convertToFillData(templateParams: Record<string, any>): Record<string, any> {
+    const fillData: Record<string, any> = {};
     
-    // 遍历所有模板参数，将其转换为字符串格式
+    console.log('🔥🔥🔥 convertToFillData 开始处理 🔥🔥🔥');
+    console.log('🔥 输入参数:', JSON.stringify(templateParams, null, 2));
+    
+    // 遍历所有模板参数，特殊处理不同类型的字段
     Object.entries(templateParams).forEach(([key, value]) => {
+      console.log(`🔥 处理字段: "${key}" = ${JSON.stringify(value)} (类型: ${typeof value}, 是否数组: ${Array.isArray(value)})`);
+      
       if (value !== null && value !== undefined && value !== '') {
-        fillData[key] = String(value);
+        // 特殊处理：服务备注字段（多行文本类型，需要换行符分隔的字符串）
+        // 扩展匹配条件，包含更多可能的字段名
+        const isServiceField = key === '服务备注' || 
+                              key.includes('服务备注') || 
+                              key.includes('服务内容') || 
+                              key.includes('服务项目') ||
+                              key.includes('服务需求') ||
+                              key === '服务需求' ||
+                              key === '服务内容' ||
+                              key === '服务项目';
+        
+        console.log(`🔥 字段"${key}"匹配检查: isServiceField=${isServiceField}`);
+        
+        if (isServiceField) {
+          console.log(`🔥🔥 检测到服务相关字段: "${key}"`);
+          console.log(`🔥🔥 字段值: ${JSON.stringify(value)}`);
+          console.log(`🔥🔥 字段类型: ${typeof value}`);
+          console.log(`🔥🔥 是否数组: ${Array.isArray(value)}`);
+          
+          if (Array.isArray(value)) {
+            // 🔥 优先处理数组格式（前端Checkbox.Group可能直接传递数组）
+            console.log(`🔥🔥🔥 开始处理数组格式: ${JSON.stringify(value)}`);
+            const serviceLines = value.filter(item => item && item.trim()).join('\n');
+            fillData[key] = serviceLines;
+            console.log(`🔥🔥🔥 服务备注数组转换成功!`);
+            console.log(`🔥🔥🔥 原始数组: [${value.join(', ')}]`);
+            console.log(`🔥🔥🔥 转换结果: "${serviceLines}"`);
+          } else if (typeof value === 'string' && value.includes('；')) {
+            // 将分号分隔的字符串转换为换行符分隔的字符串（多行文本格式）
+            console.log(`🔥🔥 开始处理分号分隔字符串: "${value}"`);
+            const serviceLines = value.split('；').filter(item => item.trim()).join('\n');
+            fillData[key] = serviceLines;
+            console.log(`🔥🔥 服务备注字符串转换成功: "${value}" -> 多行文本:\n${serviceLines}`);
+          } else {
+            // 单个值保持字符串格式
+            console.log(`🔥🔥 处理单个值: "${value}"`);
+            fillData[key] = String(value);
+            console.log(`🔥🔥 服务备注单值转换: "${value}" -> "${fillData[key]}"`);
+          }
+        } else {
+          // 其他字段保持字符串格式
+          fillData[key] = String(value);
+          console.log(`➡️ 普通字段转换: "${key}" -> "${fillData[key]}"`);
+        }
+      } else {
+        console.log(`⚠️ 跳过空值字段: "${key}" = ${value}`);
       }
     });
 
-    console.log('📝 转换后的fillData:', fillData);
+    console.log('🔥🔥🔥 转换后的fillData完整数据 🔥🔥🔥');
+    console.log(JSON.stringify(fillData, null, 2));
+    
+    // 检查是否有服务相关字段
+    const serviceFieldsInFillData = Object.keys(fillData).filter(key => 
+      key.includes('服务') || key.includes('备注')
+    );
+    
+    if (serviceFieldsInFillData.length > 0) {
+      console.log('🔥🔥 fillData中包含的服务相关字段:', serviceFieldsInFillData);
+      serviceFieldsInFillData.forEach(field => {
+        console.log(`🔥  ${field}: ${fillData[field]}`);
+      });
+    } else {
+      console.log('🔥🔥 ⚠️ fillData中未找到服务相关字段');
+    }
+    
     return fillData;
   }
 
@@ -3346,16 +3599,56 @@ export class ESignService {
           if (!seenKeys.has(fieldKey)) {
             seenKeys.add(fieldKey);
             
+            // 特殊处理：服务备注字段，添加预定义选项
+            let options = undefined;
+            console.log(`🔍 检查字段: ${fieldKey}, dataType: ${field.dataType}`);
+            if (fieldKey === '服务备注' && field.dataType === 8) {
+              // 为服务备注字段添加预定义的选项
+              const serviceOptions = [
+                '做饭', '做早餐', '做午餐', '做晚餐', '买菜', '熨烫衣服', '洗衣服', '打扫卫生',
+                '照顾老人', '照顾孩子', '辅助照顾老人\\孩子',
+                '科学合理的喂养指导，保障婴幼儿生长发育的营养需要',
+                '婴幼儿洗澡、洗头、清洗五官',
+                '婴幼儿换洗衣物、尿不湿等，保障婴幼儿卫生、干爽、预防尿布疹',
+                '为婴幼儿进行抚触、被动操、安抚哭闹、呵护入睡',
+                '随时对婴幼儿的身体状况（如摄入量、大小便、皮肤、体温等）进行观察，协助护理婴幼儿常见疾病。',
+                '婴幼儿房间的卫生、通风，奶瓶、餐具的清洁消毒',
+                '婴幼儿的早期教育和正确引导',
+                '婴幼儿的辅食制作及喂养',
+                '做儿童早餐', '做儿童中餐', '做儿童晚餐',
+                '手洗儿童衣服', '熨烫儿童衣服', '整理儿童玩具、书籍',
+                '接送孩子上学、课外辅导'
+              ];
+              
+              options = serviceOptions.map((option, index) => ({
+                label: option,
+                value: option,
+                selected: false,
+                index: index
+              }));
+              
+              console.log(`✅ 为服务备注字段添加了 ${serviceOptions.length} 个预定义选项`);
+            } else if (field.options && Array.isArray(field.options)) {
+              // 处理爱签API原有的options字段
+              options = field.options.map((opt: any) => ({
+                label: opt.label,
+                value: opt.label,
+                selected: opt.selected,
+                index: opt.index
+              }));
+            }
+            
             const formField = {
               key: fieldKey,
               label: fieldKey, // 使用原始字段名作为标签
               type: this.getFieldTypeByDataType(field.dataType),
               required: field.required === 1,
-              originalField: field // 保留原始字段信息
+              originalField: field, // 保留原始字段信息
+              options: options // 可能包含服务备注的预定义选项或爱签API的选项
             };
             
             formFields.push(formField);
-            console.log(`✅ 添加爱签原始字段: ${fieldKey} (类型: ${field.dataType})`);
+            console.log(`✅ 添加爱签原始字段: ${fieldKey} (类型: ${field.dataType}, options: ${options ? options.length : 0})`);
           } else {
             console.log(`⚠️  跳过重复字段: ${fieldKey}`);
           }
@@ -3415,6 +3708,164 @@ export class ESignService {
         description: '无法从爱签API获取模板字段，请刷新页面重试',
         fields: []
       }];
+    }
+  }
+
+  /**
+   * 预览合同（根据官方文档实现真正的预览功能）
+   * 需要传入签署方信息和签章策略来生成预览
+   */
+  async previewContract(contractNo: string, signers?: Array<{
+    account: string;
+    signStrategyList: Array<{
+      attachNo: number;
+      locationMode: number;
+      signPage: number;
+      signX: number;
+      signY: number;
+      signKey?: string;
+    }>;
+    isWrite?: number; // 个人用户是否使用手写章：1是，0否
+  }>): Promise<any> {
+    try {
+      console.log('🔍 预览合同:', contractNo);
+
+      // 如果没有提供签署方信息，使用默认的预览配置
+      if (!signers || signers.length === 0) {
+        signers = [
+          {
+            account: 'preview_user_1',
+            isWrite: 0,
+            signStrategyList: [
+              {
+                attachNo: 1,
+                locationMode: 2, // 坐标签章（预览只支持坐标模式）
+                signPage: 1,
+                signX: 0.35,
+                signY: 0.65
+              }
+            ]
+          },
+          {
+            account: 'preview_user_2', 
+            isWrite: 0,
+            signStrategyList: [
+              {
+                attachNo: 1,
+                locationMode: 2,
+                signPage: 1,
+                signX: 0.65,
+                signY: 0.75
+              }
+            ]
+          }
+        ];
+      }
+
+      // 构建预览请求数据
+      const previewData = signers.map(signer => ({
+        contractNo,
+        account: signer.account,
+        isWrite: signer.isWrite || 0,
+        signStrategyList: signer.signStrategyList
+      }));
+
+      console.log('📋 预览合同请求数据:', JSON.stringify(previewData, null, 2));
+
+      // 调用爱签预览合同API
+      const result = await this.callESignAPI('/contract/previewContract', previewData);
+      
+      console.log('✅ 预览合同响应:', result);
+
+      if (result.code === 100000) {
+        return {
+          success: true,
+          contractNo,
+          previewData: result.data,
+          message: '合同预览生成成功',
+          // 添加预览信息
+          previewInfo: {
+            canDownload: true,
+            hasPreviewImage: !!result.data,
+            availableFormats: [
+              { type: 1, name: 'PDF文件', recommended: true },
+              { type: 2, name: 'PNG图片+PDF' },
+              { type: 3, name: '分页PNG压缩+PDF' },
+              { type: 4, name: '合同单张图片' },
+              { type: 5, name: '所有分页图片' }
+            ]
+          }
+        };
+      } else {
+        throw new Error(result.msg || '预览合同失败');
+      }
+    } catch (error) {
+      console.error('❌ 预览合同失败:', error);
+      
+      // 如果预览失败，回退到获取合同状态
+      try {
+        console.log('🔄 预览失败，尝试获取合同状态作为备选方案');
+        const statusResult = await this.getContractStatus(contractNo);
+        
+        return {
+          success: true,
+          contractNo,
+          status: statusResult,
+          message: '无法生成预览图，但获取合同状态成功',
+          fallbackMode: true,
+          previewInfo: {
+            canDownload: true,
+            hasPreviewImage: false,
+            availableFormats: [
+              { type: 1, name: 'PDF文件', recommended: true },
+              { type: 2, name: 'PNG图片+PDF' },
+              { type: 3, name: '分页PNG压缩+PDF' },
+              { type: 4, name: '合同单张图片' },
+              { type: 5, name: '所有分页图片' }
+            ]
+          }
+        };
+      } catch (fallbackError) {
+        console.error('❌ 备选方案也失败:', fallbackError);
+        throw new Error(`预览合同失败: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * 撤销合同
+   * 根据官方文档实现撤销合同功能
+   */
+  async withdrawContract(contractNo: string, reason?: string): Promise<any> {
+    try {
+      console.log('🔍 撤销合同:', contractNo);
+
+      // 构建撤销合同请求数据
+      const withdrawData = {
+        contractNo,
+        reason: reason || '用户主动撤销合同' // 撤销原因，可选
+      };
+
+      console.log('📋 撤销合同请求数据:', JSON.stringify(withdrawData, null, 2));
+
+      // 调用爱签撤销合同API
+      const result = await this.callESignAPI('/contract/withdraw', withdrawData);
+      
+      console.log('✅ 撤销合同响应:', result);
+
+      if (result.code === 100000) {
+        return {
+          success: true,
+          contractNo,
+          message: '合同撤销成功',
+          data: result.data
+        };
+      } else {
+        throw new Error(result.msg || '撤销合同失败');
+      }
+    } catch (error) {
+      console.error('❌ 撤销合同失败:', error);
+      throw new Error(`撤销合同失败: ${error.message}`);
     }
   }
 }

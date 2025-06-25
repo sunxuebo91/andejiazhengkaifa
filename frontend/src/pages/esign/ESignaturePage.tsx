@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Card, 
   Button, 
@@ -15,12 +15,25 @@ import {
   Spin,
   AutoComplete,
   Tag,
-  App
+  App,
+  Checkbox,
+  InputNumber,
+  Radio
 } from 'antd';
 import { 
   ArrowLeftOutlined,
   UserOutlined,
-  SearchOutlined
+  SearchOutlined,
+  FileDoneOutlined,
+  DownloadOutlined,
+  SyncOutlined,
+  EyeOutlined,
+  SendOutlined,
+  StopOutlined,
+  DeleteOutlined,
+  CaretRightOutlined,
+  UndoOutlined,
+  InfoCircleOutlined
 } from '@ant-design/icons';
 import esignService from '../../services/esignService';
 import { customerService } from '../../services/customerService';
@@ -29,6 +42,37 @@ import { JobType, JOB_TYPE_MAP } from '../../types/resume';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
+const { Step } = Steps;
+
+// 服务项目选项
+const SERVICE_OPTIONS = [
+  '做饭',
+  '做早餐',
+  '做午餐', 
+  '做晚餐',
+  '买菜',
+  '熨烫衣服',
+  '洗衣服',
+  '打扫卫生',
+  '照顾老人',
+  '照顾孩子',
+  '辅助照顾老人\\孩子',
+  '科学合理的喂养指导，保障婴幼儿生长发育的营养需要',
+  '婴幼儿洗澡、洗头、清洗五官',
+  '婴幼儿换洗衣物、尿不湿等，保障婴幼儿卫生、干爽、预防尿布疹',
+  '为婴幼儿进行抚触、被动操、安抚哭闹、呵护入睡',
+  '随时对婴幼儿的身体状况（如摄入量、大小便、皮肤、体温等）进行观察，协助护理婴幼儿常见疾病。',
+  '婴幼儿房间的卫生、通风，奶瓶、餐具的清洁消毒',
+  '婴幼儿的早期教育和正确引导',
+  '婴幼儿的辅食制作及喂养',
+  '做儿童早餐',
+  '做儿童中餐',
+  '做儿童晚餐',
+  '手洗儿童衣服',
+  '熨烫儿童衣服',
+  '整理儿童玩具、书籍',
+  '接送孩子上学、课外辅导'
+];
 
 
 
@@ -122,6 +166,7 @@ const ESignatureStepPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [form] = Form.useForm();
+  const [step2Form] = Form.useForm();
   const [contractResult, setContractResult] = useState<any>(null);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   
@@ -146,6 +191,25 @@ const ESignatureStepPage: React.FC = () => {
   const [partyBSearchResults, setPartyBSearchResults] = useState<UserSearchResult[]>([]);
   const [partyASearchValue, setPartyASearchValue] = useState('');
   const [partyBSearchValue, setPartyBSearchValue] = useState('');
+
+  // 步骤5相关状态
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [contractStatus, setContractStatus] = useState<any>(null);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [downloadOptions, setDownloadOptions] = useState({
+    force: 1, // 默认强制下载
+    downloadFileType: 1 // 默认PDF文件
+  });
+
+  // 有效期选择相关状态
+  const [validityType, setValidityType] = useState('90'); // 默认90天
+  const [customDays, setCustomDays] = useState('');
+
+  // 🔥 最终修复：使用 ref 来存储服务备注的真实选择，绕过 antd form 的 state 覆盖问题
+  const serviceRemarksRef = useRef<string[]>([]);
 
   const steps = [
     {
@@ -356,10 +420,70 @@ const ESignatureStepPage: React.FC = () => {
     }
   };
 
+  // 自动计算合同有效期的函数
+  const calculateValidityTime = () => {
+    const formValues = step2Form.getFieldsValue();
+    
+    // 获取时间字段值
+    const startYear = formValues.templateParams?.['开始年'];
+    const startMonth = formValues.templateParams?.['开始月'];
+    const startDay = formValues.templateParams?.['开始日'];
+    const endYear = formValues.templateParams?.['结束年'];
+    const endMonth = formValues.templateParams?.['结束月'];
+    const endDay = formValues.templateParams?.['结束日'];
+    
+    // 如果所有时间字段都有值，则计算天数差
+    if (startYear && startMonth && startDay && endYear && endMonth && endDay) {
+      try {
+        // 创建开始和结束日期
+        const startDate = new Date(startYear, startMonth - 1, startDay);
+        const endDate = new Date(endYear, endMonth - 1, endDay);
+        
+        // 计算天数差
+        const timeDiff = endDate.getTime() - startDate.getTime();
+        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+        
+        // 确保天数为正数，至少为1天
+        const validityDays = Math.max(1, daysDiff + 1); // +1 因为包含开始和结束日期
+        
+        // 自动填充到有效期字段
+        step2Form.setFieldsValue({
+          validityTime: validityDays
+        });
+        
+        console.log('自动计算有效期:', {
+          startDate: `${startYear}-${startMonth}-${startDay}`,
+          endDate: `${endYear}-${endMonth}-${endDay}`,
+          validityDays
+        });
+      } catch (error) {
+        console.error('计算有效期时出错:', error);
+      }
+    }
+  };
+
   // 当进入步骤2时加载模板并设置默认值
   React.useEffect(() => {
     if (currentStep === 1) {
       loadTemplates();
+      
+      // 设置表单默认值
+      const defaultValues = {
+        validityTime: '90', // 默认90天，与下拉选择的默认值保持一致
+        signOrder: 1,
+        readSeconds: 5,
+        needAgree: 0,
+        autoExpand: 1,
+        refuseOn: 0,
+        autoContinue: 0,
+        viewFlg: 0,
+        enableDownloadButton: 1
+      };
+      
+      step2Form.setFieldsValue(defaultValues);
+      
+      // 设置有效期下拉选择的默认值
+      setValidityType('90');
       
       // 如果有步骤1的用户数据，这些数据会在getInitialValues中使用
       if (stepData.users?.batchRequest) {
@@ -367,6 +491,34 @@ const ESignatureStepPage: React.FC = () => {
       }
     }
   }, [currentStep, stepData.users]);
+
+  // 监听时间字段变化，自动计算有效期
+  React.useEffect(() => {
+    if (currentStep === 1) {
+      // 设置默认时间值并计算有效期
+      const currentDate = new Date();
+      const nextYearDate = new Date(currentDate.getFullYear() + 1, currentDate.getMonth(), currentDate.getDate());
+      
+      const defaultTimeValues = {
+        templateParams: {
+          '开始年': currentDate.getFullYear(),
+          '开始月': currentDate.getMonth() + 1,
+          '开始日': currentDate.getDate(),
+          '结束年': nextYearDate.getFullYear(),
+          '结束月': nextYearDate.getMonth() + 1,
+          '结束日': nextYearDate.getDate()
+        }
+      };
+      
+      // 设置默认时间值
+      step2Form.setFieldsValue(defaultTimeValues);
+      
+      // 计算默认有效期
+      setTimeout(() => {
+        calculateValidityTime();
+      }, 100); // 延迟一点确保表单值已设置
+    }
+  }, [currentStep]);
 
   // 步骤2提交处理
   const handleStep2Submit = async (values: any) => {
@@ -377,27 +529,81 @@ const ESignatureStepPage: React.FC = () => {
       // 生成合同编号
       const contractNo = `CONTRACT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // 填充甲乙双方信息到模板参数
+      // 填充甲乙双方信息到模板参数 - 只保留模板真正需要的字段
       const enhancedTemplateParams = {
         ...values.templateParams,
-        // 如果模板参数中没有甲乙方信息，从步骤1数据中补充
-        // 甲方（客户）信息 - 使用模板要求的字段名
+        // 只映射模板控件真正需要的字段，避免重复
+        // 甲方（客户）信息 - 使用模板控件要求的字段名
         '客户姓名': values.templateParams?.['客户姓名'] || stepData.users?.batchRequest?.partyAName,
         '客户电话': values.templateParams?.['客户电话'] || values.templateParams?.['甲方电话'] || values.templateParams?.['甲方联系电话'] || stepData.users?.batchRequest?.partyAMobile,
         '客户身份证号': values.templateParams?.['客户身份证号'] || values.templateParams?.['甲方身份证'] || values.templateParams?.['甲方身份证号'] || stepData.users?.batchRequest?.partyAIdCard,
-        // 乙方（阿姨）信息
-        '乙方姓名': values.templateParams?.['乙方姓名'] || values.templateParams?.['阿姨姓名'] || stepData.users?.batchRequest?.partyBName,
-        '乙方电话': values.templateParams?.['乙方电话'] || values.templateParams?.['阿姨电话'] || stepData.users?.batchRequest?.partyBMobile,
-        '乙方身份证': values.templateParams?.['乙方身份证'] || values.templateParams?.['阿姨身份证号'] || stepData.users?.batchRequest?.partyBIdCard,
+        // 乙方（阿姨）信息 - 使用模板控件要求的字段名
+        '阿姨姓名': values.templateParams?.['阿姨姓名'] || values.templateParams?.['乙方姓名'] || stepData.users?.batchRequest?.partyBName,
+        '阿姨电话': values.templateParams?.['阿姨电话'] || values.templateParams?.['乙方电话'] || stepData.users?.batchRequest?.partyBMobile,
+        '阿姨身份证号': values.templateParams?.['阿姨身份证号'] || values.templateParams?.['乙方身份证'] || stepData.users?.batchRequest?.partyBIdCard,
         // 服务费相关 - 自动生成大写金额
         '大写服务费': values.templateParams?.['大写服务费'] || convertToChineseAmount(values.templateParams?.['服务费'] || '0'),
         '匹配费大写': values.templateParams?.['匹配费大写'] || convertToChineseAmount(values.templateParams?.['匹配费'] || '0'),
         '阿姨工资大写': values.templateParams?.['阿姨工资大写'] || convertToChineseAmount(values.templateParams?.['阿姨工资'] || '0'),
+        // 时间相关字段 - 合并分别的年月日为完整格式
+        '服务开始时间': `${values.templateParams?.['开始年'] || new Date().getFullYear()}年${values.templateParams?.['开始月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['开始日'] || new Date().getDate()}日`,
+        '服务结束时间': `${values.templateParams?.['结束年'] || (new Date().getFullYear() + 1)}年${values.templateParams?.['结束月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['结束日'] || new Date().getDate()}日`,
+        '合同开始时间': `${values.templateParams?.['开始年'] || new Date().getFullYear()}年${values.templateParams?.['开始月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['开始日'] || new Date().getDate()}日`,
+        '合同结束时间': `${values.templateParams?.['结束年'] || (new Date().getFullYear() + 1)}年${values.templateParams?.['结束月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['结束日'] || new Date().getDate()}日`,
+        '服务期限': `${values.templateParams?.['开始年'] || new Date().getFullYear()}年${values.templateParams?.['开始月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['开始日'] || new Date().getDate()}日至${values.templateParams?.['结束年'] || (new Date().getFullYear() + 1)}年${values.templateParams?.['结束月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['结束日'] || new Date().getDate()}日`,
+        // 保留原有的分别字段，方便模板按需使用
+        '开始年': values.templateParams?.['开始年'] || new Date().getFullYear(),
+        '开始月': values.templateParams?.['开始月'] || (new Date().getMonth() + 1),
+        '开始日': values.templateParams?.['开始日'] || new Date().getDate(),
+        '结束年': values.templateParams?.['结束年'] || (new Date().getFullYear() + 1),
+        '结束月': values.templateParams?.['结束月'] || (new Date().getMonth() + 1),
+        '结束日': values.templateParams?.['结束日'] || new Date().getDate(),
       };
+
+      // 🔥 最终修复：在提交时，直接使用 ref 中存储的完整服务选项，覆盖掉可能已被破坏的表单值
+      if (serviceRemarksRef.current && serviceRemarksRef.current.length > 0) {
+        const correctServiceRemarks = serviceRemarksRef.current.join('；');
+        enhancedTemplateParams['服务备注'] = correctServiceRemarks;
+        console.log(`🔥🔥🔥 前端最终修复：使用 ref 覆盖服务备注，正确值为: "${correctServiceRemarks}"`);
+      }
+
+      // 🔥 特殊处理服务备注字段 - 确保多选项目正确传递
+      console.log('🔥 前端修复：检查服务备注字段处理');
+      Object.keys(enhancedTemplateParams).forEach(key => {
+        if (key.includes('服务备注') || key.includes('服务需求') || key.includes('服务内容') || key.includes('服务项目')) {
+          const originalValue = enhancedTemplateParams[key];
+          console.log(`🔥 服务字段"${key}"原始值:`, originalValue, `(类型: ${typeof originalValue})`);
+          
+          // 如果是数组，转换为分号分隔的字符串
+          if (Array.isArray(originalValue)) {
+            const convertedValue = originalValue.join('；');
+            enhancedTemplateParams[key] = convertedValue;
+            console.log(`🔥 服务字段"${key}"数组转换: [${originalValue.join(', ')}] -> "${convertedValue}"`);
+          }
+          // 如果是字符串且包含分号，保持不变
+          else if (typeof originalValue === 'string' && originalValue.includes('；')) {
+            console.log(`🔥 服务字段"${key}"已是分号分隔字符串: "${originalValue}"`);
+          }
+          // 其他情况保持原值
+          else {
+            console.log(`🔥 服务字段"${key}"保持原值: "${originalValue}"`);
+          }
+        }
+      });
+      
+      // 移除可能导致重复显示的字段（这些字段不是模板控件需要的）
+      delete enhancedTemplateParams['甲方姓名'];
+      delete enhancedTemplateParams['甲方联系电话'];
+      delete enhancedTemplateParams['甲方身份证号'];
+      delete enhancedTemplateParams['甲方'];
+      delete enhancedTemplateParams['乙方姓名'];
+      delete enhancedTemplateParams['乙方电话'];
+      delete enhancedTemplateParams['乙方身份证'];
+      delete enhancedTemplateParams['乙方'];
       
       const contractRequest = {
         contractNo: contractNo,
-        contractName: values.contractName,
+        contractName: '安得家政服务合同', // 固定合同名称
         templateNo: values.templateNo,
         templateParams: enhancedTemplateParams,
         validityTime: parseInt(values.validityTime) || 30,
@@ -423,7 +629,7 @@ const ESignatureStepPage: React.FC = () => {
           ...prev, 
           contract: {
             contractNo: contractNo,
-            contractName: values.contractName,
+            contractName: '安得家政服务合同', // 固定合同名称
             templateNo: values.templateNo,
             templateParams: enhancedTemplateParams,
             success: true, // 添加成功标记
@@ -439,7 +645,7 @@ const ESignatureStepPage: React.FC = () => {
           ...prev, 
           contract: {
             contractNo: contractNo,
-            contractName: values.contractName,
+            contractName: '安得家政服务合同', // 固定合同名称
             templateNo: values.templateNo,
             templateParams: enhancedTemplateParams,
             success: false, // 添加失败标记
@@ -717,18 +923,12 @@ const ESignatureStepPage: React.FC = () => {
         enableDownloadButton: 1
       };
 
-      // 如果有步骤1的数据，生成默认合同名称：甲方名称+身份证后四位+的家政服务合同
-      if (stepData.users?.batchRequest) {
-        const { partyAName, partyAIdCard } = stepData.users.batchRequest;
-        const idCardLast4 = partyAIdCard ? partyAIdCard.slice(-4) : '';
-        baseValues.contractName = `${partyAName}${idCardLast4}的家政服务合同`;
-      }
-
       return baseValues;
     };
 
     return (
       <Form
+        form={step2Form}
         layout="vertical"
         onFinish={handleStep2Submit}
         style={{ maxWidth: 800, margin: '0 auto' }}
@@ -745,25 +945,21 @@ const ESignatureStepPage: React.FC = () => {
         {/* 基本信息 */}
         <Card title="合同基本信息" style={{ marginBottom: 24 }}>
           <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="合同名称"
-                name="contractName"
-                rules={[{ required: true, message: '请输入合同名称' }]}
-              >
-                <Input placeholder="请输入合同名称" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
+            <Col span={24}>
               <Form.Item
                 label="有效期（天）"
                 name="validityTime"
                 rules={[{ required: true, message: '请输入合同有效期' }]}
               >
-                <Input type="number" placeholder="合同有效期（天数）" />
+                <Input type="number" placeholder="根据合同时间自动计算" />
               </Form.Item>
             </Col>
           </Row>
+          <div style={{ marginBottom: 16, padding: '12px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '6px' }}>
+            <Text type="success">
+              📋 合同名称将自动设置为：<strong>安得家政服务合同</strong>
+            </Text>
+          </div>
         </Card>
 
         {/* 模板选择 */}
@@ -801,7 +997,7 @@ const ESignatureStepPage: React.FC = () => {
                   partyA: { title: '甲方信息（客户）', icon: '👤', fields: [] as any[] },
                   partyB: { title: '乙方信息（阿姨）', icon: '👩‍💼', fields: [] as any[] },
                   service: { title: '服务信息', icon: '🏠', fields: [] as any[] },
-                  time: { title: '服务时间', icon: '📅', fields: [] as any[] },
+                  time: { title: '合同开始与结束时间', icon: '📅', fields: [] as any[] },
                   fee: { title: '费用信息', icon: '💰', fields: [] as any[] },
                   contract: { title: '合同信息', icon: '📋', fields: [] as any[] },
                   other: { title: '其他信息', icon: '📝', fields: [] as any[] }
@@ -854,13 +1050,166 @@ const ESignatureStepPage: React.FC = () => {
                   if (fieldKey.includes('服务类型') || fieldLabel.includes('服务类型') || 
                       fieldKey.includes('工种') || fieldLabel.includes('工种')) {
                     return (
-                      <Select placeholder="请选择服务类型">
+                      <Select 
+                        placeholder="请选择服务类型"
+                      >
                         {Object.values(JobType).map(jobType => (
                           <Option key={jobType} value={JOB_TYPE_MAP[jobType]}>
                             {JOB_TYPE_MAP[jobType]}
                           </Option>
                         ))}
                       </Select>
+                    );
+                  }
+
+                  // 特殊处理：如果是服务备注字段，使用多选框
+                  if (fieldKey.includes('服务备注') || fieldKey.includes('服务内容') || fieldKey.includes('服务项目') || 
+                      (field.options && field.options.length > 0)) {
+                    return (
+                      <Form.Item shouldUpdate={(prevValues, currentValues) => {
+                        return prevValues[field.key] !== currentValues[field.key];
+                      }}>
+                        {() => {
+                          // 获取当前表单值并转换为数组
+                          const currentValue = step2Form.getFieldValue(field.key) || '';
+                          // 获取可用选项，优先使用模板字段自带的options，否则使用默认的SERVICE_OPTIONS
+                          const availableOptions = field.options && field.options.length > 0 
+                            ? field.options.map((opt: any) => opt.label) 
+                            : SERVICE_OPTIONS;
+                          const currentSelectedValues = currentValue ? 
+                            currentValue.split('；').filter((item: string) => item.trim() && availableOptions.includes(item.trim())) : 
+                            [];
+                          
+                          return (
+                            <div>
+                              <Checkbox.Group
+                                value={currentSelectedValues}
+                                style={{ 
+                                  width: '100%',
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                                  gap: '8px 16px',
+                                  marginBottom: '12px'
+                                }}
+                                onChange={(checkedValues) => {
+                                  // 🔥 最终修复：将选中的值实时保存到 ref 中
+                                  serviceRemarksRef.current = checkedValues;
+                                  console.log('🔥 ref updated:', serviceRemarksRef.current);
+
+                                  console.log('服务备注选择变化:', checkedValues); // 调试日志
+                                  // 获取当前表单值，保留非服务选项的内容（如用户手动输入的补充内容）
+                                  const currentFormValue = step2Form.getFieldValue(field.key) || '';
+                                  const parts = currentFormValue.split('；');
+                                  const nonServiceParts = parts.filter((item: string) => 
+                                    item.trim() && !availableOptions.includes(item.trim())
+                                  );
+                                  
+                                  // 合并选中的服务项目和已有的补充内容
+                                  let finalValue = checkedValues.join('；');
+                                  if (nonServiceParts.length > 0) {
+                                    finalValue += (finalValue ? '；' : '') + nonServiceParts.join('；');
+                                  }
+                                  
+                                  step2Form.setFieldValue(field.key, finalValue);
+                                  console.log('服务备注最终值:', finalValue); // 调试日志
+                                }}
+                              >
+                                {availableOptions.map((option: string, index: number) => (
+                                  <Checkbox 
+                                    key={`service-${index}-${option}`} 
+                                    value={option} 
+                                    style={{ marginBottom: '4px' }}
+                                  >
+                                    {option}
+                                  </Checkbox>
+                                ))}
+                              </Checkbox.Group>
+                              <Input.TextArea 
+                                rows={3} 
+                                placeholder="您也可以在此处补充其他服务内容或详细说明"
+                                style={{ marginTop: '8px' }}
+                                onChange={(e) => {
+                                  // 处理手动输入的补充内容 - 需要与已选择的服务项目合并
+                                  const additionalContent = e.target.value;
+                                  const currentFormValue = step2Form.getFieldValue(field.key) || '';
+                                  
+                                  // 如果当前表单值包含分号，说明有多选项目，需要合并
+                                  if (currentFormValue.includes('；')) {
+                                    // 分离已选择的项目和补充内容
+                                    const parts = currentFormValue.split('；');
+                                    const selectedServices = parts.filter((part: string) => availableOptions.includes(part.trim()));
+                                    
+                                    // 合并选择的服务和补充内容
+                                    let finalValue = selectedServices.join('；');
+                                    if (additionalContent.trim()) {
+                                      finalValue += (finalValue ? '；' : '') + additionalContent.trim();
+                                    }
+                                    step2Form.setFieldValue(field.key, finalValue);
+                                  } else {
+                                    // 如果没有多选项目，直接设置补充内容
+                                    step2Form.setFieldValue(field.key, additionalContent);
+                                  }
+                                }}
+                              />
+                            </div>
+                          );
+                        }}
+                      </Form.Item>
+                    );
+                  }
+
+                  // 匹配费字段已在Form.Item层面特殊处理，这里跳过
+                  if (fieldKey.includes('匹配费') && !fieldKey.includes('大写')) {
+                    return null; // 这不会被显示，因为已在Form.Item层面处理
+                  }
+
+                  // 特殊处理：有效期字段使用下拉选择
+                  if (fieldKey.includes('有效期') || fieldLabel.includes('有效期')) {
+                    const handleValidityChange = (value: string) => {
+                      setValidityType(value);
+                      if (value !== 'custom') {
+                        // 预设选项，直接设置天数
+                        step2Form.setFieldValue(field.key, value);
+                      } else {
+                        // 自定义选项，清空当前值，等待用户输入
+                        step2Form.setFieldValue(field.key, customDays || '');
+                      }
+                    };
+
+                    const handleCustomDaysChange = (e: any) => {
+                      const days = e.target.value;
+                      setCustomDays(days);
+                      if (validityType === 'custom') {
+                        step2Form.setFieldValue(field.key, days);
+                      }
+                    };
+
+                    return (
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <Select
+                          value={validityType}
+                          onChange={handleValidityChange}
+                          style={{ width: '150px' }}
+                          placeholder="选择有效期"
+                        >
+                          <Option value="90">90天</Option>
+                          <Option value="180">180天</Option>
+                          <Option value="365">365天</Option>
+                          <Option value="custom">其他（自定义）</Option>
+                        </Select>
+                        {validityType === 'custom' && (
+                          <Input
+                            type="number"
+                            value={customDays}
+                            onChange={handleCustomDaysChange}
+                            placeholder="请输入天数"
+                            style={{ width: '120px' }}
+                            min={1}
+                            max={3650}
+                            suffix="天"
+                          />
+                        )}
+                      </div>
                     );
                   }
 
@@ -966,6 +1315,11 @@ const ESignatureStepPage: React.FC = () => {
                     return new Date().getDate();
                   }
                   
+                  // 有效期字段默认值
+                  if (fieldKey.includes('有效期') || fieldKey.includes('validitytime')) {
+                    return '90'; // 默认90天，与下拉选择的默认值保持一致
+                  }
+                  
                   // 根据字段类型和名称提供合理默认值
                   if (field.type === 'date') {
                     return new Date().toISOString().split('T')[0];
@@ -974,6 +1328,10 @@ const ESignatureStepPage: React.FC = () => {
                     return true;
                   }
                   if (field.type === 'number') {
+                    // 匹配费字段设置默认值
+                    if (fieldKey.includes('匹配费') && !fieldKey.includes('大写')) {
+                      return 1000; // 默认1000元
+                    }
                     if (fieldKey.includes('费') || fieldKey.includes('金额') || fieldKey.includes('工资')) {
                       return '';
                     }
@@ -986,11 +1344,194 @@ const ESignatureStepPage: React.FC = () => {
                   return undefined;
                 };
 
-
-
                 // 渲染字段组
                 const renderFieldGroup = (groupKey: string, group: any) => {
                   if (group.fields.length === 0) return null;
+                  
+                  // 特殊处理时间字段组 - 改为年月日6列展示
+                  if (groupKey === 'time') {
+                    // 生成年份选项（当前年 - 1 到 当前年 + 10）
+                    const currentYear = new Date().getFullYear();
+                    const yearOptions = Array.from({ length: 12 }, (_, i) => currentYear - 1 + i);
+                    
+                    // 生成月份选项
+                    const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
+                    
+                    // 生成日期选项
+                    const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
+                    
+                    // 找到时间相关字段
+                    const startYearField = group.fields.find((f: any) => f.key === '开始年');
+                    const startMonthField = group.fields.find((f: any) => f.key === '开始月');
+                    const startDayField = group.fields.find((f: any) => f.key === '开始日');
+                    const endYearField = group.fields.find((f: any) => f.key === '结束年');
+                    const endMonthField = group.fields.find((f: any) => f.key === '结束月');
+                    const endDayField = group.fields.find((f: any) => f.key === '结束日');
+                    
+                    // 其他时间字段
+                    const otherTimeFields = group.fields.filter((f: any) => 
+                      !['开始年', '开始月', '开始日', '结束年', '结束月', '结束日'].includes(f.key)
+                    );
+                    
+                    return (
+                      <Card 
+                        key={groupKey}
+                        title={
+                          <span>
+                            <span style={{ marginRight: 8 }}>{group.icon}</span>
+                            {group.title}
+                          </span>
+                        }
+                        size="small" 
+                        style={{ marginBottom: 16 }}
+                      >
+                        {/* 合同开始时间 */}
+                        <div style={{ marginBottom: 16 }}>
+                          <h4 style={{ marginBottom: 12, color: '#1890ff' }}>合同开始时间</h4>
+                          <Row gutter={8}>
+                            <Col span={4}>
+                              {startYearField && (
+                                <Form.Item
+                                  label="开始年"
+                                  name={['templateParams', startYearField.key]}
+                                  rules={startYearField.required ? [{ required: true, message: '请选择年份' }] : []}
+                                  initialValue={getDefaultValue(startYearField)}
+                                >
+                                  <Select placeholder="年" onChange={calculateValidityTime}>
+                                    {yearOptions.map(year => (
+                                      <Option key={year} value={year}>{year}年</Option>
+                                    ))}
+                                  </Select>
+                                </Form.Item>
+                              )}
+                            </Col>
+                            <Col span={4}>
+                              {startMonthField && (
+                                <Form.Item
+                                  label="开始月"
+                                  name={['templateParams', startMonthField.key]}
+                                  rules={startMonthField.required ? [{ required: true, message: '请选择月份' }] : []}
+                                  initialValue={getDefaultValue(startMonthField)}
+                                >
+                                  <Select placeholder="月" onChange={calculateValidityTime}>
+                                    {monthOptions.map(month => (
+                                      <Option key={month} value={month}>{month}月</Option>
+                                    ))}
+                                  </Select>
+                                </Form.Item>
+                              )}
+                            </Col>
+                            <Col span={4}>
+                              {startDayField && (
+                                <Form.Item
+                                  label="开始日"
+                                  name={['templateParams', startDayField.key]}
+                                  rules={startDayField.required ? [{ required: true, message: '请选择日期' }] : []}
+                                  initialValue={getDefaultValue(startDayField)}
+                                >
+                                  <Select placeholder="日" onChange={calculateValidityTime}>
+                                    {dayOptions.map(day => (
+                                      <Option key={day} value={day}>{day}日</Option>
+                                    ))}
+                                  </Select>
+                                </Form.Item>
+                              )}
+                            </Col>
+                            <Col span={12}>
+                              {/* 空白区域 */}
+                            </Col>
+                          </Row>
+                        </div>
+                        
+                        {/* 合同结束时间 */}
+                        <div>
+                          <h4 style={{ marginBottom: 12, color: '#52c41a' }}>合同结束时间</h4>
+                          <Row gutter={8}>
+                            <Col span={4}>
+                              {endYearField && (
+                                <Form.Item
+                                  label="结束年"
+                                  name={['templateParams', endYearField.key]}
+                                  rules={endYearField.required ? [{ required: true, message: '请选择年份' }] : []}
+                                  initialValue={getDefaultValue(endYearField)}
+                                >
+                                  <Select placeholder="年" onChange={calculateValidityTime}>
+                                    {yearOptions.map(year => (
+                                      <Option key={year} value={year}>{year}年</Option>
+                                    ))}
+                                  </Select>
+                                </Form.Item>
+                              )}
+                            </Col>
+                            <Col span={4}>
+                              {endMonthField && (
+                                <Form.Item
+                                  label="结束月"
+                                  name={['templateParams', endMonthField.key]}
+                                  rules={endMonthField.required ? [{ required: true, message: '请选择月份' }] : []}
+                                  initialValue={getDefaultValue(endMonthField)}
+                                >
+                                  <Select placeholder="月" onChange={calculateValidityTime}>
+                                    {monthOptions.map(month => (
+                                      <Option key={month} value={month}>{month}月</Option>
+                                    ))}
+                                  </Select>
+                                </Form.Item>
+                              )}
+                            </Col>
+                            <Col span={4}>
+                              {endDayField && (
+                                <Form.Item
+                                  label="结束日"
+                                  name={['templateParams', endDayField.key]}
+                                  rules={endDayField.required ? [{ required: true, message: '请选择日期' }] : []}
+                                  initialValue={getDefaultValue(endDayField)}
+                                >
+                                  <Select placeholder="日" onChange={calculateValidityTime}>
+                                    {dayOptions.map(day => (
+                                      <Option key={day} value={day}>{day}日</Option>
+                                    ))}
+                                  </Select>
+                                </Form.Item>
+                              )}
+                            </Col>
+                            <Col span={12}>
+                              {/* 空白区域 */}
+                            </Col>
+                          </Row>
+                        </div>
+                        
+                        {/* 其他时间相关字段 */}
+                        {otherTimeFields.length > 0 && (
+                          <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
+                            <h4 style={{ marginBottom: 12, color: '#666' }}>其他时间信息</h4>
+                            {Array.from({ length: Math.ceil(otherTimeFields.length / 2) }).map((_, rowIndex) => {
+                              const startIndex = rowIndex * 2;
+                              const rowFields = otherTimeFields.slice(startIndex, startIndex + 2);
+                              
+                              return (
+                                <Row gutter={16} key={`time-row-${rowIndex}`}>
+                                  {rowFields.map((field: any, fieldIndex: number) => (
+                                    <Col span={12} key={`${field.key}-${rowIndex}-${fieldIndex}`}>
+                                      <Form.Item
+                                        label={field.label}
+                                        name={['templateParams', field.key]}
+                                        rules={field.required ? [{ required: true, message: `请输入${field.label}` }] : []}
+                                        initialValue={getDefaultValue(field)}
+                                      >
+                                        {renderFormControl(field)}
+                                      </Form.Item>
+                                    </Col>
+                                  ))}
+                                  {rowFields.length === 1 && <Col span={12} />}
+                                </Row>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  }
                   
                   // 将字段按类型分组：textarea单独占一行，其他字段两列展示
                   const textareaFields = group.fields.filter((f: any) => f.type === 'textarea');
@@ -1017,18 +1558,54 @@ const ESignatureStepPage: React.FC = () => {
                             
                             return (
                               <Row gutter={16} key={`${groupKey}-row-${rowIndex}`}>
-                                {rowFields.map((field: any, fieldIndex: number) => (
-                                  <Col span={12} key={`${field.key}-${rowIndex}-${fieldIndex}`}>
-                                    <Form.Item
-                                      label={field.label}
-                                      name={['templateParams', field.key]}
-                                      rules={field.required ? [{ required: true, message: `请输入${field.label}` }] : []}
-                                      initialValue={getDefaultValue(field)}
-                                    >
-                                      {renderFormControl(field)}
-                                    </Form.Item>
-                                  </Col>
-                                ))}
+                                {rowFields.map((field: any, fieldIndex: number) => {
+                                  const fieldKey = field.key.toLowerCase();
+                                  
+                                                                     // 特殊处理：匹配费字段使用简单下拉选择
+                                   if (fieldKey.includes('匹配费') && !fieldKey.includes('大写')) {
+                                     return (
+                                       <Col span={12} key={`${field.key}-${rowIndex}-${fieldIndex}`}>
+                                         <Form.Item
+                                           label={field.label}
+                                           name={['templateParams', field.key]}
+                                           rules={field.required ? [{ required: true, message: `请输入${field.label}` }] : []}
+                                           initialValue={getDefaultValue(field)}
+                                         >
+                                           <Select 
+                                             placeholder="请选择匹配费"
+                                             onChange={(value) => {
+                                               console.log('💰 匹配费选择:', value);
+                                               // 自动更新匹配费大写字段
+                                               const chineseAmount = convertToChineseAmount(value);
+                                               step2Form.setFieldsValue({
+                                                 templateParams: {
+                                                   '匹配费大写': chineseAmount
+                                                 }
+                                               });
+                                             }}
+                                           >
+                                             <Option value={1000}>1000元</Option>
+                                             <Option value={1500}>1500元</Option>
+                                           </Select>
+                                         </Form.Item>
+                                       </Col>
+                                     );
+                                   }
+                                  
+                                  // 普通字段处理
+                                  return (
+                                    <Col span={12} key={`${field.key}-${rowIndex}-${fieldIndex}`}>
+                                      <Form.Item
+                                        label={field.label}
+                                        name={['templateParams', field.key]}
+                                        rules={field.required ? [{ required: true, message: `请输入${field.label}` }] : []}
+                                        initialValue={getDefaultValue(field)}
+                                      >
+                                        {renderFormControl(field)}
+                                      </Form.Item>
+                                    </Col>
+                                  );
+                                })}
                                 {/* 如果只有一个字段，补齐空白列 */}
                                 {rowFields.length === 1 && <Col span={12} />}
                               </Row>
@@ -1173,36 +1750,26 @@ const ESignatureStepPage: React.FC = () => {
         console.log('用户数据:', stepData.users);
         console.log('合同数据:', stepData.contract);
 
-        // 构建签署方数据
+        // 构建签署方数据（使用模板坐标签章）
         const signersData = [
           {
-            contractNo: stepData.contract.contractNo,
             account: stepData.users.partyA.request.mobile, // 甲方账号（手机号）
             name: stepData.users.partyA.request.name,
             mobile: stepData.users.partyA.request.mobile,
             signType: 'manual' as const, // 有感知签约
-            validateType: 'sms' as const, // 短信验证码
-            signPosition: {
-              page: 1,
-              x: 0.25, // 甲方签名位置（左侧）
-              y: 0.55
-            }
+            validateType: 'sms' as const // 短信验证码
+            // 移除signPosition，让后端使用模板坐标签章策略
           },
           {
-            contractNo: stepData.contract.contractNo,
             account: stepData.users.partyB.request.mobile, // 乙方账号（手机号）
             name: stepData.users.partyB.request.name,
             mobile: stepData.users.partyB.request.mobile,
             signType: 'manual' as const, // 有感知签约
-            validateType: 'sms' as const, // 短信验证码
-            signPosition: {
-              page: 1,
-              x: 0.75, // 乙方签名位置（右侧）
-              y: 0.55
-            }
+            validateType: 'sms' as const // 短信验证码
+            // 移除signPosition，让后端使用模板坐标签章策略
           }
         ];
-
+        
         console.log('签署方数据构建完成:', signersData);
 
         // 调用简化版添加签署方API
@@ -1256,7 +1823,7 @@ const ESignatureStepPage: React.FC = () => {
                   <p><strong>姓名：</strong>{stepData.users.partyA?.request?.name}</p>
                   <p><strong>手机：</strong>{stepData.users.partyA?.request?.mobile}</p>
                   <p><strong>签署方式：</strong>有感知签约（短信验证码）</p>
-                  <p><strong>签名位置：</strong>第1页左侧</p>
+                  <p><strong>签名位置：</strong>模板预设位置（甲方签名区）</p>
                 </Card>
               </Col>
               <Col span={12}>
@@ -1264,14 +1831,14 @@ const ESignatureStepPage: React.FC = () => {
                   <p><strong>姓名：</strong>{stepData.users.partyB?.request?.name}</p>
                   <p><strong>手机：</strong>{stepData.users.partyB?.request?.mobile}</p>
                   <p><strong>签署方式：</strong>有感知签约（短信验证码）</p>
-                  <p><strong>签名位置：</strong>第1页右侧</p>
+                  <p><strong>签名位置：</strong>模板预设位置（乙方签名区）</p>
                 </Card>
               </Col>
             </Row>
 
             <Card title="合同信息" size="small" style={{ marginTop: 16, background: '#f0f9ff' }}>
               <p><strong>合同编号：</strong>{stepData.contract.contractNo}</p>
-              <p><strong>合同名称：</strong>{stepData.contract.contractName || '家政服务合同'}</p>
+              <p><strong>合同名称：</strong>{stepData.contract.contractName || '安得家政三方服务合同'}</p>
               <p><strong>模板编号：</strong>{stepData.contract.templateNo}</p>
               <p><strong>签署顺序：</strong>并行签署（甲乙双方可同时签署）</p>
             </Card>
@@ -1397,32 +1964,34 @@ const ESignatureStepPage: React.FC = () => {
 
   // 步骤5：下载合同
   const renderStep5 = () => {
-    const [contractStatus, setContractStatus] = useState<any>(null);
-    const [statusLoading, setStatusLoading] = useState(false);
-    const [downloadLoading, setDownloadLoading] = useState(false);
-
-    const checkContractStatus = async () => {
+    const previewContract = async () => {
       if (!stepData.contract?.contractNo) {
         message.error('合同编号不存在');
         return;
       }
 
-      setStatusLoading(true);
+      setPreviewLoading(true);
       try {
-        const result = await esignService.getContractStatus(stepData.contract.contractNo);
-        console.log('合同状态查询结果:', result);
-        setContractStatus(result.data);
+        const result = await esignService.previewContract(stepData.contract.contractNo);
+        console.log('合同预览结果:', result);
         
         if (result.success) {
-          message.success('合同状态查询成功');
+          setPreviewData(result);
+          if (result.fallbackMode) {
+            message.warning('无法生成预览图，已获取合同状态信息');
+          } else if (result.previewData) {
+            message.success('合同预览生成成功');
+          } else {
+            message.success('合同预览信息获取成功');
+          }
         } else {
-          message.warning(result.message || '合同状态查询失败');
+          message.error(result.message || '获取合同预览信息失败');
         }
       } catch (error) {
-        console.error('查询合同状态失败:', error);
-        message.error('查询合同状态失败');
+        console.error('预览合同失败:', error);
+        message.error('预览合同失败');
       } finally {
-        setStatusLoading(false);
+        setPreviewLoading(false);
       }
     };
 
@@ -1434,13 +2003,34 @@ const ESignatureStepPage: React.FC = () => {
 
       setDownloadLoading(true);
       try {
-        const result = await esignService.downloadSignedContract(stepData.contract.contractNo);
+        const result = await esignService.downloadSignedContract(
+          stepData.contract.contractNo, 
+          downloadOptions
+        );
         console.log('下载合同结果:', result);
         
-        if (result.success && result.data?.downloadUrl) {
-          // 打开下载链接
-          window.open(result.data.downloadUrl, '_blank');
-          message.success('合同下载链接已打开');
+        if (result.success && result.data) {
+          const downloadData = result.data;
+          
+          // 如果返回的是base64数据，直接下载文件
+          if (downloadData.data && downloadData.downloadInfo?.isBase64) {
+            const fileName = downloadData.downloadInfo.fileName || `${stepData.contract.contractNo}.pdf`;
+            esignService.downloadBase64File(
+              downloadData.data, 
+              fileName, 
+              downloadData.downloadInfo.fileType
+            );
+            message.success(`合同文件下载成功：${fileName}`);
+          }
+          // 如果返回的是下载URL，打开链接
+          else if (downloadData.downloadUrl) {
+            window.open(downloadData.downloadUrl, '_blank');
+            message.success('合同下载链接已打开');
+          }
+          // 其他情况显示返回的信息
+          else {
+            message.info('下载请求已提交，请查看响应信息');
+          }
         } else {
           message.error(result.message || '合同下载失败');
         }
@@ -1452,11 +2042,168 @@ const ESignatureStepPage: React.FC = () => {
       }
     };
 
+    // 获取下载文件类型选项
+    const getDownloadFileTypeOptions = () => [
+      { label: 'PDF文件', value: 1, description: '标准PDF格式合同文件' },
+      { label: 'PNG图片+PDF', value: 2, description: '多个单张PNG文件，含PDF文件' },
+      { label: 'PNG分页压缩+PDF', value: 3, description: '分页PNG压缩文件，含PDF文件' }, 
+      { label: '合同单张图片', value: 4, description: '合同单张图片，不含PDF文件' },
+      { label: '所有分页图片', value: 5, description: '所有分页图片，不含PDF文件' }
+    ];
+
+    // 查询合同状态的函数
+    const checkContractStatus = async () => {
+      if (!stepData.contract?.contractNo) {
+        message.error('合同编号不存在');
+        return;
+      }
+
+      setStatusLoading(true);
+      try {
+        const result = await esignService.getContractStatus(stepData.contract.contractNo);
+        console.log('合同状态查询结果:', result);
+        
+        if (result.success && result.data) {
+          setContractStatus(result.data);
+          
+          // 根据合同状态显示不同的消息
+          const statusMap = {
+            0: { text: '等待签约', type: 'warning' },
+            1: { text: '签约中', type: 'info' },
+            2: { text: '已签约', type: 'success' },
+            3: { text: '过期', type: 'error' },
+            4: { text: '拒签', type: 'error' },
+            6: { text: '作废', type: 'warning' },
+            7: { text: '撤销', type: 'warning' }
+          };
+          
+          const status = result.data.data?.status;
+          const statusInfo = statusMap[status as keyof typeof statusMap] || { text: '未知状态', type: 'info' };
+          const messageType = statusInfo.type as keyof typeof message;
+          (message[messageType] as any)(`合同状态：${statusInfo.text}`);
+        } else {
+          setContractStatus(null);
+          
+          // 根据错误码显示具体错误信息
+          let errorMessage = result.message || '合同状态查询失败';
+          if (result.errorCode) {
+            switch (result.errorCode) {
+              case 100066:
+                errorMessage = '合同不存在，请检查合同编号是否正确';
+                break;
+              case 100613:
+                errorMessage = '合同已被删除';
+                break;
+              case 100056:
+                errorMessage = '合同编号格式错误';
+                break;
+            }
+          }
+          
+          message.warning(errorMessage);
+        }
+      } catch (error: any) {
+        console.error('查询合同状态失败:', error);
+        setContractStatus(null);
+        
+        // 检查是否是网络错误或其他系统错误
+        if (error?.response?.status === 404) {
+          message.error('合同查询服务暂时不可用，请稍后重试');
+        } else if (error?.response?.status >= 500) {
+          message.error('服务器错误，请联系管理员');
+        } else {
+          message.error('查询合同状态失败，请检查网络连接');
+        }
+      } finally {
+        setStatusLoading(false);
+      }
+    };
+
+    // 撤销合同的函数
+    const withdrawContract = async () => {
+      if (!stepData.contract?.contractNo) {
+        message.error('合同编号不存在');
+        return;
+      }
+
+      // 确认对话框
+      Modal.confirm({
+        title: '确认撤销合同',
+        content: '撤销后的合同将无法恢复，您确定要撤销此合同吗？',
+        okText: '确认撤销',
+        cancelText: '取消',
+        okType: 'danger',
+        onOk: async () => {
+          setWithdrawLoading(true);
+          try {
+            const result = await esignService.withdrawContract(
+              stepData.contract.contractNo,
+              '用户主动撤销合同'
+            );
+            console.log('撤销合同结果:', result);
+            
+            if (result.success) {
+              message.success('合同撤销成功');
+              // 撤销成功后，重新查询合同状态
+              await checkContractStatus();
+            } else {
+              message.error(result.message || '撤销合同失败');
+            }
+          } catch (error) {
+            console.error('撤销合同失败:', error);
+            message.error('撤销合同失败');
+          } finally {
+            setWithdrawLoading(false);
+          }
+        }
+      });
+    };
+
+    // 状态辅助函数
+    const getStatusColor = (status: number): string => {
+      const colorMap: { [key: number]: string } = {
+        0: 'orange',  // 等待签约
+        1: 'blue',    // 签约中
+        2: 'green',   // 已签约
+        3: 'red',     // 过期
+        4: 'red',     // 拒签
+        6: 'gray',    // 作废
+        7: 'gray'     // 撤销
+      };
+      return colorMap[status] || 'gray';
+    };
+
+    const getStatusText = (status: number): string => {
+      const textMap: { [key: number]: string } = {
+        0: '等待签约',
+        1: '签约中',
+        2: '已签约',
+        3: '过期',
+        4: '拒签',
+        6: '作废',
+        7: '撤销'
+      };
+      return textMap[status] || '未知状态';
+    };
+
+    const getStatusDescription = (status: number): string => {
+      const descMap: { [key: number]: string } = {
+        0: '合同已创建，等待签署方签约',
+        1: '合同正在签署过程中',
+        2: '合同已完成签署',
+        3: '合同已过期',
+        4: '签署方拒绝签署合同',
+        6: '合同已作废',
+        7: '合同已撤销'
+      };
+      return descMap[status] || '无法获取合同状态信息';
+    };
+
     return (
       <Card title="步骤5：下载合同" bordered={false}>
         <Alert
           message="合同签署流程完成"
-          description="您可以查询合同状态，确认签署完成后下载已签署的合同。"
+          description="您可以查询合同状态，预览合同信息，然后选择不同格式下载已签署的合同。"
           type="success"
           showIcon
           style={{ marginBottom: 24 }}
@@ -1465,13 +2212,36 @@ const ESignatureStepPage: React.FC = () => {
         {stepData.contract && (
           <Card title="合同信息" size="small" style={{ marginBottom: 24, background: '#f0f9ff' }}>
             <p><strong>合同编号：</strong>{stepData.contract.contractNo}</p>
-            <p><strong>合同名称：</strong>{stepData.contract.contractName || '家政服务合同'}</p>
+            <p><strong>合同名称：</strong>{stepData.contract.contractName || '安得家政三方服务合同'}</p>
             <p><strong>模板编号：</strong>{stepData.contract.templateNo}</p>
           </Card>
         )}
 
+        {/* 合同状态显示 */}
+        {contractStatus && (
+          <Card title="合同状态信息" size="small" style={{ marginBottom: 24, background: '#f0f9ff' }}>
+            <Row gutter={16}>
+              <Col span={8}>
+                <p><strong>合同编号：</strong>{contractStatus.data?.contractNo}</p>
+              </Col>
+              <Col span={8}>
+                <p><strong>合同名称：</strong>{contractStatus.data?.contractName}</p>
+              </Col>
+              <Col span={8}>
+                <p><strong>当前状态：</strong>
+                  <Tag color={getStatusColor(contractStatus.data?.status)}>
+                    {getStatusText(contractStatus.data?.status)}
+                  </Tag>
+                </p>
+              </Col>
+            </Row>
+            <p><strong>状态说明：</strong>{getStatusDescription(contractStatus.data?.status)}</p>
+          </Card>
+        )}
+
+        {/* 操作按钮区域 */}
         <div style={{ marginBottom: 24 }}>
-          <Space>
+          <Space wrap>
             <Button 
               type="primary" 
               onClick={checkContractStatus}
@@ -1481,24 +2251,155 @@ const ESignatureStepPage: React.FC = () => {
               查询合同状态
             </Button>
             <Button 
+              type="default" 
+              onClick={previewContract}
+              loading={previewLoading}
+            >
+              预览合同信息
+            </Button>
+            <Button 
               type="primary" 
               onClick={downloadContract}
               loading={downloadLoading}
-              disabled={!contractStatus}
+              style={{ background: '#52c41a', borderColor: '#52c41a' }}
             >
               下载合同
+            </Button>
+            <Button 
+              danger
+              onClick={withdrawContract}
+              loading={withdrawLoading}
+              style={{ marginLeft: 8 }}
+            >
+              撤销合同
             </Button>
           </Space>
         </div>
 
+        {/* 预览信息显示 */}
+        {previewData && (
+          <Card title="合同预览信息" size="small" style={{ marginBottom: 24, background: '#f6ffed' }}>
+            <Row gutter={16}>
+              <Col span={12}>
+                <p><strong>合同编号：</strong>{previewData.contractNo}</p>
+                <p><strong>可下载状态：</strong>
+                  <Tag color={previewData.previewInfo?.canDownload ? 'green' : 'red'}>
+                    {previewData.previewInfo?.canDownload ? '可下载' : '不可下载'}
+                  </Tag>
+                </p>
+                {previewData.fallbackMode && (
+                  <p><strong>预览模式：</strong>
+                    <Tag color="orange">状态信息模式</Tag>
+                  </p>
+                )}
+              </Col>
+              <Col span={12}>
+                <p><strong>推荐格式：</strong>
+                  {previewData.previewInfo?.availableFormats?.find((f: any) => f.recommended)?.name || 'PDF文件'}
+                </p>
+                <p><strong>可用格式数量：</strong>{previewData.previewInfo?.availableFormats?.length || 0}</p>
+                {previewData.previewInfo?.hasPreviewImage !== undefined && (
+                  <p><strong>预览图：</strong>
+                    <Tag color={previewData.previewInfo.hasPreviewImage ? 'green' : 'orange'}>
+                      {previewData.previewInfo.hasPreviewImage ? '已生成' : '未生成'}
+                    </Tag>
+                  </p>
+                )}
+              </Col>
+            </Row>
+            
+            {/* 显示预览图片（如果有） */}
+            {previewData.previewData && (
+              <div style={{ marginTop: 16 }}>
+                <p><strong>预览图片：</strong></p>
+                {typeof previewData.previewData === 'string' ? (
+                  <img 
+                    src={`data:image/png;base64,${previewData.previewData}`}
+                    alt="合同预览"
+                    style={{ maxWidth: '100%', maxHeight: '400px', border: '1px solid #d9d9d9' }}
+                  />
+                ) : (
+                  <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 4 }}>
+                    <pre>{JSON.stringify(previewData.previewData, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* 显示合同状态（如果是备选模式） */}
+            {previewData.fallbackMode && previewData.status && (
+              <div style={{ marginTop: 16 }}>
+                <p><strong>合同状态信息：</strong></p>
+                <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 4 }}>
+                  <pre>{JSON.stringify(previewData.status, null, 2)}</pre>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* 下载选项配置 */}
+        <Card title="下载选项配置" size="small" style={{ marginBottom: 24 }}>
+          <Form layout="vertical">
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item label="强制下载">
+                  <Select
+                    value={downloadOptions.force}
+                    onChange={(value) => setDownloadOptions(prev => ({ ...prev, force: value }))}
+                  >
+                    <Option value={0}>仅下载已签署完成的合同</Option>
+                    <Option value={1}>强制下载任何状态的合同</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="下载文件类型">
+                  <Select
+                    value={downloadOptions.downloadFileType}
+                    onChange={(value) => setDownloadOptions(prev => ({ ...prev, downloadFileType: value }))}
+                  >
+                    {getDownloadFileTypeOptions().map(option => (
+                      <Option key={option.value} value={option.value}>
+                        {option.label}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            {/* 显示当前选择的文件类型描述 */}
+            <Alert
+              message="文件类型说明"
+              description={getDownloadFileTypeOptions().find(opt => opt.value === downloadOptions.downloadFileType)?.description}
+              type="info"
+              showIcon
+              style={{ marginTop: 8 }}
+            />
+          </Form>
+        </Card>
+
         {contractStatus && (
-          <Card title="合同状态" size="small" style={{ marginBottom: 24 }}>
+          <Card title="合同状态详情" size="small" style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 16 }}>
+              <Tag color={contractStatus.status === 'completed' ? 'green' : 'orange'}>
+                状态：{contractStatus.status || '未知'}
+              </Tag>
+              {contractStatus.signProgress && (
+                <Tag color="blue">
+                  签署进度：{contractStatus.signProgress}
+                </Tag>
+              )}
+            </div>
+            
             <pre style={{ 
               background: '#f6f8fa', 
               padding: 16, 
               borderRadius: 4, 
               overflow: 'auto',
-              whiteSpace: 'pre-wrap'
+              whiteSpace: 'pre-wrap',
+              fontSize: '12px'
             }}>
               {JSON.stringify(contractStatus, null, 2)}
             </pre>
@@ -1509,10 +2410,22 @@ const ESignatureStepPage: React.FC = () => {
           message="操作说明"
           description={
             <div>
-              <p>1. 点击"查询合同状态"可以查看当前签署进度</p>
-              <p>2. 当所有签署方都完成签署后，合同状态会变为"已完成"</p>
-              <p>3. 合同签署完成后，点击"下载合同"获取已签署的PDF文件</p>
-              <p>4. 如果合同尚未完成签署，请通知相关方完成签署</p>
+              <p><strong>下载选项说明：</strong></p>
+              <ul style={{ paddingLeft: 20, margin: '8px 0' }}>
+                <li><strong>强制下载：</strong>选择是否在合同未完全签署时也允许下载</li>
+                <li><strong>PDF文件：</strong>标准格式，适合打印和存档</li>
+                <li><strong>PNG图片+PDF：</strong>包含图片格式和PDF文件的压缩包</li>
+                <li><strong>分页压缩：</strong>每页单独的PNG图片加PDF文件</li>
+                <li><strong>单张图片：</strong>整个合同的一张长图</li>
+                <li><strong>分页图片：</strong>每页单独的PNG图片文件</li>
+              </ul>
+              <p><strong>操作流程：</strong></p>
+              <ol style={{ paddingLeft: 20, margin: '8px 0' }}>
+                <li>先查询合同状态确认签署进度</li>
+                <li>预览合同信息了解可用格式</li>
+                <li>根据需要选择下载文件类型</li>
+                <li>点击下载合同按钮获取文件</li>
+              </ol>
             </div>
           }
           type="info"

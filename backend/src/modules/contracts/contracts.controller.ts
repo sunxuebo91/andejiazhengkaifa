@@ -286,4 +286,18 @@ export class ContractsController {
       };
     }
   }
+
+  @Post('esign/test-get-contract')
+  async testGetContract(@Body() body: { contractNo: string }) {
+    try {
+      const result = await this.esignService.getContractInfo(body.contractNo);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '测试getContract失败',
+        error: error.toString()
+      };
+    }
+  }
 } 

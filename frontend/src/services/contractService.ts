@@ -118,4 +118,88 @@ export const contractService = {
     const response = await apiService.post(`/api/contracts/${contractId}/download-contract`, options);
     return response.data;
   },
+
+  // 预览合同
+  async previewContract(contractNo: string, signers?: Array<{
+    account: string;
+    signStrategyList: Array<{
+      attachNo: number;
+      locationMode: number;
+      signPage: number;
+      signX: number;
+      signY: number;
+      signKey?: string;
+    }>;
+    isWrite?: number;
+  }>): Promise<{
+    success: boolean;
+    contractNo: string;
+    contractStatus?: number;
+    statusText?: string;
+    shouldDownload?: boolean;
+    previewUrl?: string;
+    embeddedUrl?: string;
+    previewData?: string;
+    contractInfo?: any;
+    status?: any;
+    method?: string;
+    previewInfo?: {
+      canDownload: boolean;
+      shouldDownload?: boolean;
+      contractCompleted?: boolean;
+      contractSigning?: boolean;
+      hasPreviewImage?: boolean;
+      hasPreviewUrl?: boolean;
+      hasEmbeddedUrl?: boolean;
+      contractStatus?: number;
+      contractName?: string;
+      validityTime?: string;
+      signUsers?: any[];
+      statusText?: string;
+      recommendation?: string;
+      error?: boolean;
+      availableFormats: Array<{ 
+        type: number | string; 
+        name: string; 
+        recommended?: boolean;
+        description?: string;
+      }>;
+    };
+    message: string;
+    fallbackMode?: boolean;
+  }> {
+    try {
+      let response;
+      if (signers && signers.length > 0) {
+        // 如果提供了签署方信息，使用POST方法
+        response = await apiService.post(`/api/esign/preview-contract/${contractNo}`, { signers });
+      } else {
+        // 否则使用GET方法（使用默认配置）
+        response = await apiService.get(`/api/esign/preview-contract/${contractNo}`);
+      }
+      return response.data || response;
+    } catch (error: any) {
+      console.error('预览合同API调用失败:', error);
+      
+      // 如果错误响应中包含数据，返回错误响应数据
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      
+      // 否则返回一个标准的错误响应
+      return {
+        success: false,
+        contractNo,
+        message: error.message || '预览合同失败',
+        contractStatus: undefined,
+        statusText: '未知状态',
+        previewInfo: {
+          canDownload: false,
+          error: true,
+          recommendation: '请稍后重试或联系管理员',
+          availableFormats: []
+        }
+      };
+    }
+  },
 }; 

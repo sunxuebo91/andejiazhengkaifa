@@ -14,6 +14,7 @@ import {
   Alert,
   Modal,
   Typography,
+  App,
 } from 'antd';
 import { 
   ArrowLeftOutlined, 
@@ -42,6 +43,7 @@ interface EsignInfo {
 const ContractDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { modal } = App.useApp();
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -98,40 +100,269 @@ const ContractDetail: React.FC = () => {
     }
   };
 
-  const handlePreviewContract = () => {
-    if (!esignInfo?.preview) {
-      message.warning('暂无预览信息');
+  const handlePreviewContract = async () => {
+    if (!contract?.esignContractNo) {
+      message.warning('该合同暂无爱签合同编号，无法预览');
       return;
     }
 
-    // 如果有预览URL，直接打开
-    if (esignInfo.preview.previewUrl) {
-      window.open(esignInfo.preview.previewUrl, '_blank');
-      return;
+    try {
+      message.loading({ content: '正在生成合同预览...', key: 'preview' });
+      
+      // 调用预览合同API
+      const response = await contractService.previewContract(contract.esignContractNo);
+      
+      message.destroy('preview');
+      
+      if (response.success) {
+        // 根据合同状态处理不同的预览逻辑
+        if (response.shouldDownload || response.contractStatus === 2) {
+          // 签约完成状态：显示下载提示
+          modal.confirm({
+            title: '✅ 合同已签约完成',
+            width: 600,
+            content: (
+              <div>
+                <Alert 
+                  type="success" 
+                  message="合同签署完成" 
+                  description="合同已完成所有签署，具有法律效力。建议下载合同PDF文件进行查看和保存。"
+                  style={{ marginBottom: 16 }}
+                />
+                <p><strong>合同编号:</strong> {response.contractNo}</p>
+                <p><strong>状态:</strong> {response.statusText || '已签约'}</p>
+                <p><strong>推荐格式:</strong> PDF文件（完整签署版本）</p>
+                {response.previewInfo?.availableFormats && (
+                  <div style={{ marginTop: 12 }}>
+                    <p><strong>可用下载格式:</strong></p>
+                    <ul>
+                      {response.previewInfo.availableFormats.map((format: any, index: number) => (
+                        <li key={index}>
+                          {format.name} {format.recommended && <span style={{ color: '#52c41a' }}>(推荐)</span>}
+                          {format.description && <span style={{ color: '#666' }}> - {format.description}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ),
+            okText: '立即下载',
+            cancelText: '稍后下载',
+            onOk: () => {
+              handleDownloadContract();
+            },
+          });
+        } else if (response.contractStatus === 1) {
+          // 签约中状态：可以预览当前签署进度
+          if (response.previewData) {
+            const previewUrl = `data:application/pdf;base64,${response.previewData}`;
+            window.open(previewUrl, '_blank');
+            message.success('合同预览已打开（当前签署状态）');
+          } else {
+            modal.info({
+              title: '📝 合同签约中',
+              width: 600,
+              content: (
+                <div>
+                  <Alert 
+                    type="info" 
+                    message="合同正在签署中" 
+                    description="合同尚未完成所有签署，可以预览当前签署进度。"
+                    style={{ marginBottom: 16 }}
+                  />
+                  <p><strong>合同编号:</strong> {response.contractNo}</p>
+                  <p><strong>状态:</strong> {response.statusText || '签约中'}</p>
+                  <p><strong>说明:</strong> {response.previewInfo?.recommendation}</p>
+                </div>
+              ),
+            });
+          }
+        } else if (response.previewUrl) {
+          // 有预览链接，直接打开
+          window.open(response.previewUrl, '_blank');
+          message.success('合同预览已打开');
+        } else if (response.previewData) {
+          // 有预览数据，显示预览
+          const previewUrl = `data:application/pdf;base64,${response.previewData}`;
+          window.open(previewUrl, '_blank');
+          message.success('合同预览已打开');
+        } else if (response.fallbackMode) {
+          // 回退模式：根据状态显示不同信息
+          const statusText = response.statusText || '未知状态';
+          const recommendation = response.previewInfo?.recommendation || '请联系管理员处理';
+          
+          modal.info({
+            title: `合同状态：${statusText}`,
+            width: 600,
+            content: (
+              <div>
+                <p><strong>合同编号:</strong> {response.contractNo}</p>
+                <p><strong>当前状态:</strong> {statusText}</p>
+                <p><strong>建议:</strong> {recommendation}</p>
+                
+                {response.previewInfo?.canDownload && (
+                  <div style={{ marginTop: 16 }}>
+                    <Alert 
+                      type="info" 
+                      message="可以下载合同" 
+                      description="虽然无法在线预览，但可以下载合同文件查看。"
+                    />
+                    <div style={{ marginTop: 12, textAlign: 'center' }}>
+                      <Button type="primary" onClick={handleDownloadContract}>
+                        下载合同
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ),
+          });
+        } else {
+          message.info(response.message || '预览生成成功，但无法显示');
+        }
+      } else {
+        // 失败情况的处理
+        const statusText = response.statusText || '未知状态';
+        if (response.contractStatus === 2) {
+          // 即使失败，如果是签约完成状态，仍然提示下载
+          modal.confirm({
+            title: '无法预览，建议下载',
+            width: 600,
+            content: (
+              <div>
+                <Alert 
+                  type="warning" 
+                  message="预览功能不可用" 
+                  description="无法生成在线预览，但合同已签约完成，可以下载查看。"
+                  style={{ marginBottom: 16 }}
+                />
+                <p><strong>合同状态:</strong> {statusText}</p>
+                <p><strong>错误信息:</strong> {response.message}</p>
+              </div>
+            ),
+            okText: '下载合同',
+            cancelText: '取消',
+            onOk: () => {
+              handleDownloadContract();
+            },
+          });
+        } else {
+          // 其他状态的失败处理
+          modal.warning({
+            title: '预览合同',
+            width: 600,
+            content: (
+              <div>
+                <p><strong>合同编号:</strong> {contract.esignContractNo}</p>
+                <p><strong>合同状态:</strong> {statusText}</p>
+                <p><strong>预览失败原因:</strong> {response.message}</p>
+                <Alert 
+                  type="warning" 
+                  message="预览功能暂时不可用" 
+                  description="这通常是因为签署方尚未在爱签平台注册，或合同状态不支持预览。您可以稍后重试，或使用下载功能获取合同文件。"
+                  style={{ marginTop: 16 }}
+                />
+                <div style={{ marginTop: 16, textAlign: 'center' }}>
+                  <Button 
+                    type="primary" 
+                    onClick={() => {
+                      handleDownloadContract();
+                    }}
+                  >
+                    尝试下载合同
+                  </Button>
+                </div>
+              </div>
+            ),
+          });
+        }
+      }
+    } catch (error) {
+      message.destroy('preview');
+      console.error('预览合同失败:', error);
+      
+      // 检查错误响应中是否包含合同状态信息
+      const errorResponse = (error as any).response?.data;
+      
+      if (errorResponse && errorResponse.contractStatus === 2) {
+        // 如果是签约完成状态，即使出错也提示下载
+        modal.confirm({
+          title: '✅ 合同已签约完成',
+          width: 600,
+          content: (
+            <div>
+              <Alert 
+                type="warning" 
+                message="预览服务暂时不可用" 
+                description="无法连接到预览服务，但合同已签约完成，具有法律效力。建议直接下载合同查看。"
+                style={{ marginBottom: 16 }}
+              />
+              <p><strong>合同状态:</strong> {errorResponse.statusText || '已签约'}</p>
+              <p><strong>建议:</strong> {errorResponse.previewInfo?.recommendation || '下载PDF文件查看完整签署版本'}</p>
+            </div>
+          ),
+          okText: '立即下载',
+          cancelText: '稍后下载',
+          onOk: () => {
+            handleDownloadContract();
+          },
+        });
+      } else if (errorResponse && errorResponse.contractStatus) {
+        // 其他状态的错误处理
+        const statusText = errorResponse.statusText || '未知状态';
+        modal.warning({
+          title: '预览合同失败',
+          width: 600,
+          content: (
+            <div>
+              <p><strong>合同编号:</strong> {contract?.esignContractNo}</p>
+              <p><strong>合同状态:</strong> {statusText}</p>
+              <p><strong>错误原因:</strong> 无法连接到预览服务</p>
+              <Alert 
+                type="info" 
+                message="建议操作" 
+                description={errorResponse.previewInfo?.recommendation || '请稍后重试，或联系管理员处理'}
+                style={{ marginTop: 16 }}
+              />
+              {errorResponse.previewInfo?.canDownload && (
+                <div style={{ marginTop: 16, textAlign: 'center' }}>
+                  <Button 
+                    type="primary" 
+                    onClick={() => {
+                      handleDownloadContract();
+                    }}
+                  >
+                    尝试下载合同
+                  </Button>
+                </div>
+              )}
+            </div>
+          ),
+        });
+      } else {
+        // 完全无法获取状态信息的情况
+        modal.error({
+          title: '预览合同失败',
+          content: (
+            <div>
+              <p>无法连接到预览服务，请稍后重试。</p>
+              <p>您也可以尝试下载合同文件查看内容。</p>
+              <div style={{ marginTop: 16, textAlign: 'center' }}>
+                <Button 
+                  type="primary" 
+                  onClick={() => {
+                    handleDownloadContract();
+                  }}
+                >
+                  下载合同
+                </Button>
+              </div>
+            </div>
+          ),
+        });
+      }
     }
-
-    // 显示预览信息弹窗
-    Modal.info({
-      title: '合同预览信息',
-      width: 600,
-      content: (
-        <div>
-          <p><strong>合同编号:</strong> {esignInfo.contractNo}</p>
-          <p><strong>模板编号:</strong> {esignInfo.templateNo}</p>
-          {esignInfo.preview.contractName && (
-            <p><strong>合同名称:</strong> {esignInfo.preview.contractName}</p>
-          )}
-          {esignInfo.preview.signFlowId && (
-            <p><strong>签署流程ID:</strong> {esignInfo.preview.signFlowId}</p>
-          )}
-          <Alert 
-            type="info" 
-            message="预览功能正在完善中，如需查看合同请使用下载功能" 
-            style={{ marginTop: 16 }}
-          />
-        </div>
-      ),
-    });
   };
 
   const handleDownloadContract = async () => {

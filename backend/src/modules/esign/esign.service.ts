@@ -2892,6 +2892,38 @@ export class ESignService {
   }
 
   /**
+   * 查询合同信息（包含预览链接）
+   * API: /contract/getContract
+   * 根据官方文档，这个接口会返回合同的详细信息，包括previewUrl
+   */
+  async getContractInfo(contractNo: string): Promise<any> {
+    try {
+      console.log('🔍 查询合同信息:', contractNo);
+
+      const bizData = {
+        contractNo: contractNo
+      };
+
+      const response = await this.callESignAPI('/contract/getContract', bizData);
+      console.log('✅ 获取合同信息成功:', response);
+      
+      if (response.code === 100000) {
+        return {
+          success: true,
+          contractNo,
+          data: response.data,
+          message: '获取合同信息成功'
+        };
+      } else {
+        throw new Error(response.msg || '获取合同信息失败');
+      }
+    } catch (error) {
+      console.error('❌ 获取合同信息失败:', error);
+      throw new Error(`获取合同信息失败: ${error.message}`);
+    }
+  }
+
+  /**
    * 步骤5：下载已签署合同（完善版本）
    * API: /contract/downloadContract
    * 支持官方文档中的所有参数
@@ -3770,8 +3802,10 @@ export class ESignService {
   }
 
   /**
-   * 预览合同（根据官方文档实现真正的预览功能）
-   * 需要传入签署方信息和签章策略来生成预览
+   * 预览合同（根据官方文档优化：基于合同状态处理预览逻辑）
+   * - 签约中状态（Status=1）：可以正常预览，显示已签署方签名和待签署位置
+   * - 签约完成状态（Status=2）：提示下载合同进行预览
+   * - 其他状态：根据情况处理
    */
   async previewContract(contractNo: string, signers?: Array<{
     account: string;
@@ -3783,111 +3817,219 @@ export class ESignService {
       signY: number;
       signKey?: string;
     }>;
-    isWrite?: number; // 个人用户是否使用手写章：1是，0否
+    isWrite?: number;
   }>): Promise<any> {
     try {
       console.log('🔍 预览合同:', contractNo);
 
-      // 如果没有提供签署方信息，使用默认的预览配置
-      if (!signers || signers.length === 0) {
-        signers = [
-          {
-            account: 'preview_user_1',
-            isWrite: 0,
-            signStrategyList: [
-              {
-                attachNo: 1,
-                locationMode: 2, // 坐标签章（预览只支持坐标模式）
-                signPage: 1,
-                signX: 0.35,
-                signY: 0.65
-              }
-            ]
-          },
-          {
-            account: 'preview_user_2', 
-            isWrite: 0,
-            signStrategyList: [
-              {
-                attachNo: 1,
-                locationMode: 2,
-                signPage: 1,
-                signX: 0.65,
-                signY: 0.75
-              }
-            ]
-          }
-        ];
+      // 步骤1: 首先获取合同状态，根据状态决定预览策略
+      let contractStatus = null;
+      try {
+        console.log('📋 步骤1: 获取合同状态');
+        const statusResult = await this.getContractStatus(contractNo);
+        contractStatus = statusResult.data?.status;
+        console.log('✅ 合同状态:', this.getContractStatusText(contractStatus));
+      } catch (statusError) {
+        console.log('⚠️ 获取合同状态失败，尝试其他方案:', statusError.message);
       }
 
-      // 构建预览请求数据
-      const previewData = signers.map(signer => ({
-        contractNo,
-        account: signer.account,
-        isWrite: signer.isWrite || 0,
-        signStrategyList: signer.signStrategyList
-      }));
-
-      console.log('📋 预览合同请求数据:', JSON.stringify(previewData, null, 2));
-
-      // 调用爱签预览合同API
-      const result = await this.callESignAPI('/contract/previewContract', previewData);
-      
-      console.log('✅ 预览合同响应:', result);
-
-      if (result.code === 100000) {
+      // 步骤2: 根据合同状态处理预览逻辑
+      if (contractStatus === 2) {
+        // 签约完成状态：提示下载合同
+        console.log('📋 合同已签约完成，建议下载合同进行预览');
         return {
           success: true,
           contractNo,
-          previewData: result.data,
-          message: '合同预览生成成功',
-          // 添加预览信息
+          contractStatus: 2,
+          statusText: '签约完成',
+          message: '合同已签约完成，请下载合同进行预览',
+          shouldDownload: true,
           previewInfo: {
             canDownload: true,
-            hasPreviewImage: !!result.data,
+            shouldDownload: true,
+            contractCompleted: true,
+            statusText: '签约完成',
+            recommendation: '合同已签约完成，建议下载PDF文件进行查看',
             availableFormats: [
-              { type: 1, name: 'PDF文件', recommended: true },
-              { type: 2, name: 'PNG图片+PDF' },
-              { type: 3, name: '分页PNG压缩+PDF' },
-              { type: 4, name: '合同单张图片' },
-              { type: 5, name: '所有分页图片' }
+              { type: 1, name: 'PDF文件', recommended: true, description: '完整签署版本' },
+              { type: 2, name: 'PNG图片+PDF', description: '图片格式+PDF' },
+              { type: 3, name: '分页PNG压缩+PDF', description: '分页图片压缩包' }
             ]
           }
         };
-      } else {
-        throw new Error(result.msg || '预览合同失败');
+      } else if (contractStatus === 1) {
+        // 签约中状态：可以预览，显示签署进度
+        console.log('📋 合同签约中，可以预览当前签署状态');
+        
+        try {
+          // 使用previewContract接口生成预览
+          if (!signers || signers.length === 0) {
+            signers = [
+              {
+                account: 'preview_user_1',
+                isWrite: 0,
+                signStrategyList: [
+                  {
+                    attachNo: 1,
+                    locationMode: 2, // 坐标定位
+                    signPage: 1,
+                    signX: 0.35,
+                    signY: 0.65
+                  }
+                ]
+              }
+            ];
+          }
+
+          const previewData = signers.map(signer => ({
+            contractNo,
+            account: signer.account,
+            isWrite: signer.isWrite || 0,
+            signStrategyList: signer.signStrategyList
+          }));
+
+          const result = await this.callESignAPI('/contract/previewContract', previewData);
+          
+          if (result.code === 100000) {
+            return {
+              success: true,
+              contractNo,
+              contractStatus: 1,
+              statusText: '签约中',
+              previewData: result.data,
+              message: '合同预览生成成功（签约中状态）',
+              method: 'previewContract',
+              previewInfo: {
+                canDownload: false,
+                hasPreviewImage: !!result.data,
+                contractSigning: true,
+                statusText: '签约中',
+                recommendation: '合同正在签署中，可预览当前签署进度',
+                availableFormats: [
+                  { type: 'preview', name: '在线预览', recommended: true, description: '查看当前签署状态' }
+                ]
+              }
+            };
+          } else {
+            throw new Error(result.msg || 'previewContract接口失败');
+          }
+        } catch (previewError) {
+          console.log('⚠️ 签约中状态预览失败:', previewError.message);
+        }
       }
+
+      // 步骤3: 尝试使用getContract接口获取预览链接（适用于其他状态）
+      try {
+        console.log('📋 步骤3: 尝试使用getContract接口');
+        const contractInfo = await this.getContractInfo(contractNo);
+        
+        if (contractInfo.success && contractInfo.data?.previewUrl) {
+          console.log('✅ 成功获取预览链接:', contractInfo.data.previewUrl);
+          
+          return {
+            success: true,
+            contractNo,
+            contractStatus: contractInfo.data.status,
+            statusText: this.getContractStatusText(contractInfo.data.status),
+            previewUrl: contractInfo.data.previewUrl,
+            embeddedUrl: contractInfo.data.embeddedUrl,
+            contractInfo: contractInfo.data,
+            message: '获取合同预览链接成功',
+            method: 'getContract',
+            previewInfo: {
+              canDownload: contractInfo.data.status === 2,
+              hasPreviewUrl: true,
+              hasEmbeddedUrl: !!contractInfo.data.embeddedUrl,
+              contractStatus: contractInfo.data.status,
+              statusText: this.getContractStatusText(contractInfo.data.status),
+              contractName: contractInfo.data.contractName,
+              validityTime: contractInfo.data.validityTime,
+              signUsers: contractInfo.data.signUser || [],
+              availableFormats: [
+                { type: 'preview', name: '在线预览', recommended: true },
+                { type: 'embedded', name: '嵌入式预览' },
+                ...(contractInfo.data.status === 2 ? [{ type: 'download', name: 'PDF下载' }] : [])
+              ]
+            }
+          };
+        }
+      } catch (getContractError) {
+        console.log('⚠️ getContract接口调用失败:', getContractError.message);
+      }
+
+      // 步骤4: 最后回退方案
+      return {
+        success: false,
+        contractNo,
+        contractStatus,
+        statusText: this.getContractStatusText(contractStatus),
+        message: '无法获取合同预览，请稍后重试',
+        fallbackMode: true,
+        previewInfo: {
+          canDownload: contractStatus === 2,
+          hasPreviewImage: false,
+          error: true,
+          statusText: this.getContractStatusText(contractStatus),
+          recommendation: contractStatus === 2 ? '建议下载合同进行查看' : '请联系管理员处理',
+          availableFormats: contractStatus === 2 ? [
+            { type: 1, name: 'PDF文件', recommended: true },
+            { type: 2, name: 'PNG图片+PDF' },
+            { type: 3, name: '分页PNG压缩+PDF' }
+          ] : []
+        }
+      };
     } catch (error) {
       console.error('❌ 预览合同失败:', error);
       
-      // 如果预览失败，回退到获取合同状态
+      // 即使出错，也尝试返回合同状态信息，而不是直接抛出异常
       try {
-        console.log('🔄 预览失败，尝试获取合同状态作为备选方案');
+        console.log('🔄 预览失败，尝试获取合同状态作为回退信息');
         const statusResult = await this.getContractStatus(contractNo);
+        const contractStatus = statusResult.data?.status;
         
         return {
-          success: true,
+          success: false,
           contractNo,
-          status: statusResult,
-          message: '无法生成预览图，但获取合同状态成功',
-          fallbackMode: true,
+          contractStatus,
+          statusText: this.getContractStatusText(contractStatus),
+          message: `预览合同失败: ${error.message}`,
+          error: true,
           previewInfo: {
-            canDownload: true,
-            hasPreviewImage: false,
-            availableFormats: [
-              { type: 1, name: 'PDF文件', recommended: true },
-              { type: 2, name: 'PNG图片+PDF' },
-              { type: 3, name: '分页PNG压缩+PDF' },
-              { type: 4, name: '合同单张图片' },
-              { type: 5, name: '所有分页图片' }
-            ]
+            canDownload: contractStatus === 2,
+            error: true,
+            statusText: this.getContractStatusText(contractStatus),
+            recommendation: contractStatus === 2 ? 
+              '合同已签约完成，建议下载PDF文件查看' : 
+              '请联系管理员处理预览问题',
+            availableFormats: contractStatus === 2 ? [
+              { type: 1, name: 'PDF文件', recommended: true, description: '完整签署版本' },
+              { type: 2, name: 'PNG图片+PDF', description: '图片格式+PDF' }
+            ] : []
           }
         };
-      } catch (fallbackError) {
-        console.error('❌ 备选方案也失败:', fallbackError);
+      } catch (statusError) {
+        console.error('❌ 获取合同状态也失败:', statusError);
+        // 如果连状态都获取不到，才抛出异常
         throw new Error(`预览合同失败: ${error.message}`);
       }
     }
+  }
+
+  /**
+   * 获取合同状态文本描述
+   */
+  private getContractStatusText(status: number): string {
+    const statusMap = {
+      0: '等待签约',
+      1: '签约中', 
+      2: '已签约',
+      3: '过期',
+      4: '拒签',
+      6: '作废',
+      7: '撤销',
+      '-2': '状态异常'
+    };
+    return statusMap[status] || '未知状态';
   }
 
   /**

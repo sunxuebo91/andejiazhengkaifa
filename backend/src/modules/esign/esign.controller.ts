@@ -914,6 +914,8 @@ export class ESignController {
     } catch (error) {
       this.logger.error('获取合同预览信息失败', error.stack);
       
+      // 注意：这里不再抛出异常，而是返回包含错误信息的响应
+      // 这样前端就能收到错误响应而不是网络异常
       return {
         success: false,
         message: error.message || '获取合同预览信息失败',
@@ -951,6 +953,8 @@ export class ESignController {
     } catch (error) {
       this.logger.error('获取合同预览信息失败', error.stack);
       
+      // 注意：这里不再抛出异常，而是返回包含错误信息的响应
+      // 这样前端就能收到错误响应而不是网络异常
       return {
         success: false,
         message: error.message || '获取合同预览信息失败',
@@ -978,6 +982,24 @@ export class ESignController {
       return {
         success: false,
         message: error.message || '撤销合同失败',
+      };
+    }
+  }
+
+  @Post('test-get-contract')
+  async testGetContract(@Body() body: { contractNo: string }) {
+    this.logger.log('调用 test-get-contract 端点, contractNo:', body.contractNo);
+    
+    try {
+      const result = await this.esignService.getContractInfo(body.contractNo);
+      return result;
+    } catch (error) {
+      this.logger.error('测试getContract失败', error.stack);
+      
+      return {
+        success: false,
+        message: error.message || '测试getContract失败',
+        error: error.toString()
       };
     }
   }

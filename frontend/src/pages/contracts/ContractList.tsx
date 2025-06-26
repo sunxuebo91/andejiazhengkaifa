@@ -17,6 +17,7 @@ import {
 import { SearchOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { Contract, ContractType, CONTRACT_TYPES } from '../../types/contract.types';
+import ContractStatusMini from '../../components/ContractStatusMini';
 import dayjs from 'dayjs';
 
 const { Option } = Select;
@@ -120,9 +121,15 @@ const ContractList: React.FC = () => {
 
   const getContractTypeColor = (type: ContractType) => {
     const colors: Record<ContractType, string> = {
-      [ContractType.HOURLY_WORKER]: 'blue',
-      [ContractType.NANNY_CHILDCARE]: 'green',
-      [ContractType.MATERNITY_NURSE]: 'purple',
+      [ContractType.YUEXIN]: 'purple',
+      [ContractType.ZHUJIA_YUER]: 'green',
+      [ContractType.BAOJIE]: 'blue',
+      [ContractType.ZHUJIA_BAOMU]: 'cyan',
+      [ContractType.YANGCHONG]: 'orange',
+      [ContractType.XIAOSHI]: 'geekblue',
+      [ContractType.BAIBAN_YUER]: 'lime',
+      [ContractType.BAIBAN_BAOMU]: 'magenta',
+      [ContractType.ZHUJIA_HULAO]: 'gold',
     };
     return colors[type] || 'default';
   };
@@ -194,12 +201,28 @@ const ContractList: React.FC = () => {
     },
     {
       title: '状态',
-      dataIndex: 'status',
       key: 'status',
-      width: 100,
-      render: (status: string) => (
-        <Tag color={getStatusColor(status)}>{status}</Tag>
-      ),
+      width: 150,
+      render: (_: any, record: Contract) => {
+        // 如果有爱签合同编号，显示爱签状态组件（迷你版）
+        if (record.esignContractNo) {
+          return (
+            <ContractStatusMini
+              contractNo={record.esignContractNo}
+              onStatusChange={(status) => {
+                // 可以在这里更新列表中的状态信息
+                console.log(`合同 ${record.contractNumber} 状态更新:`, status);
+              }}
+            />
+          );
+        }
+        
+        // 否则显示本地状态（如果有esignStatus则显示，否则显示默认状态）
+        const statusText = record.esignStatus || '未知状态';
+        return (
+          <Tag color={getStatusColor(statusText)}>{statusText}</Tag>
+        );
+      },
     },
     {
       title: '创建时间',
@@ -244,7 +267,7 @@ const ContractList: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="进行中"
+              title="签约中"
               value={statistics.active}
               valueStyle={{ color: '#52c41a' }}
             />
@@ -253,7 +276,7 @@ const ContractList: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="已完成"
+              title="已签约"
               value={statistics.completed}
               valueStyle={{ color: '#1890ff' }}
             />
@@ -262,7 +285,7 @@ const ContractList: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="已取消"
+              title="其他状态"
               value={statistics.cancelled}
               valueStyle={{ color: '#ff4d4f' }}
             />
@@ -276,7 +299,7 @@ const ContractList: React.FC = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => navigate('/customers')}
+            onClick={() => navigate('/contracts/create')}
           >
             新建合同
           </Button>
@@ -313,10 +336,13 @@ const ContractList: React.FC = () => {
               allowClear
               style={{ width: '100%' }}
             >
-              <Option value="进行中">进行中</Option>
-              <Option value="已完成">已完成</Option>
-              <Option value="已取消">已取消</Option>
-              <Option value="暂停">暂停</Option>
+              <Option value="等待签约">等待签约</Option>
+              <Option value="签约中">签约中</Option>
+              <Option value="已签约">已签约</Option>
+              <Option value="过期">过期</Option>
+              <Option value="拒签">拒签</Option>
+              <Option value="作废">作废</Option>
+              <Option value="撤销">撤销</Option>
             </Select>
           </Col>
           <Col span={6}>

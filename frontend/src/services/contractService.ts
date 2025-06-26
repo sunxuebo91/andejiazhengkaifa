@@ -96,4 +96,26 @@ export const contractService = {
     
     return [];
   },
+
+  // 获取爱签信息
+  async getEsignInfo(contractId: string): Promise<{
+    contractNo: string;
+    templateNo?: string;
+    status?: any;
+    preview?: any;
+    statusError?: string;
+    previewError?: string;
+  }> {
+    const response = await apiService.get(`/api/contracts/${contractId}/esign-info`);
+    return response.data;
+  },
+
+  // 下载爱签合同
+  async downloadContract(contractId: string, options: {
+    force?: number;
+    downloadFileType?: number;
+  } = {}): Promise<any> {
+    const response = await apiService.post(`/api/contracts/${contractId}/download-contract`, options);
+    return response.data;
+  },
 }; 

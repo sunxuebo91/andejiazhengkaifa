@@ -6,24 +6,33 @@ import {
   Param,
   Delete,
   Query,
+  Put,
   UseGuards,
   Request,
-  Put,
 } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
+import { ESignService } from '../esign/esign.service';
 
 @Controller('contracts')
 @UseGuards(JwtAuthGuard)
 export class ContractsController {
-  constructor(private readonly contractsService: ContractsService) {}
+  constructor(
+    private readonly contractsService: ContractsService,
+    private readonly esignService: ESignService,
+  ) {}
+
 
   @Post()
   async create(@Body() createContractDto: CreateContractDto, @Request() req) {
     try {
-      const contract = await this.contractsService.create(createContractDto, req.user.userId);
+      const contract = await this.contractsService.create(
+        createContractDto,
+        req.user.userId,
+      );
       return {
         success: true,
         data: contract,
@@ -176,6 +185,104 @@ export class ContractsController {
       return {
         success: false,
         message: error.message || '合同删除失败',
+      };
+    }
+  }
+
+  @Get('test-no-auth')
+  @Public()
+  async testNoAuth() {
+    return {
+      success: true,
+      message: '无认证测试端点正常',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  @Get(':id/esign-info')
+  async getEsignInfo(@Param('id') contractId: string) {
+    try {
+      // 获取本地合同信息
+      const contract = await this.contractsService.findOne(contractId);
+      
+      if (!contract.esignContractNo) {
+        return {
+          success: false,
+          message: '该合同未关联爱签合同',
+        };
+      }
+
+      // 获取爱签实时状态
+      const [statusResult, previewResult] = await Promise.allSettled([
+        this.esignService.getContractStatus(contract.esignContractNo),
+        this.esignService.previewContract(contract.esignContractNo),
+      ]);
+
+      const result: any = {
+        contractNo: contract.esignContractNo,
+        templateNo: contract.esignTemplateNo,
+      };
+
+      // 处理状态查询结果
+      if (statusResult.status === 'fulfilled' && statusResult.value.success) {
+        result.status = statusResult.value.data;
+      } else {
+        result.statusError = statusResult.status === 'rejected' 
+          ? statusResult.reason.message 
+          : statusResult.value.message;
+      }
+
+      // 处理预览结果
+      if (previewResult.status === 'fulfilled' && previewResult.value.success) {
+        result.preview = previewResult.value.data;
+      } else {
+        result.previewError = previewResult.status === 'rejected'
+          ? previewResult.reason.message
+          : previewResult.value.message;
+      }
+
+      return {
+        success: true,
+        data: result,
+        message: '获取爱签信息成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '获取爱签信息失败',
+      };
+    }
+  }
+
+  @Post(':id/download-contract')
+  async downloadContract(
+    @Param('id') contractId: string,
+    @Body() options: { force?: number; downloadFileType?: number } = {}
+  ) {
+    try {
+      const contract = await this.contractsService.findOne(contractId);
+      
+      if (!contract.esignContractNo) {
+        return {
+          success: false,
+          message: '该合同未关联爱签合同',
+        };
+      }
+
+      const result = await this.esignService.downloadSignedContract(
+        contract.esignContractNo,
+        options
+      );
+
+      return {
+        success: true,
+        data: result,
+        message: '合同下载成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '合同下载失败',
       };
     }
   }

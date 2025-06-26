@@ -4,9 +4,15 @@ import { Document, Types } from 'mongoose';
 export type ContractDocument = Contract & Document;
 
 export enum ContractType {
-  HOURLY_WORKER = '小时工',
-  NANNY_CHILDCARE = '保姆/育儿嫂',
-  MATERNITY_NURSE = '月嫂'
+  YUEXIN = '月嫂',
+  ZHUJIA_YUER = '住家育儿嫂',
+  BAOJIE = '保洁',
+  ZHUJIA_BAOMU = '住家保姆',
+  YANGCHONG = '养宠',
+  XIAOSHI = '小时工',
+  BAIBAN_YUER = '白班育儿',
+  BAIBAN_BAOMU = '白班保姆',
+  ZHUJIA_HULAO = '住家护老'
 }
 
 @Schema({ timestamps: true })
@@ -76,6 +82,22 @@ export class Contract {
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId; // 创建人
+
+  // 爱签相关字段
+  @Prop()
+  esignContractNo?: string; // 爱签合同编号
+
+  @Prop()
+  esignStatus?: string; // 爱签合同状态缓存
+
+  @Prop()
+  esignCreatedAt?: Date; // 爱签合同创建时间
+
+  @Prop()
+  esignTemplateNo?: string; // 爱签模板编号
+
+  @Prop()
+  esignPreviewUrl?: string; // 爱签预览链接（缓存）
 
   @Prop({ default: Date.now })
   createdAt: Date; // 录入时间，自动生成

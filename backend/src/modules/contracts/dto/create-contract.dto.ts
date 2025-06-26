@@ -27,39 +27,44 @@ export class CreateContractDto {
   @IsString()
   customerIdCard?: string;
 
+  @IsOptional()
   @IsEnum(ContractType, {
-    message: '合同类型必须是：小时工、保姆/育儿嫂、月嫂之一'
+    message: '合同类型必须是：月嫂、住家育儿嫂、保洁、住家保姆、养宠、小时工、白班育儿、白班保姆、住家护老之一'
   })
-  contractType: ContractType;
+  contractType?: ContractType;
 
+  @IsOptional()
   @IsDateString({}, { message: '开始时间格式不正确' })
-  startDate: string;
+  startDate?: string;
 
+  @IsOptional()
   @IsDateString({}, { message: '结束时间格式不正确' })
-  endDate: string;
+  endDate?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: '劳动者姓名不能为空' })
-  workerName: string;
+  workerName?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: '劳动者电话不能为空' })
   @IsPhoneNumber('CN', { message: '请输入有效的中国手机号码' })
-  workerPhone: string;
+  workerPhone?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: '劳动者身份证号不能为空' })
-  workerIdCard: string;
+  workerIdCard?: string;
 
+  @IsOptional()
   @IsNumber({}, { message: '家政员工资必须是数字' })
-  @Min(1, { message: '家政员工资必须大于0' })
-  @Transform(({ value }) => parseFloat(value))
-  workerSalary: number;
+  @Min(0, { message: '家政员工资不能小于0' })
+  @Transform(({ value }) => value ? parseFloat(value) : 0)
+  workerSalary?: number;
 
+  @IsOptional()
   @IsNumber({}, { message: '客户服务费必须是数字' })
   @Min(0, { message: '客户服务费不能小于0' })
-  @Transform(({ value }) => parseFloat(value))
-  customerServiceFee: number;
+  @Transform(({ value }) => value ? parseFloat(value) : 0)
+  customerServiceFee?: number;
 
   @IsOptional()
   @IsNumber({}, { message: '家政员服务费必须是数字' })
@@ -101,9 +106,78 @@ export class CreateContractDto {
   @Transform(({ value }) => value ? parseInt(value) : undefined)
   monthlyWorkDays?: number;
 
-  @IsMongoId({ message: '客户ID格式不正确' })
-  customerId: string;
+  @IsOptional()
+  @IsString()
+  customerId?: string;
 
-  @IsMongoId({ message: '服务人员ID格式不正确' })
-  workerId: string;
+  @IsOptional()
+  @IsString()
+  workerId?: string;
+
+  @IsOptional()
+  @IsString()
+  createdBy?: string;
+
+  @IsOptional()
+  @IsString()
+  contractNumber?: string;
+
+  // 爱签相关字段
+  @IsOptional()
+  @IsString()
+  esignContractNo?: string;
+
+  @IsOptional()
+  @IsString()
+  esignStatus?: string;
+
+  @IsOptional()
+  @IsDateString()
+  esignCreatedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  esignTemplateNo?: string;
+
+  @IsOptional()
+  @IsString()
+  esignPreviewUrl?: string;
+
+  // 前端发送的附加字段
+  @IsOptional()
+  @IsString()
+  customerAddress?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => value ? parseFloat(value) : undefined)
+  contractAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  serviceStartDate?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceEndDate?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceContent?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceFrequency?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @IsOptional()
+  @IsString()
+  specialRequirements?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
 } 

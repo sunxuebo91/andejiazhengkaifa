@@ -7,7 +7,7 @@ import {
   DatePicker,
   InputNumber,
   Button,
-  message,
+  App,
   Row,
   Col,
   Space,
@@ -35,6 +35,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const { message } = App.useApp();
 
   useEffect(() => {
     if (visible && contract) {
@@ -74,7 +75,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
           : undefined,
       };
 
-      await contractService.updateContract(contract._id, contractData);
+      await contractService.updateContract(contract._id!, contractData);
       message.success('合同更新成功！');
       onSuccess();
       handleCancel();
@@ -98,7 +99,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
       onCancel={handleCancel}
       footer={null}
       width={1000}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form
         form={form}

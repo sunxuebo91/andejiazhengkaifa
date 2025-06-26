@@ -1,5 +1,5 @@
 export interface Contract {
-  _id: string;
+  _id?: string;
   contractNumber: string;
   customerName: string;
   customerPhone: string;
@@ -21,16 +21,29 @@ export interface Contract {
   monthlyWorkDays?: number;
   customerId: string;
   workerId: string;
-  createdBy: string | { _id: string; name: string; username: string };
-  createdByUser?: { name: string; username: string } | null;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
+  
+  // 爱签相关字段
+  esignContractNo?: string;
+  esignStatus?: string;
+  esignCreatedAt?: string;
+  esignTemplateNo?: string;
+  esignPreviewUrl?: string;
+  esignSignUrls?: string; // JSON字符串，存储真实的签署链接
 }
 
 export enum ContractType {
-  HOURLY_WORKER = '小时工',
-  NANNY_CHILDCARE = '保姆/育儿嫂',
-  MATERNITY_NURSE = '月嫂'
+  YUEXIN = '月嫂',
+  ZHUJIA_YUER = '住家育儿嫂',
+  BAOJIE = '保洁',
+  ZHUJIA_BAOMU = '住家保姆',
+  YANGCHONG = '养宠',
+  XIAOSHI = '小时工',
+  BAIBAN_YUER = '白班育儿',
+  BAIBAN_BAOMU = '白班保姆',
+  ZHUJIA_HULAO = '住家护老'
 }
 
 export const CONTRACT_TYPES = Object.values(ContractType);
@@ -56,6 +69,13 @@ export interface CreateContractData {
   monthlyWorkDays?: number;
   customerId: string;
   workerId: string;
+  
+  // 爱签相关字段
+  esignContractNo?: string;
+  esignStatus?: string;
+  esignCreatedAt?: string;
+  esignTemplateNo?: string;
+  esignSignUrls?: string; // JSON字符串，存储真实的签署链接
 }
 
 export interface Worker {

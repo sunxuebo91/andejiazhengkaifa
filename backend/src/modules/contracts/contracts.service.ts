@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Contract, ContractDocument } from './models/contract.model';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
@@ -19,22 +19,66 @@ export class ContractsService {
   }
 
   // 创建合同
-  async create(createContractDto: CreateContractDto, userId: string): Promise<Contract> {
-    const contractNumber = this.generateContractNumber();
-    
-    const contractData = {
-      ...createContractDto,
-      contractNumber,
-      createdBy: userId,
-      startDate: new Date(createContractDto.startDate),
-      endDate: new Date(createContractDto.endDate),
-      expectedDeliveryDate: createContractDto.expectedDeliveryDate 
-        ? new Date(createContractDto.expectedDeliveryDate)
-        : undefined,
-    };
-
-    const contract = new this.contractModel(contractData);
-    return await contract.save();
+  async create(createContractDto: CreateContractDto, userId?: string): Promise<Contract> {
+    try {
+      console.log('创建合同服务被调用，数据:', createContractDto);
+      
+      // 如果是从爱签同步过来的合同，处理临时字段
+      if (createContractDto.customerId === 'temp' || createContractDto.workerId === 'temp' || createContractDto.createdBy === 'temp') {
+        console.log('检测到来自爱签的合同数据，开始处理临时字段...');
+        
+        // 处理客户ID - 尝试找到现有客户或创建新客户
+        let finalCustomerId = createContractDto.customerId;
+        if (createContractDto.customerId === 'temp') {
+          // TODO: 这里应该集成客户服务，暂时使用固定值
+          finalCustomerId = new Types.ObjectId().toString();
+          console.log('为爱签合同生成临时客户ID:', finalCustomerId);
+        }
+        
+        // 处理员工ID - 尝试找到现有员工或创建新员工记录
+        let finalWorkerId = createContractDto.workerId;
+        if (createContractDto.workerId === 'temp') {
+          // TODO: 这里应该集成员工/简历服务，暂时使用固定值
+          finalWorkerId = new Types.ObjectId().toString();
+          console.log('为爱签合同生成临时员工ID:', finalWorkerId);
+        }
+        
+        // 处理创建人ID
+        let finalCreatedBy = createContractDto.createdBy;
+        if (createContractDto.createdBy === 'temp' || !createContractDto.createdBy) {
+          // 使用传入的userId或生成临时ID
+          finalCreatedBy = userId || new Types.ObjectId().toString();
+          console.log('为合同设置创建人ID:', finalCreatedBy);
+        }
+        
+        // 更新字段
+        createContractDto.customerId = finalCustomerId;
+        createContractDto.workerId = finalWorkerId;
+        createContractDto.createdBy = finalCreatedBy;
+      } else {
+        // 正常创建合同时，确保设置创建人ID
+        if (userId && !createContractDto.createdBy) {
+          createContractDto.createdBy = userId;
+        }
+      }
+      
+      // 生成合同编号（如果没有提供）
+      if (!createContractDto.contractNumber) {
+        createContractDto.contractNumber = await this.generateContractNumber();
+      }
+      
+      console.log('处理后的合同数据:', createContractDto);
+      
+      const contract = new this.contractModel(createContractDto);
+      const savedContract = await contract.save();
+      
+      console.log('合同保存成功，ID:', savedContract._id);
+      
+      return savedContract;
+    } catch (error) {
+      console.error('创建合同失败:', error);
+      throw new BadRequestException(`创建合同失败: ${error.message}`);
+    }
   }
 
   // 获取合同列表

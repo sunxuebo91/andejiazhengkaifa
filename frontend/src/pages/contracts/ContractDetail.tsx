@@ -11,12 +11,33 @@ import {
   Row,
   Col,
   Divider,
+  Alert,
+  Modal,
+  Typography,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, PrinterOutlined } from '@ant-design/icons';
+import { 
+  ArrowLeftOutlined, 
+  EditOutlined, 
+  EyeOutlined,
+  DownloadOutlined,
+  FileTextOutlined,
+  CopyOutlined,
+  LinkOutlined,
+} from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { Contract, ContractType } from '../../types/contract.types';
 import EditContractModal from '../../components/EditContractModal';
+import ContractStatusCard, { ContractStatusInfo } from '../../components/ContractStatusCard';
 import dayjs from 'dayjs';
+
+interface EsignInfo {
+  contractNo: string;
+  templateNo?: string;
+  status?: any;
+  preview?: any;
+  statusError?: string;
+  previewError?: string;
+}
 
 const ContractDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -24,10 +45,28 @@ const ContractDetail: React.FC = () => {
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  
+  // 爱签相关状态
+  const [esignInfo, setEsignInfo] = useState<EsignInfo | null>(null);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  
+  // 新增：合同状态信息
+  const [contractStatusInfo, setContractStatusInfo] = useState<ContractStatusInfo | null>(null);
+
+  // 处理合同状态变化
+  const handleStatusChange = (statusInfo: ContractStatusInfo | null) => {
+    setContractStatusInfo(statusInfo);
+  };
 
   useEffect(() => {
     fetchContractDetail();
   }, [id]);
+
+  useEffect(() => {
+    if (contract?.esignContractNo) {
+      fetchEsignInfo();
+    }
+  }, [contract]);
 
   const fetchContractDetail = async () => {
     if (!id) {
@@ -48,6 +87,274 @@ const ContractDetail: React.FC = () => {
     }
   };
 
+  const fetchEsignInfo = async () => {
+    if (!id) return;
+    
+    try {
+      const response = await contractService.getEsignInfo(id);
+      setEsignInfo(response);
+    } catch (error) {
+      console.error('获取爱签信息失败:', error);
+    }
+  };
+
+  const handlePreviewContract = () => {
+    if (!esignInfo?.preview) {
+      message.warning('暂无预览信息');
+      return;
+    }
+
+    // 如果有预览URL，直接打开
+    if (esignInfo.preview.previewUrl) {
+      window.open(esignInfo.preview.previewUrl, '_blank');
+      return;
+    }
+
+    // 显示预览信息弹窗
+    Modal.info({
+      title: '合同预览信息',
+      width: 600,
+      content: (
+        <div>
+          <p><strong>合同编号:</strong> {esignInfo.contractNo}</p>
+          <p><strong>模板编号:</strong> {esignInfo.templateNo}</p>
+          {esignInfo.preview.contractName && (
+            <p><strong>合同名称:</strong> {esignInfo.preview.contractName}</p>
+          )}
+          {esignInfo.preview.signFlowId && (
+            <p><strong>签署流程ID:</strong> {esignInfo.preview.signFlowId}</p>
+          )}
+          <Alert 
+            type="info" 
+            message="预览功能正在完善中，如需查看合同请使用下载功能" 
+            style={{ marginTop: 16 }}
+          />
+        </div>
+      ),
+    });
+  };
+
+  const handleDownloadContract = async () => {
+    if (!id) return;
+
+    try {
+      setDownloadLoading(true);
+      const response = await contractService.downloadContract(id, {
+        force: 1,
+        downloadFileType: 1
+      });
+
+      if (response.success && response.data) {
+        const downloadData = response.data.data;
+        
+        if (downloadData?.data && downloadData?.downloadInfo?.isBase64) {
+          // 处理base64下载
+          const fileName = downloadData.downloadInfo.fileName || `${esignInfo?.contractNo}.pdf`;
+          const byteCharacters = atob(downloadData.data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/pdf' });
+          
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          link.click();
+          window.URL.revokeObjectURL(url);
+          
+          message.success(`合同下载成功：${fileName}`);
+        } else if (downloadData?.downloadUrl) {
+          window.open(downloadData.downloadUrl, '_blank');
+          message.success('合同下载链接已打开');
+        } else {
+          message.info('下载请求已提交，请稍候');
+        }
+      } else {
+        message.error(response.message || '合同下载失败');
+      }
+    } catch (error) {
+      console.error('下载合同失败:', error);
+      message.error('下载合同失败');
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
+  const [signUrlModalVisible, setSignUrlModalVisible] = useState(false);
+  const [signUrls, setSignUrls] = useState<any[]>([]);
+  const [signUrlLoading, setSignUrlLoading] = useState(false);
+
+  const getStatusText = (status: number): string => {
+    const statusMap: Record<number, string> = {
+      0: '等待签约',
+      1: '签约中',
+      2: '已签约',
+      3: '过期',
+      4: '拒签',
+      6: '作废',
+      7: '撤销'
+    };
+    return statusMap[status] || '未知状态';
+  };
+
+  const handleRefreshSignUrls = async () => {
+    if (!contract) return;
+    
+    try {
+      setSignUrlLoading(true);
+      
+      // 尝试重新添加签署方获取链接（会返回100074，但我们可以从错误中获取信息）
+      const signersData = {
+        contractNo: contract.esignContractNo,
+        signers: [
+          {
+            account: contract.customerPhone,
+            name: contract.customerName,
+            mobile: contract.customerPhone,
+            signType: 'manual',
+            validateType: 'sms'
+          },
+          {
+            account: contract.workerPhone,
+            name: contract.workerName,
+            mobile: contract.workerPhone,
+            signType: 'manual',
+            validateType: 'sms'
+          }
+        ],
+        signOrder: 'parallel'
+      };
+
+      console.log('🔄 尝试重新获取签署链接:', signersData);
+      
+      // 调用爱签API
+      const response = await fetch('/api/esign/add-signers-simple', {
+        method: 'POST',
+                 headers: {
+           'Content-Type': 'application/json',
+           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+         },
+        body: JSON.stringify(signersData)
+      });
+      
+      const result = await response.json();
+      console.log('📊 重新添加签署方结果:', result);
+      
+      if (result.data?.signUser && result.data.signUser.length > 0) {
+        // 成功获取到签署链接
+        const realSignUrls = result.data.signUser.map((user: any, index: number) => ({
+          name: user.name,
+          mobile: user.account,
+          role: index === 0 ? '甲方（客户）' : '乙方（服务人员）',
+          signUrl: user.signUrl,
+          account: user.account,
+          signOrder: user.signOrder
+        }));
+        
+        setSignUrls(realSignUrls);
+        
+        // 同时保存到本地数据库
+        if (contract._id) {
+          await contractService.updateContract(contract._id, {
+            esignSignUrls: JSON.stringify(realSignUrls)
+          });
+        }
+        
+        message.success('签署链接获取成功');
+        console.log('✅ 签署链接已获取并保存:', realSignUrls);
+      } else {
+        message.warning('无法获取签署链接，合同可能已完成签署或状态异常');
+      }
+    } catch (error) {
+      console.error('❌ 刷新签署链接失败:', error);
+      message.error('获取签署链接失败，请稍后重试');
+    } finally {
+      setSignUrlLoading(false);
+    }
+  };
+
+  const handleOpenSignUrl = async () => {
+    if (!contract) {
+      message.error('合同信息不存在');
+      return;
+    }
+
+    if (!contract.esignContractNo) {
+      message.warning('该合同暂无爱签合同编号，无法获取签署链接');
+      return;
+    }
+
+    setSignUrlModalVisible(true);
+    setSignUrlLoading(true);
+
+    try {
+      // 🔥 直接使用本地保存的真实签署链接
+      if (contract.esignSignUrls) {
+        try {
+          const realSignUrls = JSON.parse(contract.esignSignUrls);
+          setSignUrls(realSignUrls);
+          message.success('签署链接获取成功');
+          console.log('✅ 使用本地保存的真实签署链接:', realSignUrls);
+        } catch (parseError) {
+          console.error('❌ 解析签署链接失败:', parseError);
+          throw new Error('签署链接格式错误');
+        }
+      } else {
+        // 如果没有保存的签署链接，尝试从爱签平台获取
+        console.log('🔄 本地无签署链接，尝试从爱签平台获取...');
+        try {
+                     // 先查询合同状态
+           const statusResponse = await contractService.getEsignInfo(contract.esignContractNo);
+           console.log('📊 爱签合同状态查询结果:', statusResponse);
+           
+           if (statusResponse.status && statusResponse.status.success) {
+             const statusInfo = statusResponse.status;
+            
+            // 根据合同状态判断
+            if (statusInfo.data?.status === 2) {
+              // 合同已签署完成
+              message.info('该合同已签署完成，无需再次签署');
+              setSignUrlModalVisible(false);
+              return;
+                         } else if (statusInfo.data?.status === 0 || statusInfo.data?.status === 1) {
+               // 合同等待签署或签署中，尝试重新添加签署方获取链接
+               message.info('正在尝试获取签署链接...');
+               await handleRefreshSignUrls();
+               return;
+             } else {
+               // 其他状态（过期、拒签、作废等）
+               const statusText = getStatusText(statusInfo.data?.status);
+               message.warning(`合同状态异常：${statusText}，无法获取签署链接`);
+               setSignUrlModalVisible(false);
+               return;
+             }
+          } else {
+            // 合同状态查询失败，可能是合同不存在或已删除
+            message.warning('该合同在爱签平台上不存在或已被删除，无法获取签署链接');
+            setSignUrlModalVisible(false);
+            return;
+          }
+        } catch (error) {
+          console.error('❌ 查询爱签合同状态失败:', error);
+          message.warning('该合同尚未生成签署链接，请先在爱签页面完成步骤3（添加签署方）');
+          setSignUrlModalVisible(false);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('获取签署链接失败:', error);
+      message.error('获取签署链接失败，请稍后重试');
+      setSignUrlModalVisible(false);
+    } finally {
+      setSignUrlLoading(false);
+    }
+  };
+
+
+
   const handleBack = () => {
     navigate('/contracts');
   };
@@ -63,9 +370,15 @@ const ContractDetail: React.FC = () => {
 
   const getContractTypeColor = (type: ContractType) => {
     const colors: Record<ContractType, string> = {
-      [ContractType.HOURLY_WORKER]: 'blue',
-      [ContractType.NANNY_CHILDCARE]: 'green',
-      [ContractType.MATERNITY_NURSE]: 'purple',
+      [ContractType.YUEXIN]: 'purple',
+      [ContractType.ZHUJIA_YUER]: 'green',
+      [ContractType.BAOJIE]: 'blue',
+      [ContractType.ZHUJIA_BAOMU]: 'orange',
+      [ContractType.YANGCHONG]: 'cyan',
+      [ContractType.XIAOSHI]: 'geekblue',
+      [ContractType.BAIBAN_YUER]: 'lime',
+      [ContractType.BAIBAN_BAOMU]: 'gold',
+      [ContractType.ZHUJIA_HULAO]: 'magenta',
     };
     return colors[type] || 'default';
   };
@@ -125,10 +438,19 @@ const ContractDetail: React.FC = () => {
         extra={
           <Space>
             <Button 
-              icon={<PrinterOutlined />}
-              onClick={() => window.print()}
+              icon={<EyeOutlined />}
+              onClick={handlePreviewContract}
+              disabled={!contract.esignContractNo}
             >
-              打印合同
+              预览合同
+            </Button>
+            <Button 
+              icon={<DownloadOutlined />}
+              onClick={handleDownloadContract}
+              loading={downloadLoading}
+              disabled={!contract.esignContractNo}
+            >
+              下载合同
             </Button>
             <Button 
               type="primary" 
@@ -141,6 +463,24 @@ const ContractDetail: React.FC = () => {
         }
       >
         <Row gutter={24}>
+          {/* 爱签状态信息卡片 - 使用共享组件 */}
+          {contract.esignContractNo && (
+            <Col span={24}>
+              <ContractStatusCard
+                contractNo={contract.esignContractNo}
+                contractName={contract.contractNumber}
+                showRefreshButton={true}
+                autoRefresh={false}
+                size="default"
+                style={{ marginBottom: '16px' }}
+                onStatusChange={handleStatusChange}
+                title="电子合同状态信息"
+              />
+            </Col>
+          )}
+
+
+
           {/* 合同基本信息 */}
           <Col span={24}>
             <Card type="inner" title="合同基本信息" style={{ marginBottom: '16px' }}>
@@ -158,7 +498,13 @@ const ContractDetail: React.FC = () => {
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="合同状态" span={1}>
-                  <Tag color="green">进行中</Tag>
+                  {contractStatusInfo ? (
+                    <Tag color={contractStatusInfo.statusColor}>
+                      {contractStatusInfo.statusText}
+                    </Tag>
+                  ) : (
+                    <Tag color="default">查询中...</Tag>
+                  )}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="服务开始日期" span={1}>
@@ -327,10 +673,7 @@ const ContractDetail: React.FC = () => {
             <Card type="inner" title="系统信息" style={{ marginBottom: '16px' }}>
               <Descriptions column={2} bordered>
                 <Descriptions.Item label="创建人" span={1}>
-                  {typeof contract.createdBy === 'object' && contract.createdBy?.name 
-                    ? contract.createdBy.name 
-                    : (contract.createdByUser?.name || (typeof contract.createdBy === 'string' ? contract.createdBy : '未知'))
-                  }
+                  {typeof contract.createdBy === 'string' ? contract.createdBy : '未知'}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="创建时间" span={1}>
@@ -360,16 +703,118 @@ const ContractDetail: React.FC = () => {
             >
               编辑合同
             </Button>
-            <Button 
-              size="large" 
-              icon={<PrinterOutlined />}
-              onClick={() => window.print()}
-            >
-              打印合同
-            </Button>
           </Space>
         </div>
       </Card>
+
+      {/* 签署链接弹窗 - 复用爱签页面步骤4的UI */}
+      <Modal
+        title="合同签署链接"
+        open={signUrlModalVisible}
+        onCancel={() => setSignUrlModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setSignUrlModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+        width={800}
+      >
+        <Spin spinning={signUrlLoading}>
+          <div style={{ padding: '20px 0' }}>
+            <Alert
+              message="签署链接已生成"
+              description="请将相应的签署链接发送给对应的签署方进行合同签署"
+              type="success"
+              showIcon
+              style={{ marginBottom: 24 }}
+            />
+            
+            <Row gutter={[16, 16]}>
+              {signUrls.map((signUrl, index) => (
+                <Col span={24} key={index}>
+                  <Card
+                    size="small"
+                    title={
+                      <Space>
+                        <FileTextOutlined />
+                        <Typography.Text strong>{signUrl.role}</Typography.Text>
+                      </Space>
+                    }
+                    extra={
+                      <Space>
+                        <Button
+                          type="primary"
+                          icon={<LinkOutlined />}
+                          onClick={() => {
+                            window.open(signUrl.signUrl, '_blank');
+                            message.success('签署链接已打开');
+                          }}
+                        >
+                          打开签署链接
+                        </Button>
+                        <Button
+                          icon={<CopyOutlined />}
+                          onClick={() => {
+                            navigator.clipboard.writeText(signUrl.signUrl);
+                            message.success('签署链接已复制到剪贴板');
+                          }}
+                        >
+                          复制链接
+                        </Button>
+                      </Space>
+                    }
+                  >
+                    <Descriptions column={2} size="small">
+                      <Descriptions.Item label="姓名">
+                        {signUrl.name}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="手机号">
+                        {signUrl.mobile}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="签署账号">
+                        {signUrl.account}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="签署链接">
+                        <Typography.Text 
+                          copyable={{ 
+                            text: signUrl.signUrl,
+                            onCopy: () => message.success('链接已复制')
+                          }}
+                          style={{ 
+                            maxWidth: 300, 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            display: 'inline-block'
+                          }}
+                        >
+                          {signUrl.signUrl}
+                        </Typography.Text>
+                      </Descriptions.Item>
+                    </Descriptions>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+
+            {signUrls.length > 0 && (
+              <Alert
+                message="温馨提示"
+                description={
+                  <div>
+                    <p>• 请确保签署方使用正确的手机号进行签署</p>
+                    <p>• 签署链接有效期为30天，请及时完成签署</p>
+                    <p>• 如有问题，请联系客服协助处理</p>
+                  </div>
+                }
+                type="info"
+                showIcon
+                style={{ marginTop: 16 }}
+              />
+            )}
+          </div>
+        </Spin>
+      </Modal>
 
       {/* 编辑合同模态框 */}
       {contract && (

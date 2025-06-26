@@ -1,6 +1,6 @@
 import React, { ReactNode, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ConfigProvider, App as AntdApp, Spin } from 'antd';
+import { ConfigProvider, App as AntdApp, Spin, message } from 'antd';
 import BasicLayout from './layouts/BasicLayout';
 import { PageContainer } from '@ant-design/pro-components';
 import { AuthProvider } from './contexts/AuthContext';
@@ -17,7 +17,6 @@ const CreateCustomer = React.lazy(() => import('./pages/customers/CreateCustomer
 const CustomerDetail = React.lazy(() => import('./pages/customers/CustomerDetail'));
 const EditCustomer = React.lazy(() => import('./pages/customers/EditCustomer'));
 const ContractList = React.lazy(() => import('./pages/contracts/ContractList'));
-const CreateContract = React.lazy(() => import('./pages/contracts/CreateContract'));
 const ContractDetail = React.lazy(() => import('./pages/contracts/ContractDetail'));
 const UserList = React.lazy(() => import('./pages/users/UserList'));
 const CreateUser = React.lazy(() => import('./pages/users/CreateUser'));
@@ -48,6 +47,14 @@ const LoadingComponent = () => (
 export default function App({ children }: AppProps) {
   useEffect(() => {
     console.log('App component mounted');
+    
+    // 配置全局message
+    message.config({
+      top: 100,
+      duration: 3,
+      maxCount: 3,
+      rtl: false,
+    });
   }, []);
 
   return (
@@ -133,7 +140,11 @@ export default function App({ children }: AppProps) {
                     />
                     <Route 
                       path="create" 
-                      element={<AuthorizedRoute element={<CreateContract />} />} 
+                      element={<AuthorizedRoute element={<ESignaturePage />} />} 
+                    />
+                    <Route 
+                      path="detail/:id" 
+                      element={<AuthorizedRoute element={<ContractDetail />} />} 
                     />
                     <Route 
                       path=":id" 

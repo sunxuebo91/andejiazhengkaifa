@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
+// import { useNavigate } from 'react-router-dom'; // 暂时不需要
 import { 
   Card, 
   Button, 
@@ -16,24 +17,13 @@ import {
   AutoComplete,
   Tag,
   App,
-  Checkbox,
-  InputNumber,
-  Radio
+  Checkbox
 } from 'antd';
 import { 
   ArrowLeftOutlined,
   UserOutlined,
   SearchOutlined,
-  FileDoneOutlined,
-  DownloadOutlined,
-  SyncOutlined,
-  EyeOutlined,
-  SendOutlined,
-  StopOutlined,
-  DeleteOutlined,
-  CaretRightOutlined,
-  UndoOutlined,
-  InfoCircleOutlined
+  FileTextOutlined
 } from '@ant-design/icons';
 import esignService from '../../services/esignService';
 import { customerService } from '../../services/customerService';
@@ -42,7 +32,6 @@ import { JobType, JOB_TYPE_MAP } from '../../types/resume';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
-const { Step } = Steps;
 
 // 服务项目选项
 const SERVICE_OPTIONS = [
@@ -169,6 +158,7 @@ const ESignatureStepPage: React.FC = () => {
   const [step2Form] = Form.useForm();
   const [contractResult, setContractResult] = useState<any>(null);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
+  // const navigate = useNavigate(); // 暂时不需要
   
   // 步骤数据存储
   const [stepData, setStepData] = useState({
@@ -178,7 +168,8 @@ const ESignatureStepPage: React.FC = () => {
     signUrl: '',
     downloadUrl: '',
     selectedPartyA: undefined as UserSearchResult | undefined,
-    selectedPartyB: undefined as UserSearchResult | undefined
+    selectedPartyB: undefined as UserSearchResult | undefined,
+    localContractId: undefined as string | undefined
   });
 
   // 步骤2相关状态
@@ -520,6 +511,8 @@ const ESignatureStepPage: React.FC = () => {
     }
   }, [currentStep]);
 
+
+
   // 步骤2提交处理
   const handleStep2Submit = async (values: any) => {
     try {
@@ -624,19 +617,123 @@ const ESignatureStepPage: React.FC = () => {
       // 根据爱签官方API文档，响应格式为 { code, msg, data }
       // code: 100000 表示成功，其他表示异常
       if (response && response.code === 100000) {
-        message.success('合同创建成功！可以进入下一步添加签署方。');
+        // 🔥 新增：保存到本地数据库
+        try {
+          console.log('爱签合同创建成功，开始保存到本地数据库...');
+          
+          // 准备本地合同数据
+          const localContractData = {
+            // 基本信息
+            contractNumber: contractNo,
+            customerName: stepData.users?.batchRequest?.partyAName || values.templateParams?.['客户姓名'],
+            customerPhone: stepData.users?.batchRequest?.partyAMobile || values.templateParams?.['客户电话'],
+            customerIdCard: stepData.users?.batchRequest?.partyAIdCard || values.templateParams?.['客户身份证号'],
+            contractType: values.templateParams?.['合同类型'] || '住家育儿嫂',
+            startDate: (() => {
+              const year = values.templateParams?.['开始年'] || new Date().getFullYear();
+              const month = values.templateParams?.['开始月'] || (new Date().getMonth() + 1);
+              const day = values.templateParams?.['开始日'] || new Date().getDate();
+              return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            })(),
+            endDate: (() => {
+              const year = values.templateParams?.['结束年'] || (new Date().getFullYear() + 1);
+              const month = values.templateParams?.['结束月'] || (new Date().getMonth() + 1);
+              const day = values.templateParams?.['结束日'] || new Date().getDate();
+              return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            })(),
+            
+            // 服务人员信息
+            workerName: stepData.users?.batchRequest?.partyBName || values.templateParams?.['阿姨姓名'],
+            workerPhone: stepData.users?.batchRequest?.partyBMobile || values.templateParams?.['阿姨电话'],
+            workerIdCard: stepData.users?.batchRequest?.partyBIdCard || values.templateParams?.['阿姨身份证号'],
+            
+            // 费用信息
+            workerSalary: parseFloat(values.templateParams?.['阿姨工资'] || values.templateParams?.['月工资'] || '0'),
+            customerServiceFee: parseFloat(values.templateParams?.['服务费'] || values.templateParams?.['客户服务费'] || '0'),
+            workerServiceFee: parseFloat(values.templateParams?.['家政员服务费'] || '0') || undefined,
+            deposit: parseFloat(values.templateParams?.['约定定金'] || '0') || undefined,
+            finalPayment: parseFloat(values.templateParams?.['约定尾款'] || '0') || undefined,
+            
+            // 其他信息
+            expectedDeliveryDate: values.templateParams?.['预产期'] || undefined,
+            salaryPaymentDay: parseInt(values.templateParams?.['工资发放日'] || '0') || undefined,
+            monthlyWorkDays: parseInt(values.templateParams?.['月工作天数'] || '0') || undefined,
+            remarks: values.templateParams?.['服务备注'] || values.templateParams?.['备注'] || undefined,
+            
+            // 爱签相关信息
+            esignContractNo: contractNo,
+            esignStatus: '0', // 等待签约
+            esignCreatedAt: new Date().toISOString(),
+            esignTemplateNo: values.templateNo,
+            // 🔥 新增：预留签署链接字段，等步骤3完成后更新
+            esignSignUrls: undefined, // 会在步骤3完成后更新
+            
+            // 临时字段（会被后端处理）
+            customerId: 'temp', // 会被后端处理
+            workerId: 'temp', // 会被后端处理
+            createdBy: 'temp' // 会被后端处理
+          };
+          
+          console.log('准备保存的本地合同数据:', localContractData);
+          
+          // 调用本地合同创建API
+          const localContract = await contractService.createContract(localContractData);
+          console.log('本地合同保存成功:', localContract);
+          
+          message.success('合同创建成功！已保存到本地数据库。');
+          
+          // 保存本地合同ID到stepData，供后续步骤使用
+          console.log('✅ 本地合同创建成功，ID:', localContract._id);
+          setStepData(prev => ({ 
+            ...prev, 
+            localContractId: localContract._id,
+            contract: {
+              contractNo: contractNo,
+              contractName: '安得家政服务合同',
+              templateNo: values.templateNo,
+              templateParams: enhancedTemplateParams,
+              success: true,
+              localSynced: true, // 标记本地已同步
+              localContractId: localContract._id,
+              ...response.data
+            }
+          }));
+          console.log('🔍 stepData已更新，localContractId:', localContract._id);
+          setCurrentStep(2); // 进入步骤3
+          
+        } catch (localError) {
+          console.error('保存到本地数据库失败:', localError);
+          message.warning('爱签合同创建成功，但本地数据同步失败。您可以手动在合同列表中查看。');
+          
+          // 即使本地保存失败，也保持原有流程
+          setStepData(prev => ({ 
+            ...prev, 
+            contract: {
+              contractNo: contractNo,
+              contractName: '安得家政服务合同',
+              templateNo: values.templateNo,
+              templateParams: enhancedTemplateParams,
+              success: true,
+              localSyncError: localError instanceof Error ? localError.message : String(localError),
+              ...response.data
+            }
+          }));
+          setCurrentStep(2); // 进入步骤3
+        }
+        
+        // 保存爱签数据到步骤数据
         setStepData(prev => ({ 
           ...prev, 
           contract: {
             contractNo: contractNo,
-            contractName: '安得家政服务合同', // 固定合同名称
+            contractName: '安得家政服务合同',
             templateNo: values.templateNo,
             templateParams: enhancedTemplateParams,
-            success: true, // 添加成功标记
+            success: true,
+            localSynced: true, // 标记本地已同步
             ...response.data
           }
         }));
-        setCurrentStep(2); // 进入步骤3
       } else {
         const errorMsg = response?.msg || '合同创建失败';
         message.error(`合同创建失败: ${errorMsg}`);
@@ -1782,14 +1879,100 @@ const ESignatureStepPage: React.FC = () => {
         console.log('添加签署方结果:', result);
 
         // 根据爱签官方API文档，响应格式为 { code, msg, data }
-        // code: 100000 表示成功，其他表示异常
-        if (result && result.code === 100000 && result.data) {
-          // 保存签署结果
-          setStepData(prev => ({
-            ...prev,
-            signer: result.data,
-            signUrl: result.data.signUser?.[0]?.signUrl || ''
-          }));
+        // code: 100000 表示成功，100074 表示重复添加（也算成功）
+        if (result && (result.code === 100000 || result.code === 100074)) {
+          console.log('🔍 检查本地合同ID:', stepData.localContractId);
+          console.log('🔍 检查签署用户数据:', result.data?.signUser);
+          console.log('🔍 完整的result.data:', result.data);
+          
+          // 如果是重复添加（100074），需要通过合同状态API获取签署链接
+          if (result.code === 100074) {
+            console.log('⚠️ 检测到重复添加签署人，尝试从合同状态获取签署链接...');
+            try {
+              // 通过合同状态API获取签署链接
+              const statusResult = await esignService.getContractStatus(stepData.contract.contractNo);
+              console.log('📊 合同状态查询结果:', statusResult);
+              
+              if (statusResult.success && statusResult.data?.signUser) {
+                // 使用从状态API获取的签署链接
+                setStepData(prev => ({
+                  ...prev,
+                  signer: statusResult.data,
+                  signUrl: statusResult.data.signUser?.[0]?.signUrl || ''
+                }));
+                
+                // 保存签署链接到本地数据库
+                if (stepData.localContractId) {
+                  const signUrls = statusResult.data.signUser.map((user: any, index: number) => ({
+                    name: user.name,
+                    mobile: user.account,
+                    role: index === 0 ? '甲方（客户）' : '乙方（服务人员）',
+                    signUrl: user.signUrl,
+                    account: user.account,
+                    signOrder: user.signOrder
+                  }));
+
+                  console.log('🔗 准备保存的签署链接数据:', signUrls);
+
+                  await contractService.updateContract(stepData.localContractId, {
+                    esignSignUrls: JSON.stringify(signUrls),
+                    esignStatus: '1'
+                  });
+                  
+                  console.log('✅ 签署链接已保存到本地数据库:', signUrls);
+                  message.success('签署链接已获取并保存到本地数据库');
+                }
+              } else {
+                message.warning('无法获取签署链接，请稍后在合同详情页查看');
+              }
+            } catch (statusError) {
+              console.error('❌ 获取合同状态失败:', statusError);
+              message.warning('签署方已存在，但无法获取签署链接，请稍后在合同详情页查看');
+            }
+          } else {
+            // 正常成功情况（100000）
+            setStepData(prev => ({
+              ...prev,
+              signer: result.data,
+              signUrl: result.data.signUser?.[0]?.signUrl || ''
+            }));
+
+            // 保存签署链接到本地数据库
+            if (stepData.localContractId && result.data?.signUser) {
+              try {
+                const signUrls = result.data.signUser.map((user: any, index: number) => ({
+                  name: user.name,
+                  mobile: user.account,
+                  role: index === 0 ? '甲方（客户）' : '乙方（服务人员）',
+                  signUrl: user.signUrl,
+                  account: user.account,
+                  signOrder: user.signOrder
+                }));
+
+                console.log('🔗 准备保存的签署链接数据:', signUrls);
+
+                await contractService.updateContract(stepData.localContractId, {
+                  esignSignUrls: JSON.stringify(signUrls),
+                  esignStatus: '1'
+                });
+                
+                console.log('✅ 签署链接已保存到本地数据库:', signUrls);
+                message.success('签署链接已保存到本地数据库');
+              } catch (error) {
+                console.error('❌ 保存签署链接到本地数据库失败:', error);
+                message.error('保存签署链接到本地数据库失败，但不影响签署流程');
+              }
+            } else {
+              console.warn('⚠️ 无法保存签署链接到本地数据库:');
+              console.warn('  - localContractId:', stepData.localContractId);
+              console.warn('  - signUser:', result.data?.signUser);
+              if (!stepData.localContractId) {
+                message.warning('本地合同ID不存在，签署链接无法保存到本地数据库');
+              } else if (!result.data?.signUser) {
+                message.warning('签署用户数据不存在，签署链接无法保存到本地数据库');
+              }
+            }
+          }
 
           message.success('签署方添加成功！');
           setCurrentStep(3); // 进入下一步
@@ -1964,6 +2147,18 @@ const ESignatureStepPage: React.FC = () => {
 
   // 步骤5：下载合同
   const renderStep5 = () => {
+    // 自动查询合同状态 - 在页面加载时执行
+    React.useEffect(() => {
+      if (stepData.contract?.contractNo && !contractStatus) {
+        console.log('🔄 步骤5页面加载，自动查询合同状态...');
+        // 延迟一点执行，确保页面渲染完成
+        const timer = setTimeout(() => {
+          checkContractStatus();
+        }, 300);
+        return () => clearTimeout(timer);
+      }
+    }, [stepData.contract?.contractNo]);
+
     const previewContract = async () => {
       if (!stepData.contract?.contractNo) {
         message.error('合同编号不存在');
@@ -1972,11 +2167,54 @@ const ESignatureStepPage: React.FC = () => {
 
       setPreviewLoading(true);
       try {
-        const result = await esignService.previewContract(stepData.contract.contractNo);
+        // 🔥 根据官方文档构建预览参数
+        const previewParams = [
+          {
+            account: stepData.users?.partyA?.request?.mobile || 'preview_user_1',
+            isWrite: 0, // 不使用手写章
+            signStrategyList: [
+              {
+                attachNo: 1,
+                locationMode: 4, // 模板坐标签章
+                signKey: '甲方',
+                signPage: 1,
+                signX: 0.1,
+                signY: 0.1
+              }
+            ]
+          },
+          {
+            account: stepData.users?.partyB?.request?.mobile || 'preview_user_2',
+            isWrite: 0, // 不使用手写章
+            signStrategyList: [
+              {
+                attachNo: 1,
+                locationMode: 4, // 模板坐标签章
+                signKey: '乙方',
+                signPage: 1,
+                signX: 0.6,
+                signY: 0.1
+              }
+            ]
+          }
+        ];
+
+        console.log('📋 预览合同请求参数:', previewParams);
+        
+        const result = await esignService.previewContract(stepData.contract.contractNo, previewParams);
         console.log('合同预览结果:', result);
         
-        if (result.success) {
-          setPreviewData(result);
+        // 🔥 处理后端响应格式
+        if (result && result.success) {
+          setPreviewData({
+            success: true,
+            contractNo: stepData.contract.contractNo,
+            previewUrl: result.previewData,
+            message: result.message || '预览成功',
+            fallbackMode: result.fallbackMode || false,
+            previewInfo: result.previewInfo
+          });
+          
           if (result.fallbackMode) {
             message.warning('无法生成预览图，已获取合同状态信息');
           } else if (result.previewData) {
@@ -1985,11 +2223,24 @@ const ESignatureStepPage: React.FC = () => {
             message.success('合同预览信息获取成功');
           }
         } else {
-          message.error(result.message || '获取合同预览信息失败');
+          // 处理错误情况
+          let errorMessage = result?.message || '获取合同预览信息失败';
+          
+          message.error(errorMessage);
+          setPreviewData({
+            success: false,
+            contractNo: stepData.contract.contractNo,
+            error: errorMessage
+          });
         }
       } catch (error) {
         console.error('预览合同失败:', error);
-        message.error('预览合同失败');
+        message.error('预览合同失败，请检查网络连接');
+        setPreviewData({
+          success: false,
+          contractNo: stepData.contract.contractNo,
+          error: '网络错误或服务异常'
+        });
       } finally {
         setPreviewLoading(false);
       }
@@ -2051,23 +2302,78 @@ const ESignatureStepPage: React.FC = () => {
       { label: '所有分页图片', value: 5, description: '所有分页图片，不含PDF文件' }
     ];
 
-    // 查询合同状态的函数
+    // 查询合同状态的函数 - 完全重写
     const checkContractStatus = async () => {
       if (!stepData.contract?.contractNo) {
-        message.error('合同编号不存在');
+        message.error('合同编号不存在，无法查询状态');
         return;
       }
 
+      console.log(`🔍 开始查询合同状态，合同编号: ${stepData.contract.contractNo}`);
       setStatusLoading(true);
+      
       try {
-        const result = await esignService.getContractStatus(stepData.contract.contractNo);
-        console.log('合同状态查询结果:', result);
+        // 调用后端API
+        const response = await esignService.getContractStatus(stepData.contract.contractNo);
+        console.log('📦 API响应 (原始):', response);
+        console.log('📦 响应类型:', typeof response);
         
-        if (result.success && result.data) {
-          setContractStatus(result.data);
+        // 🔥 重写：简化响应处理逻辑
+        let apiResult = response;
+        
+        // 如果是字符串，尝试解析
+        if (typeof response === 'string') {
+          try {
+            apiResult = JSON.parse(response);
+            console.log('✅ JSON解析成功:', apiResult);
+          } catch (e) {
+            console.error('❌ JSON解析失败:', e);
+            message.error('服务器响应格式错误');
+            return;
+          }
+        }
+        
+        console.log('🔍 处理后的结果:', apiResult);
+        console.log('🔍 检查字段:');
+        console.log('  - success:', apiResult.success);
+        console.log('  - message:', apiResult.message);
+        console.log('  - data:', apiResult.data);
+        console.log('  - statusInfo:', apiResult.statusInfo);
+        
+        // 🔥 重写：统一判断成功条件
+        let isSuccess = false;
+        let contractData = null;
+        let statusValue = null;
+        
+        // 方式1：后端包装格式 {success: true, data: {...}, statusInfo: {...}}
+        if (apiResult.success === true && apiResult.data) {
+          isSuccess = true;
+          contractData = apiResult;
+          statusValue = apiResult.data?.status || apiResult.statusInfo?.status;
+          console.log('✅ 识别为后端包装格式');
+          console.log('📊 提取的状态值:', statusValue);
+        }
+        // 方式2：直接爱签API格式（如果data中包含code字段）
+        else if (apiResult.data && typeof apiResult.data === 'object' && 
+                'code' in apiResult.data && 
+                (apiResult.data.code === 100000 || apiResult.data.code === '100000')) {
+          isSuccess = true;
+          contractData = apiResult.data;
+          statusValue = apiResult.data.data?.status;
+          console.log('✅ 识别为嵌套的爱签API格式');
+          console.log('📊 提取的状态值:', statusValue);
+        }
+        
+        if (isSuccess && contractData && statusValue !== undefined && statusValue !== null) {
+          // 🎉 成功获取合同状态
+          console.log('🎉 合同状态查询成功！状态值:', statusValue);
           
-          // 根据合同状态显示不同的消息
-          const statusMap = {
+          setContractStatus(contractData);
+          console.log('📋 设置的contractStatus:', contractData);
+          console.log('📋 contractStatus.data.status:', contractData.data.status);
+          
+          // 状态映射
+          const statusMap: { [key: number]: { text: string; type: 'success' | 'info' | 'warning' | 'error' } } = {
             0: { text: '等待签约', type: 'warning' },
             1: { text: '签约中', type: 'info' },
             2: { text: '已签约', type: 'success' },
@@ -2077,42 +2383,75 @@ const ESignatureStepPage: React.FC = () => {
             7: { text: '撤销', type: 'warning' }
           };
           
-          const status = result.data.data?.status;
-          const statusInfo = statusMap[status as keyof typeof statusMap] || { text: '未知状态', type: 'info' };
-          const messageType = statusInfo.type as keyof typeof message;
-          (message[messageType] as any)(`合同状态：${statusInfo.text}`);
+          const statusInfo = statusMap[statusValue] || { text: '未知状态', type: 'info' };
+          
+          // 显示成功消息
+          if (statusInfo.type === 'success') {
+            message.success(`合同状态：${statusInfo.text}`);
+          } else if (statusInfo.type === 'error') {
+            message.error(`合同状态：${statusInfo.text}`);
+          } else if (statusInfo.type === 'warning') {
+            message.warning(`合同状态：${statusInfo.text}`);
+          } else {
+            message.info(`合同状态：${statusInfo.text}`);
+          }
+          
         } else {
+          // 🚨 查询失败
+          console.log('❌ 合同状态查询失败');
+          console.log('  - isSuccess:', isSuccess);
+          console.log('  - contractData:', contractData);
+          console.log('  - statusValue:', statusValue);
+          
           setContractStatus(null);
           
-          // 根据错误码显示具体错误信息
-          let errorMessage = result.message || '合同状态查询失败';
-          if (result.errorCode) {
-            switch (result.errorCode) {
+          // 错误处理
+          let errorMessage = '合同状态查询失败';
+          let errorCode = null;
+          
+          // 获取错误码和错误信息
+          if (apiResult.success === false) {
+            errorCode = apiResult.errorCode;
+            errorMessage = apiResult.message || errorMessage;
+          } else if (apiResult.data && typeof apiResult.data === 'object' && 
+                    'code' in apiResult.data && apiResult.data.code !== 100000) {
+            errorCode = apiResult.data.code;
+            errorMessage = (apiResult.data as any).msg || errorMessage;
+          }
+          
+          // 根据错误码显示具体错误
+          if (errorCode) {
+            switch (Number(errorCode)) {
+              case 100056:
+                errorMessage = '参数错误：合同编号为空或格式错误';
+                break;
               case 100066:
                 errorMessage = '合同不存在，请检查合同编号是否正确';
                 break;
               case 100613:
                 errorMessage = '合同已被删除';
                 break;
-              case 100056:
-                errorMessage = '合同编号格式错误';
-                break;
+              default:
+                errorMessage = `查询失败 (错误码: ${errorCode}): ${errorMessage}`;
             }
           }
           
-          message.warning(errorMessage);
+          message.error(errorMessage);
         }
+        
       } catch (error: any) {
-        console.error('查询合同状态失败:', error);
+        console.error('🚨 查询合同状态异常:', error);
         setContractStatus(null);
         
-        // 检查是否是网络错误或其他系统错误
+        // 网络或系统错误处理
         if (error?.response?.status === 404) {
-          message.error('合同查询服务暂时不可用，请稍后重试');
+          message.error('合同查询服务不可用，请稍后重试');
         } else if (error?.response?.status >= 500) {
-          message.error('服务器错误，请联系管理员');
+          message.error('服务器内部错误，请联系管理员');
+        } else if (error?.message?.includes('Network Error')) {
+          message.error('网络连接失败，请检查网络');
         } else {
-          message.error('查询合同状态失败，请检查网络连接');
+          message.error('查询合同状态失败，请重试');
         }
       } finally {
         setStatusLoading(false);
@@ -2229,13 +2568,13 @@ const ESignatureStepPage: React.FC = () => {
               </Col>
               <Col span={8}>
                 <p><strong>当前状态：</strong>
-                  <Tag color={getStatusColor(contractStatus.data?.status)}>
-                    {getStatusText(contractStatus.data?.status)}
+                  <Tag color={getStatusColor(contractStatus.data.status)}>
+                    {getStatusText(contractStatus.data.status)}
                   </Tag>
                 </p>
               </Col>
             </Row>
-            <p><strong>状态说明：</strong>{getStatusDescription(contractStatus.data?.status)}</p>
+            <p><strong>状态说明：</strong>{getStatusDescription(contractStatus.data.status)}</p>
           </Card>
         )}
 
@@ -2265,6 +2604,20 @@ const ESignatureStepPage: React.FC = () => {
             >
               下载合同
             </Button>
+            {/* 新增：合同详情按钮 */}
+            {stepData.localContractId && (
+              <Button 
+                type="primary"
+                onClick={() => {
+                  window.open(`/contracts/detail/${stepData.localContractId}`, '_blank');
+                  message.success('合同详情页已在新窗口打开');
+                }}
+                icon={<FileTextOutlined />}
+                style={{ background: '#1890ff', borderColor: '#1890ff' }}
+              >
+                合同详情
+              </Button>
+            )}
             <Button 
               danger
               onClick={withdrawContract}

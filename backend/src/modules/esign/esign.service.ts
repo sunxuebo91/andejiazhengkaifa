@@ -2654,7 +2654,7 @@ export class ESignService {
         ...(signer.validateTypeList && { validateTypeList: signer.validateTypeList }),
         ...(signer.autoSwitch && { autoSwitch: signer.autoSwitch }),
         ...(signer.isNoticeComplete && { isNoticeComplete: signer.isNoticeComplete }),
-        ...(signer.waterMark && { waterMark: signer.waterMark }),
+        waterMark: signer.waterMark ?? 1, // 默认启用日期水印
         autoSms: signer.autoSms ?? 1, // 默认自动发送短信
         customSignFlag: signer.customSignFlag ?? 0, // 默认指定签章位置
         ...(signer.signStrategyList && { signStrategyList: signer.signStrategyList }),
@@ -2704,9 +2704,16 @@ export class ESignService {
     try {
       console.log('🔄 简化版添加签署方:', params);
 
-      const signersData = params.signers.map((signer, index) => {
+      const signersData = await Promise.all(params.signers.map(async (signer, index) => {
         // 签署类型：2-无感知签章，3-有感知签章
-        const signType = signer.signType === 'auto' ? 2 : 3;
+        // 特殊处理：丙方（企业发起方）始终使用无感知签章
+        let signType = signer.signType === 'auto' ? 2 : 3;
+        
+        // 如果是第三个及以后的签署人（通常是企业发起方），强制设置为无感知签章
+        if (index >= 2) {
+          signType = 2; // 无感知签章（自动签章）
+          console.log(`🏢 检测到企业发起方（第${index + 1}个签署人），强制启用无感知签章`);
+        }
         
         // 验证方式：1-短信验证码，2-签约密码，3-人脸识别
         let validateType = 1; // 默认短信验证
@@ -2752,13 +2759,25 @@ export class ESignService {
           } else {
             // 第三个及以后的签署人（企业）
             signKey = '丙方签章区';
+            
+            // 为企业用户设置默认印章（同步等待，确保在签章策略生效前完成）
+            try {
+              console.log(`🔧 为企业用户 ${signer.account} 设置默认印章...`);
+              await this.setDefaultSeal(signer.account, "e5a9b6ff9e754771b0c364f68f2c3717");
+              console.log(`✅ 企业用户 ${signer.account} 默认印章设置完成`);
+            } catch (error) {
+              console.warn(`⚠️ 为企业用户 ${signer.account} 设置默认印章失败: ${error.message}`);
+              // 不抛出异常，继续执行签章策略设置
+            }
           }
 
           signStrategyList.push({
             attachNo: 1,
             locationMode: 4, // 模板坐标签章（官方文档推荐，仅支持模板文件）
             signKey: signKey, // 模板中设置的签署区名称
-            signType: 1 // 签名/签章
+            signType: 1, // 签名/签章
+            canDrag: 0 // 不允许拖动
+            // 注意：sealNo参数应该在顶层，不在signStrategyList中
           });
         }
 
@@ -2814,7 +2833,8 @@ export class ESignService {
         
         console.log(`📊 最终receiverFillStrategyList长度: ${receiverFillStrategyList.length}`);
 
-        return {
+        // 构建签署人数据，严格按照爱签官方文档格式
+        const signerData: any = {
           contractNo: params.contractNo,
           account: signer.account,
           signType: signType,
@@ -2822,13 +2842,22 @@ export class ESignService {
           signOrder: params.signOrder === 'sequential' ? (index + 1).toString() : '1',
           isNotice: 1,
           validateType: validateType,
+          waterMark: 1, // 启用日期水印，自动显示签署日期
           autoSms: 1,
           customSignFlag: 0,
           signStrategyList: signStrategyList,
           ...(receiverFillStrategyList.length > 0 && { receiverFillStrategyList }),
           signMark: `${signer.name}_${Date.now()}`
         };
-      });
+
+        // 🔧 关键修复：为丙方（企业）添加顶层sealNo参数，按照官方文档要求
+        if (index >= 2) {
+          signerData.sealNo = "e5a9b6ff9e754771b0c364f68f2c3717"; // 企业默认印章编号
+          console.log(`🏢 为企业签署人设置顶层sealNo参数: ${signerData.sealNo}`);
+        }
+
+        return signerData;
+      }));
 
       // 调用标准的添加签署方方法，直接返回爱签API响应
       return await this.addContractSigners(signersData);
@@ -2907,6 +2936,35 @@ export class ESignService {
       return response.data;
     } catch (error) {
       console.error('❌ 下载合同失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 设置默认印章
+   * API: /user/setDefaultSeal
+   * 将指定印章设置为默认章，如果没有指定印章，则会将系统默认生成印章设置为默认章
+   */
+  async setDefaultSeal(account: string, sealNo?: string): Promise<any> {
+    try {
+      console.log(`🔧 为用户 ${account} 设置默认印章: ${sealNo || '系统默认章'}`);
+      
+      const bizData = {
+        account: account,
+        sealNo: sealNo || "e5a9b6ff9e754771b0c364f68f2c3717" // 官方默认章编号
+      };
+
+      const response = await this.callESignAPI('/user/setDefaultSeal', bizData);
+      
+      if (response.code === 100000) {
+        console.log(`✅ 用户 ${account} 默认印章设置成功`);
+      } else {
+        console.warn(`⚠️ 用户 ${account} 默认印章设置失败: ${response.msg}`);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error(`❌ 设置默认印章失败:`, error);
       throw error;
     }
   }

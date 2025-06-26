@@ -116,7 +116,8 @@ export const contractService = {
     downloadFileType?: number;
   } = {}): Promise<any> {
     const response = await apiService.post(`/api/contracts/${contractId}/download-contract`, options);
-    return response.data;
+    // 返回完整的响应对象，包含success、data、message字段
+    return response;
   },
 
   // 预览合同

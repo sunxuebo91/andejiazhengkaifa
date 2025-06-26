@@ -43,7 +43,7 @@ interface EsignInfo {
 const ContractDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { modal } = App.useApp();
+  const { modal, message: messageApi } = App.useApp();
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -72,7 +72,7 @@ const ContractDetail: React.FC = () => {
 
   const fetchContractDetail = async () => {
     if (!id) {
-      message.error('无效的合同ID');
+      messageApi.error('无效的合同ID');
       navigate('/contracts');
       return;
     }
@@ -83,7 +83,7 @@ const ContractDetail: React.FC = () => {
       setContract(response);
     } catch (error) {
       console.error('获取合同详情失败:', error);
-      message.error('获取合同详情失败');
+      messageApi.error('获取合同详情失败');
     } finally {
       setLoading(false);
     }
@@ -102,17 +102,17 @@ const ContractDetail: React.FC = () => {
 
   const handlePreviewContract = async () => {
     if (!contract?.esignContractNo) {
-      message.warning('该合同暂无爱签合同编号，无法预览');
+      messageApi.warning('该合同暂无爱签合同编号，无法预览');
       return;
     }
 
     try {
-      message.loading({ content: '正在生成合同预览...', key: 'preview' });
+      messageApi.loading({ content: '正在生成合同预览...', key: 'preview' });
       
       // 调用预览合同API
       const response = await contractService.previewContract(contract.esignContractNo);
       
-      message.destroy('preview');
+      messageApi.destroy('preview');
       
       if (response.success) {
         // 根据合同状态处理不同的预览逻辑
@@ -366,49 +366,115 @@ const ContractDetail: React.FC = () => {
   };
 
   const handleDownloadContract = async () => {
-    if (!id) return;
+    if (!contract?.esignContractNo) {
+      messageApi.warning('该合同暂无爱签合同编号，无法下载');
+      return;
+    }
 
     try {
       setDownloadLoading(true);
-      const response = await contractService.downloadContract(id, {
-        force: 1,
-        downloadFileType: 1
+      
+      console.log('🔄 开始下载合同:', contract.esignContractNo);
+      
+      // 根据官方文档调用下载API
+      const response = await contractService.downloadContract(id!, {
+        force: 1, // 强制下载，无论什么状态都下载
+        downloadFileType: 1 // PDF文件
       });
 
+      console.log('📊 下载响应:', response);
+
       if (response.success && response.data) {
-        const downloadData = response.data.data;
+        // 根据官方文档，响应格式为：
+        // {
+        //   fileName: "test001.pdf",
+        //   md5: "83caefdc55884a13d44504c78adcafd5", 
+        //   size: 449565,
+        //   data: "{base64字符串}",
+        //   fileType: 0 // 0：PDF，1：ZIP
+        // }
         
-        if (downloadData?.data && downloadData?.downloadInfo?.isBase64) {
-          // 处理base64下载
-          const fileName = downloadData.downloadInfo.fileName || `${esignInfo?.contractNo}.pdf`;
-          const byteCharacters = atob(downloadData.data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        const downloadData = response.data;
+        
+        if (downloadData.data) {
+          // 处理base64数据下载
+          try {
+            const fileName = downloadData.fileName || `${contract.esignContractNo}.pdf`;
+            const base64Data = downloadData.data;
+            
+            console.log('📄 准备下载文件:', {
+              fileName,
+              size: downloadData.size,
+              fileType: downloadData.fileType,
+              md5: downloadData.md5
+            });
+            
+            // 将base64转换为Blob
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            
+            // 根据文件类型设置MIME类型
+            const mimeType = downloadData.fileType === 1 ? 'application/zip' : 'application/pdf';
+            const blob = new Blob([byteArray], { type: mimeType });
+            
+            // 创建下载链接
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            
+            // 触发下载
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // 清理URL对象
+            window.URL.revokeObjectURL(url);
+            
+            messageApi.success(`合同下载成功：${fileName} (${(downloadData.size / 1024).toFixed(1)}KB)`);
+            console.log('✅ 合同下载完成');
+            
+          } catch (base64Error) {
+            console.error('❌ Base64数据处理失败:', base64Error);
+            messageApi.error('文件数据处理失败，请联系管理员');
           }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'application/pdf' });
-          
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = fileName;
-          link.click();
-          window.URL.revokeObjectURL(url);
-          
-          message.success(`合同下载成功：${fileName}`);
-        } else if (downloadData?.downloadUrl) {
-          window.open(downloadData.downloadUrl, '_blank');
-          message.success('合同下载链接已打开');
         } else {
-          message.info('下载请求已提交，请稍候');
+          console.error('❌ 响应中缺少文件数据');
+          messageApi.error('下载响应中缺少文件数据');
         }
       } else {
-        message.error(response.message || '合同下载失败');
+        // 处理API错误
+        const errorMsg = response.message || '合同下载失败';
+        console.error('❌ 下载API返回错误:', errorMsg);
+        
+        // 根据常见错误码提供友好提示
+        if (errorMsg.includes('100056')) {
+          messageApi.error('合同编号为空，请刷新页面重试');
+        } else if (errorMsg.includes('100066')) {
+          messageApi.error('合同不存在，可能已被删除');
+        } else if (errorMsg.includes('100067')) {
+          messageApi.warning('合同尚未签署完成，是否强制下载？');
+        } else {
+          messageApi.error(errorMsg);
+        }
       }
     } catch (error) {
-      console.error('下载合同失败:', error);
-      message.error('下载合同失败');
+      console.error('❌ 下载合同请求失败:', error);
+      
+      // 处理网络错误
+      if ((error as any).response?.status === 401) {
+        messageApi.error('登录已过期，请重新登录');
+      } else if ((error as any).response?.status === 404) {
+        messageApi.error('下载接口不存在，请联系管理员');
+      } else if ((error as any).response?.status >= 500) {
+        messageApi.error('服务器错误，请稍后重试');
+      } else {
+        messageApi.error('网络请求失败，请检查网络连接');
+      }
     } finally {
       setDownloadLoading(false);
     }

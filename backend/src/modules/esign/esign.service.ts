@@ -1557,7 +1557,7 @@ export class ESignService {
         contractNo: params.contractNo,
         contractName: params.contractName,
         signOrder: 1, // 无序签约
-        validityTime: 30, // 30天有效期
+        validityTime: 365, // 365天有效期
         // 使用模板方式（按照官方文档格式）
         templates: [
           {
@@ -1807,7 +1807,7 @@ export class ESignService {
       const requestData = {
         contractNo: contractData.contractNo,
         contractName: contractData.contractName,
-        validityTime: contractData.validityTime || 30,
+        validityTime: contractData.validityTime || 365,
         signOrder: contractData.signOrder || 1,
         templates: [
           {
@@ -3807,6 +3807,11 @@ export class ESignService {
    * - 签约完成状态（Status=2）：提示下载合同进行预览
    * - 其他状态：根据情况处理
    */
+  /**
+   * 预览合同 - 根据官方文档实现
+   * @param contractNo 合同编号
+   * @param signers 签署人配置（可选）
+   */
   async previewContract(contractNo: string, signers?: Array<{
     account: string;
     signStrategyList: Array<{
@@ -3821,6 +3826,30 @@ export class ESignService {
   }>): Promise<any> {
     try {
       console.log('🔍 预览合同:', contractNo);
+
+      // 首先检查合同编号格式，如果不是真实的爱签合同编号，返回模拟预览
+      if (contractNo.startsWith('CONTRACT_')) {
+        console.log('📋 检测到本地生成的合同编号，返回模拟预览信息');
+        return {
+          success: true,
+          contractNo,
+          contractStatus: 1,
+          statusText: '签约中',
+          message: '合同正在签署中，可预览当前签署进度',
+          previewData: null, // 没有真实预览数据
+          fallbackMode: true,
+          previewInfo: {
+            canDownload: false,
+            hasPreviewImage: false,
+            contractSigning: true,
+            statusText: '签约中',
+            recommendation: '这是本地生成的合同编号，需要真实的爱签合同编号才能预览。请先完成爱签合同创建流程。',
+            availableFormats: [
+              { type: 'info', name: '状态信息', recommended: true, description: '合同信息查看' }
+            ]
+          }
+        };
+      }
 
       // 步骤1: 首先获取合同状态，根据状态决定预览策略
       let contractStatus = null;
@@ -3862,8 +3891,9 @@ export class ESignService {
         console.log('📋 合同签约中，可以预览当前签署状态');
         
         try {
-          // 使用previewContract接口生成预览
+          // 🔥 根据3.1.9版本的预览参数配置
           if (!signers || signers.length === 0) {
+            // 使用3.1.9版本的默认预览配置
             signers = [
               {
                 account: 'preview_user_1',
@@ -3871,32 +3901,52 @@ export class ESignService {
                 signStrategyList: [
                   {
                     attachNo: 1,
-                    locationMode: 2, // 坐标定位
+                    locationMode: 4, // 模板坐标签章
+                    signKey: '甲方',
                     signPage: 1,
-                    signX: 0.35,
-                    signY: 0.65
+                    signX: 0.1,
+                    signY: 0.1
+                  }
+                ]
+              },
+              {
+                account: 'preview_user_2',
+                isWrite: 0,
+                signStrategyList: [
+                  {
+                    attachNo: 1,
+                    locationMode: 4, // 模板坐标签章
+                    signKey: '乙方',
+                    signPage: 1,
+                    signX: 0.6,
+                    signY: 0.1
                   }
                 ]
               }
             ];
           }
 
-          const previewData = signers.map(signer => ({
+          // 🔥 根据3.1.9版本的正确实现：传递多个签署人的数组
+          const previewRequestData = signers.map(signer => ({
             contractNo,
             account: signer.account,
             isWrite: signer.isWrite || 0,
             signStrategyList: signer.signStrategyList
           }));
 
-          const result = await this.callESignAPI('/contract/previewContract', previewData);
+          console.log('📋 调用预览合同API，请求参数:', JSON.stringify(previewRequestData, null, 2));
+          
+          const result = await this.callESignAPI('/contract/previewContract', previewRequestData);
+          console.log('📋 预览合同API响应:', result);
           
           if (result.code === 100000) {
+            // 成功获取预览数据
             return {
               success: true,
               contractNo,
               contractStatus: 1,
               statusText: '签约中',
-              previewData: result.data,
+              previewData: result.data, // 这应该是base64编码的图片或预览URL
               message: '合同预览生成成功（签约中状态）',
               method: 'previewContract',
               previewInfo: {
@@ -3911,10 +3961,77 @@ export class ESignService {
               }
             };
           } else {
-            throw new Error(result.msg || 'previewContract接口失败');
+            // API调用失败，记录错误信息
+            console.log('❌ 预览合同API失败:', result.msg, '错误码:', result.code);
+            
+            // 根据错误码提供具体的错误信息
+            let errorMessage = result.msg || 'previewContract接口失败';
+            let recommendation = '请联系管理员处理';
+            
+            switch (result.code) {
+              case 100034:
+                errorMessage = '模板不存在';
+                recommendation = '请检查合同模板配置';
+                break;
+              case 100054:
+                errorMessage = '签约用户错误';
+                recommendation = '请检查签约用户配置';
+                break;
+              case 100056:
+                errorMessage = '合同编号为空';
+                recommendation = '请提供有效的合同编号';
+                break;
+              case 100066:
+                errorMessage = '合同不存在';
+                recommendation = '请检查合同编号是否正确';
+                break;
+              case 100084:
+                errorMessage = '签约人不存在';
+                recommendation = '请先添加签约人';
+                break;
+              case 100613:
+                errorMessage = '合同已删除';
+                recommendation = '该合同已被删除，无法预览';
+                break;
+            }
+            
+            return {
+              success: false,
+              contractNo,
+              contractStatus: 1,
+              statusText: '签约中',
+              message: `预览失败: ${errorMessage}`,
+              error: true,
+              previewInfo: {
+                canDownload: false,
+                hasPreviewImage: false,
+                error: true,
+                statusText: '签约中',
+                recommendation,
+                errorCode: result.code,
+                availableFormats: []
+              }
+            };
           }
         } catch (previewError) {
           console.log('⚠️ 签约中状态预览失败:', previewError.message);
+          
+          return {
+            success: false,
+            contractNo,
+            contractStatus: 1,
+            statusText: '签约中',
+            message: `预览合同时发生错误: ${previewError.message}`,
+            error: true,
+            previewInfo: {
+              canDownload: false,
+              hasPreviewImage: false,
+              error: true,
+              statusText: '签约中',
+              recommendation: '网络错误或服务异常，请稍后重试',
+              availableFormats: []
+            }
+          };
         }
       }
 
@@ -4035,16 +4152,28 @@ export class ESignService {
   /**
    * 撤销合同
    * 根据官方文档实现撤销合同功能
+   * @param contractNo 合同唯一编码
+   * @param withdrawReason 撤销原因，最多50字
+   * @param isNoticeSignUser 是否短信通知签署用户，默认false
    */
-  async withdrawContract(contractNo: string, reason?: string): Promise<any> {
+  async withdrawContract(
+    contractNo: string, 
+    withdrawReason?: string, 
+    isNoticeSignUser: boolean = false
+  ): Promise<any> {
     try {
       console.log('🔍 撤销合同:', contractNo);
 
-      // 构建撤销合同请求数据
-      const withdrawData = {
+      // 构建撤销合同请求数据（按照官方文档）
+      const withdrawData: any = {
         contractNo,
-        reason: reason || '用户主动撤销合同' // 撤销原因，可选
+        isNoticeSignUser
       };
+
+      // 可选字段：撤销原因（最多50字）
+      if (withdrawReason && withdrawReason.trim()) {
+        withdrawData.withdrawReason = withdrawReason.slice(0, 50); // 限制50字
+      }
 
       console.log('📋 撤销合同请求数据:', JSON.stringify(withdrawData, null, 2));
 
@@ -4065,7 +4194,177 @@ export class ESignService {
       }
     } catch (error) {
       console.error('❌ 撤销合同失败:', error);
+      
+      // 处理特定的错误码
+      if (error.response?.data?.code) {
+        const errorCode = error.response.data.code;
+        const errorMsg = error.response.data.msg;
+        
+        switch (errorCode) {
+          case 101000:
+            throw new Error('合同已签署完成，请通过作废接口完成作废操作');
+          case 101001:
+            throw new Error('合同已撤销，不能重复撤销');
+          case 101002:
+            throw new Error('合同已作废，不能再次撤销');
+          case 100613:
+            throw new Error('合同已删除');
+          case 0:
+            throw new Error('合同不存在');
+          default:
+            throw new Error(errorMsg || '撤销合同失败');
+        }
+      }
+      
       throw new Error(`撤销合同失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 作废合同（针对已签署完成的合同）
+   * @param contractNo 合同唯一编码
+   * @param invalidReason 作废原因
+   * @param isNoticeSignUser 是否短信通知签署用户，默认false
+   */
+  async invalidateContract(
+    contractNo: string, 
+    invalidReason?: string, 
+    isNoticeSignUser: boolean = false
+  ): Promise<any> {
+    try {
+      console.log('🔍 作废合同:', contractNo);
+
+      // 构建作废合同请求数据
+      const invalidateData: any = {
+        contractNo,
+        isNoticeSignUser
+      };
+
+      // 可选字段：作废原因
+      if (invalidReason && invalidReason.trim()) {
+        invalidateData.invalidReason = invalidReason;
+      }
+
+      console.log('📋 作废合同请求数据:', JSON.stringify(invalidateData, null, 2));
+
+      // 调用爱签作废合同API
+      const result = await this.callESignAPI('/contract/invalid', invalidateData);
+      
+      console.log('✅ 作废合同响应:', result);
+
+      if (result.code === 100000) {
+        return {
+          success: true,
+          contractNo,
+          message: '合同作废成功',
+          data: result.data
+        };
+      } else {
+        throw new Error(result.msg || '作废合同失败');
+      }
+    } catch (error) {
+      console.error('❌ 作废合同失败:', error);
+      throw new Error(`作废合同失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 智能撤销/作废合同
+   * 根据合同状态自动选择撤销或作废操作
+   * @param contractNo 合同唯一编码
+   * @param reason 撤销/作废原因
+   * @param isNoticeSignUser 是否短信通知签署用户
+   */
+  async cancelContract(
+    contractNo: string, 
+    reason?: string, 
+    isNoticeSignUser: boolean = false
+  ): Promise<any> {
+    try {
+      console.log('🔍 智能撤销/作废合同:', contractNo);
+
+      // 首先尝试撤销合同
+      try {
+        const withdrawResult = await this.withdrawContract(contractNo, reason, isNoticeSignUser);
+        return {
+          ...withdrawResult,
+          action: 'withdraw',
+          message: '合同撤销成功'
+        };
+      } catch (withdrawError) {
+        // 如果是101000错误码（合同已签署完成），则尝试作废
+        if (withdrawError.message.includes('已签署完成')) {
+          console.log('🔄 合同已签署完成，尝试作废操作...');
+          const invalidateResult = await this.invalidateContract(contractNo, reason, isNoticeSignUser);
+          return {
+            ...invalidateResult,
+            action: 'invalidate',
+            message: '合同作废成功'
+          };
+        }
+        
+        // 其他错误直接抛出
+        throw withdrawError;
+      }
+    } catch (error) {
+      console.error('❌ 智能撤销/作废合同失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 简单预览合同方法 - 严格按照官方文档实现
+   */
+  async simplePreviewContract(contractNo: string): Promise<any> {
+    try {
+      console.log('🔍 简单预览合同:', contractNo);
+
+      // 构建符合官方文档的请求参数
+      const previewParams = {
+        contractNo: contractNo,
+        account: "USER_12345",  // 用户唯一标识
+        isWrite: 0,             // 0=非手写章
+        signStrategyList: [
+          {
+            attachNo: 1,        // 第一个文件
+            locationMode: 2,    // 坐标签章
+            signPage: 1,        // 第一页
+            signX: 0.75,        // 右侧位置
+            signY: 0.90         // 底部位置
+          }
+        ]
+      };
+
+      console.log('📋 预览请求参数:', JSON.stringify(previewParams, null, 2));
+      
+      const result = await this.callESignAPI('/contract/previewContract', previewParams);
+      console.log('📋 预览API响应:', result);
+      
+      if (result.code === 100000) {
+        return {
+          success: true,
+          contractNo,
+          previewData: result.data,
+          message: '合同预览成功',
+          method: 'simplePreview'
+        };
+      } else {
+        return {
+          success: false,
+          contractNo,
+          error: result.msg,
+          errorCode: result.code,
+          message: `预览失败: ${result.msg}`
+        };
+      }
+    } catch (error) {
+      console.error('简单预览合同失败:', error);
+      return {
+        success: false,
+        contractNo,
+        error: error.message,
+        message: `预览异常: ${error.message}`
+      };
     }
   }
 }

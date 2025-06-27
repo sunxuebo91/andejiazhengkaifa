@@ -13,18 +13,33 @@ import {
   Divider,
   Timeline,
   Empty,
+  Table,
+  Tooltip,
+  Alert,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined, EyeOutlined, ContainerOutlined, HistoryOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
+import { contractService } from '../../services/contractService';
 import { Customer } from '../../types/customer.types';
+import { Contract } from '../../types/contract.types';
 import { FOLLOW_UP_TYPE_OPTIONS } from '../../types/customer-follow-up.types';
 import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
+import dayjs from 'dayjs';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // 🆕 新增：客户合同相关状态
+  const [customerContracts, setCustomerContracts] = useState<Contract[]>([]);
+  const [contractsLoading, setContractsLoading] = useState(false);
+  
+  // 🆕 新增：客户换人记录相关状态
+  const [customerHistory, setCustomerHistory] = useState<any>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  
   const [followUpModal, setFollowUpModal] = useState({
     visible: false,
     customerId: '',
@@ -34,6 +49,16 @@ const CustomerDetail: React.FC = () => {
   useEffect(() => {
     fetchCustomerDetail();
   }, [id]);
+
+  // 🆕 新增：当客户信息加载完成后，获取客户的合同列表和换人历史
+  useEffect(() => {
+    if (customer?._id) {
+      fetchCustomerContracts();
+    }
+    if (customer?.phone) {
+      fetchCustomerHistory();
+    }
+  }, [customer]);
 
   const fetchCustomerDetail = async () => {
     if (!id) {
@@ -51,6 +76,60 @@ const CustomerDetail: React.FC = () => {
       message.error('获取客户详情失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🆕 新增：获取客户合同列表
+  const fetchCustomerContracts = async () => {
+    if (!customer?._id) return;
+
+    try {
+      setContractsLoading(true);
+      console.log('🔍 获取客户合同列表:', customer._id);
+      const contracts = await contractService.getContractsByCustomerId(customer._id);
+      console.log('✅ 客户合同列表获取成功:', contracts);
+      setCustomerContracts(contracts || []);
+    } catch (error) {
+      console.error('❌ 获取客户合同列表失败:', error);
+      message.error('获取客户合同列表失败');
+      setCustomerContracts([]);
+    } finally {
+      setContractsLoading(false);
+    }
+  };
+
+  // 🆕 新增：获取客户换人历史记录
+  const fetchCustomerHistory = async () => {
+    if (!customer?.phone) {
+      console.log('⚠️ 缺少客户手机号，跳过历史记录获取');
+      return;
+    }
+    
+    try {
+      setHistoryLoading(true);
+      console.log('🔍 开始获取客户合同历史:', customer.phone);
+      
+      const response = await contractService.getCustomerHistory(customer.phone);
+      
+      console.log('📡 API完整响应:', JSON.stringify(response, null, 2));
+      
+      if (response && response.success) {
+        setCustomerHistory(response.data);
+        console.log('✅ 客户合同历史获取成功:', response.data);
+        console.log('📊 总服务人员数:', response.data?.totalWorkers);
+        console.log('📊 合同记录数:', response.data?.contracts?.length);
+      } else {
+        console.log('📝 API返回失败或无数据:', response);
+        setCustomerHistory(null);
+      }
+    } catch (error: any) {
+      console.error('❌ 获取客户合同历史失败:', error);
+      console.error('❌ 错误详情:', error.response || error.message);
+      setCustomerHistory(null);
+      // 不显示错误消息，因为新客户可能没有历史记录
+    } finally {
+      setHistoryLoading(false);
+      console.log('🏁 合同历史获取流程结束');
     }
   };
 
@@ -81,6 +160,32 @@ const CustomerDetail: React.FC = () => {
       'D类': 'default',
     };
     return colors[level] || 'default';
+  };
+
+  // 🆕 新增：合同状态标签颜色
+  const getContractStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      'draft': 'default',
+      'signing': 'processing',
+      'active': 'success',
+      'completed': 'success',
+      'cancelled': 'error',
+      'replaced': 'warning',
+    };
+    return colors[status] || 'default';
+  };
+
+  // 🆕 新增：合同状态中文显示
+  const getContractStatusText = (status: string) => {
+    const statusMap: Record<string, string> = {
+      'draft': '草稿',
+      'signing': '签约中',
+      'active': '生效中',
+      'completed': '已完成',
+      'cancelled': '已取消',
+      'replaced': '已更换',
+    };
+    return statusMap[status] || status;
   };
 
   // 格式化日期（精确到分钟）
@@ -129,11 +234,110 @@ const CustomerDetail: React.FC = () => {
     }
   };
 
+  // 🆕 新增：查看合同详情
+  const handleViewContract = (contractId: string) => {
+    navigate(`/contracts/detail/${contractId}`);
+  };
+
   // 获取跟进方式的中文标签
   const getFollowUpTypeLabel = (type: string) => {
     const option = FOLLOW_UP_TYPE_OPTIONS.find(opt => opt.value === type);
     return option ? option.label : type;
   };
+
+  // 🆕 新增：合同列表表格列定义
+  const contractColumns = [
+    {
+      title: '合同编号',
+      dataIndex: 'contractNumber',
+      key: 'contractNumber',
+      render: (contractNumber: string, record: Contract) => (
+        <Button 
+          type="link" 
+          onClick={() => handleViewContract(record._id || '')}
+          style={{ padding: 0, fontWeight: 'bold' }}
+        >
+          {contractNumber}
+        </Button>
+      ),
+    },
+    {
+      title: '服务人员',
+      dataIndex: 'workerName',
+      key: 'workerName',
+      render: (workerName: string, record: Contract) => (
+        <div>
+          <div style={{ fontWeight: 'bold' }}>{workerName}</div>
+          <div style={{ fontSize: '12px', color: '#666' }}>{record.workerPhone}</div>
+        </div>
+      ),
+    },
+    {
+      title: '合同类型',
+      dataIndex: 'contractType',
+      key: 'contractType',
+      render: (type: string) => <Tag color="blue">{type}</Tag>,
+    },
+    {
+      title: '服务期间',
+      key: 'servicePeriod',
+      render: (_: any, record: Contract) => (
+        <div>
+          <div>{formatDate(record.startDate)}</div>
+          <div style={{ fontSize: '12px', color: '#666' }}>
+            至 {formatDate(record.endDate)}
+          </div>
+          <div style={{ fontSize: '12px', color: '#52c41a' }}>
+            共 {dayjs(record.endDate).diff(dayjs(record.startDate), 'day') + 1} 天
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '工资',
+      dataIndex: 'workerSalary',
+      key: 'workerSalary',
+      render: (salary: number) => (
+        <span style={{ fontWeight: 'bold', color: '#52c41a' }}>
+          ¥{salary?.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      title: '合同状态',
+      dataIndex: 'contractStatus',
+      key: 'contractStatus',
+      render: (status: string) => (
+        <Tag color={getContractStatusColor(status)}>
+          {getContractStatusText(status)}
+        </Tag>
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (date: string) => formatDate(date),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_: any, record: Contract) => (
+        <Space size="small">
+          <Tooltip title="查看详情">
+            <Button
+              type="primary"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => handleViewContract(record._id || '')}
+            >
+              详情
+            </Button>
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
 
   if (loading) {
     return (
@@ -234,6 +438,249 @@ const CustomerDetail: React.FC = () => {
               </Descriptions>
             </Card>
           </Col>
+
+          {/* 🆕 新增：客户合同信息 */}
+          <Col span={24}>
+            <Card 
+              type="inner" 
+              title={
+                <Space>
+                  <ContainerOutlined style={{ color: '#1890ff' }} />
+                  <span>合同信息</span>
+                  <Tag color="blue">
+                    {customerContracts.length > 0 ? `共 ${customerContracts.length} 个合同` : '暂无合同'}
+                  </Tag>
+                </Space>
+              }
+              extra={
+                <Button 
+                  type="primary" 
+                  size="small"
+                  icon={<FileTextOutlined />}
+                  onClick={handleCreateContract}
+                >
+                  发起新合同
+                </Button>
+              }
+              style={{ marginBottom: '16px' }}
+              loading={contractsLoading}
+            >
+              {customerContracts.length > 0 ? (
+                <Table
+                  dataSource={customerContracts}
+                  columns={contractColumns}
+                  rowKey="_id"
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: 1000 }}
+                />
+              ) : (
+                <Empty 
+                  description="该客户暂无合同记录" 
+                  style={{ padding: '40px 0' }}
+                >
+                  <Button 
+                    type="primary" 
+                    icon={<FileTextOutlined />}
+                    onClick={handleCreateContract}
+                  >
+                    立即发起合同
+                  </Button>
+                </Empty>
+              )}
+            </Card>
+          </Col>
+
+          {/* 🆕 新增：客户换人历史记录 - 复用合同详情页模块 */}
+          {customer && (
+            <Col span={24}>
+              <Card 
+                type="inner" 
+                title={
+                  <Space>
+                    <HistoryOutlined style={{ color: '#1890ff' }} />
+                    <span>换人历史记录</span>
+                    <Tag color="blue">
+                      {customerHistory && customerHistory.totalWorkers > 1 
+                        ? `共${customerHistory.totalWorkers}任阿姨` 
+                        : '首任阿姨'
+                      }
+                    </Tag>
+                  </Space>
+                } 
+                style={{ marginBottom: '16px' }}
+                loading={historyLoading}
+              >
+                <Alert
+                  message="换人记录"
+                  description={
+                    customerHistory && customerHistory.totalWorkers > 1
+                      ? `客户 ${customer.name} 共更换过 ${customerHistory.totalWorkers} 任阿姨，以下为详细记录`
+                      : `客户 ${customer.name} 的首任阿姨服务记录`
+                  }
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
+                
+                <Timeline>
+                  {customerHistory?.contracts && customerHistory.contracts.length > 0 ? (
+                    customerHistory.contracts
+                      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .map((historyContract: any, index: number) => (
+                        <Timeline.Item 
+                          key={historyContract.contractId}
+                          color={historyContract.status === 'active' ? 'green' : 'gray'}
+                        >
+                          <div style={{ paddingBottom: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                              <span style={{ 
+                                fontWeight: 'bold', 
+                                fontSize: '16px',
+                                color: historyContract.status === 'active' ? '#52c41a' : '#8c8c8c'
+                              }}>
+                                第{historyContract.order}任：{historyContract.workerName}
+                              </span>
+                              <Tag 
+                                color={historyContract.status === 'active' ? 'green' : 'default'}
+                                style={{ marginLeft: '8px' }}
+                              >
+                                {historyContract.status === 'active' ? '当前服务' : '已更换'}
+                              </Tag>
+                              <Button
+                                type="link"
+                                size="small"
+                                onClick={() => handleViewContract(historyContract.contractId)}
+                                style={{ marginLeft: '8px', padding: 0 }}
+                              >
+                                查看合同
+                              </Button>
+                            </div>
+                            
+                            <div style={{ color: '#666', lineHeight: '1.6' }}>
+                              <div>
+                                <strong>联系电话：</strong>{historyContract.workerPhone} | 
+                                <strong> 月薪：</strong>¥{historyContract.workerSalary?.toLocaleString()}
+                              </div>
+                              <div>
+                                <strong>服务期间：</strong>
+                                {formatDate(historyContract.startDate)} 至 {formatDate(historyContract.endDate)}
+                              </div>
+                              {historyContract.serviceDays && (
+                                <div>
+                                  <strong>实际服务：</strong>
+                                  <span style={{ color: historyContract.status === 'active' ? '#52c41a' : '#fa8c16' }}>
+                                    {historyContract.serviceDays} 天
+                                  </span>
+                                  {historyContract.terminationDate && (
+                                    <span style={{ color: '#8c8c8c', marginLeft: '8px' }}>
+                                      (于 {formatDate(historyContract.terminationDate)} 结束)
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {historyContract.terminationReason && (
+                                <div>
+                                  <strong>更换原因：</strong>
+                                  <span style={{ color: '#fa541c' }}>{historyContract.terminationReason}</span>
+                                </div>
+                              )}
+                              <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                                合同编号：{historyContract.contractNumber} | 
+                                爱签状态：{historyContract.esignStatus || '未知'}
+                              </div>
+                            </div>
+                          </div>
+                        </Timeline.Item>
+                      ))
+                  ) : (
+                    customerContracts.length > 0 && (
+                      <Timeline.Item color="green">
+                        <div style={{ paddingBottom: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ 
+                              fontWeight: 'bold', 
+                              fontSize: '16px',
+                              color: '#52c41a'
+                            }}>
+                              第1任：{customerContracts[0]?.workerName}
+                            </span>
+                            <Tag color="green" style={{ marginLeft: '8px' }}>
+                              当前服务
+                            </Tag>
+                            <Button
+                              type="link"
+                              size="small"
+                              onClick={() => handleViewContract(customerContracts[0]?._id || '')}
+                              style={{ marginLeft: '8px', padding: 0 }}
+                            >
+                              查看合同
+                            </Button>
+                          </div>
+                          
+                          <div style={{ color: '#666', lineHeight: '1.6' }}>
+                            <div>
+                              <strong>联系电话：</strong>{customerContracts[0]?.workerPhone} | 
+                              <strong> 月薪：</strong>¥{customerContracts[0]?.workerSalary?.toLocaleString()}
+                            </div>
+                            <div>
+                              <strong>服务期间：</strong>
+                              {formatDate(customerContracts[0]?.startDate)} 至 {formatDate(customerContracts[0]?.endDate)}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                              合同编号：{customerContracts[0]?.contractNumber} | 
+                              爱签状态：{customerContracts[0]?.esignContractNo ? '已创建' : '未创建'}
+                            </div>
+                          </div>
+                        </div>
+                      </Timeline.Item>
+                    )
+                  )}
+                </Timeline>
+                
+                {(customerHistory?.contracts?.length > 0 || customerContracts.length > 0) && (
+                  <div style={{ 
+                    marginTop: '16px', 
+                    padding: '12px', 
+                    backgroundColor: '#f6f6f6', 
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    color: '#666'
+                  }}>
+                    <strong>说明：</strong>
+                    {customerHistory && customerHistory.totalWorkers > 1 ? (
+                      <>
+                        • 每次换人都会创建新的合同记录，保证服务的连续性<br/>
+                        • 实际服务天数根据换人日期自动计算<br/>
+                        • 新合同的开始时间会自动衔接上一任的结束时间
+                      </>
+                    ) : (
+                      <>
+                        • 这是该客户的首任阿姨服务记录<br/>
+                        • 如需更换阿姨，可在合同详情页使用"为该客户换人"功能<br/>
+                        • 换人后会自动记录服务历史，保证服务连续性
+                      </>
+                    )}
+                  </div>
+                )}
+                
+                {customerContracts.length === 0 && !customerHistory?.contracts?.length && (
+                  <Empty 
+                    description="该客户暂无服务记录" 
+                    style={{ padding: '40px 0' }}
+                  >
+                    <Button 
+                      type="primary" 
+                      icon={<FileTextOutlined />}
+                      onClick={handleCreateContract}
+                    >
+                      立即发起合同
+                    </Button>
+                  </Empty>
+                )}
+              </Card>
+            </Col>
+          )}
 
           {/* 服务需求信息 */}
           <Col span={24}>

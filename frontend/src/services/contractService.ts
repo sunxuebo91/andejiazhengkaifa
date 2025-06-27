@@ -203,4 +203,57 @@ export const contractService = {
       };
     }
   },
+
+  // ==================== 换人功能 ====================
+
+  // 检查客户现有合同
+  async checkCustomerContract(customerPhone: string): Promise<{
+    hasContract: boolean;
+    contract?: any;
+    contractHistory?: any;
+  }> {
+    const response = await apiService.get(`/api/contracts/check-customer/${customerPhone}`);
+    return response.data;
+  },
+
+  // 创建换人合同
+  async createChangeWorkerContract(originalContractId: string, contractData: any): Promise<any> {
+    const response = await apiService.post(`/api/contracts/change-worker/${originalContractId}`, contractData);
+    return response.data;
+  },
+
+  // 获取客户合同历史
+  async getCustomerHistory(customerPhone: string): Promise<any> {
+    const response = await apiService.get(`/api/contracts/history/${customerPhone}`);
+    return response.data;
+  },
+
+  // 获取最新合同列表（用于主列表显示）
+  async getLatestContracts(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  } = {}): Promise<{
+    contracts: Contract[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const { page = 1, limit = 10, search } = params;
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      ...(search && { search })
+    });
+    
+    const response = await apiService.get(`/api/contracts/latest/list?${queryParams}`);
+    return response.data;
+  },
+
+  // 合同签约成功回调
+  async handleContractSigned(contractId: string, esignData: any): Promise<any> {
+    const response = await apiService.post(`/api/contracts/signed-callback/${contractId}`, esignData);
+    return response.data;
+  }
 }; 

@@ -968,12 +968,19 @@ export class ESignController {
   @Post('withdraw-contract/:contractNo')
   async withdrawContract(
     @Param('contractNo') contractNo: string,
-    @Body() body: { reason?: string }
+    @Body() body: { 
+      withdrawReason?: string;
+      isNoticeSignUser?: boolean;
+    }
   ) {
     this.logger.log('调用 withdraw-contract 端点');
     
     try {
-      const result = await this.esignService.withdrawContract(contractNo, body.reason);
+      const result = await this.esignService.withdrawContract(
+        contractNo, 
+        body.withdrawReason,
+        body.isNoticeSignUser || false
+      );
       
       return result;
     } catch (error) {
@@ -982,6 +989,68 @@ export class ESignController {
       return {
         success: false,
         message: error.message || '撤销合同失败',
+      };
+    }
+  }
+
+  /**
+   * 作废合同
+   */
+  @Post('invalidate-contract/:contractNo')
+  async invalidateContract(
+    @Param('contractNo') contractNo: string,
+    @Body() body: { 
+      invalidReason?: string;
+      isNoticeSignUser?: boolean;
+    }
+  ) {
+    this.logger.log('调用 invalidate-contract 端点');
+    
+    try {
+      const result = await this.esignService.invalidateContract(
+        contractNo, 
+        body.invalidReason,
+        body.isNoticeSignUser || false
+      );
+      
+      return result;
+    } catch (error) {
+      this.logger.error('作废合同失败', error.stack);
+      
+      return {
+        success: false,
+        message: error.message || '作废合同失败',
+      };
+    }
+  }
+
+  /**
+   * 智能撤销/作废合同
+   */
+  @Post('cancel-contract/:contractNo')
+  async cancelContract(
+    @Param('contractNo') contractNo: string,
+    @Body() body: { 
+      reason?: string;
+      isNoticeSignUser?: boolean;
+    }
+  ) {
+    this.logger.log('调用 cancel-contract 端点');
+    
+    try {
+      const result = await this.esignService.cancelContract(
+        contractNo, 
+        body.reason,
+        body.isNoticeSignUser || false
+      );
+      
+      return result;
+    } catch (error) {
+      this.logger.error('智能撤销/作废合同失败', error.stack);
+      
+      return {
+        success: false,
+        message: error.message || '撤销/作废合同失败',
       };
     }
   }

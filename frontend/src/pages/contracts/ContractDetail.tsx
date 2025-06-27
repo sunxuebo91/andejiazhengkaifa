@@ -15,6 +15,8 @@ import {
   Modal,
   Typography,
   App,
+  Timeline,
+  Empty,
 } from 'antd';
 import { 
   ArrowLeftOutlined, 
@@ -24,6 +26,8 @@ import {
   FileTextOutlined,
   CopyOutlined,
   LinkOutlined,
+  UserSwitchOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { Contract, ContractType } from '../../types/contract.types';
@@ -54,6 +58,10 @@ const ContractDetail: React.FC = () => {
   
   // 新增：合同状态信息
   const [contractStatusInfo, setContractStatusInfo] = useState<ContractStatusInfo | null>(null);
+  
+  // 🆕 新增：客户合同历史记录
+  const [contractHistory, setContractHistory] = useState<any>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // 处理合同状态变化
   const handleStatusChange = (statusInfo: ContractStatusInfo | null) => {
@@ -67,6 +75,10 @@ const ContractDetail: React.FC = () => {
   useEffect(() => {
     if (contract?.esignContractNo) {
       fetchEsignInfo();
+    }
+    // 🆕 获取客户合同历史
+    if (contract?.customerPhone) {
+      fetchContractHistory();
     }
   }, [contract]);
 
@@ -100,6 +112,47 @@ const ContractDetail: React.FC = () => {
     }
   };
 
+  // 🆕 获取客户合同历史记录
+  const fetchContractHistory = async () => {
+    if (!contract?.customerPhone) {
+      console.log('⚠️ 缺少客户手机号，跳过历史记录获取');
+      return;
+    }
+    
+    try {
+      setHistoryLoading(true);
+      console.log('🔍 开始获取客户合同历史:', contract.customerPhone);
+      console.log('🔍 当前合同信息:', {
+        id: contract._id,
+        customerName: contract.customerName,
+        customerPhone: contract.customerPhone,
+        workerName: contract.workerName
+      });
+      
+      const response = await contractService.getCustomerHistory(contract.customerPhone);
+      
+      console.log('📡 API完整响应:', JSON.stringify(response, null, 2));
+      
+      if (response && response.success) {
+        setContractHistory(response.data);
+        console.log('✅ 客户合同历史获取成功:', response.data);
+        console.log('📊 总服务人员数:', response.data?.totalWorkers);
+        console.log('📊 合同记录数:', response.data?.contracts?.length);
+      } else {
+        console.log('📝 API返回失败或无数据:', response);
+        setContractHistory(null);
+      }
+    } catch (error: any) {
+      console.error('❌ 获取客户合同历史失败:', error);
+      console.error('❌ 错误详情:', error.response || error.message);
+      setContractHistory(null);
+      // 不显示错误消息，因为新客户可能没有历史记录
+    } finally {
+      setHistoryLoading(false);
+      console.log('🏁 合同历史获取流程结束');
+    }
+  };
+
   const handlePreviewContract = async () => {
     if (!contract?.esignContractNo) {
       messageApi.warning('该合同暂无爱签合同编号，无法预览');
@@ -115,9 +168,21 @@ const ContractDetail: React.FC = () => {
       messageApi.destroy('preview');
       
       if (response.success) {
-        // 根据合同状态处理不同的预览逻辑
+        // 优先尝试直接预览
+        if (response.previewData) {
+          // 有预览数据，直接弹窗显示合同
+          showContractPreviewModal(response.previewData, response.contractNo, response.statusText);
+          return;
+        } else if (response.previewUrl) {
+          // 有预览链接，在新标签页打开
+          window.open(response.previewUrl, '_blank');
+          messageApi.success('合同预览已打开');
+          return;
+        }
+        
+        // 根据合同状态处理其他逻辑
         if (response.shouldDownload || response.contractStatus === 2) {
-          // 签约完成状态：显示下载提示
+          // 签约完成状态：优先尝试获取预览，如果没有则提示下载
           modal.confirm({
             title: '✅ 合同已签约完成',
             width: 600,
@@ -126,119 +191,11 @@ const ContractDetail: React.FC = () => {
                 <Alert 
                   type="success" 
                   message="合同签署完成" 
-                  description="合同已完成所有签署，具有法律效力。建议下载合同PDF文件进行查看和保存。"
+                  description="合同已完成所有签署，具有法律效力。可以下载查看完整版本。"
                   style={{ marginBottom: 16 }}
                 />
                 <p><strong>合同编号:</strong> {response.contractNo}</p>
                 <p><strong>状态:</strong> {response.statusText || '已签约'}</p>
-                <p><strong>推荐格式:</strong> PDF文件（完整签署版本）</p>
-                {response.previewInfo?.availableFormats && (
-                  <div style={{ marginTop: 12 }}>
-                    <p><strong>可用下载格式:</strong></p>
-                    <ul>
-                      {response.previewInfo.availableFormats.map((format: any, index: number) => (
-                        <li key={index}>
-                          {format.name} {format.recommended && <span style={{ color: '#52c41a' }}>(推荐)</span>}
-                          {format.description && <span style={{ color: '#666' }}> - {format.description}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ),
-            okText: '立即下载',
-            cancelText: '稍后下载',
-            onOk: () => {
-              handleDownloadContract();
-            },
-          });
-        } else if (response.contractStatus === 1) {
-          // 签约中状态：可以预览当前签署进度
-          if (response.previewData) {
-            const previewUrl = `data:application/pdf;base64,${response.previewData}`;
-            window.open(previewUrl, '_blank');
-            message.success('合同预览已打开（当前签署状态）');
-          } else {
-            modal.info({
-              title: '📝 合同签约中',
-              width: 600,
-              content: (
-                <div>
-                  <Alert 
-                    type="info" 
-                    message="合同正在签署中" 
-                    description="合同尚未完成所有签署，可以预览当前签署进度。"
-                    style={{ marginBottom: 16 }}
-                  />
-                  <p><strong>合同编号:</strong> {response.contractNo}</p>
-                  <p><strong>状态:</strong> {response.statusText || '签约中'}</p>
-                  <p><strong>说明:</strong> {response.previewInfo?.recommendation}</p>
-                </div>
-              ),
-            });
-          }
-        } else if (response.previewUrl) {
-          // 有预览链接，直接打开
-          window.open(response.previewUrl, '_blank');
-          message.success('合同预览已打开');
-        } else if (response.previewData) {
-          // 有预览数据，显示预览
-          const previewUrl = `data:application/pdf;base64,${response.previewData}`;
-          window.open(previewUrl, '_blank');
-          message.success('合同预览已打开');
-        } else if (response.fallbackMode) {
-          // 回退模式：根据状态显示不同信息
-          const statusText = response.statusText || '未知状态';
-          const recommendation = response.previewInfo?.recommendation || '请联系管理员处理';
-          
-          modal.info({
-            title: `合同状态：${statusText}`,
-            width: 600,
-            content: (
-              <div>
-                <p><strong>合同编号:</strong> {response.contractNo}</p>
-                <p><strong>当前状态:</strong> {statusText}</p>
-                <p><strong>建议:</strong> {recommendation}</p>
-                
-                {response.previewInfo?.canDownload && (
-                  <div style={{ marginTop: 16 }}>
-                    <Alert 
-                      type="info" 
-                      message="可以下载合同" 
-                      description="虽然无法在线预览，但可以下载合同文件查看。"
-                    />
-                    <div style={{ marginTop: 12, textAlign: 'center' }}>
-                      <Button type="primary" onClick={handleDownloadContract}>
-                        下载合同
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ),
-          });
-        } else {
-          message.info(response.message || '预览生成成功，但无法显示');
-        }
-      } else {
-        // 失败情况的处理
-        const statusText = response.statusText || '未知状态';
-        if (response.contractStatus === 2) {
-          // 即使失败，如果是签约完成状态，仍然提示下载
-          modal.confirm({
-            title: '无法预览，建议下载',
-            width: 600,
-            content: (
-              <div>
-                <Alert 
-                  type="warning" 
-                  message="预览功能不可用" 
-                  description="无法生成在线预览，但合同已签约完成，可以下载查看。"
-                  style={{ marginBottom: 16 }}
-                />
-                <p><strong>合同状态:</strong> {statusText}</p>
-                <p><strong>错误信息:</strong> {response.message}</p>
               </div>
             ),
             okText: '下载合同',
@@ -247,107 +204,47 @@ const ContractDetail: React.FC = () => {
               handleDownloadContract();
             },
           });
-        } else {
-          // 其他状态的失败处理
-          modal.warning({
-            title: '预览合同',
+        } else if (response.contractStatus === 1) {
+          // 签约中状态：提示当前状态
+          modal.info({
+            title: '📝 合同签约中',
             width: 600,
             content: (
               <div>
-                <p><strong>合同编号:</strong> {contract.esignContractNo}</p>
-                <p><strong>合同状态:</strong> {statusText}</p>
-                <p><strong>预览失败原因:</strong> {response.message}</p>
                 <Alert 
-                  type="warning" 
-                  message="预览功能暂时不可用" 
-                  description="这通常是因为签署方尚未在爱签平台注册，或合同状态不支持预览。您可以稍后重试，或使用下载功能获取合同文件。"
-                  style={{ marginTop: 16 }}
+                  type="info" 
+                  message="合同正在签署中" 
+                  description="合同尚未完成所有签署。可以尝试下载查看当前版本。"
+                  style={{ marginBottom: 16 }}
                 />
+                <p><strong>合同编号:</strong> {response.contractNo}</p>
+                <p><strong>状态:</strong> {response.statusText || '签约中'}</p>
                 <div style={{ marginTop: 16, textAlign: 'center' }}>
-                  <Button 
-                    type="primary" 
-                    onClick={() => {
-                      handleDownloadContract();
-                    }}
-                  >
-                    尝试下载合同
+                  <Button type="primary" onClick={handleDownloadContract}>
+                    下载当前版本
                   </Button>
                 </div>
               </div>
             ),
           });
+        } else {
+          messageApi.info(response.message || '暂无可用的预览内容');
         }
-      }
-    } catch (error) {
-      message.destroy('preview');
-      console.error('预览合同失败:', error);
-      
-      // 检查错误响应中是否包含合同状态信息
-      const errorResponse = (error as any).response?.data;
-      
-      if (errorResponse && errorResponse.contractStatus === 2) {
-        // 如果是签约完成状态，即使出错也提示下载
-        modal.confirm({
-          title: '✅ 合同已签约完成',
-          width: 600,
-          content: (
-            <div>
-              <Alert 
-                type="warning" 
-                message="预览服务暂时不可用" 
-                description="无法连接到预览服务，但合同已签约完成，具有法律效力。建议直接下载合同查看。"
-                style={{ marginBottom: 16 }}
-              />
-              <p><strong>合同状态:</strong> {errorResponse.statusText || '已签约'}</p>
-              <p><strong>建议:</strong> {errorResponse.previewInfo?.recommendation || '下载PDF文件查看完整签署版本'}</p>
-            </div>
-          ),
-          okText: '立即下载',
-          cancelText: '稍后下载',
-          onOk: () => {
-            handleDownloadContract();
-          },
-        });
-      } else if (errorResponse && errorResponse.contractStatus) {
-        // 其他状态的错误处理
-        const statusText = errorResponse.statusText || '未知状态';
+      } else {
+        // 失败情况的处理
         modal.warning({
           title: '预览合同失败',
           width: 600,
           content: (
             <div>
-              <p><strong>合同编号:</strong> {contract?.esignContractNo}</p>
-              <p><strong>合同状态:</strong> {statusText}</p>
-              <p><strong>错误原因:</strong> 无法连接到预览服务</p>
+              <p><strong>合同编号:</strong> {contract.esignContractNo}</p>
+              <p><strong>错误信息:</strong> {response.message}</p>
               <Alert 
-                type="info" 
-                message="建议操作" 
-                description={errorResponse.previewInfo?.recommendation || '请稍后重试，或联系管理员处理'}
+                type="warning" 
+                message="预览功能暂时不可用" 
+                description="您可以尝试下载合同文件查看内容。"
                 style={{ marginTop: 16 }}
               />
-              {errorResponse.previewInfo?.canDownload && (
-                <div style={{ marginTop: 16, textAlign: 'center' }}>
-                  <Button 
-                    type="primary" 
-                    onClick={() => {
-                      handleDownloadContract();
-                    }}
-                  >
-                    尝试下载合同
-                  </Button>
-                </div>
-              )}
-            </div>
-          ),
-        });
-      } else {
-        // 完全无法获取状态信息的情况
-        modal.error({
-          title: '预览合同失败',
-          content: (
-            <div>
-              <p>无法连接到预览服务，请稍后重试。</p>
-              <p>您也可以尝试下载合同文件查看内容。</p>
               <div style={{ marginTop: 16, textAlign: 'center' }}>
                 <Button 
                   type="primary" 
@@ -355,14 +252,94 @@ const ContractDetail: React.FC = () => {
                     handleDownloadContract();
                   }}
                 >
-                  下载合同
+                  下载合同文件
                 </Button>
               </div>
             </div>
           ),
         });
       }
+    } catch (error) {
+      messageApi.destroy('preview');
+      console.error('预览合同失败:', error);
+      
+      modal.error({
+        title: '预览合同失败',
+        content: (
+          <div>
+            <p>无法连接到预览服务，请稍后重试。</p>
+            <p>您也可以尝试下载合同文件查看内容。</p>
+            <div style={{ marginTop: 16, textAlign: 'center' }}>
+              <Button 
+                type="primary" 
+                onClick={() => {
+                  handleDownloadContract();
+                }}
+              >
+                下载合同
+              </Button>
+            </div>
+          </div>
+        ),
+      });
     }
+  };
+
+  // 显示合同预览弹窗
+  const showContractPreviewModal = (previewData: string, contractNo: string, statusText?: string) => {
+    const previewUrl = `data:application/pdf;base64,${previewData}`;
+    
+    modal.info({
+      title: `合同预览 - ${contractNo}`,
+      width: '90%',
+      style: { top: 20 },
+      content: (
+        <div style={{ height: '75vh' }}>
+          {statusText && (
+            <Alert 
+              type="info" 
+              message={`合同状态：${statusText}`} 
+              style={{ marginBottom: 16 }}
+            />
+          )}
+          <iframe
+            src={previewUrl}
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              border: '1px solid #d9d9d9',
+              borderRadius: '6px'
+            }}
+            title="合同预览"
+          />
+        </div>
+      ),
+      footer: (
+        <div style={{ textAlign: 'center' }}>
+          <Button type="default" onClick={() => modal.destroyAll()}>
+            关闭
+          </Button>
+          <Button 
+            type="primary" 
+            style={{ marginLeft: 8 }}
+            onClick={() => {
+              window.open(previewUrl, '_blank');
+            }}
+          >
+            在新窗口打开
+          </Button>
+          <Button 
+            type="default" 
+            style={{ marginLeft: 8 }}
+            onClick={handleDownloadContract}
+          >
+            下载合同
+          </Button>
+        </div>
+      ),
+    });
+    
+    messageApi.success('合同预览已加载');
   };
 
   const handleDownloadContract = async () => {
@@ -983,6 +960,222 @@ const ContractDetail: React.FC = () => {
               </Descriptions>
             </Card>
           </Col>
+
+          {/* 🆕 客户合同历史记录 - 固定显示 */}
+          {contract && (
+            <Col span={24}>
+              <Card 
+                type="inner" 
+                title={
+                  <Space>
+                    <HistoryOutlined style={{ color: '#1890ff' }} />
+                    <span>换人历史记录</span>
+                    <Tag color="blue">
+                      {contractHistory && contractHistory.totalWorkers > 1 
+                        ? `共${contractHistory.totalWorkers}任阿姨` 
+                        : '首任阿姨'
+                      }
+                    </Tag>
+                  </Space>
+                } 
+                style={{ marginBottom: '16px' }}
+                loading={historyLoading}
+              >
+                <Alert
+                  message="换人记录"
+                  description={
+                    contractHistory && contractHistory.totalWorkers > 1
+                      ? `客户 ${contract.customerName} 共更换过 ${contractHistory.totalWorkers} 任阿姨，以下为详细记录`
+                      : `客户 ${contract.customerName} 的首任阿姨服务记录`
+                  }
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
+                
+                <Timeline>
+                  {contractHistory?.contracts && contractHistory.contracts.length > 0 ? (
+                    contractHistory.contracts
+                      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .map((historyContract: any, index: number) => (
+                        <Timeline.Item 
+                          key={historyContract.contractId}
+                          color={historyContract.status === 'active' ? 'green' : 'gray'}
+                        >
+                          <div style={{ paddingBottom: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                              <span style={{ 
+                                fontWeight: 'bold', 
+                                fontSize: '16px',
+                                color: historyContract.status === 'active' ? '#52c41a' : '#8c8c8c'
+                              }}>
+                                第{historyContract.order}任：{historyContract.workerName}
+                              </span>
+                              <Tag 
+                                color={historyContract.status === 'active' ? 'green' : 'default'}
+                                style={{ marginLeft: '8px' }}
+                              >
+                                {historyContract.status === 'active' ? '当前服务' : '已更换'}
+                              </Tag>
+                              {historyContract.contractId === contract._id && (
+                                <Tag color="blue" style={{ marginLeft: '4px' }}>当前查看</Tag>
+                              )}
+                            </div>
+                            
+                            <div style={{ color: '#666', lineHeight: '1.6' }}>
+                              <div>
+                                <strong>联系电话：</strong>{historyContract.workerPhone} | 
+                                <strong> 月薪：</strong>¥{historyContract.workerSalary?.toLocaleString()}
+                              </div>
+                              <div>
+                                <strong>服务期间：</strong>
+                                {formatDate(historyContract.startDate)} 至 {formatDate(historyContract.endDate)}
+                              </div>
+                              {historyContract.serviceDays && (
+                                <div>
+                                  <strong>实际服务：</strong>
+                                  <span style={{ color: historyContract.status === 'active' ? '#52c41a' : '#fa8c16' }}>
+                                    {historyContract.serviceDays} 天
+                                  </span>
+                                  {historyContract.terminationDate && (
+                                    <span style={{ color: '#8c8c8c', marginLeft: '8px' }}>
+                                      (于 {formatDate(historyContract.terminationDate)} 结束)
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {historyContract.terminationReason && (
+                                <div>
+                                  <strong>更换原因：</strong>
+                                  <span style={{ color: '#fa541c' }}>{historyContract.terminationReason}</span>
+                                </div>
+                              )}
+                              <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                                合同编号：{historyContract.contractNumber} | 
+                                爱签状态：{historyContract.esignStatus || '未知'}
+                              </div>
+                            </div>
+                          </div>
+                        </Timeline.Item>
+                      ))
+                  ) : (
+                    <Timeline.Item color="green">
+                      <div style={{ paddingBottom: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ 
+                            fontWeight: 'bold', 
+                            fontSize: '16px',
+                            color: '#52c41a'
+                          }}>
+                            第1任：{contract.workerName}
+                          </span>
+                          <Tag color="green" style={{ marginLeft: '8px' }}>
+                            当前服务
+                          </Tag>
+                          <Tag color="blue" style={{ marginLeft: '4px' }}>当前查看</Tag>
+                        </div>
+                        
+                        <div style={{ color: '#666', lineHeight: '1.6' }}>
+                          <div>
+                            <strong>联系电话：</strong>{contract.workerPhone} | 
+                            <strong> 月薪：</strong>¥{contract.workerSalary?.toLocaleString()}
+                          </div>
+                          <div>
+                            <strong>服务期间：</strong>
+                            {formatDate(contract.startDate)} 至 {formatDate(contract.endDate)}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                            合同编号：{contract.contractNumber} | 
+                            爱签状态：{contract.esignContractNo ? '已创建' : '未创建'}
+                          </div>
+                        </div>
+                      </div>
+                    </Timeline.Item>
+                  )}
+                </Timeline>
+                
+                <div style={{ 
+                  marginTop: '16px', 
+                  padding: '12px', 
+                  backgroundColor: '#f6f6f6', 
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  color: '#666'
+                }}>
+                  <strong>说明：</strong>
+                  {contractHistory && contractHistory.totalWorkers > 1 ? (
+                    <>
+                      • 每次换人都会创建新的合同记录，保证服务的连续性<br/>
+                      • 实际服务天数根据换人日期自动计算<br/>
+                      • 新合同的开始时间会自动衔接上一任的结束时间
+                    </>
+                  ) : (
+                    <>
+                      • 这是该客户的首任阿姨服务记录<br/>
+                      • 如需更换阿姨，可使用下方"为该客户换人"功能<br/>
+                      • 换人后会自动记录服务历史，保证服务连续性
+                    </>
+                  )}
+                </div>
+              </Card>
+            </Col>
+          )}
+
+          {/* 🆕 换人操作按钮 - 固定显示 */}
+          {contract && (
+            <Col span={24}>
+                             <Card 
+                 type="inner" 
+                 title={
+                   <Space>
+                     <UserSwitchOutlined style={{ color: '#722ed1' }} />
+                     <span>合同操作</span>
+                   </Space>
+                 } 
+                 style={{ marginBottom: '16px' }}
+               >
+                 <Space>
+                   <Button 
+                     type="primary"
+                     icon={<UserSwitchOutlined />}
+                     onClick={() => navigate(`/contracts/create?mode=change&phone=${contract.customerPhone}`)}
+                     style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+                   >
+                     为该客户换人
+                   </Button>
+                  <Button 
+                    onClick={() => {
+                      Modal.info({
+                        title: '换人说明',
+                        width: 600,
+                        content: (
+                          <div>
+                            <p><strong>换人流程：</strong></p>
+                            <ol>
+                              <li>点击"为该客户换人"按钮</li>
+                              <li>系统自动进入换人模式，计算服务时间</li>
+                              <li>选择新的服务人员</li>
+                              <li>确认新合同信息并创建</li>
+                              <li>发起爱签电子签约</li>
+                              <li>完成签约后自动处理原合同状态</li>
+                            </ol>
+                            <Alert 
+                              type="info" 
+                              message="时间自动计算" 
+                              description="新合同的开始时间为换人当日，结束时间保持与原合同相同，确保服务时间无缝衔接。"
+                              style={{ marginTop: 12 }}
+                            />
+                          </div>
+                        )
+                      });
+                    }}
+                  >
+                    换人说明
+                  </Button>
+                </Space>
+              </Card>
+            </Col>
+          )}
         </Row>
 
         {/* 操作按钮 */}

@@ -300,4 +300,124 @@ export class ContractsController {
       };
     }
   }
+
+  // ==================== 换人功能 API ====================
+
+  /**
+   * 检查客户现有合同
+   */
+  @Get('check-customer/:customerPhone')
+  async checkCustomerContract(@Param('customerPhone') customerPhone: string) {
+    try {
+      const result = await this.contractsService.checkCustomerExistingContract(customerPhone);
+      return {
+        success: true,
+        data: result,
+        message: result.hasContract ? '客户已有合同' : '客户暂无合同',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '检查客户合同失败',
+      };
+    }
+  }
+
+  /**
+   * 创建换人合同
+   */
+  @Post('change-worker/:originalContractId')
+  async createChangeWorkerContract(
+    @Param('originalContractId') originalContractId: string,
+    @Body() createContractDto: CreateContractDto,
+    @Request() req
+  ) {
+    try {
+      const newContract = await this.contractsService.createChangeWorkerContract(
+        createContractDto,
+        originalContractId,
+        req.user.userId
+      );
+      return {
+        success: true,
+        data: newContract,
+        message: '换人合同创建成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '换人合同创建失败',
+      };
+    }
+  }
+
+  /**
+   * 获取客户合同历史
+   */
+  @Get('history/:customerPhone')
+  async getCustomerHistory(@Param('customerPhone') customerPhone: string) {
+    try {
+      const history = await this.contractsService.getCustomerContractHistory(customerPhone);
+      return {
+        success: true,
+        data: history,
+        message: '获取客户合同历史成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '获取客户合同历史失败',
+      };
+    }
+  }
+
+  /**
+   * 获取最新合同列表（只显示每个客户的最新合同）
+   */
+  @Get('latest/list')
+  async getLatestContracts(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10',
+    @Query('search') search?: string,
+  ) {
+    try {
+      const result = await this.contractsService.findLatestContracts(
+        parseInt(page),
+        parseInt(limit),
+        search,
+      );
+      return {
+        success: true,
+        data: result,
+        message: '获取最新合同列表成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '获取最新合同列表失败',
+      };
+    }
+  }
+
+  /**
+   * 合同签约成功回调
+   */
+  @Post('signed-callback/:contractId')
+  async handleContractSigned(
+    @Param('contractId') contractId: string,
+    @Body() esignData: any
+  ) {
+    try {
+      await this.contractsService.handleContractSigned(contractId, esignData);
+      return {
+        success: true,
+        message: '合同签约成功处理完成',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '合同签约成功处理失败',
+      };
+    }
+  }
 } 

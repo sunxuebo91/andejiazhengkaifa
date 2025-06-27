@@ -195,8 +195,8 @@ const ESignatureStepPage: React.FC = () => {
     downloadFileType: 1 // 默认PDF文件
   });
 
-  // 有效期选择相关状态
-  const [validityType, setValidityType] = useState('90'); // 默认90天
+  // 有效期选择相关状态 - 固定为365天
+  const [validityType, setValidityType] = useState('365'); // 默认365天
   const [customDays, setCustomDays] = useState('');
 
   // 🔥 最终修复：使用 ref 来存储服务备注的真实选择，绕过 antd form 的 state 覆盖问题
@@ -460,7 +460,7 @@ const ESignatureStepPage: React.FC = () => {
       
       // 设置表单默认值
       const defaultValues = {
-        validityTime: '90', // 默认90天，与下拉选择的默认值保持一致
+        validityTime: '365', // 默认365天，固定值
         signOrder: 1,
         readSeconds: 5,
         needAgree: 0,
@@ -474,7 +474,7 @@ const ESignatureStepPage: React.FC = () => {
       step2Form.setFieldsValue(defaultValues);
       
       // 设置有效期下拉选择的默认值
-      setValidityType('90');
+      setValidityType('365');
       
       // 如果有步骤1的用户数据，这些数据会在getInitialValues中使用
       if (stepData.users?.batchRequest) {
@@ -599,7 +599,7 @@ const ESignatureStepPage: React.FC = () => {
         contractName: '安得家政服务合同', // 固定合同名称
         templateNo: values.templateNo,
         templateParams: enhancedTemplateParams,
-        validityTime: parseInt(values.validityTime) || 30,
+        validityTime: 365, // 固定365天
         signOrder: parseInt(values.signOrder) || 1,
         readSeconds: parseInt(values.readSeconds) || 5,
         needAgree: parseInt(values.needAgree) || 0,
@@ -1009,7 +1009,7 @@ const ESignatureStepPage: React.FC = () => {
     // 动态生成初始值
     const getInitialValues = () => {
       const baseValues: any = {
-        validityTime: 30,
+        validityTime: 365, // 固定365天
         signOrder: 1,
         readSeconds: 5,
         needAgree: 0,
@@ -1041,20 +1041,18 @@ const ESignatureStepPage: React.FC = () => {
 
         {/* 基本信息 */}
         <Card title="合同基本信息" style={{ marginBottom: 24 }}>
-          <Row gutter={16}>
-            <Col span={24}>
-              <Form.Item
-                label="有效期（天）"
-                name="validityTime"
-                rules={[{ required: true, message: '请输入合同有效期' }]}
-              >
-                <Input type="number" placeholder="根据合同时间自动计算" />
-              </Form.Item>
-            </Col>
-          </Row>
+          {/* 隐藏有效期字段，固定为365天 */}
+          <Form.Item
+            name="validityTime"
+            hidden
+          >
+            <Input />
+          </Form.Item>
+          
           <div style={{ marginBottom: 16, padding: '12px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '6px' }}>
             <Text type="success">
-              📋 合同名称将自动设置为：<strong>安得家政服务合同</strong>
+              📋 合同名称将自动设置为：<strong>安得家政服务合同</strong><br/>
+              📅 合同有效期自动设置为：<strong>365天</strong>
             </Text>
           </div>
         </Card>
@@ -1260,53 +1258,17 @@ const ESignatureStepPage: React.FC = () => {
                     return null; // 这不会被显示，因为已在Form.Item层面处理
                   }
 
-                  // 特殊处理：有效期字段使用下拉选择
+                  // 特殊处理：有效期字段隐藏，固定为365天
                   if (fieldKey.includes('有效期') || fieldLabel.includes('有效期')) {
-                    const handleValidityChange = (value: string) => {
-                      setValidityType(value);
-                      if (value !== 'custom') {
-                        // 预设选项，直接设置天数
-                        step2Form.setFieldValue(field.key, value);
-                      } else {
-                        // 自定义选项，清空当前值，等待用户输入
-                        step2Form.setFieldValue(field.key, customDays || '');
-                      }
-                    };
-
-                    const handleCustomDaysChange = (e: any) => {
-                      const days = e.target.value;
-                      setCustomDays(days);
-                      if (validityType === 'custom') {
-                        step2Form.setFieldValue(field.key, days);
-                      }
-                    };
-
                     return (
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <Select
-                          value={validityType}
-                          onChange={handleValidityChange}
-                          style={{ width: '150px' }}
-                          placeholder="选择有效期"
-                        >
-                          <Option value="90">90天</Option>
-                          <Option value="180">180天</Option>
-                          <Option value="365">365天</Option>
-                          <Option value="custom">其他（自定义）</Option>
-                        </Select>
-                        {validityType === 'custom' && (
-                          <Input
-                            type="number"
-                            value={customDays}
-                            onChange={handleCustomDaysChange}
-                            placeholder="请输入天数"
-                            style={{ width: '120px' }}
-                            min={1}
-                            max={3650}
-                            suffix="天"
-                          />
-                        )}
-                      </div>
+                      <Form.Item
+                        key={field.key}
+                        name={['templateParams', field.key]}
+                        hidden
+                        initialValue="365"
+                      >
+                        <Input />
+                      </Form.Item>
                     );
                   }
 
@@ -1414,7 +1376,7 @@ const ESignatureStepPage: React.FC = () => {
                   
                   // 有效期字段默认值
                   if (fieldKey.includes('有效期') || fieldKey.includes('validitytime')) {
-                    return '90'; // 默认90天，与下拉选择的默认值保持一致
+                    return '365'; // 固定365天
                   }
                   
                   // 根据字段类型和名称提供合理默认值

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试前端API</title>
+</head>
+<body>
+    <h1>测试合同历史API</h1>
+    <button onclick="testAPI()">测试获取客户合同历史</button>
+    <div id="result"></div>
+
+    <script>
+        async function testAPI() {
+            const customerPhone = '13552336332';
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                resultDiv.innerHTML = '正在请求...';
+                
+                const response = await fetch(`http://localhost:3001/api/contracts/history/${customerPhone}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // 注意：这里可能需要添加认证头
+                    }
+                });
+                
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <h2>API响应:</h2>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+                
+                console.log('API响应:', data);
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">错误: ${error.message}</p>`;
+                console.error('API错误:', error);
+            }
+        }
+    </script>
+</body>
+</html> 

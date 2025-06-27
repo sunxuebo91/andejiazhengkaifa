@@ -15,6 +15,15 @@ export enum ContractType {
   ZHUJIA_HULAO = '住家护老'
 }
 
+// 新增：合同状态枚举
+export enum ContractStatus {
+  DRAFT = 'draft',           // 草稿
+  SIGNING = 'signing',       // 签约中
+  ACTIVE = 'active',         // 生效中
+  REPLACED = 'replaced',     // 已被替换
+  CANCELLED = 'cancelled'    // 已作废
+}
+
 @Schema({ timestamps: true })
 export class Contract {
   @Prop({ required: true, unique: true })
@@ -94,10 +103,32 @@ export class Contract {
   esignCreatedAt?: Date; // 爱签合同创建时间
 
   @Prop()
+  esignSignedAt?: Date; // 爱签合同签署完成时间
+
+  @Prop()
   esignTemplateNo?: string; // 爱签模板编号
 
   @Prop()
   esignPreviewUrl?: string; // 爱签预览链接（缓存）
+
+  // 🆕 换人功能新增字段
+  @Prop({ default: true })
+  isLatest: boolean; // 是否为该客户最新合同
+
+  @Prop({ enum: ContractStatus, default: ContractStatus.DRAFT })
+  contractStatus: ContractStatus; // 合同状态
+
+  @Prop({ type: Types.ObjectId, ref: 'Contract' })
+  replacedByContractId?: Types.ObjectId; // 被哪个合同替换了
+
+  @Prop({ type: Types.ObjectId, ref: 'Contract' })
+  replacesContractId?: Types.ObjectId; // 替换了哪个合同
+
+  @Prop()
+  changeDate?: Date; // 换人生效日期（如果是换人合同）
+
+  @Prop()
+  serviceDays?: number; // 实际服务天数（如果已结束）
 
   @Prop({ default: Date.now })
   createdAt: Date; // 录入时间，自动生成

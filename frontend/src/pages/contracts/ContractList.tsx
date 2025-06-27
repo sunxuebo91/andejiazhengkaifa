@@ -63,6 +63,7 @@ const ContractList: React.FC = () => {
         endDate: filters.dateRange?.[1]?.format('YYYY-MM-DD'),
       };
 
+      // 只获取真实的爱签合同数据
       const response = await contractService.getContracts(params);
       setContracts(response.contracts);
       setPagination(prev => ({

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Tag, Button, Row, Col, message } from 'antd';
-import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Card, Tag, Button, Row, Col, message, Tooltip } from 'antd';
+import { SearchOutlined, ReloadOutlined, UserOutlined, TeamOutlined } from '@ant-design/icons';
 import esignService from '../services/esignService';
+import { DetailedContractStatus, EnhancedContractStatusResponse } from '../types/contract.types';
 
 export interface ContractStatusInfo {
   contractNo: string;
@@ -11,6 +12,9 @@ export interface ContractStatusInfo {
   statusColor: string;
   statusDescription: string;
   rawData?: any;
+  // 🎯 新增：精准状态信息
+  detailedStatus?: DetailedContractStatus;
+  isDetailedStatus?: boolean; // 是否为精准状态
 }
 
 interface ContractStatusCardProps {
@@ -163,15 +167,38 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
         console.log('📋 设置的contractStatus:', contractData);
         console.log('📋 contractStatus.data.status:', contractData.data.status);
         
+        // 🎯 检查是否有精准状态解析结果
+        // 首先检查API响应是否包含detailedStatus
+        const apiResponse = response as any;
+        let detailedStatus = apiResponse?.detailedStatus || (contractData as EnhancedContractStatusResponse)?.detailedStatus;
+        let isDetailedStatus = detailedStatus?.detailed === true;
+        
+        console.log('🎯 精准状态检查:');
+        console.log('- API响应:', apiResponse);
+        console.log('- contractData:', contractData);
+        console.log('- detailedStatus:', detailedStatus);
+        console.log('- isDetailedStatus:', isDetailedStatus);
+        console.log('- detailedStatus.text:', detailedStatus?.text);
+        
+        // 简化的日志记录
+        console.log('🎯 精准状态检查:');
+        console.log('- contractData:', contractData);
+        console.log('- detailedStatus:', detailedStatus);
+        console.log('- isDetailedStatus:', isDetailedStatus);
+        console.log('- detailedStatus.text:', detailedStatus?.text);
+        
         // 创建状态信息对象
         const statusInfo: ContractStatusInfo = {
           contractNo,
           contractName: contractData.data?.contractName || contractName,
           status: statusValue,
-          statusText: getStatusText(statusValue),
-          statusColor: getStatusColor(statusValue),
-          statusDescription: getStatusDescription(statusValue),
-          rawData: contractData
+          // 🎯 优先使用精准状态文本
+          statusText: isDetailedStatus ? detailedStatus.text : getStatusText(statusValue),
+          statusColor: isDetailedStatus ? detailedStatus.color : getStatusColor(statusValue),
+          statusDescription: isDetailedStatus ? detailedStatus.summary || getStatusDescription(statusValue) : getStatusDescription(statusValue),
+          rawData: contractData,
+          detailedStatus: detailedStatus,
+          isDetailedStatus: isDetailedStatus
         };
 
         // 通知父组件状态变化
@@ -179,30 +206,21 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
           onStatusChange(statusInfo);
         }
         
-        // 状态映射
-        const statusMap: { [key: number]: { text: string; type: 'success' | 'info' | 'warning' | 'error' } } = {
-          0: { text: '等待签约', type: 'warning' },
-          1: { text: '签约中', type: 'info' },
-          2: { text: '已签约', type: 'success' },
-          3: { text: '过期', type: 'error' },
-          4: { text: '拒签', type: 'error' },
-          6: { text: '作废', type: 'warning' },
-          7: { text: '撤销', type: 'warning' }
-        };
-        
-        const statusInfo2 = statusMap[statusValue] || { text: '未知状态', type: 'info' };
-        
-        // 显示成功消息
+        // 🎯 精准状态的消息显示
         if (showMessage) {
-          if (statusInfo2.type === 'success') {
-            message.success(`合同状态：${statusInfo2.text}`);
-          } else if (statusInfo2.type === 'error') {
-            message.error(`合同状态：${statusInfo2.text}`);
-          } else if (statusInfo2.type === 'warning') {
-            message.warning(`合同状态：${statusInfo2.text}`);
-          } else {
-            message.info(`合同状态：${statusInfo2.text}`);
-          }
+          const displayText = isDetailedStatus ? detailedStatus.text : getStatusText(statusValue);
+          const messageType = isDetailedStatus ? detailedStatus.type : 
+            (statusValue === 2 ? 'success' : statusValue >= 3 ? 'error' : 'info');
+          
+                     if (messageType === 'success') {
+             message.success(`合同状态：${displayText}`);
+           } else if (messageType === 'error') {
+             message.error(`合同状态：${displayText}`);
+           } else if (messageType === 'warning') {
+             message.warning(`合同状态：${displayText}`);
+           } else {
+             message.info(`合同状态：${displayText}`);
+           }
         }
 
         return statusInfo;
@@ -379,16 +397,87 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
             </Col>
             <Col span={8}>
               <p><strong>当前状态：</strong>
-                <Tag color={getStatusColor(contractStatus.data?.status)}>
-                  {getStatusText(contractStatus.data?.status)}
-                </Tag>
+                {/* 🎯 优先显示精准状态 */}
+                {contractStatus.detailedStatus?.detailed ? (
+                  <Tooltip title={contractStatus.detailedStatus.summary}>
+                    <Tag 
+                      color={contractStatus.detailedStatus.color}
+                      icon={contractStatus.detailedStatus.detailed ? <TeamOutlined /> : undefined}
+                    >
+                      {contractStatus.detailedStatus.text}
+                    </Tag>
+                  </Tooltip>
+                ) : (
+                  <Tag color={getStatusColor(contractStatus.data?.status)}>
+                    {getStatusText(contractStatus.data?.status)}
+                  </Tag>
+                )}
               </p>
             </Col>
           </Row>
-          <p><strong>状态说明：</strong>{getStatusDescription(contractStatus.data?.status)}</p>
           
-          {/* 如果有签署方信息，也显示出来 */}
-          {contractStatus.data?.signers && contractStatus.data.signers.length > 0 && (
+          {/* 🎯 精准状态说明 */}
+          <p><strong>状态说明：</strong>
+            {contractStatus.detailedStatus?.summary || getStatusDescription(contractStatus.data?.status)}
+          </p>
+          
+          {/* 🎯 精准签署方状态显示 */}
+          {contractStatus.detailedStatus?.detailed && contractStatus.detailedStatus.customer && contractStatus.detailedStatus.worker && (
+            <div style={{ marginTop: 16 }}>
+              <p><strong>详细签署状态：</strong></p>
+              <Row gutter={[12, 8]}>
+                <Col span={12}>
+                  <div style={{ 
+                    padding: '12px', 
+                    background: contractStatus.detailedStatus.customerSigned ? '#f6ffed' : '#fff7e6', 
+                    borderRadius: '6px',
+                    border: `1px solid ${contractStatus.detailedStatus.customerSigned ? '#b7eb8f' : '#ffd591'}`
+                  }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <UserOutlined style={{ marginRight: '6px' }} />
+                      <strong>甲方（客户）</strong>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666' }}>
+                      {contractStatus.detailedStatus.customer.name || '客户'}
+                    </div>
+                    <div style={{ marginTop: '4px' }}>
+                      <Tag 
+                        color={contractStatus.detailedStatus.customerSigned ? 'green' : 'orange'}
+                      >
+                        {contractStatus.detailedStatus.customerSigned ? '已签约' : '未签约'}
+                      </Tag>
+                    </div>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div style={{ 
+                    padding: '12px', 
+                    background: contractStatus.detailedStatus.workerSigned ? '#f6ffed' : '#fff7e6', 
+                    borderRadius: '6px',
+                    border: `1px solid ${contractStatus.detailedStatus.workerSigned ? '#b7eb8f' : '#ffd591'}`
+                  }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <UserOutlined style={{ marginRight: '6px' }} />
+                      <strong>乙方（阿姨）</strong>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666' }}>
+                      {contractStatus.detailedStatus.worker.name || '阿姨'}
+                    </div>
+                    <div style={{ marginTop: '4px' }}>
+                      <Tag 
+                        color={contractStatus.detailedStatus.workerSigned ? 'green' : 'orange'}
+                      >
+                        {contractStatus.detailedStatus.workerSigned ? '已签约' : '未签约'}
+                      </Tag>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+            </div>
+          )}
+          
+          {/* 如果不是精准状态，显示原有的签署方信息 */}
+          {!contractStatus.detailedStatus?.detailed && contractStatus.data?.signers && contractStatus.data.signers.length > 0 && (
             <div style={{ marginTop: 16 }}>
               <p><strong>签署方状态：</strong></p>
               <Row gutter={[8, 8]}>

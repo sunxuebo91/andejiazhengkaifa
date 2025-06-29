@@ -17,6 +17,7 @@ import {
   App,
   Timeline,
   Empty,
+  Tooltip,
 } from 'antd';
 import { 
   ArrowLeftOutlined, 
@@ -28,6 +29,7 @@ import {
   LinkOutlined,
   UserSwitchOutlined,
   HistoryOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { Contract, ContractType } from '../../types/contract.types';
@@ -65,6 +67,12 @@ const ContractDetail: React.FC = () => {
 
   // 处理合同状态变化
   const handleStatusChange = (statusInfo: ContractStatusInfo | null) => {
+    console.log('🔄 ContractDetail 收到状态变化:', statusInfo);
+    if (statusInfo?.isDetailedStatus) {
+      console.log('🎯 ContractDetail 检测到精准状态:', statusInfo.statusText);
+    } else {
+      console.log('⚠️ ContractDetail 收到基础状态:', statusInfo?.statusText);
+    }
     setContractStatusInfo(statusInfo);
   };
 
@@ -167,16 +175,15 @@ const ContractDetail: React.FC = () => {
       
       messageApi.destroy('preview');
       
+      // 强制应用内预览 - 无论返回什么都在应用内显示
       if (response.success) {
-        // 优先尝试直接预览
         if (response.previewData) {
           // 有预览数据，直接弹窗显示合同
-          showContractPreviewModal(response.previewData, response.contractNo, response.statusText);
+          showInAppPreview(response.previewData, response.contractNo, response.statusText, 'base64');
           return;
         } else if (response.previewUrl) {
-          // 有预览链接，在新标签页打开
-          window.open(response.previewUrl, '_blank');
-          messageApi.success('合同预览已打开');
+          // 有预览链接，在应用内显示
+          showInAppPreview(response.previewUrl, response.contractNo, response.statusText, 'url');
           return;
         }
         
@@ -285,61 +292,128 @@ const ContractDetail: React.FC = () => {
     }
   };
 
-  // 显示合同预览弹窗
-  const showContractPreviewModal = (previewData: string, contractNo: string, statusText?: string) => {
-    const previewUrl = `data:application/pdf;base64,${previewData}`;
+  // 统一的应用内预览方法
+  const showInAppPreview = (source: string, contractNo: string, statusText?: string, type: 'base64' | 'url' = 'url') => {
+    const previewUrl = type === 'base64' ? `data:application/pdf;base64,${source}` : source;
     
-    modal.info({
-      title: `合同预览 - ${contractNo}`,
-      width: '90%',
-      style: { top: 20 },
+    Modal.info({
+      title: (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+          <FileTextOutlined style={{ color: '#1890ff' }} />
+          🏠 应用内预览 - {contractNo}
+        </div>
+      ),
+      width: '95vw',
+      style: { 
+        top: 10, 
+        maxWidth: '1400px',
+        margin: '0 auto'
+      },
+      maskClosable: true,
+      centered: false,
+      closable: true,
       content: (
-        <div style={{ height: '75vh' }}>
+        <div style={{ 
+          height: '88vh', 
+          padding: 0, 
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
           {statusText && (
             <Alert 
               type="info" 
               message={`合同状态：${statusText}`} 
-              style={{ marginBottom: 16 }}
+              description="您正在使用应用内预览功能"
+              style={{ marginBottom: 12, flexShrink: 0 }}
+              showIcon
             />
           )}
-          <iframe
-            src={previewUrl}
-            style={{ 
-              width: '100%', 
-              height: '100%', 
-              border: '1px solid #d9d9d9',
-              borderRadius: '6px'
-            }}
-            title="合同预览"
-          />
+          
+          {/* PDF预览区域 */}
+          <div style={{ 
+            width: '100%', 
+            flex: 1,
+            border: '1px solid #d9d9d9',
+            borderRadius: '6px',
+            overflow: 'hidden',
+            backgroundColor: '#f5f5f5',
+            marginBottom: '12px'
+          }}>
+            <iframe
+              src={previewUrl}
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                border: 'none'
+              }}
+              title="合同预览"
+              frameBorder="0"
+            />
+          </div>
+          
+          {/* 底部按钮区域 - 水平布局 */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '8px 0',
+            backgroundColor: '#fafafa',
+            borderTop: '1px solid #e8e8e8',
+            borderRadius: '0 0 6px 6px',
+            flexShrink: 0
+          }}>
+            <Button 
+              size="middle"
+              icon={<DownloadOutlined />}
+              onClick={() => {
+                console.log('🔄 底部按钮：下载合同被点击');
+                Modal.destroyAll();
+                handleDownloadContract();
+              }}
+              style={{ 
+                minWidth: '100px'
+              }}
+            >
+              下载合同
+            </Button>
+            <Button 
+              size="middle"
+              onClick={() => {
+                console.log('🔄 底部按钮：关闭被点击');
+                Modal.destroyAll();
+              }}
+              style={{ 
+                minWidth: '80px'
+              }}
+            >
+              关闭
+            </Button>
+            <Button 
+              type="primary" 
+              size="middle"
+              icon={<LinkOutlined />}
+              onClick={() => {
+                console.log('🔄 底部按钮：新窗口打开被点击');
+                window.open(previewUrl, '_blank');
+                Modal.destroyAll();
+              }}
+              style={{ 
+                minWidth: '120px'
+              }}
+            >
+              新窗口打开
+            </Button>
+          </div>
         </div>
       ),
-      footer: (
-        <div style={{ textAlign: 'center' }}>
-          <Button type="default" onClick={() => modal.destroyAll()}>
-            关闭
-          </Button>
-          <Button 
-            type="primary" 
-            style={{ marginLeft: 8 }}
-            onClick={() => {
-              window.open(previewUrl, '_blank');
-            }}
-          >
-            在新窗口打开
-          </Button>
-          <Button 
-            type="default" 
-            style={{ marginLeft: 8 }}
-            onClick={handleDownloadContract}
-          >
-            下载合同
-          </Button>
-        </div>
-      ),
+      footer: null,
+      okButtonProps: { style: { display: 'none' } },
+      cancelButtonProps: { style: { display: 'none' } },
     });
     
-    messageApi.success('合同预览已加载');
+    messageApi.success('📱 应用内预览已加载');
   };
 
   const handleDownloadContract = async () => {
@@ -750,6 +824,8 @@ const ContractDetail: React.FC = () => {
                 onStatusChange={handleStatusChange}
                 title="电子合同状态信息"
               />
+              
+
             </Col>
           )}
 
@@ -773,9 +849,21 @@ const ContractDetail: React.FC = () => {
                 
                 <Descriptions.Item label="合同状态" span={1}>
                   {contractStatusInfo ? (
-                    <Tag color={contractStatusInfo.statusColor}>
-                      {contractStatusInfo.statusText}
-                    </Tag>
+                    contractStatusInfo.isDetailedStatus ? (
+                      <Tooltip title={contractStatusInfo.detailedStatus?.summary || contractStatusInfo.statusDescription}>
+                        <Tag 
+                          color={contractStatusInfo.statusColor}
+                          icon={<TeamOutlined />}
+                          style={{ fontSize: '12px' }}
+                        >
+                          {contractStatusInfo.statusText}
+                        </Tag>
+                      </Tooltip>
+                    ) : (
+                      <Tag color={contractStatusInfo.statusColor}>
+                        {contractStatusInfo.statusText}
+                      </Tag>
+                    )
                   ) : (
                     <Tag color="default">查询中...</Tag>
                   )}

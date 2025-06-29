@@ -28,7 +28,7 @@ module.exports = {
       ignore_watch: ['node_modules', 'logs', 'uploads'],
       env: {
         NODE_ENV: 'development',
-        PORT: 3001
+        PORT: 3000
       },
       instances: 1,
       exec_mode: 'fork',
@@ -64,11 +64,11 @@ module.exports = {
       name: 'frontend-dev',
       cwd: './frontend',
       script: 'npm',
-      args: 'run dev',
+      args: 'run dev -- --port 5174 --host',
       env: {
         NODE_ENV: 'development',
-        PORT: 5173,
-        VITE_API_BASE_URL: 'http://localhost:3001/api'
+        PORT: 5174,
+        VITE_API_BASE_URL: 'http://localhost:3000/api'
       },
       instances: 1,
       exec_mode: 'fork',

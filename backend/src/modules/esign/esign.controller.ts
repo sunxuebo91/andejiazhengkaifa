@@ -597,11 +597,22 @@ export class ESignController {
       
       this.logger.log('获取合同状态成功:', result);
       
-      return {
+      // 🎯 修复：确保detailedStatus在正确的层级
+      const response: any = {
         success: true,
-        data: result,
-        message: '获取合同状态成功'
+        data: result.data || result, // 爱签API的原始数据
+        message: '获取合同状态成功',
+        code: result.code,
+        msg: result.msg
       };
+      
+      // 如果有精准状态解析结果，添加到响应的根级别
+      if (result.detailedStatus) {
+        response.detailedStatus = result.detailedStatus;
+        this.logger.log('🎯 添加精准状态到响应:', result.detailedStatus);
+      }
+      
+      return response;
     } catch (error) {
       this.logger.error('获取合同状态失败', error.stack);
       
@@ -823,7 +834,7 @@ export class ESignController {
     isSignPwdNotice?: boolean;
   }) {
     try {
-      console.log('批量添加甲乙双方用户请求:', body);
+      console.log('🔄 批量添加甲乙丙三方用户请求:', body);
 
       // 构建甲方用户请求
       const partyARequest = {
@@ -847,33 +858,63 @@ export class ESignController {
         isSignPwdNotice: body.isSignPwdNotice ? 1 : 0,
       };
 
-      // 依次添加甲方和乙方用户
+      // 🎯 关键修复：使用官方已实名的测试企业账号（支持无感知签约）
+      const partyCRequest = {
+        account: 'ASIGN91110111MACJMD2R5J', // 🔑 官方已实名测试企业账号
+        userType: 2, // 企业用户类型
+        companyName: '北京安得家政有限公司',
+        mobile: '400-000-0000',
+        isNotice: 0, // 企业用户不需要短信通知
+        creditCode: '91110000000000000X', // 企业统一社会信用代码
+        agentName: '张三', // 法人姓名
+        agentCardNo: '110000000000000000', // 法人身份证号
+        // 🔑 关键：根据官方回复，添加自动签约相关参数
+        signPwd: '', // 签约密码（企业用户可留空）
+        isSignPwdNotice: 0, // 不通知签约密码
+        // 为了确保无感知签约权限，可能需要设置特定的不可变信息
+        immutableInfoList: ['signPwd'] // 设置签约密码为不可变，支持自动签约
+      };
+
+      // 依次添加甲方、乙方和丙方用户
       let partyAResponse = null;
       let partyBResponse = null;
+      let partyCResponse = null;
       
       try {
         partyAResponse = await this.esignService.addStranger(partyARequest);
-        console.log('甲方用户添加响应:', partyAResponse);
+        console.log('✅ 甲方用户添加响应:', partyAResponse);
       } catch (error) {
-        console.error('甲方用户添加失败:', error);
+        console.error('❌ 甲方用户添加失败:', error);
         partyAResponse = { code: -1, message: error.message || '甲方用户添加失败' };
       }
 
       try {
         partyBResponse = await this.esignService.addStranger(partyBRequest);
-        console.log('乙方用户添加响应:', partyBResponse);
+        console.log('✅ 乙方用户添加响应:', partyBResponse);
       } catch (error) {
-        console.error('乙方用户添加失败:', error);
+        console.error('❌ 乙方用户添加失败:', error);
         partyBResponse = { code: -1, message: error.message || '乙方用户添加失败' };
+      }
+
+      // 🎯 关键修复：添加丙方企业用户
+      try {
+        partyCResponse = await this.esignService.addStranger(partyCRequest);
+        console.log('✅ 丙方企业用户添加响应:', partyCResponse);
+      } catch (error) {
+        console.error('❌ 丙方企业用户添加失败:', error);
+        partyCResponse = { code: -1, message: error.message || '丙方企业用户添加失败' };
       }
 
       // 检查结果 - 爱签API成功响应通常是 code: 100000，用户已存在是 100021
       const partyASuccess = partyAResponse && (partyAResponse.code === 100000 || partyAResponse.code === 100021);
       const partyBSuccess = partyBResponse && (partyBResponse.code === 100000 || partyBResponse.code === 100021);
+      const partyCSuccess = partyCResponse && (partyCResponse.code === 100000 || partyCResponse.code === 100021);
+
+      const allSuccess = partyASuccess && partyBSuccess && partyCSuccess;
 
       return {
-        success: partyASuccess && partyBSuccess,
-        message: partyASuccess && partyBSuccess ? '甲乙双方用户添加成功' : '部分用户添加失败',
+        success: allSuccess,
+        message: allSuccess ? '甲乙丙三方用户添加成功' : '部分用户添加失败',
         data: {
           partyA: {
             success: partyASuccess,
@@ -886,11 +927,17 @@ export class ESignController {
             message: partyBResponse?.msg || partyBResponse?.message || '未知状态',
             request: partyBRequest,
             response: partyBResponse
+          },
+          partyC: {
+            success: partyCSuccess,
+            message: partyCResponse?.msg || partyCResponse?.message || '未知状态',
+            request: partyCRequest,
+            response: partyCResponse
           }
         }
       };
     } catch (error) {
-      console.error('批量添加用户失败:', error);
+      console.error('❌ 批量添加用户失败:', error);
       return {
         success: false,
         message: error.message || '批量添加用户失败',
@@ -1068,6 +1115,53 @@ export class ESignController {
       return {
         success: false,
         message: error.message || '测试getContract失败',
+        error: error.toString()
+      };
+    }
+  }
+
+  /**
+   * 🔍 查询用户权限状态
+   */
+  @Post('check-permissions')
+  async checkUserPermissions(@Body() body: { account: string }) {
+    this.logger.log('调用 check-permissions 端点, account:', body.account);
+    
+    try {
+      const result = await this.esignService.checkUserPermissions(body.account);
+      return result;
+    } catch (error) {
+      this.logger.error('查询用户权限失败', error.stack);
+      
+      return {
+        success: false,
+        message: error.message || '查询用户权限失败',
+        error: error.toString()
+      };
+    }
+  }
+
+  /**
+   * 🔍 查询企业测试账号权限状态
+   */
+  @Get('check-enterprise-permissions')
+  async checkEnterprisePermissions() {
+    this.logger.log('调用 check-enterprise-permissions 端点');
+    
+    try {
+      const enterpriseAccount = 'ASIGN91110111MACJMD2R5J'; // 官方已实名测试企业账号
+      const result = await this.esignService.checkUserPermissions(enterpriseAccount);
+      return {
+        ...result,
+        account: enterpriseAccount,
+        accountType: '官方已实名测试企业账号'
+      };
+    } catch (error) {
+      this.logger.error('查询企业权限失败', error.stack);
+      
+      return {
+        success: false,
+        message: error.message || '查询企业权限失败',
         error: error.toString()
       };
     }

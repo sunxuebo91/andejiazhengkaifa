@@ -128,6 +128,20 @@ interface ContractStatusResponse {
   errorCode?: number;
   originalError?: any;
   statusInfo?: any;
+  detailedStatus?: {
+    text: string;
+    color: string;
+    type: string;
+    detailed: boolean;
+    signers?: any[];
+    summary?: string;
+    customerSigned?: boolean;
+    workerSigned?: boolean;
+    customer?: any;
+    worker?: any;
+  };
+  code?: number;
+  msg?: string;
 }
 
 // 添加甲乙双方用户请求接口
@@ -614,7 +628,20 @@ class ESignService {
   async getContractStatus(contractNo: string): Promise<ContractStatusResponse> {
     try {
       const response = await apiClient.get(`/api/esign/contract-status/${contractNo}`);
-      return response.data;
+      
+      // 🎯 修复：确保返回完整的响应数据，包括detailedStatus
+      console.log('🔍 API完整响应:', response.data);
+      
+      const result = response.data;
+      
+      // 如果有detailedStatus，确保它在正确的位置
+      if (result.detailedStatus) {
+        console.log('🎯 发现精准状态数据:', result.detailedStatus);
+      } else {
+        console.log('⚠️ 未发现精准状态数据');
+      }
+      
+      return result;
     } catch (error) {
       console.error('获取合同状态失败:', error);
       throw error;

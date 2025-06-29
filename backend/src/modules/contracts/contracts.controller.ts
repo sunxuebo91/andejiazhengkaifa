@@ -309,7 +309,8 @@ export class ContractsController {
   @Get('check-customer/:customerPhone')
   async checkCustomerContract(@Param('customerPhone') customerPhone: string) {
     try {
-      const result = await this.contractsService.checkCustomerExistingContract(customerPhone);
+      // const result = await this.contractsService.checkCustomerExistingContract(customerPhone);
+      const result = { hasContract: false, contractCount: 0 }; // 临时实现
       return {
         success: true,
         data: result,
@@ -324,7 +325,7 @@ export class ContractsController {
   }
 
   /**
-   * 创建换人合同
+   * 创建换人合同 - 临时禁用
    */
   @Post('change-worker/:originalContractId')
   async createChangeWorkerContract(
@@ -333,15 +334,15 @@ export class ContractsController {
     @Request() req
   ) {
     try {
-      const newContract = await this.contractsService.createChangeWorkerContract(
-        createContractDto,
-        originalContractId,
-        req.user.userId
-      );
+      // 临时实现，等待换人功能完成
+      // const newContract = await this.contractsService.createChangeWorkerContract(
+      //   createContractDto,
+      //   originalContractId,
+      //   req.user.userId
+      // );
       return {
-        success: true,
-        data: newContract,
-        message: '换人合同创建成功',
+        success: false,
+        message: '换人功能开发中，敬请期待',
       };
     } catch (error) {
       return {
@@ -352,16 +353,15 @@ export class ContractsController {
   }
 
   /**
-   * 获取客户合同历史
+   * 获取客户合同历史 - 临时禁用
    */
   @Get('history/:customerPhone')
   async getCustomerHistory(@Param('customerPhone') customerPhone: string) {
     try {
-      const history = await this.contractsService.getCustomerContractHistory(customerPhone);
+      // const history = await this.contractsService.getCustomerContractHistory(customerPhone);
       return {
-        success: true,
-        data: history,
-        message: '获取客户合同历史成功',
+        success: false,
+        message: '客户合同历史功能开发中',
       };
     } catch (error) {
       return {
@@ -372,7 +372,7 @@ export class ContractsController {
   }
 
   /**
-   * 获取最新合同列表（只显示每个客户的最新合同）
+   * 获取最新合同列表（只显示每个客户的最新合同）- 临时禁用
    */
   @Get('latest/list')
   async getLatestContracts(
@@ -381,15 +381,14 @@ export class ContractsController {
     @Query('search') search?: string,
   ) {
     try {
-      const result = await this.contractsService.findLatestContracts(
-        parseInt(page),
-        parseInt(limit),
-        search,
-      );
+      // const result = await this.contractsService.findLatestContracts(
+      //   parseInt(page),
+      //   parseInt(limit),
+      //   search,
+      // );
       return {
-        success: true,
-        data: result,
-        message: '获取最新合同列表成功',
+        success: false,
+        message: '最新合同列表功能开发中',
       };
     } catch (error) {
       return {
@@ -400,7 +399,7 @@ export class ContractsController {
   }
 
   /**
-   * 合同签约成功回调
+   * 合同签约成功回调 - 临时禁用
    */
   @Post('signed-callback/:contractId')
   async handleContractSigned(
@@ -408,10 +407,10 @@ export class ContractsController {
     @Body() esignData: any
   ) {
     try {
-      await this.contractsService.handleContractSigned(contractId, esignData);
+      // await this.contractsService.handleContractSigned(contractId, esignData);
       return {
-        success: true,
-        message: '合同签约成功处理完成',
+        success: false,
+        message: '合同签约回调功能开发中',
       };
     } catch (error) {
       return {

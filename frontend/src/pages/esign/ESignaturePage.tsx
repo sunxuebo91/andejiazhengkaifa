@@ -1826,6 +1826,14 @@ const ESignatureStepPage: React.FC = () => {
             signType: 'manual' as const, // 有感知签约
             validateType: 'sms' as const // 短信验证码
             // 移除signPosition，让后端使用模板坐标签章策略
+          },
+          {
+            account: 'ASIGN91110111MACJMD2R5J', // 🔑 官方已实名测试企业账号（支持无感知签约）
+            name: '北京安得家政有限公司',
+            mobile: '400-000-0000', // 企业客服电话
+            signType: 'auto' as const, // 无感知签约（自动签章）
+            validateType: 'sms' as const // 虽然是无感知，但仍需设置验证方式
+            // 移除signPosition，让后端使用模板坐标签章策略
           }
         ];
         
@@ -1868,7 +1876,7 @@ const ESignatureStepPage: React.FC = () => {
                   const signUrls = statusResult.data.signUser.map((user: any, index: number) => ({
                     name: user.name,
                     mobile: user.account,
-                    role: index === 0 ? '甲方（客户）' : '乙方（服务人员）',
+                    role: index === 0 ? '甲方（客户）' : index === 1 ? '乙方（服务人员）' : '丙方（企业）',
                     signUrl: user.signUrl,
                     account: user.account,
                     signOrder: user.signOrder
@@ -1905,7 +1913,7 @@ const ESignatureStepPage: React.FC = () => {
                 const signUrls = result.data.signUser.map((user: any, index: number) => ({
                   name: user.name,
                   mobile: user.account,
-                  role: index === 0 ? '甲方（客户）' : '乙方（服务人员）',
+                  role: index === 0 ? '甲方（客户）' : index === 1 ? '乙方（服务人员）' : '丙方（企业）',
                   signUrl: user.signUrl,
                   account: user.account,
                   signOrder: user.signOrder
@@ -1954,7 +1962,7 @@ const ESignatureStepPage: React.FC = () => {
       <Card title="步骤3：添加签署方" bordered={false}>
         <Alert
           message="准备添加签署方"
-          description="将为甲方（客户）和乙方（阿姨）添加签署权限，并生成签署链接。"
+          description="将为甲方（客户）、乙方（阿姨）和丙方（企业）添加签署权限，并生成签署链接。"
           type="info"
           showIcon
           style={{ marginBottom: 24 }}
@@ -1963,7 +1971,7 @@ const ESignatureStepPage: React.FC = () => {
         {stepData.users && stepData.contract && (
           <div style={{ marginBottom: 24 }}>
             <Row gutter={16}>
-              <Col span={12}>
+              <Col span={8}>
                 <Card title="甲方（客户）" size="small" style={{ background: '#f6ffed' }}>
                   <p><strong>姓名：</strong>{stepData.users.partyA?.request?.name}</p>
                   <p><strong>手机：</strong>{stepData.users.partyA?.request?.mobile}</p>
@@ -1971,12 +1979,20 @@ const ESignatureStepPage: React.FC = () => {
                   <p><strong>签名位置：</strong>模板预设位置（甲方签名区）</p>
                 </Card>
               </Col>
-              <Col span={12}>
+              <Col span={8}>
                 <Card title="乙方（阿姨）" size="small" style={{ background: '#fff7e6' }}>
                   <p><strong>姓名：</strong>{stepData.users.partyB?.request?.name}</p>
                   <p><strong>手机：</strong>{stepData.users.partyB?.request?.mobile}</p>
                   <p><strong>签署方式：</strong>有感知签约（短信验证码）</p>
                   <p><strong>签名位置：</strong>模板预设位置（乙方签名区）</p>
+                </Card>
+              </Col>
+              <Col span={8}>
+                <Card title="丙方（企业）" size="small" style={{ background: '#f0f9ff' }}>
+                  <p><strong>名称：</strong>北京安得家政有限公司</p>
+                  <p><strong>联系方式：</strong>400-000-0000</p>
+                  <p><strong>签署方式：</strong>无感知签约（自动签章）</p>
+                  <p><strong>签章位置：</strong>模板预设位置（丙方签章区）</p>
                 </Card>
               </Col>
             </Row>
@@ -1985,7 +2001,7 @@ const ESignatureStepPage: React.FC = () => {
               <p><strong>合同编号：</strong>{stepData.contract.contractNo}</p>
               <p><strong>合同名称：</strong>{stepData.contract.contractName || '安得家政三方服务合同'}</p>
               <p><strong>模板编号：</strong>{stepData.contract.templateNo}</p>
-              <p><strong>签署顺序：</strong>并行签署（甲乙双方可同时签署）</p>
+              <p><strong>签署顺序：</strong>并行签署（三方可同时签署）</p>
             </Card>
           </div>
         )}

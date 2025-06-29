@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Contract, ContractDocument } from './models/contract.model';
+import { CustomerContractHistory, CustomerContractHistoryDocument } from './models/customer-contract-history.model';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 
@@ -9,6 +10,7 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 export class ContractsService {
   constructor(
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
+    @InjectModel(CustomerContractHistory.name) private customerContractHistoryModel: Model<CustomerContractHistoryDocument>,
   ) {}
 
   // 生成合同编号
@@ -243,5 +245,20 @@ export class ContractsService {
       thisMonth,
       thisYear,
     };
+  }
+
+  // 获取客户合同历史
+  async getCustomerContractHistory(customerPhone: string): Promise<CustomerContractHistory | null> {
+    try {
+      const history = await this.customerContractHistoryModel
+        .findOne({ customerPhone })
+        .populate('latestContractId')
+        .exec();
+      
+      return history;
+    } catch (error) {
+      console.error('获取客户合同历史失败:', error);
+      throw new BadRequestException(`获取客户合同历史失败: ${error.message}`);
+    }
   }
 } 

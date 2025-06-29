@@ -196,8 +196,8 @@ const ESignatureStepPage: React.FC = () => {
   });
 
   // 有效期选择相关状态 - 固定为365天
-  const [validityType, setValidityType] = useState('365'); // 默认365天
-  const [customDays, setCustomDays] = useState('');
+  // const [validityType, setValidityType] = useState('365'); // 默认365天
+  // const [customDays, setCustomDays] = useState('');
 
   // 🔥 最终修复：使用 ref 来存储服务备注的真实选择，绕过 antd form 的 state 覆盖问题
   const serviceRemarksRef = useRef<string[]>([]);
@@ -474,7 +474,7 @@ const ESignatureStepPage: React.FC = () => {
       step2Form.setFieldsValue(defaultValues);
       
       // 设置有效期下拉选择的默认值
-      setValidityType('365');
+      // setValidityType('365'); // 已固定为365天
       
       // 如果有步骤1的用户数据，这些数据会在getInitialValues中使用
       if (stepData.users?.batchRequest) {

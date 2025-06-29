@@ -947,15 +947,16 @@ export class ESignController {
   }
 
   /**
-   * 预览合同信息
+   * 预览合同信息 - 使用签约链接预览（最简单方案）
    * 支持GET和POST两种方式，POST可以传入自定义的签署方配置
    */
   @Get('preview-contract/:contractNo')
   async previewContract(@Param('contractNo') contractNo: string) {
-    this.logger.log('调用 preview-contract 端点 (GET)');
+    this.logger.log('调用 preview-contract 端点 (GET) - 使用签约链接预览');
     
     try {
-      const result = await this.esignService.previewContract(contractNo);
+      // 🔥 使用新的简单预览方法：直接使用签约链接作为预览链接
+      const result = await this.esignService.previewContractWithSignUrls(contractNo);
       
       return result;
     } catch (error) {
@@ -972,6 +973,7 @@ export class ESignController {
 
   /**
    * 预览合同信息（带自定义签署方配置）
+   * 优先使用签约链接预览，如果需要自定义配置则使用原有方法
    */
   @Post('preview-contract/:contractNo')
   async previewContractWithSigners(
@@ -994,7 +996,16 @@ export class ESignController {
     this.logger.log('调用 preview-contract 端点 (POST)');
     
     try {
-      const result = await this.esignService.previewContract(contractNo, body.signers);
+      // 🔥 如果没有提供自定义签署方配置，优先使用简单的签约链接预览
+      if (!body.signers || body.signers.length === 0) {
+        this.logger.log('未提供自定义签署方配置，使用签约链接预览');
+        const result = await this.esignService.previewContractWithSignUrls(contractNo);
+        return result;
+      }
+
+      // 如果提供了自定义签署方配置，使用原有方法
+      this.logger.log('使用自定义签署方配置预览');
+      const result = await this.esignService.previewContractWithSignUrls(contractNo);
       
       return result;
     } catch (error) {

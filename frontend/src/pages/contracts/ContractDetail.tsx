@@ -16,7 +16,7 @@ import {
   Typography,
   App,
   Timeline,
-  Empty,
+
   Tooltip,
 } from 'antd';
 import { 
@@ -37,14 +37,7 @@ import EditContractModal from '../../components/EditContractModal';
 import ContractStatusCard, { ContractStatusInfo } from '../../components/ContractStatusCard';
 import dayjs from 'dayjs';
 
-interface EsignInfo {
-  contractNo: string;
-  templateNo?: string;
-  status?: any;
-  preview?: any;
-  statusError?: string;
-  previewError?: string;
-}
+
 
 const ContractDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -55,7 +48,7 @@ const ContractDetail: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   
   // 爱签相关状态
-  const [esignInfo, setEsignInfo] = useState<EsignInfo | null>(null);
+
   const [downloadLoading, setDownloadLoading] = useState(false);
   
   // 新增：合同状态信息
@@ -113,8 +106,8 @@ const ContractDetail: React.FC = () => {
     if (!id) return;
     
     try {
-      const response = await contractService.getEsignInfo(id);
-      setEsignInfo(response);
+      await contractService.getEsignInfo(id);
+      // TODO: 处理爱签信息响应
     } catch (error) {
       console.error('获取爱签信息失败:', error);
     }
@@ -177,14 +170,14 @@ const ContractDetail: React.FC = () => {
       
       // 强制应用内预览 - 无论返回什么都在应用内显示
       if (response.success) {
-        if (response.previewData) {
-          // 有预览数据，直接弹窗显示合同
-          showInAppPreview(response.previewData, response.contractNo, response.statusText, 'base64');
-          return;
-        } else if (response.previewUrl) {
-          // 有预览链接，在应用内显示
-          showInAppPreview(response.previewUrl, response.contractNo, response.statusText, 'url');
-          return;
+        // 根据爱签官方文档，预览API返回的data字段就是预览链接URL
+        if (response.previewData || response.previewUrl) {
+          const previewLink = response.previewData || response.previewUrl;
+          if (previewLink) {
+            // 爱签返回的是预览链接，直接作为URL使用
+            showInAppPreview(previewLink, response.contractNo, response.statusText, response);
+            return;
+          }
         }
         
         // 根据合同状态处理其他逻辑
@@ -293,8 +286,9 @@ const ContractDetail: React.FC = () => {
   };
 
   // 统一的应用内预览方法
-  const showInAppPreview = (source: string, contractNo: string, statusText?: string, type: 'base64' | 'url' = 'url') => {
-    const previewUrl = type === 'base64' ? `data:application/pdf;base64,${source}` : source;
+  const showInAppPreview = (source: string, contractNo: string, statusText?: string, previewData?: any) => {
+    // 根据爱签官方文档，预览API返回的就是完整的预览链接URL，直接使用
+    const previewUrl = source;
     
     Modal.info({
       title: (
@@ -320,7 +314,26 @@ const ContractDetail: React.FC = () => {
           display: 'flex',
           flexDirection: 'column'
         }}>
-          {statusText && (
+          {/* 显示详细的合同状态信息 */}
+          {contract?.esignContractNo && (
+            <div style={{ marginBottom: 12, flexShrink: 0 }}>
+              <ContractStatusCard
+                contractNo={contract.esignContractNo}
+                contractName={contractNo}
+                showRefreshButton={true}
+                autoRefresh={false}
+                size="small"
+                style={{ marginBottom: 0 }}
+                onStatusChange={handleStatusChange}
+                title="电子合同状态信息"
+              />
+            </div>
+          )}
+          
+
+          
+          {/* 备用状态显示（如果ContractStatusCard无法正常工作） */}
+          {statusText && !contract?.esignContractNo && (
             <Alert 
               type="info" 
               message={`合同状态：${statusText}`} 
@@ -532,174 +545,14 @@ const ContractDetail: React.FC = () => {
   };
 
   const [signUrlModalVisible, setSignUrlModalVisible] = useState(false);
-  const [signUrls, setSignUrls] = useState<any[]>([]);
-  const [signUrlLoading, setSignUrlLoading] = useState(false);
+  const [signUrls] = useState<any[]>([]);
+  const [signUrlLoading] = useState(false);
 
-  const getStatusText = (status: number): string => {
-    const statusMap: Record<number, string> = {
-      0: '等待签约',
-      1: '签约中',
-      2: '已签约',
-      3: '过期',
-      4: '拒签',
-      6: '作废',
-      7: '撤销'
-    };
-    return statusMap[status] || '未知状态';
-  };
 
-  const handleRefreshSignUrls = async () => {
-    if (!contract) return;
-    
-    try {
-      setSignUrlLoading(true);
-      
-      // 尝试重新添加签署方获取链接（会返回100074，但我们可以从错误中获取信息）
-      const signersData = {
-        contractNo: contract.esignContractNo,
-        signers: [
-          {
-            account: contract.customerPhone,
-            name: contract.customerName,
-            mobile: contract.customerPhone,
-            signType: 'manual',
-            validateType: 'sms'
-          },
-          {
-            account: contract.workerPhone,
-            name: contract.workerName,
-            mobile: contract.workerPhone,
-            signType: 'manual',
-            validateType: 'sms'
-          }
-        ],
-        signOrder: 'parallel'
-      };
 
-      console.log('🔄 尝试重新获取签署链接:', signersData);
-      
-      // 调用爱签API
-      const response = await fetch('/api/esign/add-signers-simple', {
-        method: 'POST',
-                 headers: {
-           'Content-Type': 'application/json',
-           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-         },
-        body: JSON.stringify(signersData)
-      });
-      
-      const result = await response.json();
-      console.log('📊 重新添加签署方结果:', result);
-      
-      if (result.data?.signUser && result.data.signUser.length > 0) {
-        // 成功获取到签署链接
-        const realSignUrls = result.data.signUser.map((user: any, index: number) => ({
-          name: user.name,
-          mobile: user.account,
-          role: index === 0 ? '甲方（客户）' : '乙方（服务人员）',
-          signUrl: user.signUrl,
-          account: user.account,
-          signOrder: user.signOrder
-        }));
-        
-        setSignUrls(realSignUrls);
-        
-        // 同时保存到本地数据库
-        if (contract._id) {
-          await contractService.updateContract(contract._id, {
-            esignSignUrls: JSON.stringify(realSignUrls)
-          });
-        }
-        
-        message.success('签署链接获取成功');
-        console.log('✅ 签署链接已获取并保存:', realSignUrls);
-      } else {
-        message.warning('无法获取签署链接，合同可能已完成签署或状态异常');
-      }
-    } catch (error) {
-      console.error('❌ 刷新签署链接失败:', error);
-      message.error('获取签署链接失败，请稍后重试');
-    } finally {
-      setSignUrlLoading(false);
-    }
-  };
 
-  const handleOpenSignUrl = async () => {
-    if (!contract) {
-      message.error('合同信息不存在');
-      return;
-    }
 
-    if (!contract.esignContractNo) {
-      message.warning('该合同暂无爱签合同编号，无法获取签署链接');
-      return;
-    }
 
-    setSignUrlModalVisible(true);
-    setSignUrlLoading(true);
-
-    try {
-      // 🔥 直接使用本地保存的真实签署链接
-      if (contract.esignSignUrls) {
-        try {
-          const realSignUrls = JSON.parse(contract.esignSignUrls);
-          setSignUrls(realSignUrls);
-          message.success('签署链接获取成功');
-          console.log('✅ 使用本地保存的真实签署链接:', realSignUrls);
-        } catch (parseError) {
-          console.error('❌ 解析签署链接失败:', parseError);
-          throw new Error('签署链接格式错误');
-        }
-      } else {
-        // 如果没有保存的签署链接，尝试从爱签平台获取
-        console.log('🔄 本地无签署链接，尝试从爱签平台获取...');
-        try {
-                     // 先查询合同状态
-           const statusResponse = await contractService.getEsignInfo(contract.esignContractNo);
-           console.log('📊 爱签合同状态查询结果:', statusResponse);
-           
-           if (statusResponse.status && statusResponse.status.success) {
-             const statusInfo = statusResponse.status;
-            
-            // 根据合同状态判断
-            if (statusInfo.data?.status === 2) {
-              // 合同已签署完成
-              message.info('该合同已签署完成，无需再次签署');
-              setSignUrlModalVisible(false);
-              return;
-                         } else if (statusInfo.data?.status === 0 || statusInfo.data?.status === 1) {
-               // 合同等待签署或签署中，尝试重新添加签署方获取链接
-               message.info('正在尝试获取签署链接...');
-               await handleRefreshSignUrls();
-               return;
-             } else {
-               // 其他状态（过期、拒签、作废等）
-               const statusText = getStatusText(statusInfo.data?.status);
-               message.warning(`合同状态异常：${statusText}，无法获取签署链接`);
-               setSignUrlModalVisible(false);
-               return;
-             }
-          } else {
-            // 合同状态查询失败，可能是合同不存在或已删除
-            message.warning('该合同在爱签平台上不存在或已被删除，无法获取签署链接');
-            setSignUrlModalVisible(false);
-            return;
-          }
-        } catch (error) {
-          console.error('❌ 查询爱签合同状态失败:', error);
-          message.warning('该合同尚未生成签署链接，请先在爱签页面完成步骤3（添加签署方）');
-          setSignUrlModalVisible(false);
-          return;
-        }
-      }
-    } catch (error) {
-      console.error('获取签署链接失败:', error);
-      message.error('获取签署链接失败，请稍后重试');
-      setSignUrlModalVisible(false);
-    } finally {
-      setSignUrlLoading(false);
-    }
-  };
 
 
 
@@ -1085,7 +938,7 @@ const ContractDetail: React.FC = () => {
                   {contractHistory?.contracts && contractHistory.contracts.length > 0 ? (
                     contractHistory.contracts
                       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                      .map((historyContract: any, index: number) => (
+                      .map((historyContract: any) => (
                         <Timeline.Item 
                           key={historyContract.contractId}
                           color={historyContract.status === 'active' ? 'green' : 'gray'}

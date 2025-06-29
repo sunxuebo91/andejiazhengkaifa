@@ -523,15 +523,15 @@ const CustomerDetail: React.FC = () => {
                   style={{ marginBottom: 16 }}
                 />
                 
-                <Timeline>
-                  {customerHistory?.contracts && customerHistory.contracts.length > 0 ? (
+                <Timeline 
+                  items={
+                    customerHistory?.contracts && customerHistory.contracts.length > 0 ? 
                     customerHistory.contracts
                       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                      .map((historyContract: any, index: number) => (
-                        <Timeline.Item 
-                          key={historyContract.contractId}
-                          color={historyContract.status === 'active' ? 'green' : 'gray'}
-                        >
+                      .map((historyContract: any) => ({
+                        key: historyContract.contractId,
+                        color: historyContract.status === 'active' ? 'green' : 'gray',
+                        children: (
                           <div style={{ paddingBottom: '12px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
                               <span style={{ 
@@ -591,52 +591,53 @@ const CustomerDetail: React.FC = () => {
                               </div>
                             </div>
                           </div>
-                        </Timeline.Item>
-                      ))
-                  ) : (
-                    customerContracts.length > 0 && (
-                      <Timeline.Item color="green">
-                        <div style={{ paddingBottom: '12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ 
-                              fontWeight: 'bold', 
-                              fontSize: '16px',
-                              color: '#52c41a'
-                            }}>
-                              第1任：{customerContracts[0]?.workerName}
-                            </span>
-                            <Tag color="green" style={{ marginLeft: '8px' }}>
-                              当前服务
-                            </Tag>
-                            <Button
-                              type="link"
-                              size="small"
-                              onClick={() => handleViewContract(customerContracts[0]?._id || '')}
-                              style={{ marginLeft: '8px', padding: 0 }}
-                            >
-                              查看合同
-                            </Button>
+                        )
+                      }))
+                    : (customerContracts.length > 0 ? [{
+                        key: customerContracts[0]?._id || 'default',
+                        color: 'green' as const,
+                        children: (
+                          <div style={{ paddingBottom: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                              <span style={{ 
+                                fontWeight: 'bold', 
+                                fontSize: '16px',
+                                color: '#52c41a'
+                              }}>
+                                第1任：{customerContracts[0]?.workerName}
+                              </span>
+                              <Tag color="green" style={{ marginLeft: '8px' }}>
+                                当前服务
+                              </Tag>
+                              <Button
+                                type="link"
+                                size="small"
+                                onClick={() => handleViewContract(customerContracts[0]?._id || '')}
+                                style={{ marginLeft: '8px', padding: 0 }}
+                              >
+                                查看合同
+                              </Button>
+                            </div>
+                            
+                            <div style={{ color: '#666', lineHeight: '1.6' }}>
+                              <div>
+                                <strong>联系电话：</strong>{customerContracts[0]?.workerPhone} | 
+                                <strong> 月薪：</strong>¥{customerContracts[0]?.workerSalary?.toLocaleString()}
+                              </div>
+                              <div>
+                                <strong>服务期间：</strong>
+                                {formatDate(customerContracts[0]?.startDate)} 至 {formatDate(customerContracts[0]?.endDate)}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                                合同编号：{customerContracts[0]?.contractNumber} | 
+                                爱签状态：{customerContracts[0]?.esignContractNo ? '已创建' : '未创建'}
+                              </div>
+                            </div>
                           </div>
-                          
-                          <div style={{ color: '#666', lineHeight: '1.6' }}>
-                            <div>
-                              <strong>联系电话：</strong>{customerContracts[0]?.workerPhone} | 
-                              <strong> 月薪：</strong>¥{customerContracts[0]?.workerSalary?.toLocaleString()}
-                            </div>
-                            <div>
-                              <strong>服务期间：</strong>
-                              {formatDate(customerContracts[0]?.startDate)} 至 {formatDate(customerContracts[0]?.endDate)}
-                            </div>
-                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
-                              合同编号：{customerContracts[0]?.contractNumber} | 
-                              爱签状态：{customerContracts[0]?.esignContractNo ? '已创建' : '未创建'}
-                            </div>
-                          </div>
-                        </div>
-                      </Timeline.Item>
-                    )
-                  )}
-                </Timeline>
+                        )
+                      }] : [])
+                  }
+                />
                 
                 {(customerHistory?.contracts?.length > 0 || customerContracts.length > 0) && (
                   <div style={{ 

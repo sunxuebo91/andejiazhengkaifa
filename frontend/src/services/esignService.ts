@@ -629,16 +629,22 @@ class ESignService {
     try {
       const response = await apiClient.get(`/api/esign/contract-status/${contractNo}`);
       
-      // 🎯 修复：确保返回完整的响应数据，包括detailedStatus
-      console.log('🔍 API完整响应:', response.data);
+      // 按照官方文档处理合同状态响应
+      console.log('🔍 合同状态API响应:', response);
       
-      const result = response.data;
+      const result = response as any;
       
-      // 如果有detailedStatus，确保它在正确的位置
-      if (result.detailedStatus) {
-        console.log('🎯 发现精准状态数据:', result.detailedStatus);
+      // 检查响应格式和状态信息
+      if (result.code === 100000) {
+        console.log('✅ 合同状态查询成功');
+        if (result.detailedStatus) {
+          console.log('📋 状态信息:', result.detailedStatus);
+        }
+        if (result.statusInfo) {
+          console.log('📋 标准状态:', result.statusInfo);
+        }
       } else {
-        console.log('⚠️ 未发现精准状态数据');
+        console.warn('⚠️ 合同状态查询失败:', result.msg);
       }
       
       return result;

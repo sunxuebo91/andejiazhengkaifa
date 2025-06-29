@@ -215,7 +215,7 @@ export class ContractsController {
       // 获取爱签实时状态
       const [statusResult, previewResult] = await Promise.allSettled([
         this.esignService.getContractStatus(contract.esignContractNo),
-        this.esignService.previewContract(contract.esignContractNo),
+        this.esignService.previewContractWithSignUrls(contract.esignContractNo),
       ]);
 
       const result: any = {
@@ -353,15 +353,16 @@ export class ContractsController {
   }
 
   /**
-   * 获取客户合同历史 - 临时禁用
+   * 获取客户合同历史
    */
   @Get('history/:customerPhone')
   async getCustomerHistory(@Param('customerPhone') customerPhone: string) {
     try {
-      // const history = await this.contractsService.getCustomerContractHistory(customerPhone);
+      const history = await this.contractsService.getCustomerContractHistory(customerPhone);
       return {
-        success: false,
-        message: '客户合同历史功能开发中',
+        success: true,
+        data: history,
+        message: history ? '获取客户合同历史成功' : '该客户暂无合同历史记录',
       };
     } catch (error) {
       return {

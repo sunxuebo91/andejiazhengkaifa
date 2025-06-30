@@ -29,6 +29,8 @@ const NotFound = React.lazy(() => import('./pages/NotFound'));
 const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
 const ESignaturePage = React.lazy(() => import('./pages/esign/ESignaturePage'));
 const SignContractPage = React.lazy(() => import('./pages/esign/SignContractPage'));
+const PaymentGuide = React.lazy(() => import('./pages/PaymentGuide'));
+const Payment = React.lazy(() => import('./pages/Payment'));
 
 interface AppProps {
   children?: ReactNode;
@@ -197,6 +199,16 @@ export default function App({ children }: AppProps) {
                       element={<AuthorizedRoute element={<EditRole />} role="admin" />} 
                     />
                   </Route>
+
+                  {/* 支付相关路由 - 所有登录用户可访问 */}
+                  <Route 
+                    path="payment-guide/:contractId" 
+                    element={<AuthorizedRoute element={<PaymentGuide />} />} 
+                  />
+                  <Route 
+                    path="payment/:contractId" 
+                    element={<AuthorizedRoute element={<Payment />} />} 
+                  />
 
                   {/* 个人信息相关路由 - 所有登录用户可访问 */}
                   <Route 

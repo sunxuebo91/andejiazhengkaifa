@@ -3331,11 +3331,64 @@ export class ESignService {
 
       console.log('✅ 爱签API响应:', response);
 
+      // 🔥 关键修改：处理previewUrl
+      if (response && response.code === 100000 && response.data) {
+        console.log('🎯 检查API响应中的previewUrl...');
+        
+        // 检查响应数据中是否包含previewUrl
+        if (response.data.previewUrl) {
+          console.log('✅ 发现官方previewUrl:', response.data.previewUrl);
+          
+          // 🔥 将previewUrl添加到响应数据中，确保前端能够获取
+          response.data.officialPreviewUrl = response.data.previewUrl;
+          
+          // 🔥 尝试更新数据库中的合同记录，保存previewUrl
+          try {
+            await this.updateContractPreviewUrl(contractData.contractNo, response.data.previewUrl);
+            console.log('✅ 合同预览链接已保存到数据库');
+          } catch (dbError) {
+            console.warn('⚠️ 保存预览链接到数据库失败:', dbError.message);
+          }
+        } else {
+          console.log('⚠️ API响应中未包含previewUrl字段');
+          console.log('📋 响应数据结构:', Object.keys(response.data || {}));
+        }
+      }
+
       // 直接返回爱签API的原始响应格式 { code, msg, data }
       return response;
     } catch (error) {
       console.error('❌ 创建模板合同失败:', error);
       // 如果是爱签API错误，直接抛出让上层处理
+      throw error;
+    }
+  }
+
+  /**
+   * 更新合同的预览链接到数据库
+   */
+  private async updateContractPreviewUrl(contractNo: string, previewUrl: string): Promise<void> {
+    try {
+      console.log('💾 更新合同预览链接到数据库:', { contractNo, previewUrl });
+      
+      // 查找并更新合同记录
+      const result = await this.contractModel.updateOne(
+        { esignContractNo: contractNo },
+        { 
+          $set: { 
+            esignPreviewUrl: previewUrl,
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      if (result.modifiedCount > 0) {
+        console.log('✅ 合同预览链接更新成功');
+      } else {
+        console.log('⚠️ 未找到匹配的合同记录或无需更新');
+      }
+    } catch (error) {
+      console.error('❌ 更新合同预览链接失败:', error);
       throw error;
     }
   }

@@ -163,6 +163,20 @@ const ContractDetail: React.FC = () => {
     try {
       messageApi.loading({ content: '正在生成合同预览...', key: 'preview' });
       
+      // 🔥 优先检查数据库中是否有保存的官方预览链接
+      if (contract.esignPreviewUrl) {
+        console.log('✅ 使用数据库中保存的官方预览链接:', contract.esignPreviewUrl);
+        messageApi.destroy('preview');
+        showInAppPreview(contract.esignPreviewUrl, contract.esignContractNo, '官方预览', {
+          success: true,
+          contractNo: contract.esignContractNo,
+          previewUrl: contract.esignPreviewUrl,
+          method: 'officialPreviewUrl',
+          message: '使用官方预览链接'
+        });
+        return;
+      }
+      
       // 调用预览合同API
       const response = await contractService.previewContract(contract.esignContractNo);
       
@@ -204,7 +218,7 @@ const ContractDetail: React.FC = () => {
               handleDownloadContract();
             },
           });
-        } else if (response.contractStatus === 1) {
+        } else {
           // 签约中状态：提示当前状态
           modal.info({
             title: '📝 合同签约中',
@@ -227,8 +241,6 @@ const ContractDetail: React.FC = () => {
               </div>
             ),
           });
-        } else {
-          messageApi.info(response.message || '暂无可用的预览内容');
         }
       } else {
         // 失败情况的处理

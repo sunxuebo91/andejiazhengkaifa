@@ -117,37 +117,46 @@ const CustomerDetail: React.FC = () => {
       contract.esignStatus === '2'
     );
 
-    // 如果有已签约合同，且客户当前状态不是"已签约"，则自动更新
+    console.log('🔍 状态同步检查:', {
+      检查结果: hasSignedContract ? '发现已签约合同' : '未发现已签约合同',
+      当前客户状态: customer.contractStatus,
+      合同详情: contractHistory.contracts.map((c: any) => ({
+        contractNumber: c.contractNumber,
+        esignStatus: c.esignStatus,
+        workerName: c.workerName
+      }))
+    });
+
+    // 只有当有已签约合同，且客户当前状态不是"已签约"时，才自动更新
     if (hasSignedContract && customer.contractStatus !== '已签约') {
-      console.log('🔄 检测到已签约合同，自动同步客户状态...');
+      console.log('🔄 检测到已签约合同，自动同步客户状态为"已签约"...');
       
       try {
-        // 调用客户更新API，只更新签约状态
-        const updateResponse = await fetch(`/api/customers/${customer._id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          body: JSON.stringify({
-            contractStatus: '已签约'
-          })
-        });
+        // 使用客户服务API更新状态
+        const updatedCustomer = await customerService.updateCustomer(customer._id, {
+          contractStatus: '已签约'
+        } as any);
 
-        if (updateResponse.ok) {
-          console.log('✅ 客户签约状态已自动同步为"已签约"');
+        if (updatedCustomer && updatedCustomer._id) {
+          console.log('✅ 客户状态已自动同步为"已签约"');
           
           // 更新本地客户数据
           setCustomer(prev => prev ? { ...prev, contractStatus: '已签约' } : prev);
           
-          // 可选：显示提示消息
-          // message.success('检测到已签约合同，客户状态已自动更新');
+          // 显示成功提示
+          message.success('检测到已签约合同，客户状态已自动更新为"已签约"');
         } else {
-          console.error('❌ 自动更新客户状态失败');
+          console.error('❌ 自动更新客户状态失败: 返回数据无效');
+          message.warning('检测到已签约合同，但自动更新客户状态失败，请手动更新');
         }
       } catch (error) {
         console.error('❌ 自动同步客户状态时出错:', error);
+        message.error('自动同步客户状态时发生错误');
       }
+    } else if (!hasSignedContract) {
+      console.log('ℹ️ 没有检测到已签约合同，客户状态保持不变');
+    } else {
+      console.log('ℹ️ 客户状态已经是"已签约"，无需更新');
     }
   };
 

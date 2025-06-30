@@ -21,7 +21,7 @@ export interface Contract {
   monthlyWorkDays?: number;
   customerId: string;
   workerId: string;
-  createdBy: string;
+  createdBy: string | { _id: string; name?: string; username?: string; };
   createdAt: string;
   updatedAt: string;
   

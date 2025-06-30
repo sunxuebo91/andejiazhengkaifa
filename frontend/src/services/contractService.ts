@@ -230,9 +230,44 @@ export const contractService = {
       latestContractId: string;
       totalWorkers: number;
     };
-    message: string;
+    message?: string;
   }> {
     const response = await apiService.get(`/api/contracts/history/${customerPhone}`);
+    // 直接返回完整的响应对象，包含 success, data, message
+    return response;
+  },
+
+  // 检查客户现有合同 - 用于换人模式判断
+  async checkCustomerContract(customerPhone: string): Promise<{
+    success: boolean;
+    data?: {
+      hasContract: boolean;
+      contract?: Contract;
+      contractCount: number;
+      isSignedContract: boolean;
+    };
+    message: string;
+  }> {
+    const response = await apiService.get(`/api/contracts/check-customer/${customerPhone}`);
+    return response.data || response;
+  },
+
+  // 创建换人合同
+  async createChangeWorkerContract(originalContractId: string, changeData: {
+    workerName: string;
+    workerPhone: string;
+    workerIdCard: string;
+    workerSalary: number;
+    contractType?: string;
+    customerServiceFee?: number;
+    workerId?: string;
+    remarks?: string;
+  }): Promise<{
+    success: boolean;
+    data?: Contract;
+    message: string;
+  }> {
+    const response = await apiService.post(`/api/contracts/change-worker/${originalContractId}`, changeData);
     return response.data || response;
   },
 }; 

@@ -637,7 +637,7 @@ class ESignService {
       // 检查响应格式和状态信息
       if (result.code === 100000) {
         console.log('✅ 合同状态查询成功');
-        if (result.detailedStatus) {
+      if (result.detailedStatus) {
           console.log('📋 状态信息:', result.detailedStatus);
         }
         if (result.statusInfo) {

@@ -176,7 +176,7 @@ const ContractDetail: React.FC = () => {
           if (previewLink) {
             // 爱签返回的是预览链接，直接作为URL使用
             showInAppPreview(previewLink, response.contractNo, response.statusText, response);
-            return;
+          return;
           }
         }
         
@@ -286,7 +286,7 @@ const ContractDetail: React.FC = () => {
   };
 
   // 统一的应用内预览方法
-  const showInAppPreview = (source: string, contractNo: string, statusText?: string, previewData?: any) => {
+  const showInAppPreview = (source: string, contractNo: string, statusText?: string, _previewData?: any) => {
     // 根据爱签官方文档，预览API返回的就是完整的预览链接URL，直接使用
     const previewUrl = source;
     
@@ -888,7 +888,18 @@ const ContractDetail: React.FC = () => {
             <Card type="inner" title="系统信息" style={{ marginBottom: '16px' }}>
               <Descriptions column={2} bordered>
                 <Descriptions.Item label="创建人" span={1}>
-                  {typeof contract.createdBy === 'string' ? contract.createdBy : '未知'}
+                  {(() => {
+                    // 处理创建人信息的显示
+                    if (typeof contract.createdBy === 'string') {
+                      return contract.createdBy;
+                    } else if (contract.createdBy && typeof contract.createdBy === 'object') {
+                      // 如果是对象，优先显示 name，然后是 username
+                      const creator = contract.createdBy as any;
+                      return creator.name || creator.username || '系统';
+                    } else {
+                      return '未知';
+                    }
+                  })()}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="创建时间" span={1}>

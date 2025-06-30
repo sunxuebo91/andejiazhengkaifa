@@ -180,4 +180,24 @@ export class CreateContractDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  // 合同合并相关字段
+  @IsOptional()
+  @IsString()
+  contractStatus?: string;
+
+  @IsOptional()
+  isLatest?: boolean;
+
+  @IsOptional()
+  @IsString()
+  replacedByContractId?: string;
+
+  @IsOptional()
+  @IsString()
+  replacesContractId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  serviceDays?: number;
 } 

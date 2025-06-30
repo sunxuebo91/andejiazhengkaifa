@@ -3841,7 +3841,7 @@ export class ESignService {
       '-2': '状态异常'
     };
     return statusMap[status] || '未知状态';
-  }
+      }
 
   /**
    * 获取签约状态文本描述
@@ -3880,11 +3880,11 @@ export class ESignService {
         status: contractInfo.status,
         signUsers: contractInfo.signUser?.length || 0
       });
-
+            
       // 步骤2：处理签约人信息和状态
       const signUsers = contractInfo.signUser?.map((user: any) => {
         const signStatus = user.signStatus || user.status || 1;
-        return {
+            return {
           account: user.account,
           name: user.name || user.signerName,
           role: user.name?.includes('客户') ? '甲方' : (user.name?.includes('阿姨') ? '乙方' : '丙方'),
@@ -3911,9 +3911,9 @@ export class ESignService {
       const contractStatus = this.getContractStatusText(contractInfo.status || 1);
 
       // 步骤5：返回预览信息
-      return {
-        success: true,
-        contractNo,
+          return {
+            success: true,
+            contractNo,
         previewUrl: previewUrl, // 🔥 直接使用签约链接
         previewData: previewUrl,
         statusText: contractStatus,
@@ -3930,9 +3930,9 @@ export class ESignService {
         message: '合同预览链接获取成功（使用签约链接）',
         method: 'signUrlPreview',
         hasPreviewUrl: true,
-        previewInfo: {
+            previewInfo: {
           canDownload: contractInfo.status === 2,
-          hasPreviewUrl: true,
+              hasPreviewUrl: true,
           hasPreviewImage: true,
           contractSigning: contractInfo.status === 1,
           statusText: contractStatus,
@@ -3943,27 +3943,27 @@ export class ESignService {
           createTime: contractInfo.createTime,
           recommendation: contractInfo.status === 2 ? '合同已签约完成，可下载查看' : '点击查看合同预览和签约进度',
           previewUrl: previewUrl,
-          availableFormats: [
+              availableFormats: [
             { type: 'signUrl', name: '签约预览', recommended: true, description: '查看合同预览和签约状态' }
           ]
         }
       };
     } catch (error) {
       console.error('❌ 签约链接预览失败:', error.message);
-      return {
-        success: false,
-        contractNo,
-        message: `预览合同失败: ${error.message}`,
+        return {
+          success: false,
+          contractNo,
+          message: `预览合同失败: ${error.message}`,
         error: error.message,
-        previewInfo: {
+          previewInfo: {
           canDownload: false,
           hasPreviewUrl: false,
-          error: true,
+            error: true,
           statusText: '预览失败',
           recommendation: '请确保合同已在爱签系统中正确创建并添加了签约人',
           availableFormats: []
-        }
-      };
+          }
+        };
     }
   }
   // 🗑️ 所有旧的复杂预览代码已删除，保持代码简洁
@@ -4139,7 +4139,7 @@ export class ESignService {
   async checkUserPermissions(account: string): Promise<any> {
     try {
       console.log('🔍 检查用户权限:', account);
-      
+
       // 调用爱签API检查用户权限
       const result = await this.callESignAPI('/user/getUserPermissions', {
         account: account

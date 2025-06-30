@@ -51,12 +51,14 @@ export class ContractsController {
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
     @Query('search') search?: string,
+    @Query('showAll') showAll?: string,
   ) {
     try {
       const result = await this.contractsService.findAll(
         parseInt(page),
         parseInt(limit),
         search,
+        showAll === 'true',
       );
       return {
         success: true,
@@ -307,10 +309,10 @@ export class ContractsController {
    * 检查客户现有合同
    */
   @Get('check-customer/:customerPhone')
+  @Public()
   async checkCustomerContract(@Param('customerPhone') customerPhone: string) {
     try {
-      // const result = await this.contractsService.checkCustomerExistingContract(customerPhone);
-      const result = { hasContract: false, contractCount: 0 }; // 临时实现
+      const result = await this.contractsService.checkCustomerExistingContract(customerPhone);
       return {
         success: true,
         data: result,
@@ -325,7 +327,7 @@ export class ContractsController {
   }
 
   /**
-   * 创建换人合同 - 临时禁用
+   * 创建换人合同
    */
   @Post('change-worker/:originalContractId')
   async createChangeWorkerContract(
@@ -334,15 +336,16 @@ export class ContractsController {
     @Request() req
   ) {
     try {
-      // 临时实现，等待换人功能完成
-      // const newContract = await this.contractsService.createChangeWorkerContract(
-      //   createContractDto,
-      //   originalContractId,
-      //   req.user.userId
-      // );
+      const userId = req.user?.userId || req.user?.sub || 'system-user';
+      const newContract = await this.contractsService.createChangeWorkerContract(
+        createContractDto,
+        originalContractId,
+        userId
+      );
       return {
-        success: false,
-        message: '换人功能开发中，敬请期待',
+        success: true,
+        data: newContract,
+        message: '换人合同创建成功',
       };
     } catch (error) {
       return {
@@ -356,6 +359,7 @@ export class ContractsController {
    * 获取客户合同历史
    */
   @Get('history/:customerPhone')
+  @Public()
   async getCustomerHistory(@Param('customerPhone') customerPhone: string) {
     try {
       const history = await this.contractsService.getCustomerContractHistory(customerPhone);
@@ -417,6 +421,79 @@ export class ContractsController {
       return {
         success: false,
         message: error.message || '合同签约成功处理失败',
+      };
+    }
+  }
+}
+
+// 创建一个独立的测试控制器，不使用认证
+@Controller('contracts-test')
+export class ContractsTestController {
+  constructor(private readonly contractsService: ContractsService) {}
+
+  /**
+   * 检查客户现有合同 - 测试版本
+   */
+  @Get('check-customer/:customerPhone')
+  async checkCustomerContract(@Param('customerPhone') customerPhone: string) {
+    try {
+      const result = await this.contractsService.checkCustomerExistingContract(customerPhone);
+      return {
+        success: true,
+        data: result,
+        message: result.hasContract ? '客户已有合同' : '客户暂无合同',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '检查客户合同失败',
+      };
+    }
+  }
+
+  /**
+   * 创建换人合同 - 测试版本
+   */
+  @Post('change-worker/:originalContractId')
+  async createChangeWorkerContract(
+    @Param('originalContractId') originalContractId: string,
+    @Body() createContractDto: CreateContractDto
+  ) {
+    try {
+      const newContract = await this.contractsService.createChangeWorkerContract(
+        createContractDto,
+        originalContractId,
+        'test-user-id' // 临时用户ID
+      );
+      return {
+        success: true,
+        data: newContract,
+        message: '换人合同创建成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '换人合同创建失败',
+      };
+    }
+  }
+
+  /**
+   * 获取客户合同历史 - 测试版本
+   */
+  @Get('history/:customerPhone')
+  async getCustomerHistory(@Param('customerPhone') customerPhone: string) {
+    try {
+      const history = await this.contractsService.getCustomerContractHistory(customerPhone);
+      return {
+        success: true,
+        data: history,
+        message: history ? '获取客户合同历史成功' : '该客户暂无合同历史记录',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '获取客户合同历史失败',
       };
     }
   }

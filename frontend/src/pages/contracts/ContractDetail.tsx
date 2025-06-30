@@ -190,7 +190,7 @@ const ContractDetail: React.FC = () => {
               <div>
                 <Alert 
                   type="success" 
-                  message="合同签署完成" 
+                  message="合同已完成所有签署，具有法律效力。可以下载查看完整版本。"
                   description="合同已完成所有签署，具有法律效力。可以下载查看完整版本。"
                   style={{ marginBottom: 16 }}
                 />
@@ -945,106 +945,109 @@ const ContractDetail: React.FC = () => {
                   style={{ marginBottom: 16 }}
                 />
                 
-                <Timeline>
-                  {contractHistory?.contracts && contractHistory.contracts.length > 0 ? (
-                    contractHistory.contracts
-                      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                      .map((historyContract: any) => (
-                        <Timeline.Item 
-                          key={historyContract.contractId}
-                          color={historyContract.status === 'active' ? 'green' : 'gray'}
-                        >
-                          <div style={{ paddingBottom: '12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                              <span style={{ 
-                                fontWeight: 'bold', 
-                                fontSize: '16px',
-                                color: historyContract.status === 'active' ? '#52c41a' : '#8c8c8c'
-                              }}>
-                                第{historyContract.order}任：{historyContract.workerName}
-                              </span>
-                              <Tag 
-                                color={historyContract.status === 'active' ? 'green' : 'default'}
-                                style={{ marginLeft: '8px' }}
-                              >
-                                {historyContract.status === 'active' ? '当前服务' : '已更换'}
-                              </Tag>
-                              {historyContract.contractId === contract._id && (
-                                <Tag color="blue" style={{ marginLeft: '4px' }}>当前查看</Tag>
-                              )}
-                            </div>
-                            
-                            <div style={{ color: '#666', lineHeight: '1.6' }}>
-                              <div>
-                                <strong>联系电话：</strong>{historyContract.workerPhone} | 
-                                <strong> 月薪：</strong>¥{historyContract.workerSalary?.toLocaleString()}
-                              </div>
-                              <div>
-                                <strong>服务期间：</strong>
-                                {formatDate(historyContract.startDate)} 至 {formatDate(historyContract.endDate)}
-                              </div>
-                              {historyContract.serviceDays && (
-                                <div>
-                                  <strong>实际服务：</strong>
-                                  <span style={{ color: historyContract.status === 'active' ? '#52c41a' : '#fa8c16' }}>
-                                    {historyContract.serviceDays} 天
+                <Timeline
+                  items={
+                    contractHistory?.contracts && contractHistory.contracts.length > 0 
+                      ? contractHistory.contracts
+                          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                          .map((historyContract: any) => ({
+                            key: historyContract.contractId,
+                            color: historyContract.status === 'active' ? 'green' : 'gray',
+                            children: (
+                              <div style={{ paddingBottom: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                                  <span style={{ 
+                                    fontWeight: 'bold', 
+                                    fontSize: '16px',
+                                    color: historyContract.status === 'active' ? '#52c41a' : '#8c8c8c'
+                                  }}>
+                                    第{historyContract.order}任：{historyContract.workerName}
                                   </span>
-                                  {historyContract.terminationDate && (
-                                    <span style={{ color: '#8c8c8c', marginLeft: '8px' }}>
-                                      (于 {formatDate(historyContract.terminationDate)} 结束)
-                                    </span>
+                                  <Tag 
+                                    color={historyContract.status === 'active' ? 'green' : 'default'}
+                                    style={{ marginLeft: '8px' }}
+                                  >
+                                    {historyContract.status === 'active' ? '当前服务' : '已更换'}
+                                  </Tag>
+                                  {historyContract.contractId === contract._id && (
+                                    <Tag color="blue" style={{ marginLeft: '4px' }}>当前查看</Tag>
                                   )}
                                 </div>
-                              )}
-                              {historyContract.terminationReason && (
-                                <div>
-                                  <strong>更换原因：</strong>
-                                  <span style={{ color: '#fa541c' }}>{historyContract.terminationReason}</span>
+                                
+                                <div style={{ color: '#666', lineHeight: '1.6' }}>
+                                  <div>
+                                    <strong>联系电话：</strong>{historyContract.workerPhone} | 
+                                    <strong> 月薪：</strong>¥{historyContract.workerSalary?.toLocaleString()}
+                                  </div>
+                                  <div>
+                                    <strong>服务期间：</strong>
+                                    {formatDate(historyContract.startDate)} 至 {formatDate(historyContract.endDate)}
+                                  </div>
+                                  {historyContract.serviceDays && (
+                                    <div>
+                                      <strong>实际服务：</strong>
+                                      <span style={{ color: historyContract.status === 'active' ? '#52c41a' : '#fa8c16' }}>
+                                        {historyContract.serviceDays} 天
+                                      </span>
+                                      {historyContract.terminationDate && (
+                                        <span style={{ color: '#8c8c8c', marginLeft: '8px' }}>
+                                          (于 {formatDate(historyContract.terminationDate)} 结束)
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {historyContract.terminationReason && (
+                                    <div>
+                                      <strong>更换原因：</strong>
+                                      <span style={{ color: '#fa541c' }}>{historyContract.terminationReason}</span>
+                                    </div>
+                                  )}
+                                  <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                                    合同编号：{historyContract.contractNumber} | 
+                                    爱签状态：{historyContract.esignStatus || '未知'}
+                                  </div>
                                 </div>
-                              )}
-                              <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
-                                合同编号：{historyContract.contractNumber} | 
-                                爱签状态：{historyContract.esignStatus || '未知'}
+                              </div>
+                            )
+                          }))
+                      : [{
+                          key: 'current',
+                          color: 'green' as const,
+                          children: (
+                            <div style={{ paddingBottom: '12px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ 
+                                  fontWeight: 'bold', 
+                                  fontSize: '16px',
+                                  color: '#52c41a'
+                                }}>
+                                  第1任：{contract.workerName}
+                                </span>
+                                <Tag color="green" style={{ marginLeft: '8px' }}>
+                                  当前服务
+                                </Tag>
+                                <Tag color="blue" style={{ marginLeft: '4px' }}>当前查看</Tag>
+                              </div>
+                              
+                              <div style={{ color: '#666', lineHeight: '1.6' }}>
+                                <div>
+                                  <strong>联系电话：</strong>{contract.workerPhone} | 
+                                  <strong> 月薪：</strong>¥{contract.workerSalary?.toLocaleString()}
+                                </div>
+                                <div>
+                                  <strong>服务期间：</strong>
+                                  {formatDate(contract.startDate)} 至 {formatDate(contract.endDate)}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                                  合同编号：{contract.contractNumber} | 
+                                  爱签状态：{contract.esignContractNo ? '已创建' : '未创建'}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </Timeline.Item>
-                      ))
-                  ) : (
-                    <Timeline.Item color="green">
-                      <div style={{ paddingBottom: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ 
-                            fontWeight: 'bold', 
-                            fontSize: '16px',
-                            color: '#52c41a'
-                          }}>
-                            第1任：{contract.workerName}
-                          </span>
-                          <Tag color="green" style={{ marginLeft: '8px' }}>
-                            当前服务
-                          </Tag>
-                          <Tag color="blue" style={{ marginLeft: '4px' }}>当前查看</Tag>
-                        </div>
-                        
-                        <div style={{ color: '#666', lineHeight: '1.6' }}>
-                          <div>
-                            <strong>联系电话：</strong>{contract.workerPhone} | 
-                            <strong> 月薪：</strong>¥{contract.workerSalary?.toLocaleString()}
-                          </div>
-                          <div>
-                            <strong>服务期间：</strong>
-                            {formatDate(contract.startDate)} 至 {formatDate(contract.endDate)}
-                          </div>
-                          <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
-                            合同编号：{contract.contractNumber} | 
-                            爱签状态：{contract.esignContractNo ? '已创建' : '未创建'}
-                          </div>
-                        </div>
-                      </div>
-                    </Timeline.Item>
-                  )}
-                </Timeline>
+                          )
+                        }]
+                  }
+                />
                 
                 <div style={{ 
                   marginTop: '16px', 

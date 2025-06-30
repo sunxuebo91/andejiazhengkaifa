@@ -54,7 +54,7 @@ const CustomerFollowUpModal: React.FC<CustomerFollowUpModalProps> = ({
       onCancel={handleCancel}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form
         form={form}

@@ -731,54 +731,7 @@ export class ResumeController {
     }
   }
 
-  @Get('debug/sorting')
-  @ApiOperation({ summary: '调试排序问题' })
-  @ApiResponse({ status: 200, description: '调试成功' })
-  async debugSorting() {
-    try {
-      this.logger.log('=== 🔍 开始调试排序问题 ===');
-      
-      // 1. 查询最新的10条记录（按updatedAt降序）
-      const latestRecords = await this.resumeService.debugLatestRecords();
-      
-      this.logger.log('🔍 数据库直接查询结果（最新10条）:');
-      latestRecords.forEach((record, index) => {
-        const updatedAt = record.updatedAt ? new Date(record.updatedAt).toISOString() : 'NULL';
-        this.logger.log(`  ${index + 1}. ${record.name} - ${updatedAt}`);
-      });
-      
-      // 2. 模拟findAll查询
-      const findAllResult = await this.resumeService.findAll(1, 10);
-      
-      this.logger.log('🔍 findAll方法返回结果:');
-      findAllResult.items.forEach((item, index) => {
-        const updatedAt = (item as any).updatedAt ? new Date((item as any).updatedAt).toISOString() : 'NULL';
-        this.logger.log(`  ${index + 1}. ${item.name} - ${updatedAt}`);
-      });
-      
-      return {
-        success: true,
-        data: {
-          latestFromDB: latestRecords.map(r => ({
-            name: r.name,
-            updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : 'NULL'
-          })),
-          fromFindAll: findAllResult.items.map((item: any) => ({
-            name: item.name,
-            updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : 'NULL'
-          }))
-        },
-        message: '排序调试完成'
-      };
-    } catch (error) {
-      this.logger.error(`排序调试失败: ${error.message}`, error.stack);
-      return {
-        success: false,
-        data: null,
-        message: `排序调试失败: ${error.message}`
-      };
-    }
-  }
+
 
       @Get('findAll')
   @ApiOperation({ summary: '获取简历列表' })

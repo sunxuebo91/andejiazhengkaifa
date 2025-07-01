@@ -225,9 +225,9 @@ const CustomerList: React.FC = () => {
     },
 
     {
-      title: '创建时间',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
+      title: '更新时间',
+      dataIndex: 'updatedAt',
+      key: 'updatedAt',
       width: 120,
       render: (date: string) => new Date(date).toLocaleDateString(),
     },

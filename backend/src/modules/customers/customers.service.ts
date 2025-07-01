@@ -61,7 +61,7 @@ export class CustomersService {
     limit: number;
     totalPages: number;
   }> {
-    const { search, caregiverName, caregiverPhone, page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', ...filters } = query;
+    const { search, caregiverName, caregiverPhone, page = 1, limit = 10, sortBy = 'updatedAt', sortOrder = 'desc', ...filters } = query;
     
     const searchConditions: any = {};
 
@@ -107,15 +107,33 @@ export class CustomersService {
     const sortOptions: any = {};
     sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
-    const [customers, total] = await Promise.all([
-      this.customerModel
-        .find(searchConditions)
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.customerModel.countDocuments(searchConditions).exec(),
-    ]);
+    // 🔥 [CUSTOMER-SORT-FIX] 强制按更新时间倒序排序，与简历列表保持一致
+    console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 开始查询客户列表 - page: ${page}, limit: ${limit}, sortBy: ${sortBy}`);
+    
+    let customers = await this.customerModel
+      .find(searchConditions)
+      .sort({ updatedAt: -1, createdAt: -1 }) // 强制按更新时间倒序排序
+      .skip(skip)
+      .limit(limit)
+      .lean() // 使用lean提高性能
+      .exec();
+
+    // 🔥 [CUSTOMER-SORT-FIX] 强制二次排序确保正确性
+    customers = customers.sort((a: any, b: any) => {
+      const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return bTime - aTime; // 最新的在前面
+    });
+
+    const total = await this.customerModel.countDocuments(searchConditions).exec();
+
+    // 验证排序结果
+    if (customers.length > 0) {
+      console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 强制排序后的前3条记录:`);
+      customers.slice(0, 3).forEach((item: any, index) => {
+        console.log(`🔥🔥🔥 [CUSTOMER-DEBUG]   ${index + 1}. ${item.name} - ${item.updatedAt || item.createdAt}`);
+      });
+    }
 
     return {
       customers,

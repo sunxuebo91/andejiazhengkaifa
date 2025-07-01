@@ -730,4 +730,143 @@ export class ResumeController {
       };
     }
   }
+
+  @Get('debug/sorting')
+  @ApiOperation({ summary: '调试排序问题' })
+  @ApiResponse({ status: 200, description: '调试成功' })
+  async debugSorting() {
+    try {
+      this.logger.log('=== 🔍 开始调试排序问题 ===');
+      
+      // 1. 查询最新的10条记录（按updatedAt降序）
+      const latestRecords = await this.resumeService.debugLatestRecords();
+      
+      this.logger.log('🔍 数据库直接查询结果（最新10条）:');
+      latestRecords.forEach((record, index) => {
+        const updatedAt = record.updatedAt ? new Date(record.updatedAt).toISOString() : 'NULL';
+        this.logger.log(`  ${index + 1}. ${record.name} - ${updatedAt}`);
+      });
+      
+      // 2. 模拟findAll查询
+      const findAllResult = await this.resumeService.findAll(1, 10);
+      
+      this.logger.log('🔍 findAll方法返回结果:');
+      findAllResult.items.forEach((item, index) => {
+        const updatedAt = (item as any).updatedAt ? new Date((item as any).updatedAt).toISOString() : 'NULL';
+        this.logger.log(`  ${index + 1}. ${item.name} - ${updatedAt}`);
+      });
+      
+      return {
+        success: true,
+        data: {
+          latestFromDB: latestRecords.map(r => ({
+            name: r.name,
+            updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : 'NULL'
+          })),
+          fromFindAll: findAllResult.items.map((item: any) => ({
+            name: item.name,
+            updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : 'NULL'
+          }))
+        },
+        message: '排序调试完成'
+      };
+    } catch (error) {
+      this.logger.error(`排序调试失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `排序调试失败: ${error.message}`
+      };
+    }
+  }
+
+      @Get('findAll')
+  @ApiOperation({ summary: '获取简历列表' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async findAllOld(
+    @Query('page') pageStr: string = '1',
+    @Query('pageSize') pageSizeStr: string = '10',
+    @Query('keyword') keyword?: string,
+    @Query('jobType') jobType?: string,
+    @Query('orderStatus') orderStatus?: string,
+    @Query('maxAge') maxAgeStr?: string,
+    @Query('nativePlace') nativePlace?: string,
+    @Query('ethnicity') ethnicity?: string,
+    @Query('_t') timestamp?: string, // 时间戳参数
+    @Req() req?: any
+  ) {
+    try {
+      // 手动解析数字参数，避免使用ParseIntPipe
+      let page = 1;
+      let pageSize = 10;
+      let maxAge: number | undefined = undefined;
+
+      // 详细记录请求信息
+      this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}`);
+      console.log(`🔥🔥🔥 [CONSOLE-DEBUG-OLD] findAllOld方法被调用! URL: ${req?.url}`);
+      
+      // 安全地解析页码
+      try {
+        if (pageStr) {
+          const parsed = parseInt(pageStr, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            page = parsed;
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`页码解析错误: ${e.message}`);
+      }
+      
+      // 安全地解析每页条数
+      try {
+        if (pageSizeStr) {
+          const parsed = parseInt(pageSizeStr, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            pageSize = Math.min(parsed, 100); // 限制最大为100
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`每页条数解析错误: ${e.message}`);
+      }
+      
+      // 安全地解析最大年龄
+      try {
+        if (maxAgeStr) {
+          const parsed = parseInt(maxAgeStr, 10);
+          if (!isNaN(parsed)) {
+            maxAge = parsed;
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`最大年龄解析错误: ${e.message}`);
+      }
+      
+      this.logger.log(`解析后的参数: page=${page}, pageSize=${pageSize}, maxAge=${maxAge}`);
+      
+      // 调用服务获取数据
+      const result = await this.resumeService.findAll(
+        page, 
+        pageSize, 
+        keyword, 
+        jobType,
+        orderStatus,
+        maxAge,
+        nativePlace,
+        ethnicity
+      );
+      
+      return {
+        success: true,
+        data: result,
+        message: '获取简历列表成功'
+      };
+    } catch (error) {
+      this.logger.error(`获取简历列表失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 },
+        message: `获取简历列表失败: ${error.message}`
+      };
+    }
+  }
 }

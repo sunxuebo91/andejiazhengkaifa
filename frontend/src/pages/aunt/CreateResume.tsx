@@ -1287,6 +1287,9 @@ const CreateResume: React.FC = () => {
           console.log('✅ 显示成功消息:', successMessage);
           messageApi.success(successMessage);
           
+          // 设置刷新标记，让列表页面知道需要刷新
+          localStorage.setItem('shouldRefreshResumeList', 'true');
+          
           // 等待一下让用户看到成功消息，然后跳转
           setTimeout(() => {
             navigate('/aunt/list');
@@ -1402,6 +1405,9 @@ const CreateResume: React.FC = () => {
           const successMessage = '简历创建成功';
           console.log('✅ 显示成功消息:', successMessage);
           messageApi.success(successMessage);
+          
+          // 设置刷新标记，让列表页面知道需要刷新
+          localStorage.setItem('shouldRefreshResumeList', 'true');
           
           // 等待一下让用户看到成功消息，然后跳转
           setTimeout(() => {

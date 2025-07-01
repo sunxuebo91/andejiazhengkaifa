@@ -1541,6 +1541,18 @@ const ResumeDetail = () => {
               pagination={{ pageSize: 5 }}
             />
           </Card>
+
+          {/* 时间信息卡片 */}
+          <Card title="时间信息" style={{ marginBottom: 24 }}>
+            <Descriptions bordered column={2}>
+              <Descriptions.Item label="创建时间">
+                {resume?.createdAt ? dayjs(resume.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="最后更新时间">
+                {resume?.updatedAt ? dayjs(resume.updatedAt).format('YYYY-MM-DD HH:mm:ss') : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
         </Card>
 
         {/* 添加跟进记录弹窗 */}

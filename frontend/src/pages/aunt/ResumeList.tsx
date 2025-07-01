@@ -4,6 +4,7 @@ import type { TablePaginationConfig, UploadProps } from 'antd';
 import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import apiService from '../../services/api';
 import { createFollowUp } from '@/services/followUp.service';
 
@@ -52,6 +53,8 @@ interface ResumeData {
   orderStatus: keyof typeof orderStatusMap;
   jobType: string;
   hasMedicalReport: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   [key: string]: any;
 }
 
@@ -91,7 +94,7 @@ const ResumeList = () => {
       if (response.success && response.data) {
         setNativePlaceOptions(response.data.nativePlaces || []);
         setEthnicityOptions(response.data.ethnicities || []);
-        console.log('获取筛选选项成功:', response.data);
+        // console.log('获取筛选选项成功:', response.data);
       } else {
         console.error('获取筛选选项失败:', response.message);
       }
@@ -104,6 +107,56 @@ const ResumeList = () => {
   useEffect(() => {
     fetchFilterOptions();
   }, []);
+
+  // 监听页面可见性，当从其他页面返回时刷新列表
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('页面变为可见，检查是否需要刷新列表');
+        // 页面变为可见时，检查是否需要刷新
+        const shouldRefresh = localStorage.getItem('shouldRefreshResumeList');
+        console.log('shouldRefresh标记:', shouldRefresh);
+        if (shouldRefresh === 'true') {
+          console.log('检测到需要刷新，开始刷新列表');
+          localStorage.removeItem('shouldRefreshResumeList');
+          // 刷新列表数据
+          fetchResumeList({
+            ...searchParams,
+            page: currentPage,
+            pageSize,
+            _t: Date.now()
+          });
+        }
+      }
+    };
+
+    // 立即检查是否需要刷新（用于页面刷新或直接导航的情况）
+    const checkImmediate = () => {
+      const shouldRefresh = localStorage.getItem('shouldRefreshResumeList');
+      if (shouldRefresh === 'true') {
+        console.log('页面加载时检测到需要刷新列表');
+        localStorage.removeItem('shouldRefreshResumeList');
+        // 延迟一小会确保数据已更新
+        setTimeout(() => {
+          fetchResumeList({
+            ...searchParams,
+            page: currentPage,
+            pageSize,
+            _t: Date.now()
+          });
+        }, 100);
+      }
+    };
+
+    // 页面加载时立即检查
+    checkImmediate();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [searchParams, currentPage, pageSize]);
 
   // 获取简历列表
   const fetchResumeList = async (params: SearchParams & { page?: number; pageSize?: number; _t?: number } = {}) => {
@@ -119,7 +172,7 @@ const ResumeList = () => {
       // 将所有筛选参数传递给后端API
       const apiParams = { ...params };
       
-      console.log('开始请求简历列表，参数:', apiParams);
+      // console.log('开始请求简历列表，参数:', apiParams);
       // 使用正确的API路径和参数格式
       const response = await apiService.get('/api/resumes', apiParams, {
         timeout: 30000 // 增加超时时间到30秒
@@ -128,7 +181,7 @@ const ResumeList = () => {
       // 清除超时计时器
       clearTimeout(timeoutId);
       
-      console.log('API响应数据:', response);
+      // console.log('API响应数据:', response);
       
       // 检查响应格式
       if (!response || !response.data) {
@@ -138,7 +191,7 @@ const ResumeList = () => {
       // 直接从响应数据中提取 items（因为 axios 拦截器已经处理过）
       const { items: resumes = [], total: totalCount = 0 } = response.data;
       
-      console.log('解析后的简历数据:', { resumesCount: resumes.length, totalCount, sampleResume: resumes[0] });
+      // console.log('解析后的简历数据:', { resumesCount: resumes.length, totalCount, sampleResume: resumes[0] });
       
       // 格式化数据
       let formattedData: ResumeData[] = resumes.map((resume: any) => {
@@ -161,11 +214,22 @@ const ResumeList = () => {
         };
       }).filter(Boolean);
       
-      // 应用前端筛选
+      console.log('🔥 后端返回的数据（前10条记录）:');
+      formattedData.slice(0, 10).forEach((item, index) => {
+        const updateTime = item.updatedAt || item.createdAt || '未知';
+        console.log(`  ${index + 1}. ${item.name} - 更新时间: ${updateTime}`);
+      });
+      
+      // 🔥 使用强制排序后的数据
       let filteredData = [...formattedData]; // 创建副本，避免引用问题
       
-      // 所有筛选操作已在后端完成，前端不再需要重复筛选
-      console.log('最终处理后的数据:', filteredData.slice(0, 2)); // 只打印前两条记录用于调试
+      console.log('🔥 最终设置到state的数据（前3条）- 强制排序:');
+      filteredData.slice(0, 3).forEach((item, index) => {
+        const updateTime = item.updatedAt || item.createdAt || '未知';
+        console.log(`  最终${index + 1}. ${item.name} - 更新时间: ${updateTime}`);
+      });
+      
+      // 直接设置数据，不做任何前端排序
       setResumeList(filteredData);
       setTotal(totalCount); // 使用后端返回的总记录数，而不是前端筛选后的数据长度
       
@@ -218,7 +282,7 @@ const ResumeList = () => {
     
     // 只有在启用自动刷新且没有筛选条件时才设置定时器
     if (autoRefreshEnabled && Object.keys(searchParams).length === 0) {
-      console.log('启动定时检查新简历...');
+      // console.log('启动定时检查新简历...');
       // 设置定时器，每60秒刷新一次数据，检查是否有新简历
       autoRefreshIntervalRef.current = setInterval(() => {
         console.log('定时检查新简历...');
@@ -451,7 +515,6 @@ const ResumeList = () => {
       key: 'formattedId',
       width: 120,
       render: (text: string, record: ResumeData) => {
-        console.log('渲染简历ID:', { text, record });
         const id = record.id || record._id || '';
         return (
           <Tooltip title={`完整ID: ${id || '未知'}`}>
@@ -460,8 +523,7 @@ const ResumeList = () => {
                 messageApi.warning('简历ID不存在');
                 return;
               }
-              console.log('导航到简历详情:', { formattedId: record.formattedId, fullId: id });
-              navigate(`/aunt/resumes/detail/${id}`); // 使用完整ID
+              navigate(`/aunt/resumes/detail/${id}`);
             }}>
               {text || '未知ID'}
             </a>
@@ -519,6 +581,15 @@ const ResumeList = () => {
         hasMedicalReport ? 
           <Tag color="green">有</Tag> : 
           <Tag color="red">无</Tag>
+      ),
+    },
+    {
+      title: '更新时间',
+      dataIndex: 'updatedAt',
+      key: 'updatedAt',
+      width: 160,
+      render: (updatedAt: string) => (
+        updatedAt ? dayjs(updatedAt).format('YYYY-MM-DD HH:mm') : '-'
       ),
     },
     {
@@ -753,7 +824,7 @@ const ResumeList = () => {
             关闭
           </Button>,
         ]}
-        destroyOnClose
+        destroyOnHidden
       >
         {!importResult ? (
           <div>

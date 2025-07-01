@@ -160,62 +160,117 @@ export class ResumeService {
     }
   }
 
-  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string) {
-    // 构建查询条件
-    const query: any = {};
-    
-    // 添加关键词搜索
-    if (keyword) {
-      query.$or = [
-        { name: { $regex: keyword, $options: 'i' } },
-        { phone: { $regex: keyword, $options: 'i' } },
-        { expectedPosition: { $regex: keyword, $options: 'i' } }
-      ];
-    }
-    
-    // 添加工种筛选
-    if (jobType) {
-      query.jobType = jobType;
-    }
-    
-    // 添加接单状态筛选
-    if (orderStatus) {
-      query.orderStatus = orderStatus;
-    }
-    
-    // 添加最大年龄筛选
-    if (maxAge !== undefined && maxAge !== null) {
-      query.age = { $lte: maxAge };
-    }
-    
-    // 添加籍贯筛选
-    if (nativePlace) {
-      query.nativePlace = nativePlace;
-    }
-    
-    // 添加民族筛选
-    if (ethnicity) {
-      query.ethnicity = ethnicity;
-    }
+  private hasCheckedUpdatedAt = false; // 标记是否已检查过updatedAt字段
 
-    const [items, total] = await Promise.all([
-      this.resumeModel
+  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string) {
+    try {
+      this.logger.log(`🔥 [SORT-FIX-FINAL] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
+      console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
+      
+      // 首次查询时检查updatedAt字段
+      if (!this.hasCheckedUpdatedAt) {
+        await this.batchFixMissingUpdatedAt();
+        this.hasCheckedUpdatedAt = true;
+      }
+
+      // 构建查询条件
+      const query: any = {};
+      
+      // 关键词搜索
+      if (keyword) {
+        query.$or = [
+          { name: { $regex: keyword, $options: 'i' } },
+          { phone: { $regex: keyword, $options: 'i' } },
+          { expectedPosition: { $regex: keyword, $options: 'i' } }
+        ];
+      }
+      
+      // 工种筛选
+      if (jobType) {
+        query.jobType = jobType;
+      }
+      
+      // 接单状态筛选
+      if (orderStatus) {
+        query.orderStatus = orderStatus;
+      }
+      
+      // 年龄筛选
+      if (maxAge !== undefined && maxAge !== null) {
+        query.age = { $lte: maxAge };
+      }
+      
+      // 添加籍贯筛选
+      if (nativePlace) {
+        query.nativePlace = nativePlace;
+      }
+      
+      // 添加民族筛选
+      if (ethnicity) {
+        query.ethnicity = ethnicity;
+      }
+
+      this.logger.log(`🔥 [SORT-FIX-FINAL] 查询条件: ${JSON.stringify(query)}`);
+
+      // 🔥 [SORT-FIX-FINAL] 使用分离的查询，确保排序和分页的执行顺序
+      
+      // 1. 获取总记录数
+      const total = await this.resumeModel.countDocuments(query).exec();
+      this.logger.log(`🔥 [SORT-FIX-FINAL] 查询到总数: ${total}`);
+
+      // 2. 获取分页和排序后的数据 - 强制排序修复
+      let items = await this.resumeModel
         .find(query)
+        .sort({ updatedAt: -1, createdAt: -1 }) // 数据库排序
         .skip((page - 1) * pageSize)
         .limit(pageSize)
-        .sort({ createdAt: -1 })
         .populate('userId', 'username name')
-        .exec(),
-      this.resumeModel.countDocuments(query)
-    ]);
+        .lean() // 使用lean提高性能
+        .exec();
 
-    return {
-      items,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize)
-    };
+      // 🔥 [CRITICAL-FIX] 强制二次排序确保正确性  
+      items = items.sort((a: any, b: any) => {
+        const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return bTime - aTime; // 最新的在前面
+      });
+        
+      this.logger.log(`🔥 [SORT-FIX-FINAL] 查询完成 - 返回 ${items.length} 条记录`);
+      
+      // 验证强制排序结果
+      if (items.length > 0) {
+        console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 强制排序后的前3条记录:`);
+        items.slice(0, 3).forEach((item: any, index) => {
+          console.log(`🔥🔥🔥 [CONSOLE-DEBUG]   ${index + 1}. ${item.name} - ${item.updatedAt}`);
+        });
+        
+        if (items.length > 1) {
+          const first = items[0] as any;
+          const second = items[1] as any;
+          const firstTime = new Date(first.updatedAt).getTime();
+          const secondTime = new Date(second.updatedAt).getTime();
+          console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 排序验证: ${first.name}(${firstTime}) vs ${second.name}(${secondTime})`);
+          if (firstTime < secondTime) {
+            this.logger.error(`🔥 [SORT-FIX-FINAL] ❌ 强制排序后仍然失败!`);
+            console.log(`🔥🔥🔥 [CONSOLE-DEBUG] ❌ 强制排序后仍然失败!`);
+          } else {
+            this.logger.log(`🔥 [SORT-FIX-FINAL] ✅ 强制排序成功!`);
+            console.log(`🔥🔥🔥 [CONSOLE-DEBUG] ✅ 强制排序成功!`);
+          }
+        }
+      }
+
+      return {
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+      };
+    } catch (error) {
+      this.logger.error(`🔥 [SORT-FIX-FINAL] 查询失败: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   async findOne(id: string) {
@@ -233,7 +288,16 @@ export class ResumeService {
 
   async update(id: string, updateResumeDto: UpdateResumeDto) {
     const resume = await this.resumeModel
-      .findByIdAndUpdate(new Types.ObjectId(id), updateResumeDto, { new: true })
+      .findByIdAndUpdate(
+        new Types.ObjectId(id), 
+        updateResumeDto, 
+        { 
+          new: true,
+          // 确保触发timestamps的updatedAt更新
+          timestamps: true,
+          runValidators: true
+        }
+      )
       .populate('userId', 'username name')
       .exec();
 
@@ -241,6 +305,7 @@ export class ResumeService {
       throw new NotFoundException('简历不存在');
     }
 
+    this.logger.log(`简历更新成功: ${id}, updatedAt: ${(resume as any).updatedAt}`);
     return resume;
   }
 
@@ -613,7 +678,12 @@ export class ResumeService {
     // 保存更新后的简历
     const savedResume = await resume.save();
     
-    this.logger.log(`简历更新成功，文件信息: ${JSON.stringify({
+    this.logger.log(`📝 简历更新成功详情:`);
+    this.logger.log(`  - 简历ID: ${id}`);
+    this.logger.log(`  - 姓名: ${savedResume.name}`);
+    this.logger.log(`  - updatedAt: ${(savedResume as any).updatedAt}`);
+    this.logger.log(`  - createdAt: ${(savedResume as any).createdAt}`);
+    this.logger.log(`  - 文件统计: ${JSON.stringify({
       idCardFront: !!savedResume.idCardFront,
       idCardBack: !!savedResume.idCardBack,
       photoCount: savedResume.photoUrls?.length || 0,
@@ -684,9 +754,9 @@ export class ResumeService {
       
       const workers = await this.resumeModel
         .find(query)
+        .sort({ updatedAt: -1, createdAt: -1 }) // 先排序
         .select('_id name phone idNumber age jobType nativePlace currentAddress')
         .limit(limit)
-        .sort({ createdAt: -1 })
         .exec();
       
       this.logger.log(`搜索结果: ${JSON.stringify(workers, null, 2)}`);
@@ -695,6 +765,55 @@ export class ResumeService {
     } catch (error) {
       this.logger.error(`搜索服务人员失败: ${error.message}`, error.stack);
       throw new Error('搜索服务人员失败');
+    }
+  }
+
+  /**
+   * 修复缺失的 updatedAt 字段
+   * @param resumeId 简历ID
+   * @param fallbackDate 回退日期（通常使用createdAt）
+   */
+  private async fixMissingUpdatedAt(resumeId: string, fallbackDate: Date) {
+    try {
+      this.logger.warn(`🔧 修复缺失的updatedAt字段: ${resumeId}`);
+      await this.resumeModel.findByIdAndUpdate(
+        resumeId,
+        { updatedAt: fallbackDate },
+        { new: true }
+      );
+    } catch (error) {
+      this.logger.error(`修复updatedAt字段失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 批量修复所有缺失的 updatedAt 字段
+   */
+  public async batchFixMissingUpdatedAt() {
+    try {
+      this.logger.log('🔧 开始批量修复缺失的updatedAt字段...');
+      
+      const resumesWithoutUpdatedAt = await this.resumeModel.find({
+        $or: [
+          { updatedAt: { $exists: false } },
+          { updatedAt: null }
+        ]
+      });
+      
+      this.logger.log(`发现 ${resumesWithoutUpdatedAt.length} 条记录缺失updatedAt字段`);
+      
+      for (const resume of resumesWithoutUpdatedAt) {
+        const fallbackDate = (resume as any).createdAt || new Date();
+        await this.resumeModel.findByIdAndUpdate(
+          resume._id,
+          { updatedAt: fallbackDate },
+          { new: true }
+        );
+      }
+      
+      this.logger.log(`✅ 批量修复完成，共修复 ${resumesWithoutUpdatedAt.length} 条记录`);
+    } catch (error) {
+      this.logger.error(`批量修复updatedAt字段失败: ${error.message}`);
     }
   }
 
@@ -899,5 +1018,28 @@ export class ResumeService {
     
     // 返回转换后的DTO
     return dto as CreateResumeDto;
+  }
+
+  /**
+   * 调试方法：直接查询最新的记录
+   */
+  async debugLatestRecords(limit: number = 10) {
+    try {
+      this.logger.log(`🔍 直接查询最新的${limit}条记录...`);
+      
+      const records = await this.resumeModel
+        .find({})
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .limit(limit)
+        .select('name updatedAt createdAt')
+        .lean()
+        .exec();
+      
+      this.logger.log(`🔍 查询到${records.length}条记录`);
+      return records;
+    } catch (error) {
+      this.logger.error('❌ 调试查询失败:', error);
+      throw error;
+    }
   }
 }

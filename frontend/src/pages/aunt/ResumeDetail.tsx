@@ -1542,8 +1542,8 @@ const ResumeDetail = () => {
             />
           </Card>
 
-          {/* 时间信息卡片 */}
-          <Card title="时间信息" style={{ marginBottom: 24 }}>
+          {/* 创建信息卡片 */}
+          <Card title="创建信息" style={{ marginBottom: 24 }}>
             <Descriptions bordered column={2}>
               <Descriptions.Item label="创建时间">
                 {resume?.createdAt ? dayjs(resume.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-'}

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-// import { useNavigate } from 'react-router-dom'; // 暂时不需要
+import { useNavigate } from 'react-router-dom';
 import { 
   Card, 
   Button, 
@@ -158,7 +158,7 @@ const ESignatureStepPage: React.FC = () => {
   const [step2Form] = Form.useForm();
   const [contractResult, setContractResult] = useState<any>(null);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
-  // const navigate = useNavigate(); // 暂时不需要
+  const navigate = useNavigate();
   
   // 步骤数据存储
   const [stepData, setStepData] = useState({
@@ -222,12 +222,13 @@ const ESignatureStepPage: React.FC = () => {
       title: '打开签署链接',
       content: 'step4',
       description: '打开签署链接进行实名认证和签署'
-    },
-    {
-      title: '下载合同',
-      content: 'step5',
-      description: '下载已签署的合同'
     }
+    // 隐藏步骤5（下载合同）
+    // {
+    //   title: '下载合同',
+    //   content: 'step5',
+    //   description: '下载已签署的合同'
+    // }
   ];
 
   // 搜索用户（客户库 + 阿姨简历库）
@@ -1067,16 +1068,37 @@ const ESignatureStepPage: React.FC = () => {
             <Select
               placeholder="请选择合同模板"
               loading={templateLoading}
+              optionLabelProp="label"
+              dropdownStyle={{ maxWidth: '600px', minWidth: '400px' }}
               onChange={(value) => {
                 const template = templates.find(t => t.templateNo === value);
                 setSelectedTemplate(template);
               }}
             >
               {templates.map(template => (
-                <Option key={template.templateNo} value={template.templateNo}>
-                  <div>
-                    <div style={{ fontWeight: 'bold' }}>{template.templateName}</div>
-                    <div style={{ fontSize: '12px', color: '#666' }}>{template.description}</div>
+                <Option 
+                  key={template.templateNo} 
+                  value={template.templateNo}
+                  label={template.templateName}
+                >
+                  <div style={{ 
+                    padding: '8px 4px',
+                    lineHeight: '1.4',
+                    whiteSpace: 'normal',
+                    maxWidth: '560px'
+                  }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#333' }}>
+                      {template.templateName}
+                    </div>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#888',
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      maxWidth: '520px'
+                    }}>
+                      {template.description}
+                    </div>
                   </div>
                 </Option>
               ))}
@@ -1101,7 +1123,16 @@ const ESignatureStepPage: React.FC = () => {
                 // 根据字段关键词智能分组
                 selectedTemplate.fields.forEach((field: any) => {
                   const fieldKey = field.key.toLowerCase();
+                  const fieldLabel = (field.label || '').toLowerCase();
 
+                  // 过滤签名相关字段 - 隐藏这些字段
+                  if (fieldKey.includes('签名区') || fieldLabel.includes('签名区') ||
+                      fieldKey.includes('签章区') || fieldLabel.includes('签章区') ||
+                      fieldKey.includes('签约日期') || fieldLabel.includes('签约日期') ||
+                      fieldKey.includes('签署日期') || fieldLabel.includes('签署日期')) {
+                    console.log('跳过签名相关字段:', field.key, field.label);
+                    return; // 跳过这些字段，不显示
+                  }
                   
                   // 甲方信息
                   if (fieldKey.includes('甲方') || fieldKey.includes('客户') || fieldKey.includes('签署人')) {
@@ -1116,9 +1147,11 @@ const ESignatureStepPage: React.FC = () => {
                   else if (fieldKey.includes('服务') || fieldKey.includes('地址') || fieldKey.includes('类型')) {
                     fieldGroups.service.fields.push(field);
                   }
-                  // 时间信息
-                  else if (fieldKey.includes('年') || fieldKey.includes('月') || fieldKey.includes('日') || 
-                           fieldKey.includes('时间') || fieldKey.includes('期限') || fieldKey.includes('签署日期')) {
+                  // 时间信息 - 排除签约和签署相关的日期字段
+                  else if ((fieldKey.includes('年') || fieldKey.includes('月') || fieldKey.includes('日') || 
+                           fieldKey.includes('时间') || fieldKey.includes('期限')) &&
+                           !fieldKey.includes('签约') && !fieldKey.includes('签署') && 
+                           !fieldLabel.includes('签约') && !fieldLabel.includes('签署')) {
                     fieldGroups.time.fields.push(field);
                   }
                   // 费用信息
@@ -1783,7 +1816,7 @@ const ESignatureStepPage: React.FC = () => {
 
         <Form.Item>
           <Space>
-            <Button onClick={() => setCurrentStep(0)} icon={<ArrowLeftOutlined />}>
+            <Button onClick={() => setCurrentStep(0)} icon={<ArrowLeftOutlined />} size="large">
               返回上一步
             </Button>
             <Button type="primary" htmlType="submit" loading={loading} size="large">
@@ -2008,7 +2041,7 @@ const ESignatureStepPage: React.FC = () => {
 
         <Form.Item>
           <Space>
-            <Button onClick={() => setCurrentStep(1)} icon={<ArrowLeftOutlined />}>
+            <Button onClick={() => setCurrentStep(1)} icon={<ArrowLeftOutlined />} size="large">
               返回上一步
             </Button>
             <Button 
@@ -2106,16 +2139,21 @@ const ESignatureStepPage: React.FC = () => {
 
         <Form.Item>
           <Space>
-            <Button onClick={() => setCurrentStep(2)} icon={<ArrowLeftOutlined />}>
+            <Button onClick={() => setCurrentStep(2)} icon={<ArrowLeftOutlined />} size="large">
               返回上一步
             </Button>
             <Button 
               type="primary" 
-              onClick={() => setCurrentStep(4)}
+              onClick={() => {
+                message.success('签署流程已完成！双方可以使用签署链接进行签署。');
+                setTimeout(() => {
+                  navigate('/contracts');
+                }, 1000);
+              }}
               size="large"
               disabled={signUrls.length === 0}
             >
-              继续下一步（下载合同）
+              返回合同列表
             </Button>
           </Space>
         </Form.Item>
@@ -2765,10 +2803,10 @@ const ESignatureStepPage: React.FC = () => {
 
         <Form.Item>
           <Space>
-            <Button onClick={() => setCurrentStep(3)} icon={<ArrowLeftOutlined />}>
+            <Button onClick={() => setCurrentStep(3)} icon={<ArrowLeftOutlined />} size="large">
               返回上一步
             </Button>
-            <Button type="primary" onClick={() => window.location.reload()}>
+            <Button type="primary" onClick={() => window.location.reload()} size="large">
               重新开始
             </Button>
           </Space>
@@ -2788,8 +2826,9 @@ const ESignatureStepPage: React.FC = () => {
         return renderStep3();
       case 3:
         return renderStep4();
-      case 4:
-        return renderStep5();
+      // 隐藏步骤5（下载合同）
+      // case 4:
+      //   return renderStep5();
       default:
         return null;
     }
@@ -2804,7 +2843,7 @@ const ESignatureStepPage: React.FC = () => {
         
         <Card style={{ marginBottom: 24 }}>
           <Steps 
-            current={currentStep} 
+            current={Math.min(currentStep, steps.length - 1)} 
             items={steps}
             style={{ marginBottom: 0 }}
           />
@@ -2812,8 +2851,8 @@ const ESignatureStepPage: React.FC = () => {
 
         {renderStepContent()}
 
-        {/* 步骤数据展示（调试用） */}
-        {(stepData.users || stepData.contract) && (
+        {/* 步骤数据展示（调试用） - 已隐藏，太占地方 */}
+        {/* {(stepData.users || stepData.contract) && (
           <Card title="已保存的步骤数据" style={{ marginTop: 24 }}>
             {stepData.users && (
               <Paragraph>
@@ -2832,7 +2871,7 @@ const ESignatureStepPage: React.FC = () => {
               </Paragraph>
             )}
           </Card>
-        )}
+        )} */}
 
         {/* 成功结果弹窗 */}
         <Modal

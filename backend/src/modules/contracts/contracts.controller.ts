@@ -143,14 +143,22 @@ export class ContractsController {
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
+    console.log('🚨🚨🚨 [CONTRACTS API CALLED] 收到合同详情请求, ID:', id);
+    console.log('🚨🚨🚨 [CONTRACTS API CALLED] 当前时间:', new Date().toISOString());
     try {
       const contract = await this.contractsService.findOne(id);
+      console.log('🚨🚨🚨 [CONTRACTS API CALLED] 合同详情查询完成:', {
+        contractNumber: contract.contractNumber,
+        hasLastUpdatedBy: !!contract.lastUpdatedBy,
+        lastUpdatedBy: contract.lastUpdatedBy
+      });
       return {
         success: true,
         data: contract,
         message: '获取合同详情成功',
       };
     } catch (error) {
+      console.error('🚨🚨🚨 [CONTRACTS API CALLED] 合同详情查询失败:', error);
       return {
         success: false,
         message: error.message || '获取合同详情失败',
@@ -159,9 +167,9 @@ export class ContractsController {
   }
 
   @Put(':id')
-  async update(@Param('id') id: string, @Body() updateContractDto: UpdateContractDto) {
+  async update(@Param('id') id: string, @Body() updateContractDto: UpdateContractDto, @Request() req) {
     try {
-      const contract = await this.contractsService.update(id, updateContractDto);
+      const contract = await this.contractsService.update(id, updateContractDto, req.user.userId);
       return {
         success: true,
         data: contract,

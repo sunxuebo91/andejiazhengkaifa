@@ -147,6 +147,7 @@ export class CustomersService {
   // 根据ID获取客户详情（包含跟进记录）
   async findOne(id: string): Promise<Customer & { 
     createdByUser?: { name: string; username: string } | null;
+    lastUpdatedByUser?: { name: string; username: string } | null;
     followUps?: CustomerFollowUp[];
   }> {
     const customer = await this.customerModel.findById(id).exec();
@@ -161,6 +162,13 @@ export class CustomersService {
       .lean()
       .exec();
 
+    // 获取最后更新人信息
+    const lastUpdatedByUser = customer.lastUpdatedBy ? await this.userModel
+      .findById(customer.lastUpdatedBy)
+      .select('name username')
+      .lean()
+      .exec() : null;
+
     // 获取跟进记录
     const followUps = await this.customerFollowUpModel
       .find({ customerId: id })
@@ -171,6 +179,7 @@ export class CustomersService {
     return {
       ...customer.toObject(),
       createdByUser: createdByUser ? { name: createdByUser.name, username: createdByUser.username } : null,
+      lastUpdatedByUser: lastUpdatedByUser ? { name: lastUpdatedByUser.name, username: lastUpdatedByUser.username } : null,
       followUps: followUps
     };
   }
@@ -185,7 +194,7 @@ export class CustomersService {
   }
 
   // 更新客户信息
-  async update(id: string, updateCustomerDto: UpdateCustomerDto): Promise<Customer> {
+  async update(id: string, updateCustomerDto: UpdateCustomerDto, userId?: string): Promise<Customer> {
     // 如果更新手机号，检查是否与其他客户冲突
     if (updateCustomerDto.phone) {
       const existingCustomer = await this.customerModel.findOne({
@@ -204,6 +213,11 @@ export class CustomersService {
     }
     if (updateCustomerDto.expectedDeliveryDate) {
       updateData.expectedDeliveryDate = new Date(updateCustomerDto.expectedDeliveryDate);
+    }
+
+    // 设置最后更新人
+    if (userId) {
+      updateData.lastUpdatedBy = userId;
     }
 
     const customer = await this.customerModel

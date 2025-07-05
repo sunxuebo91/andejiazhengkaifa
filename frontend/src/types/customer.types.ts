@@ -25,6 +25,8 @@ export interface Customer {
   remarks?: string;
   createdBy: string;
   createdByUser?: { name: string; username: string } | null;
+  lastUpdatedBy?: string;
+  lastUpdatedByUser?: { name: string; username: string } | null;
   followUps?: CustomerFollowUp[];
   createdAt: string;
   updatedAt: string;

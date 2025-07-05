@@ -32,6 +32,9 @@ const CustomerDetail: React.FC = () => {
   const [customerHistory, setCustomerHistory] = useState<any>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   
+  // 🆕 新增：最后更新人信息状态
+  const [lastUpdatedByUser, setLastUpdatedByUser] = useState<{name: string, username: string} | null>(null);
+  
   const [followUpModal, setFollowUpModal] = useState({
     visible: false,
     customerId: '',
@@ -48,6 +51,26 @@ const CustomerDetail: React.FC = () => {
       fetchCustomerHistory();
     }
   }, [customer]);
+
+  // 🆕 新增：获取最后更新人信息
+  useEffect(() => {
+    const fetchLastUpdatedByUser = async () => {
+      if (customer?.lastUpdatedBy && typeof customer.lastUpdatedBy === 'string' && customer.lastUpdatedBy.length === 24) {
+        try {
+          const response = await fetch(`/api/users/${customer.lastUpdatedBy}`);
+          if (response.ok) {
+            const userData = await response.json();
+            setLastUpdatedByUser(userData);
+          }
+        } catch (error) {
+          console.error('获取最后更新人信息失败:', error);
+        }
+      } else {
+        setLastUpdatedByUser(null);
+      }
+    };
+    fetchLastUpdatedByUser();
+  }, [customer?.lastUpdatedBy]);
 
   const fetchCustomerDetail = async () => {
     if (!id) {
@@ -453,7 +476,29 @@ const CustomerDetail: React.FC = () => {
                   {formatDateTime(customer.createdAt)}
                 </Descriptions.Item>
                 
-                <Descriptions.Item label="最后更新时间" span={2}>
+                <Descriptions.Item label="最后更新人" span={1}>
+                  {(() => {
+                    // 如果后端返回了用户对象，直接使用
+                    if (customer.lastUpdatedByUser) {
+                      return customer.lastUpdatedByUser.name || customer.lastUpdatedByUser.username;
+                    }
+                    
+                    // 如果是字符串ID且已获取到用户信息，使用获取到的信息
+                    if (lastUpdatedByUser) {
+                      return lastUpdatedByUser.name || lastUpdatedByUser.username;
+                    }
+                    
+                    // 如果有lastUpdatedBy但还在加载用户信息，显示加载状态
+                    if (customer.lastUpdatedBy && typeof customer.lastUpdatedBy === 'string' && customer.lastUpdatedBy.length === 24) {
+                      return '加载中...';
+                    }
+                    
+                    // 如果没有lastUpdatedBy，显示未知
+                    return customer.lastUpdatedBy || '-';
+                  })()}
+                </Descriptions.Item>
+                
+                <Descriptions.Item label="最后更新时间" span={1}>
                   {formatDateTime(customer.updatedAt)}
                 </Descriptions.Item>
               </Descriptions>

@@ -58,6 +58,8 @@ const ContractDetail: React.FC = () => {
   const [contractHistory, setContractHistory] = useState<any>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // 最后更新人信息已在fetchContractDetail中直接处理
+
   // 处理合同状态变化
   const handleStatusChange = (statusInfo: ContractStatusInfo | null) => {
     console.log('🔄 ContractDetail 收到状态变化:', statusInfo);
@@ -83,6 +85,8 @@ const ContractDetail: React.FC = () => {
     }
   }, [contract]);
 
+  // 不再需要独立的useEffect获取用户信息，已在fetchContractDetail中处理
+
   const fetchContractDetail = async () => {
     if (!id) {
       messageApi.error('无效的合同ID');
@@ -93,6 +97,33 @@ const ContractDetail: React.FC = () => {
     try {
       setLoading(true);
       const response = await contractService.getContractById(id);
+      console.log('📡 合同详情API响应:', response);
+      console.log('🔍 lastUpdatedBy字段:', response.lastUpdatedBy);
+      console.log('🔍 lastUpdatedBy类型:', typeof response.lastUpdatedBy);
+      
+      // 🔧 前端直接处理lastUpdatedBy用户信息获取（类似简历详情页）
+      if (response.lastUpdatedBy && typeof response.lastUpdatedBy === 'string') {
+        console.log('🔧 前端检测到lastUpdatedBy为字符串，准备获取用户信息');
+        try {
+          const userResponse = await fetch(`/api/users/${response.lastUpdatedBy}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            response.lastUpdatedBy = {
+              _id: userData._id,
+              username: userData.username,
+              name: userData.name
+            };
+            console.log('🔧 前端成功获取用户信息:', response.lastUpdatedBy);
+          }
+        } catch (error) {
+          console.warn('🔧 前端获取用户信息失败:', error);
+        }
+      }
+      
       setContract(response);
     } catch (error) {
       console.error('获取合同详情失败:', error);
@@ -918,7 +949,20 @@ const ContractDetail: React.FC = () => {
                   {formatDateTime(contract.createdAt)}
                 </Descriptions.Item>
                 
-                <Descriptions.Item label="最后更新时间" span={2}>
+                <Descriptions.Item label="最后更新人" span={1}>
+                  {(() => {
+                    // 如果后端返回了用户对象，直接使用
+                    if (contract.lastUpdatedBy && typeof contract.lastUpdatedBy === 'object') {
+                      const updater = contract.lastUpdatedBy as any;
+                      return updater.name || updater.username;
+                    }
+                    
+                    // 如果没有lastUpdatedBy或者仍然是字符串，显示默认值
+                    return contract.lastUpdatedBy || '-';
+                  })()}
+                </Descriptions.Item>
+                
+                <Descriptions.Item label="最后更新时间" span={1}>
                   {formatDateTime(contract.updatedAt)}
                 </Descriptions.Item>
               </Descriptions>

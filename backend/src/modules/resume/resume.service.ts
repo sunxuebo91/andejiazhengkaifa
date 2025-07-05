@@ -283,14 +283,45 @@ export class ResumeService {
       throw new NotFoundException('简历不存在');
     }
 
+    // 手动获取lastUpdatedBy用户信息
+    this.logger.log(`🔍 开始处理lastUpdatedBy, 当前值: ${resume.lastUpdatedBy}, 类型: ${typeof resume.lastUpdatedBy}`);
+    if (resume.lastUpdatedBy) {
+      try {
+        const userCollection = this.resumeModel.db.collection('users');
+        this.logger.log(`🔍 查询用户信息: ${resume.lastUpdatedBy}`);
+        const lastUpdatedByUser = await userCollection.findOne(
+          { _id: resume.lastUpdatedBy },
+          { projection: { username: 1, name: 1 } }
+        );
+        this.logger.log(`🔍 查询到的用户信息:`, lastUpdatedByUser);
+        if (lastUpdatedByUser) {
+          (resume as any).lastUpdatedBy = lastUpdatedByUser;
+          this.logger.log(`🔍 成功设置lastUpdatedBy为用户对象`);
+        } else {
+          this.logger.warn(`🔍 未找到用户: ${resume.lastUpdatedBy}`);
+        }
+      } catch (error) {
+        this.logger.error(`🔍 获取lastUpdatedBy用户信息失败: ${error.message}`, error.stack);
+      }
+    } else {
+      this.logger.log(`🔍 lastUpdatedBy为空，跳过用户信息获取`);
+    }
+
     return resume;
   }
 
-  async update(id: string, updateResumeDto: UpdateResumeDto) {
+  async update(id: string, updateResumeDto: UpdateResumeDto, userId?: string) {
+    const updateData: any = { ...updateResumeDto };
+    
+    // 设置最后更新人
+    if (userId) {
+      updateData.lastUpdatedBy = new Types.ObjectId(userId);
+    }
+    
     const resume = await this.resumeModel
       .findByIdAndUpdate(
         new Types.ObjectId(id), 
-        updateResumeDto, 
+        updateData, 
         { 
           new: true,
           // 确保触发timestamps的updatedAt更新
@@ -299,6 +330,7 @@ export class ResumeService {
         }
       )
       .populate('userId', 'username name')
+      .populate('lastUpdatedBy', 'username name')
       .exec();
 
     if (!resume) {
@@ -579,7 +611,8 @@ export class ResumeService {
     id: string, 
     updateResumeDto: UpdateResumeDto, 
     files?: Express.Multer.File[],
-    fileTypes?: string[]
+    fileTypes?: string[],
+    userId?: string
   ) {
     // 检查身份证号是否重复
     if (updateResumeDto.idNumber) {
@@ -640,6 +673,11 @@ export class ResumeService {
     
     // 只更新非undefined和非文件相关的字段
     Object.assign(resume, updateFields);
+    
+    // 设置最后更新人
+    if (userId) {
+      resume.lastUpdatedBy = new Types.ObjectId(userId);
+    }
     
     // 更新分类文件信息
     Object.keys(categorizedFiles).forEach(type => {

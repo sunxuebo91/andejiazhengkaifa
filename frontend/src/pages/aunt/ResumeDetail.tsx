@@ -382,6 +382,16 @@ interface ResumeData {
   medicalExamDate: string;
   createdAt: string;
   updatedAt: string;
+  userId?: {
+    _id: string;
+    username: string;
+    name: string;
+  };
+  lastUpdatedBy?: {
+    _id: string;
+    username: string;
+    name: string;
+  };
   __v: number;
 }
 
@@ -448,6 +458,31 @@ const ResumeDetail = () => {
       
       if (response.success && resumeData) {
         console.log('设置简历数据:', resumeData);
+        console.log('🔍 检查lastUpdatedBy字段:', {
+          lastUpdatedBy: resumeData.lastUpdatedBy,
+          userId: resumeData.userId,
+          createdAt: resumeData.createdAt,
+          updatedAt: resumeData.updatedAt
+        });
+        
+        // 🔧 前端直接处理lastUpdatedBy用户信息获取
+        if (resumeData.lastUpdatedBy && typeof resumeData.lastUpdatedBy === 'string') {
+          console.log('🔧 前端检测到lastUpdatedBy为字符串，准备获取用户信息');
+          try {
+            const userResponse = await apiService.get(`/api/users/${resumeData.lastUpdatedBy}`);
+            if (userResponse.success && userResponse.data) {
+              resumeData.lastUpdatedBy = {
+                _id: userResponse.data._id,
+                username: userResponse.data.username,
+                name: userResponse.data.name
+              };
+              console.log('🔧 前端成功获取用户信息:', resumeData.lastUpdatedBy);
+            }
+          } catch (error) {
+            console.warn('🔧 前端获取用户信息失败:', error);
+          }
+        }
+        
         setResume(resumeData);
         console.log('简历数据设置完成，_id:', resumeData._id);
       } else {
@@ -1545,8 +1580,14 @@ const ResumeDetail = () => {
           {/* 创建信息卡片 */}
           <Card title="创建信息" style={{ marginBottom: 24 }}>
             <Descriptions bordered column={2}>
+              <Descriptions.Item label="创建人">
+                {resume?.userId?.name || resume?.userId?.username || '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="创建时间">
                 {resume?.createdAt ? dayjs(resume.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="最后更新人">
+                {resume?.lastUpdatedBy?.name || resume?.lastUpdatedBy?.username || '-'}
               </Descriptions.Item>
               <Descriptions.Item label="最后更新时间">
                 {resume?.updatedAt ? dayjs(resume.updatedAt).format('YYYY-MM-DD HH:mm:ss') : '-'}

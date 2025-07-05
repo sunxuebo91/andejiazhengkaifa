@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type CustomerDocument = Customer & Document;
 
@@ -81,6 +81,9 @@ export class Customer {
 
   @Prop({ required: true })
   createdBy: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  lastUpdatedBy: Types.ObjectId;
 
   @Prop({ default: Date.now })
   createdAt: Date;

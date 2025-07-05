@@ -168,16 +168,29 @@ export class ContractsService {
 
   // 根据ID获取合同详情
   async findOne(id: string): Promise<Contract> {
+    console.log('🚨🚨🚨 [CONTRACTS SERVICE] 开始查询合同详情, ID:', id);
+    console.log('🚨🚨🚨 [CONTRACTS SERVICE] 当前时间:', new Date().toISOString());
+    
     const contract = await this.contractModel
       .findById(id)
       .populate('customerId', 'name phone customerId address')
       .populate('workerId', 'name phone idCardNumber')
       .populate('createdBy', 'name username')
+      .populate('lastUpdatedBy', 'name username')
       .exec();
       
     if (!contract) {
+      console.log('🚨🚨🚨 [CONTRACTS SERVICE] 合同不存在, ID:', id);
       throw new NotFoundException('合同不存在');
     }
+    
+    console.log('🚨🚨🚨 [CONTRACTS SERVICE] 合同详情查询结果:');
+    console.log('🚨🚨🚨   - 合同ID:', contract._id);
+    console.log('🚨🚨🚨   - 合同编号:', contract.contractNumber);
+    console.log('🚨🚨🚨   - 创建人:', contract.createdBy);
+    console.log('🚨🚨🚨   - 最后更新人:', contract.lastUpdatedBy);
+    console.log('🚨🚨🚨   - lastUpdatedBy类型:', typeof contract.lastUpdatedBy);
+    console.log('🚨🚨🚨   - 原始合同数据的lastUpdatedBy字段:', contract.toObject().lastUpdatedBy);
     
     return contract;
   }
@@ -217,7 +230,7 @@ export class ContractsService {
   }
 
   // 更新合同
-  async update(id: string, updateContractDto: UpdateContractDto): Promise<Contract> {
+  async update(id: string, updateContractDto: UpdateContractDto, userId?: string): Promise<Contract> {
     const updateData: any = { ...updateContractDto };
     
     // 处理日期字段
@@ -231,11 +244,17 @@ export class ContractsService {
       updateData.expectedDeliveryDate = new Date(updateContractDto.expectedDeliveryDate);
     }
 
+    // 设置最后更新人
+    if (userId) {
+      updateData.lastUpdatedBy = userId;
+    }
+
     const contract = await this.contractModel
       .findByIdAndUpdate(id, updateData, { new: true })
       .populate('customerId', 'name phone customerId address')
       .populate('workerId', 'name phone idCardNumber')
       .populate('createdBy', 'name username')
+      .populate('lastUpdatedBy', 'name username')
       .exec();
       
     if (!contract) {

@@ -27,6 +27,7 @@ export interface IResume extends Document {
   title: string;
   content: string;
   userId: Types.ObjectId;
+  lastUpdatedBy?: Types.ObjectId;
   fileIds: Types.ObjectId[];
   name: string;
   gender: Gender;
@@ -83,6 +84,9 @@ export class Resume extends Document implements IResume {
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   userId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', nullable: true })
+  lastUpdatedBy?: Types.ObjectId;
 
   @Prop({ type: [{ type: Types.ObjectId }] })
   fileIds: Types.ObjectId[];

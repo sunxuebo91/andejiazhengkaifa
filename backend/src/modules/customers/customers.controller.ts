@@ -97,9 +97,10 @@ export class CustomersController {
   async update(
     @Param('id') id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
+    @Request() req,
   ): Promise<ApiResponse> {
     try {
-      const customer = await this.customersService.update(id, updateCustomerDto);
+      const customer = await this.customersService.update(id, updateCustomerDto, req.user.userId);
       return this.createResponse(true, '客户信息更新成功', customer);
     } catch (error) {
       return this.createResponse(false, '客户信息更新失败', null, error.message);

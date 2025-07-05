@@ -22,6 +22,7 @@ export interface Contract {
   customerId: string;
   workerId: string;
   createdBy: string | { _id: string; name?: string; username?: string; };
+  lastUpdatedBy?: string | { _id: string; name?: string; username?: string; };
   createdAt: string;
   updatedAt: string;
   

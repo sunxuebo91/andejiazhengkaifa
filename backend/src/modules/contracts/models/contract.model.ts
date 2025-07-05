@@ -92,6 +92,9 @@ export class Contract {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId; // 创建人
 
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  lastUpdatedBy: Types.ObjectId; // 最后更新人
+
   // 爱签相关字段
   @Prop()
   esignContractNo?: string; // 爱签合同编号

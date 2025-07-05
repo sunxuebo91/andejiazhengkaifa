@@ -474,15 +474,18 @@ export class ResumeController {
   @ApiResponse({ status: 200, description: '获取成功' })
   async findOne(@Param('id') id: string) {
     try {
-      this.logger.log(`获取简历详情: id=${id}`);
+      this.logger.log(`🔧 Controller获取简历详情: id=${id}`);
+      this.logger.log(`🔧 准备调用ResumeService.findOne`);
       const resume = await this.resumeService.findOne(id);
+      this.logger.log(`🔧 ResumeService.findOne执行完成，结果类型: ${typeof resume}`);
+      this.logger.log(`🔧 返回的lastUpdatedBy类型: ${typeof resume?.lastUpdatedBy}`);
       return {
         success: true,
         data: resume,
         message: '获取简历详情成功'
       };
     } catch (error) {
-      this.logger.error(`获取简历详情失败: ${error.message}`);
+      this.logger.error(`🔧 获取简历详情失败: ${error.message}`, error.stack);
       return {
         success: false,
         data: null,
@@ -572,6 +575,7 @@ export class ResumeController {
         updateResumeDto,
         filesArray,
         fileTypes,
+        req.user.userId // 添加用户ID
       );
       
       return result;

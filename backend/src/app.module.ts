@@ -14,6 +14,7 @@ import { FollowUpModule } from './modules/follow-up/follow-up.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { ESignModule } from './modules/esign/esign.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ESignModule } from './modules/esign/esign.module';
     CustomersModule,
     ContractsModule,
     ESignModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

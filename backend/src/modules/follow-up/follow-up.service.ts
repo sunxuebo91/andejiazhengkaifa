@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { FollowUp, FollowUpType } from './models/follow-up.entity';
 import { CreateFollowUpDto } from './dto/create-follow-up.dto';
 import { User } from '../users/models/user.entity';
+import { Resume } from '../resume/models/resume.entity';
 
 // 定义填充后的用户信息类型
 export interface PopulatedUser {
@@ -31,6 +32,7 @@ export class FollowUpService {
   constructor(
     @InjectModel(FollowUp.name) private followUpModel: Model<FollowUp>,
     @InjectModel('User') private userModel: Model<User>,
+    @InjectModel(Resume.name) private resumeModel: Model<Resume>,
   ) {}
 
   // 创建跟进记录
@@ -43,6 +45,12 @@ export class FollowUpService {
     
     console.log('创建跟进记录的用户信息:', user);
     
+    // 验证简历是否存在
+    const resume = await this.resumeModel.findById(createFollowUpDto.resumeId);
+    if (!resume) {
+      throw new NotFoundException('关联的简历不存在');
+    }
+    
     // 创建跟进记录
     const followUp = new this.followUpModel({
       ...createFollowUpDto,
@@ -52,6 +60,24 @@ export class FollowUpService {
 
     // 保存跟进记录
     const savedFollowUp = await followUp.save();
+    
+    // 🎯 关键逻辑：更新简历的updatedAt时间戳
+    // 这不是修改简历内容，而是更新简历的活动时间
+    const currentTime = new Date();
+    await this.resumeModel.findByIdAndUpdate(
+      createFollowUpDto.resumeId,
+      { 
+        updatedAt: currentTime,
+        // 可选：记录最后跟进人
+        lastUpdatedBy: new Types.ObjectId(userId)
+      },
+      { 
+        timestamps: false, // 禁用自动时间戳，使用我们手动设置的时间
+        new: true 
+      }
+    );
+    
+    console.log(`简历 ${createFollowUpDto.resumeId} 的updatedAt已更新为: ${currentTime.toISOString()}`);
     
     // 由于配置了自动填充,直接查询即可获取填充后的数据
     const populatedFollowUp = await this.followUpModel

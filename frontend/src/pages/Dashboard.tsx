@@ -1,177 +1,596 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Row, Col, Statistic, Spin, App } from 'antd';
-import { UserOutlined, FileAddOutlined, CheckCircleOutlined, CloseCircleOutlined, HomeOutlined } from '@ant-design/icons';
-import apiService from '../services/api';
-import dayjs from 'dayjs';
-import type { Resume } from '../services/resume.service';
+import { Card, Row, Col, Statistic, Spin, App, Progress, Typography, Alert, DatePicker, Select, Space, Button } from 'antd';
+import {
+  UserOutlined,
+  FileAddOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  HomeOutlined,
+  TeamOutlined,
+  ContainerOutlined,
+  RiseOutlined,
+  ShoppingCartOutlined,
+  DollarOutlined,
+  MoneyCollectOutlined,
+  LineChartOutlined,
+  BankOutlined,
+  PercentageOutlined,
+  ClockCircleOutlined,
+  SwapOutlined,
+  SmileOutlined,
+  ThunderboltOutlined,
+  ReloadOutlined
+} from '@ant-design/icons';
+import dashboardService from '../services/dashboardService';
+import type { DashboardStats } from '../types/dashboard.types';
+import dayjs, { Dayjs } from 'dayjs';
 
-// 定义统计数据接口
-interface Stats {
-  totalResumes: number;
-  newTodayResumes: number;
-  acceptingResumes: number;
-  notAcceptingResumes: number;
-  onServiceResumes: number;
-}
+const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
+
+// 时间筛选选项
+const TIME_RANGE_OPTIONS = [
+  { label: '今日', value: 'today' },
+  { label: '昨日', value: 'yesterday' },
+  { label: '本周', value: 'thisWeek' },
+  { label: '上周', value: 'lastWeek' },
+  { label: '本月', value: 'thisMonth' },
+  { label: '上月', value: 'lastMonth' },
+  { label: '近7天', value: 'last7Days' },
+  { label: '近30天', value: 'last30Days' },
+  { label: '自定义', value: 'custom' }
+];
 
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
-  const [stats, setStats] = useState<Stats>({
-    totalResumes: 0,
-    newTodayResumes: 0,
-    acceptingResumes: 0,
-    notAcceptingResumes: 0,
-    onServiceResumes: 0
-  });
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [timeRange, setTimeRange] = useState<string>('thisMonth');
+  const [customDateRange, setCustomDateRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { message: messageApi } = App.useApp();
 
-  // 从后端获取统计数据
-  const fetchStats = async () => {
+  // 获取时间范围的开始和结束日期
+  const getDateRange = (range: string): [string, string] => {
+    const now = dayjs();
+    
+    switch (range) {
+      case 'today':
+        return [now.startOf('day').toISOString(), now.endOf('day').toISOString()];
+      case 'yesterday':
+        const yesterday = now.subtract(1, 'day');
+        return [yesterday.startOf('day').toISOString(), yesterday.endOf('day').toISOString()];
+      case 'thisWeek':
+        return [now.startOf('week').toISOString(), now.endOf('week').toISOString()];
+      case 'lastWeek':
+        const lastWeekStart = now.subtract(1, 'week').startOf('week');
+        const lastWeekEnd = now.subtract(1, 'week').endOf('week');
+        return [lastWeekStart.toISOString(), lastWeekEnd.toISOString()];
+      case 'thisMonth':
+        return [now.startOf('month').toISOString(), now.endOf('month').toISOString()];
+      case 'lastMonth':
+        const lastMonthStart = now.subtract(1, 'month').startOf('month');
+        const lastMonthEnd = now.subtract(1, 'month').endOf('month');
+        return [lastMonthStart.toISOString(), lastMonthEnd.toISOString()];
+      case 'last7Days':
+        return [now.subtract(7, 'day').startOf('day').toISOString(), now.endOf('day').toISOString()];
+      case 'last30Days':
+        return [now.subtract(30, 'day').startOf('day').toISOString(), now.endOf('day').toISOString()];
+      case 'custom':
+        if (customDateRange) {
+          return [customDateRange[0].startOf('day').toISOString(), customDateRange[1].endOf('day').toISOString()];
+        }
+        return [now.startOf('month').toISOString(), now.endOf('month').toISOString()];
+      default:
+        return [now.startOf('month').toISOString(), now.endOf('month').toISOString()];
+    }
+  };
+
+  const fetchDashboardStats = async () => {
     setLoading(true);
+    setError(null);
     try {
-      // 获取所有简历，设置合理的pageSize
-      const response = await apiService.get('/api/resumes', {
-        page: 1,
-        pageSize: 100 // 设置合理的值，避免后端参数验证错误
-      }, {
-        timeout: 10000
+      const [startDate, endDate] = getDateRange(timeRange);
+      const data = await dashboardService.getDashboardStats({
+        startDate,
+        endDate
       });
-
-      // 使用后端返回的新格式
-      const { success, data: paginatedData } = response;
-      if (!success || !paginatedData) {
-        throw new Error('获取数据失败');
-      }
-
-      const { items: resumes = [], total } = paginatedData;
-
-      // 如果返回的数据总数大于当前获取的数据量，说明还有更多数据
-      if (total > resumes.length) {
-        console.warn(`警告：简历总数(${total})大于当前获取的数据量(${resumes.length})，统计数据可能不准确`);
-      }
-
-      // 当天的起始时间（零点）
-      const todayStart = dayjs().startOf('day');
-      
-      // 分类统计
-      const totalResumes = total; // 使用后端返回的总数
-      
-      // 今日新增：创建时间在今天的简历
-      const newTodayResumes = resumes.filter((resume: Resume) => 
-        resume.createdAt && dayjs(resume.createdAt).isAfter(todayStart)
-      ).length;
-      
-      // 按接单状态统计
-      const acceptingResumes = resumes.filter((resume: Resume) => resume.orderStatus === 'accepting').length;
-      const notAcceptingResumes = resumes.filter((resume: Resume) => resume.orderStatus === 'not-accepting').length;
-      const onServiceResumes = resumes.filter((resume: Resume) => resume.orderStatus === 'on-service').length;
-
-      // 更新统计数据
-      setStats({
-        totalResumes,
-        newTodayResumes,
-        acceptingResumes,
-        notAcceptingResumes,
-        onServiceResumes
-      });
-    } catch (error) {
-      console.error('获取统计数据失败:', error);
-      messageApi.error('获取统计数据失败，请稍后重试');
+      setStats(data);
+    } catch (error: any) {
+      console.error('获取驾驶舱统计数据失败:', error);
+      messageApi.error(error.message || '获取统计数据失败，请稍后重试');
+      setError('获取数据失败，请稍后重试');
     } finally {
       setLoading(false);
     }
   };
 
+  // 手动刷新数据
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchDashboardStats();
+    setRefreshing(false);
+  };
+
+  // 时间范围变化处理
+  const handleTimeRangeChange = (value: string) => {
+    setTimeRange(value);
+    if (value !== 'custom') {
+      setCustomDateRange(null);
+    }
+  };
+
+  // 自定义日期范围变化处理
+  const handleCustomDateChange = (dates: any) => {
+    if (dates && dates.length === 2) {
+      setCustomDateRange([dates[0], dates[1]]);
+      if (timeRange === 'custom') {
+        // 如果选择了自定义日期且当前是自定义模式，立即刷新数据
+        setTimeout(fetchDashboardStats, 100);
+      }
+    } else {
+      setCustomDateRange(null);
+    }
+  };
+
   useEffect(() => {
-    fetchStats();
-    
-    // 每分钟刷新一次数据
-    const intervalId = setInterval(() => {
-      fetchStats();
-    }, 60000);
-    
+    fetchDashboardStats();
+  }, [timeRange]);
+
+  // 自动刷新（每分钟）
+  useEffect(() => {
+    const intervalId = setInterval(fetchDashboardStats, 60000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [timeRange]);
+
+  // 渲染线索来源分布
+  const renderLeadSourceDistribution = () => {
+    if (!stats?.leadQuality.leadSourceDistribution) return null;
+    
+    const sources = Object.entries(stats.leadQuality.leadSourceDistribution)
+      .sort(([,a], [,b]) => b - a);
+    
+    const totalLeads = sources.reduce((sum, [,count]) => sum + count, 0);
+    
+    return (
+      <div style={{ marginTop: 16 }}>
+        <Text strong style={{ marginBottom: 8, display: 'block' }}>线索来源分布</Text>
+        {sources.map(([source, count], index) => {
+          const percentage = totalLeads > 0 ? ((count / totalLeads) * 100).toFixed(1) : '0';
+          const colors = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#eb2f96'];
+          return (
+            <div key={source} style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text>{source}</Text>
+                <Text strong>{count}个 ({percentage}%)</Text>
+              </div>
+              <Progress 
+                percent={parseFloat(percentage)} 
+                showInfo={false} 
+                strokeColor={colors[index % colors.length]}
+                size="small"
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   const content = (
-    <Card style={{ marginBottom: 24 }}>
-      <Row gutter={[24, 24]}>
-        <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-          <Card variant="outlined">
-            <Statistic
-              title="简历总量"
-              value={stats.totalResumes}
-              valueStyle={{ color: '#1890ff' }}
-              prefix={<UserOutlined />}
-              suffix="个"
+    <div>
+      {/* 顶部时间筛选器 */}
+      <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
+        <Col>
+          <Space>
+            <Select
+              defaultValue="thisMonth"
+              style={{ width: 120 }}
+              onChange={handleTimeRangeChange}
+              options={TIME_RANGE_OPTIONS}
             />
-          </Card>
+            {timeRange === 'custom' && (
+              <RangePicker
+                value={customDateRange}
+                onChange={handleCustomDateChange}
+                style={{ width: 250 }}
+              />
+            )}
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={handleRefresh}
+              loading={refreshing}
+              disabled={loading}
+            >
+              刷新
+            </Button>
+          </Space>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-          <Card variant="outlined">
+      </Row>
+
+      {/* 第一行：人员资源指标（简历相关）*/}
+      <Card title={<Title level={4}>👥 人员资源概览</Title>} style={{ marginBottom: 24 }}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="简历总量"
+                value={stats?.resumes.totalResumes || 0}
+                valueStyle={{ color: '#1890ff' }}
+                prefix={<UserOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="今日新增简历"
+                value={stats?.resumes.newTodayResumes || 0}
+                valueStyle={{ color: '#52c41a' }}
+                prefix={<FileAddOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="想接单阿姨"
+                value={stats?.resumes.acceptingResumes || 0}
+                valueStyle={{ color: '#faad14' }}
+                prefix={<CheckCircleOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="不接单阿姨"
+                value={stats?.resumes.notAcceptingResumes || 0}
+                valueStyle={{ color: '#ff4d4f' }}
+                prefix={<CloseCircleOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="已上户阿姨"
+                value={stats?.resumes.onServiceResumes || 0}
+                valueStyle={{ color: '#13c2c2' }}
+                prefix={<HomeOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+        </Row>
+      </Card>
+
+      {/* 第二行：客户业务指标 */}
+      <Card title={<Title level={4}>🎯 客户业务指标</Title>} style={{ marginBottom: 24 }}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="客户总量"
+                value={stats?.customerBusiness.totalCustomers || 0}
+                valueStyle={{ color: '#1890ff' }}
+                prefix={<TeamOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="今日新增客户"
+                value={stats?.customerBusiness.newTodayCustomers || 0}
+                valueStyle={{ color: '#52c41a' }}
+                prefix={<UserOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="待匹配客户"
+                value={stats?.customerBusiness.pendingMatchCustomers || 0}
+                valueStyle={{ color: '#faad14' }}
+                prefix={<RiseOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="已签约客户"
+                value={stats?.customerBusiness.signedCustomers || 0}
+                valueStyle={{ color: '#52c41a' }}
+                prefix={<CheckCircleOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="流失客户"
+                value={stats?.customerBusiness.lostCustomers || 0}
+                valueStyle={{ color: '#ff4d4f' }}
+                prefix={<CloseCircleOutlined />}
+                suffix="个"
+              />
+            </Card>
+          </Col>
+        </Row>
+      </Card>
+
+      {/* 第三行：线索质量 & 合同指标 */}
+      <Row gutter={24} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+          <Card title={<Title level={4}>📊 线索质量分析</Title>} style={{ height: '100%' }}>
             <Statistic
-              title="今日新增"
-              value={stats.newTodayResumes}
+              title="A类线索占比"
+              value={stats?.leadQuality.aLevelLeadsRatio || 0}
+              precision={2}
               valueStyle={{ color: '#52c41a' }}
-              prefix={<FileAddOutlined />}
-              suffix="个"
+              prefix={<RiseOutlined />}
+              suffix="%"
             />
+            {renderLeadSourceDistribution()}
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-          <Card variant="outlined">
-            <Statistic
-              title="想接单阿姨"
-              value={stats.acceptingResumes}
-              valueStyle={{ color: '#faad14' }}
-              prefix={<CheckCircleOutlined />}
-              suffix="个"
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-          <Card variant="outlined">
-            <Statistic
-              title="不接单阿姨"
-              value={stats.notAcceptingResumes}
-              valueStyle={{ color: '#ff4d4f' }}
-              prefix={<CloseCircleOutlined />}
-              suffix="个"
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-          <Card variant="outlined">
-            <Statistic
-              title="已上户阿姨"
-              value={stats.onServiceResumes}
-              valueStyle={{ color: '#13c2c2' }}
-              prefix={<HomeOutlined />}
-              suffix="个"
-            />
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+          <Card title={<Title level={4}>📋 合同签约指标</Title>} style={{ height: '100%' }}>
+            <Row gutter={[16, 16]}>
+              <Col span={8}>
+                <Statistic
+                  title="合同总量"
+                  value={stats?.contracts.totalContracts || 0}
+                  valueStyle={{ color: '#1890ff' }}
+                  prefix={<ContainerOutlined />}
+                  suffix="份"
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title="本月新签"
+                  value={stats?.contracts.newThisMonthContracts || 0}
+                  valueStyle={{ color: '#52c41a' }}
+                  prefix={<FileAddOutlined />}
+                  suffix="份"
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title="签约中合同"
+                  value={stats?.contracts.signingContracts || 0}
+                  valueStyle={{ color: '#faad14' }}
+                  prefix={<ShoppingCartOutlined />}
+                  suffix="份"
+                />
+              </Col>
+              <Col span={12}>
+                <Statistic
+                  title="换人合同数"
+                  value={stats?.contracts.changeWorkerContracts || 0}
+                  valueStyle={{ color: '#ff7a45' }}
+                  prefix={<RiseOutlined />}
+                  suffix="份"
+                />
+              </Col>
+              <Col span={12}>
+                <Statistic
+                  title="签约转化率"
+                  value={stats?.contracts.signConversionRate || 0}
+                  precision={2}
+                  valueStyle={{ color: '#13c2c2' }}
+                  prefix={<DollarOutlined />}
+                  suffix="%"
+                />
+              </Col>
+            </Row>
           </Card>
         </Col>
       </Row>
-    </Card>
+
+      {/* 第四行：财务营收指标 */}
+      <Card title={<Title level={4}>💰 财务营收指标</Title>} style={{ marginBottom: 24 }}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="本月服务费收入"
+                value={stats?.financial.monthlyServiceFeeIncome || 0}
+                valueStyle={{ color: '#1890ff' }}
+                prefix={<MoneyCollectOutlined />}
+                suffix="元"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="本月工资支出"
+                value={stats?.financial.monthlyWageExpenditure || 0}
+                valueStyle={{ color: '#ff4d4f' }}
+                prefix={<BankOutlined />}
+                suffix="元"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="毛利润率"
+                value={stats?.financial.grossProfitMargin || 0}
+                precision={2}
+                valueStyle={{ color: '#52c41a' }}
+                prefix={<PercentageOutlined />}
+                suffix="%"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="环比增长率"
+                value={stats?.financial.monthOverMonthGrowthRate || 0}
+                precision={2}
+                valueStyle={{ 
+                  color: (stats?.financial.monthOverMonthGrowthRate || 0) >= 0 ? '#52c41a' : '#ff4d4f' 
+                }}
+                prefix={<LineChartOutlined />}
+                suffix="%"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="生效中合同"
+                value={stats?.financial.totalActiveContracts || 0}
+                valueStyle={{ color: '#722ed1' }}
+                prefix={<ContainerOutlined />}
+                suffix="份"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="平均服务费"
+                value={stats?.financial.averageServiceFee || 0}
+                valueStyle={{ color: '#13c2c2' }}
+                prefix={<DollarOutlined />}
+                suffix="元"
+              />
+            </Card>
+          </Col>
+        </Row>
+      </Card>
+
+      {/* 第五行：运营效率指标 */}
+      <Card title={<Title level={4}>⚡ 运营效率指标</Title>} style={{ marginBottom: 24 }}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="平均匹配时长"
+                value={stats?.efficiency.averageMatchingDays || 0}
+                precision={1}
+                valueStyle={{ color: '#1890ff' }}
+                prefix={<ClockCircleOutlined />}
+                suffix="天"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="换人率"
+                value={stats?.efficiency.workerChangeRate || 0}
+                precision={2}
+                valueStyle={{ 
+                  color: (stats?.efficiency.workerChangeRate || 0) > 10 ? '#ff4d4f' : '#52c41a' 
+                }}
+                prefix={<SwapOutlined />}
+                suffix="%"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="客户满意度"
+                value={stats?.efficiency.customerSatisfactionRate || 0}
+                precision={1}
+                valueStyle={{ color: '#52c41a' }}
+                prefix={<SmileOutlined />}
+                suffix="%"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="合同签署率"
+                value={stats?.efficiency.contractSigningRate || 0}
+                precision={2}
+                valueStyle={{ color: '#13c2c2' }}
+                prefix={<CheckCircleOutlined />}
+                suffix="%"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="平均服务时长"
+                value={stats?.efficiency.averageServiceDuration || 0}
+                valueStyle={{ color: '#722ed1' }}
+                prefix={<ClockCircleOutlined />}
+                suffix="天"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Card variant="outlined">
+              <Statistic
+                title="快速匹配率"
+                value={stats?.efficiency.quickMatchingRate || 0}
+                precision={2}
+                valueStyle={{ color: '#faad14' }}
+                prefix={<ThunderboltOutlined />}
+                suffix="%"
+              />
+            </Card>
+          </Col>
+        </Row>
+      </Card>
+
+      {/* 更新时间显示 */}
+      {stats?.updateTime && (
+        <Card size="small">
+          <Text type="secondary">
+            数据更新时间：{dayjs(stats.updateTime).format('YYYY-MM-DD HH:mm:ss')}
+          </Text>
+        </Card>
+      )}
+    </div>
   );
 
   return (
     <PageContainer
       header={{
-        title: '驾驶舱',
+        title: '📊 业务驾驶舱',
+        subTitle: '实时监控核心业务指标',
       }}
     >
-      <div style={{ position: 'relative', minHeight: '200px' }}>
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', position: 'absolute', width: '100%', zIndex: 1 }}>
-            <Spin size="large" />
-          </div>
-        ) : null}
-        <div style={{ opacity: loading ? 0.5 : 1 }}>
+      <Spin 
+        spinning={loading || refreshing} 
+        tip="加载驾驶舱数据..." 
+        size="large"
+      >
+        <div style={{ minHeight: '400px' }}>
+          {error && (
+            <Alert
+              message="错误"
+              description={error}
+              type="error"
+              showIcon
+              style={{ marginBottom: 24 }}
+            />
+          )}
           {content}
         </div>
-      </div>
+      </Spin>
     </PageContainer>
   );
 };

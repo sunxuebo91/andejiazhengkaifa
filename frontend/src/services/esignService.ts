@@ -1,4 +1,4 @@
-import apiClient from './api';
+import { api } from './api';
 
 export interface Contract {
   id: string;
@@ -220,7 +220,7 @@ class ESignService {
   // 获取合同列表
   async getContracts(): Promise<Contract[]> {
     try {
-      const response = await apiClient.get<ESignResponse<Contract[]>>('/api/esign/contracts');
+      const response = await api.get<ESignResponse<Contract[]>>('/api/esign/contracts');
       return response.data?.data || [];
     } catch (error) {
       console.error('获取合同列表失败:', error);
@@ -231,7 +231,7 @@ class ESignService {
   // 获取合同详情
   async getContract(id: string): Promise<Contract> {
     try {
-      const response = await apiClient.get<ESignResponse<Contract>>(`/esign/contracts/${id}`);
+      const response = await api.get<ESignResponse<Contract>>(`/esign/contracts/${id}`);
       if (!response.data?.data) {
         throw new Error('合同数据为空');
       }
@@ -245,7 +245,7 @@ class ESignService {
   // 创建合同
   async createContract(data: CreateContractRequest): Promise<Contract> {
     try {
-      const response = await apiClient.post<ESignResponse<Contract>>('/api/esign/contracts', data);
+      const response = await api.post<ESignResponse<Contract>>('/api/esign/contracts', data);
       if (!response.data?.data) {
         throw new Error('创建合同失败，返回数据为空');
       }
@@ -259,7 +259,7 @@ class ESignService {
   // 更新合同
   async updateContract(id: string, data: Partial<CreateContractRequest>): Promise<Contract> {
     try {
-      const response = await apiClient.put<ESignResponse<Contract>>(`/api/esign/contracts/${id}`, data);
+      const response = await api.put<ESignResponse<Contract>>(`/api/esign/contracts/${id}`, data);
       if (!response.data?.data) {
         throw new Error('更新合同失败，返回数据为空');
       }
@@ -273,7 +273,7 @@ class ESignService {
   // 删除合同
   async deleteContract(id: string): Promise<void> {
     try {
-      await apiClient.delete(`/api/esign/contracts/${id}`);
+      await api.delete(`/api/esign/contracts/${id}`);
     } catch (error) {
       console.error('删除合同失败:', error);
       throw new Error('删除合同失败');
@@ -283,7 +283,7 @@ class ESignService {
   // 发送签名请求
   async sendSignatureRequest(data: SignatureRequest): Promise<void> {
     try {
-      await apiClient.post<ESignResponse>('/api/esign/send-signature-request', data);
+      await api.post<ESignResponse>('/api/esign/send-signature-request', data);
     } catch (error) {
       console.error('发送签名请求失败:', error);
       throw new Error('发送签名请求失败');
@@ -293,7 +293,7 @@ class ESignService {
   // 签名合同
   async signContract(data: SignContractRequest): Promise<ESignResponse<any>> {
     try {
-      const response = await apiClient.post<ESignResponse<any>>('/api/esign/sign-contract', data);
+      const response = await api.post<ESignResponse<any>>('/api/esign/sign-contract', data);
       return response.data || { success: false, data: null, message: '签名失败' };
     } catch (error) {
       console.error('签名合同失败:', error);
@@ -304,7 +304,7 @@ class ESignService {
   // 获取签名URL
   async getSigningUrl(contractId: string): Promise<string> {
     try {
-      const response = await apiClient.get<ESignResponse<{ url: string }>>(`/api/esign/contracts/${contractId}/signing-url`);
+      const response = await api.get<ESignResponse<{ url: string }>>(`/api/esign/contracts/${contractId}/signing-url`);
       if (!response.data?.data?.url) {
         throw new Error('获取签名URL失败，返回数据为空');
       }
@@ -318,7 +318,7 @@ class ESignService {
   // 下载合同
   async downloadContract(contractId: string): Promise<Blob> {
     try {
-      const response = await apiClient.get(`/api/esign/contracts/${contractId}/download`, {
+      const response = await api.get(`/api/esign/contracts/${contractId}/download`, {
         responseType: 'blob'
       });
       return response.data;
@@ -331,7 +331,7 @@ class ESignService {
   // 获取签名历史
   async getSigningHistory(contractId: string): Promise<any[]> {
     try {
-      const response = await apiClient.get<ESignResponse<any[]>>(`/api/esign/contracts/${contractId}/history`);
+      const response = await api.get<ESignResponse<any[]>>(`/api/esign/contracts/${contractId}/history`);
       return response.data?.data || [];
     } catch (error) {
       console.error('获取签名历史失败:', error);
@@ -345,7 +345,7 @@ class ESignService {
       const formData = new FormData();
       formData.append('file', file);
       
-      const response = await apiClient.post<ESignResponse<{ fileId: string; fileName: string }>>(
+      const response = await api.post<ESignResponse<{ fileId: string; fileName: string }>>(
         '/api/esign/upload-contract-file', 
         formData,
         {
@@ -367,7 +367,7 @@ class ESignService {
   // 预览合同文件（旧版本，用于预览URL）
   async previewContractFile(contractId: string): Promise<string> {
     try {
-      const response = await apiClient.get<ESignResponse<{ previewUrl: string }>>(`/api/esign/contracts/${contractId}/preview`);
+      const response = await api.get<ESignResponse<{ previewUrl: string }>>(`/api/esign/contracts/${contractId}/preview`);
       if (!response.data?.data?.previewUrl) {
         throw new Error('预览合同失败，返回数据为空');
       }
@@ -381,7 +381,7 @@ class ESignService {
   // 批量操作
   async batchDeleteContracts(contractIds: string[]): Promise<void> {
     try {
-      await apiClient.post('/api/esign/contracts/batch-delete', { contractIds });
+      await api.post('/api/esign/contracts/batch-delete', { contractIds });
     } catch (error) {
       console.error('批量删除合同失败:', error);
       throw new Error('批量删除合同失败');
@@ -397,7 +397,7 @@ class ESignService {
     expired: number;
   }> {
     try {
-      const response = await apiClient.get<ESignResponse<{
+      const response = await api.get<ESignResponse<{
         total: number;
         draft: number;
         pending: number;
@@ -417,7 +417,7 @@ class ESignService {
   // 获取模板控件信息
   async getTemplateData(templateIdent: string): Promise<TemplateField[]> {
     try {
-      const response = await apiClient.post('/api/esign/template/data', {
+      const response = await api.post('/api/esign/template/data', {
         templateIdent
       });
       
@@ -487,7 +487,7 @@ class ESignService {
    */
   async createContractFlow(request: CreateContractFlowRequest): Promise<CreateContractFlowResponse> {
     try {
-      const response = await apiClient.post('/api/esign/create-contract-flow', request);
+      const response = await api.post('/api/esign/create-contract-flow', request);
       return response.data;
     } catch (error) {
       console.error('创建合同流程失败:', error);
@@ -500,7 +500,7 @@ class ESignService {
    */
   async addStranger(request: AddStrangerRequest): Promise<any> {
     try {
-      const response = await apiClient.post('/api/esign/add-stranger', request);
+      const response = await api.post('/api/esign/add-stranger', request);
       return response.data;
     } catch (error) {
       console.error('添加陌生用户失败:', error);
@@ -520,7 +520,7 @@ class ESignService {
     signOrder?: number;
   }): Promise<any> {
     try {
-      const response = await apiClient.post('/api/esign/create-contract-template', request);
+      const response = await api.post('/api/esign/create-contract-template', request);
       return response.data;
     } catch (error) {
       console.error('创建合同失败:', error);
@@ -584,7 +584,7 @@ class ESignService {
     signMark?: string;
   }>): Promise<any> {
     try {
-      const response = await apiClient.post('/api/esign/add-signers', request);
+      const response = await api.post('/api/esign/add-signers', request);
       return response.data;
     } catch (error) {
       console.error('添加签署方失败:', error);
@@ -614,7 +614,7 @@ class ESignService {
     signOrder?: 'sequential' | 'parallel';
   }): Promise<any> {
     try {
-      const response = await apiClient.post('/api/esign/add-signers-simple', request);
+      const response = await api.post('/api/esign/add-signers-simple', request);
       return response.data;
     } catch (error) {
       console.error('简化版添加签署方失败:', error);
@@ -627,7 +627,7 @@ class ESignService {
    */
   async getContractStatus(contractNo: string): Promise<ContractStatusResponse> {
     try {
-      const response = await apiClient.get(`/api/esign/contract-status/${contractNo}`);
+      const response = await api.get(`/api/esign/contract-status/${contractNo}`);
       
       // 按照官方文档处理合同状态响应
       console.log('🔍 合同状态API响应:', response);
@@ -659,7 +659,7 @@ class ESignService {
    */
   async syncContractStatus(contractNos: string[]): Promise<any> {
     try {
-      const response = await apiClient.post('/api/esign/sync-contract-status', { contractNos });
+      const response = await api.post('/api/esign/sync-contract-status', { contractNos });
       return response.data;
     } catch (error) {
       console.error('批量同步合同状态失败:', error);
@@ -685,7 +685,7 @@ class ESignService {
       const queryString = params.toString();
       const url = `/api/esign/download-contract/${contractNo}${queryString ? '?' + queryString : ''}`;
       
-      const response = await apiClient.get(url);
+      const response = await api.get(url);
       return response.data;
     } catch (error) {
       console.error('下载已签署合同失败:', error);
@@ -747,7 +747,7 @@ class ESignService {
   async addUsersBatch(request: AddUsersBatchRequest): Promise<AddUsersBatchResponse> {
     try {
       console.log('调用批量添加用户API:', request);
-      const response = await apiClient.post('/api/esign/add-users-batch', request);
+      const response = await api.post('/api/esign/add-users-batch', request);
       console.log('批量添加用户响应:', response.data);
       return response.data;
     } catch (error) {
@@ -761,7 +761,7 @@ class ESignService {
    */
   async getTemplates(): Promise<ContractTemplate[]> {
     try {
-      const response = await apiClient.get('/api/esign/templates');
+      const response = await api.get('/api/esign/templates');
       return response.data;
     } catch (error) {
       console.error('获取模板列表失败:', error);
@@ -775,7 +775,7 @@ class ESignService {
   async createContractStep2(request: CreateContractStep2Request): Promise<CreateContractStep2Response> {
     try {
       console.log('调用创建合同API:', request);
-      const response = await apiClient.post('/api/esign/create-contract', request);
+      const response = await api.post('/api/esign/create-contract', request);
       console.log('创建合同响应:', response);
       // 返回后端的爱签API响应格式
       return response.data as CreateContractStep2Response;
@@ -805,10 +805,10 @@ class ESignService {
       
       if (signers && signers.length > 0) {
         // 如果提供了签署方配置，使用POST请求
-        response = await apiClient.post(`/api/esign/preview-contract/${contractNo}`, { signers });
+        response = await api.post(`/api/esign/preview-contract/${contractNo}`, { signers });
       } else {
         // 否则使用GET请求（使用默认配置）
-        response = await apiClient.get(`/api/esign/preview-contract/${contractNo}`);
+        response = await api.get(`/api/esign/preview-contract/${contractNo}`);
       }
       
       return response.data;
@@ -823,7 +823,7 @@ class ESignService {
    */
   async withdrawContract(contractNo: string, reason?: string): Promise<any> {
     try {
-      const response = await apiClient.post(`/api/esign/withdraw-contract/${contractNo}`, { 
+      const response = await api.post(`/api/esign/withdraw-contract/${contractNo}`, { 
         reason: reason || '用户主动撤销合同' 
       });
       return response.data;

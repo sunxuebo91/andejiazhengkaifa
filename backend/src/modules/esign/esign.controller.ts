@@ -819,8 +819,8 @@ export class ESignController {
   }
 
   /**
-   * 添加甲乙双方用户
-   * 同时添加甲方（客户）和乙方（阿姨）两个用户
+   * 添加甲乙丙三方用户（恢复git 2.2.4版本的正确实现）
+   * 甲方（客户）、乙方（阿姨）、丙方（企业）
    */
   @Post('add-users-batch')
   async addUsersBatch(@Body() body: {
@@ -861,9 +861,9 @@ export class ESignController {
       // 🎯 关键修复：使用官方已实名的测试企业账号（支持无感知签约）
       const partyCRequest = {
         account: 'ASIGN91110111MACJMD2R5J', // 🔑 官方已实名测试企业账号
-        userType: 2, // 企业用户类型
+        userType: 1, // 企业用户类型
         companyName: '北京安得家政有限公司',
-        mobile: '400-000-0000',
+        mobile: '', // 企业用户不需要手机号
         isNotice: 0, // 企业用户不需要短信通知
         creditCode: '91110000000000000X', // 企业统一社会信用代码
         agentName: '张三', // 法人姓名
@@ -919,18 +919,21 @@ export class ESignController {
           partyA: {
             success: partyASuccess,
             message: partyAResponse?.msg || partyAResponse?.message || '未知状态',
+            code: partyAResponse?.code,
             request: partyARequest,
             response: partyAResponse
           },
           partyB: {
             success: partyBSuccess,
             message: partyBResponse?.msg || partyBResponse?.message || '未知状态',
+            code: partyBResponse?.code,
             request: partyBRequest,
             response: partyBResponse
           },
           partyC: {
             success: partyCSuccess,
             message: partyCResponse?.msg || partyCResponse?.message || '未知状态',
+            code: partyCResponse?.code,
             request: partyCRequest,
             response: partyCResponse
           }

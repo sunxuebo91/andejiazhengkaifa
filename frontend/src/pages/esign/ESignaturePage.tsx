@@ -1069,7 +1069,7 @@ const ESignatureStepPage: React.FC = () => {
               placeholder="请选择合同模板"
               loading={templateLoading}
               optionLabelProp="label"
-              dropdownStyle={{ maxWidth: '600px', minWidth: '400px' }}
+              popupClassName="esign-template-select-popup"
               onChange={(value) => {
                 const template = templates.find(t => t.templateNo === value);
                 setSelectedTemplate(template);

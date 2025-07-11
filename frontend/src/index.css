@@ -56,3 +56,9 @@ body {
   margin: 4px 8px !important;
   border-radius: 4px !important;
 }
+
+/* 电子签名模板选择器样式 */
+.esign-template-select-popup {
+  max-width: 600px !important;
+  min-width: 400px !important;
+}

@@ -63,7 +63,7 @@ export class ESignService {
       publicKey: this.configService.get<string>('ESIGN_PUBLIC_KEY', 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjkWacvkz1GQnZtln/YqkaemCdiBNpM39XPY2Tcev3ZEBlrW8fradWAT2HgtbAL/+zo07KMEUSd9fHVGdUzjbZOfcmY/JQhbZEXud3w250CpN5luK1XhQZ+KUP8mtnRDPo2TnYyykx1jbVA+3MlZeKmoLF/vEwqBQSfZT8qTNIprxdVnLC7/VoJCA/fo7w9DX2uF0kxEEs0tQK6BJl/Xjl/O8k2EzBWTY9DnLg1H/In8IXM9UKGtpPTQDIVCvRo8PuFyOz/BVI/ttOdQPchbti6aIi5w5Osvp2wkplt1myU+fbtYzc/7Broxui4rWEAsyiSERrPBRmzUgO6dDII38iQIDAQAB'),
       privateKey: this.configService.get<string>('ESIGN_PRIVATE_KEY'),
       privateKeyPath: this.configService.get<string>('ESIGN_PRIVATE_KEY_PATH'),
-      host: 'https://prev.asign.cn', // 开发环境域名
+      host: this.configService.get<string>('ESIGN_HOST', 'https://oapi.asign.cn'), // 从环境变量获取域名
       version: this.configService.get<string>('ESIGN_VERSION', 'v1'),
       notifyUrl: this.configService.get<string>('ESIGN_NOTIFY_URL', 'https://crm.andejiazheng.com/api/esign/callback'),
     };
@@ -2175,7 +2175,7 @@ export class ESignService {
     try {
       console.log('🔍 获取模板控件信息:', templateId);
       
-      // 基于爱签模板ID TNF606E6D81E2D49C99CC983F4D0412276-3387 的预期控件
+      // 基于爱签模板ID TNCBC37535B2134B5F949E1BBC86116B59 的预期控件
       // 这里我们定义该模板的实际控件结构
       const templateComponents = this.getTemplateComponentsConfig(templateId);
       
@@ -2225,7 +2225,7 @@ export class ESignService {
    * 获取模板控件配置
    */
   private getTemplateComponentsConfig(templateId: string): any[] {
-    // 针对模板 TNF606E6D81E2D49C99CC983F4D0412276-3387 的控件配置
+    // 针对模板 TNCBC37535B2134B5F949E1BBC86116B59 的控件配置
     const components = [
       {
         id: 'party_a_name',
@@ -2769,7 +2769,7 @@ export class ESignService {
             // 为企业用户设置默认印章（同步等待，确保在签章策略生效前完成）
             try {
               console.log(`🔧 为企业用户 ${signer.account} 设置默认印章...`);
-              await this.setDefaultSeal(signer.account, "e5a9b6ff9e754771b0c364f68f2c3717");
+              await this.setDefaultSeal(signer.account, "5f0e3bd2fc744bd8b500576e60b17711");
               console.log(`✅ 企业用户 ${signer.account} 默认印章设置完成`);
             } catch (error) {
               console.warn(`⚠️ 为企业用户 ${signer.account} 设置默认印章失败: ${error.message}`);
@@ -2865,7 +2865,7 @@ export class ESignService {
 
         // 🔧 关键修复：为丙方（企业）添加顶层sealNo参数，按照官方文档要求
         if (index >= 2) {
-          signerData.sealNo = "e5a9b6ff9e754771b0c364f68f2c3717"; // 企业默认印章编号
+          signerData.sealNo = "5f0e3bd2fc744bd8b500576e60b17711"; // 企业默认印章编号
           console.log(`🏢 为企业签署人设置顶层sealNo参数: ${signerData.sealNo}`);
         }
 
@@ -2996,7 +2996,7 @@ export class ESignService {
       
       const bizData = {
         account: account,
-        sealNo: sealNo || "e5a9b6ff9e754771b0c364f68f2c3717" // 官方默认章编号
+        sealNo: sealNo || "5f0e3bd2fc744bd8b500576e60b17711" // 官方默认章编号
       };
 
       const response = await this.callESignAPI('/user/setDefaultSeal', bizData);
@@ -3848,7 +3848,7 @@ export class ESignService {
       console.log('🔍 获取真实模板列表');
 
       // 目前使用已知的模板编号
-      const knownTemplateNo = 'TNF606E6D81E2D49C99CC983F4D0412276-3387';
+      const knownTemplateNo = 'TNCBC37535B2134B5F949E1BBC86116B59';
       
       // 获取模板信息
       const templateInfo = await this.getRealTemplateInfo(knownTemplateNo);
@@ -3859,7 +3859,7 @@ export class ESignService {
       
       // 返回空模板列表，提示用户重试
       return [{
-        templateNo: 'TNF606E6D81E2D49C99CC983F4D0412276-3387',
+                  templateNo: 'TNCBC37535B2134B5F949E1BBC86116B59',
         templateName: '模板加载失败',
         description: '无法从爱签API获取模板字段，请刷新页面重试',
         fields: []

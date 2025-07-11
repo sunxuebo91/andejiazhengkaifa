@@ -400,7 +400,7 @@ async function example() {
   const contractResult = await previewService.createContractWithPreview({
     contractNo: 'CONTRACT_' + Date.now(),
     contractName: '测试合同',
-    templates: [{ templateNo: 'TNF606E6D81E2D49C99CC983F4D0412276-3387' }],
+          templates: [{ templateNo: 'TNCBC37535B2134B5F949E1BBC86116B59' }],
     validityTime: 30,
     redirectUrl: 'https://yoursite.com/payment-guide',
     notifyUrl: 'https://yoursite.com/api/esign/callback'

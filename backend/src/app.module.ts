@@ -5,6 +5,7 @@ import { ResumeModule } from './modules/resume/resume.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { OcrModule } from './modules/ocr/ocr.module';
 import { HealthModule } from './modules/health/health.module';
+import { BaiduModule } from './modules/baidu/baidu.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TasksModule } from './modules/tasks/tasks.module';
@@ -39,6 +40,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     UploadModule,
     OcrModule,
     HealthModule,
+    BaiduModule,
     TasksModule,
     UsersModule,
     AuthModule,

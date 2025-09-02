@@ -739,7 +739,7 @@ export class ResumeController {
 
 
 
-  @Get('findAll')
+      @Get('findAll')
   @ApiOperation({ summary: '获取简历列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findAllOld(

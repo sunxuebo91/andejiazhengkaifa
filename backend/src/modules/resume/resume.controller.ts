@@ -88,7 +88,7 @@ export class ResumeController {
   })
   async create(
     @Body() dto: CreateResumeDto,
-    @UploadedFiles() files: { 
+    @UploadedFiles() files: {
       idCardFront?: Express.Multer.File[],
       idCardBack?: Express.Multer.File[],
       photoFiles?: Express.Multer.File[],
@@ -143,7 +143,7 @@ export class ResumeController {
         filesArray.push(...files.medicalReportFiles);
         fileTypes.push(...files.medicalReportFiles.map(() => 'medicalReport'));
       }
-      
+
       this.logger.debug('解析后的文件信息:', {
         jobType: dto.jobType,
         filesCount: filesArray.length,
@@ -156,29 +156,29 @@ export class ResumeController {
         filesArray,
         fileTypes
       );
-  
+
       // 检查是否有文件上传错误
       if (resume && resume.fileUploadErrors && resume.fileUploadErrors.length > 0) {
         fileErrors = resume.fileUploadErrors;
         delete resume.fileUploadErrors; // 移除错误信息，避免污染返回数据
       }
-  
+
       // 如果简历创建成功，即使有文件上传错误也返回成功
       if (resume) {
         this.logger.log(`简历创建成功: ${resume._id}`);
         return {
           success: true,
           data: resume,
-          message: fileErrors.length > 0 
+          message: fileErrors.length > 0
             ? `简历创建成功，但部分文件上传失败: ${fileErrors.join(', ')}`
             : '创建简历成功'
         };
       }
-  
+
       throw new Error('简历创建失败');
     } catch (error) {
       this.logger.error(`创建简历失败: ${error.message}`, error.stack);
-      
+
       // 处理特定类型的错误
       if (error instanceof ConflictException) {
         return {
@@ -187,7 +187,7 @@ export class ResumeController {
           message: error.message
         };
       }
-      
+
       if (error instanceof BadRequestException) {
         return {
           success: false,
@@ -195,7 +195,7 @@ export class ResumeController {
           message: error.message
         };
       }
-      
+
       // 如果简历已经创建成功，但后续处理出错，返回部分成功状态
       if (resume) {
         this.logger.warn(`简历已创建但处理过程中出现错误: ${error.message}`, {
@@ -208,7 +208,7 @@ export class ResumeController {
           message: `简历已创建，但处理过程中出现错误: ${error.message}`
         };
       }
-      
+
       // 完全失败的情况
       return {
         success: false,
@@ -288,7 +288,7 @@ export class ResumeController {
 
       this.logger.log(`开始处理Excel导入，文件名: ${file.originalname}`);
       const importResults = await this.resumeService.importFromExcel(file.path, req.user.userId);
-      
+
       return {
         success: true,
         data: importResults,
@@ -327,7 +327,7 @@ export class ResumeController {
 
       // 详细记录请求信息
       this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}`);
-      
+
       // 安全地解析页码
       try {
         if (pageStr) {
@@ -339,7 +339,7 @@ export class ResumeController {
       } catch (e) {
         this.logger.warn(`页码解析错误: ${e.message}`);
       }
-      
+
       // 安全地解析每页条数
       try {
         if (pageSizeStr) {
@@ -351,7 +351,7 @@ export class ResumeController {
       } catch (e) {
         this.logger.warn(`每页条数解析错误: ${e.message}`);
       }
-      
+
       // 安全地解析最大年龄
       try {
         if (maxAgeStr) {
@@ -363,21 +363,21 @@ export class ResumeController {
       } catch (e) {
         this.logger.warn(`最大年龄解析错误: ${e.message}`);
       }
-      
+
       this.logger.log(`解析后的参数: page=${page}, pageSize=${pageSize}, maxAge=${maxAge}`);
-      
+
       // 调用服务获取数据
       const result = await this.resumeService.findAll(
-        page, 
-        pageSize, 
-        keyword, 
+        page,
+        pageSize,
+        keyword,
         jobType,
         orderStatus,
         maxAge,
         nativePlace,
         ethnicity
       );
-      
+
       return {
         success: true,
         data: result,
@@ -399,7 +399,7 @@ export class ResumeController {
   async getOptions() {
     try {
       const options = await this.resumeService.getFilterOptions();
-      
+
       return {
         success: true,
         data: options,
@@ -471,6 +471,51 @@ export class ResumeController {
     }
   }
 
+  @Post(':id/share')
+  @ApiOperation({ summary: '生成简历分享链接（返回令牌）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiBody({ schema: { type: 'object', properties: { expiresInHours: { type: 'number', example: 72 } } } })
+  async createShare(
+    @Param('id') id: string,
+    @Body('expiresInHours') expiresInHours?: string | number,
+  ) {
+    try {
+      const hours = expiresInHours === undefined || expiresInHours === null || expiresInHours === ''
+        ? 72
+        : Number(expiresInHours);
+      const { token, expireAt } = this.resumeService.createShareToken(id, isNaN(hours) ? 72 : hours);
+      return {
+        success: true,
+        data: {
+          token,
+          expireAt,
+          // 小程序公开详情页路径（由前端/小程序直接使用）
+          path: `/pages/public/detail/index?token=${token}`,
+        },
+        message: '生成分享链接成功',
+      };
+    } catch (error) {
+      this.logger.error(`生成分享链接失败: ${error.message}`);
+      return { success: false, data: null, message: error.message || '生成分享链接失败' };
+    }
+  }
+
+  @Get('shared/:token')
+  @Public()
+  @ApiOperation({ summary: '获取分享简历（脱敏）详情' })
+  @ApiParam({ name: 'token', description: '分享令牌' })
+  async getShared(@Param('token') token: string) {
+    try {
+      const data = await this.resumeService.findSharedByToken(token);
+      return { success: true, data, message: '获取分享详情成功' };
+    } catch (error) {
+      this.logger.warn(`获取分享详情失败: ${error.message}`);
+      return { success: false, data: null, message: error.message || '获取分享详情失败' };
+    }
+  }
+
+
+
   @Get(':id')
   @ApiOperation({ summary: '获取简历详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -510,7 +555,7 @@ export class ResumeController {
   async update(
     @Param('id') id: string,
     @Body() updateResumeDto: UpdateResumeDto,
-    @UploadedFiles() files: { 
+    @UploadedFiles() files: {
       idCardFront?: Express.Multer.File[],
       idCardBack?: Express.Multer.File[],
       photoFiles?: Express.Multer.File[],
@@ -522,7 +567,7 @@ export class ResumeController {
     try {
       // 确保files对象存在，避免undefined访问错误
       const safeFiles = files || {};
-      
+
       this.logger.debug('更新简历 - 接收到的文件数据:', {
         idCardFront: safeFiles.idCardFront?.length || 0,
         idCardBack: safeFiles.idCardBack?.length || 0,
@@ -566,12 +611,12 @@ export class ResumeController {
         filesArray.push(...safeFiles.medicalReportFiles);
         fileTypes.push(...safeFiles.medicalReportFiles.map(() => 'medicalReport'));
       }
-      
+
       this.logger.debug('更新简历 - 解析后的文件信息:', {
         filesCount: filesArray.length,
         fileTypes: fileTypes
       });
-      
+
       const result = await this.resumeService.updateWithFiles(
         id,
         updateResumeDto,
@@ -579,7 +624,7 @@ export class ResumeController {
         fileTypes,
         req.user.userId // 添加用户ID
       );
-      
+
       return result;
     } catch (error) {
       console.error('更新简历失败:', error);
@@ -708,7 +753,7 @@ export class ResumeController {
           type: 'string',
           format: 'binary',
         },
-        type: { 
+        type: {
           type: 'string',
           description: '文件类型：idCardFront/idCardBack/personalPhoto/certificate/medicalReport'
         },
@@ -763,7 +808,7 @@ export class ResumeController {
       // 详细记录请求信息
       this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}`);
       console.log(`🔥🔥🔥 [CONSOLE-DEBUG-OLD] findAllOld方法被调用! URL: ${req?.url}`);
-      
+
       // 安全地解析页码
       try {
         if (pageStr) {
@@ -775,7 +820,7 @@ export class ResumeController {
       } catch (e) {
         this.logger.warn(`页码解析错误: ${e.message}`);
       }
-      
+
       // 安全地解析每页条数
       try {
         if (pageSizeStr) {
@@ -787,7 +832,7 @@ export class ResumeController {
       } catch (e) {
         this.logger.warn(`每页条数解析错误: ${e.message}`);
       }
-      
+
       // 安全地解析最大年龄
       try {
         if (maxAgeStr) {
@@ -799,21 +844,21 @@ export class ResumeController {
       } catch (e) {
         this.logger.warn(`最大年龄解析错误: ${e.message}`);
       }
-      
+
       this.logger.log(`解析后的参数: page=${page}, pageSize=${pageSize}, maxAge=${maxAge}`);
-      
+
       // 调用服务获取数据
       const result = await this.resumeService.findAll(
-        page, 
-        pageSize, 
-        keyword, 
+        page,
+        pageSize,
+        keyword,
         jobType,
         orderStatus,
         maxAge,
         nativePlace,
         ethnicity
       );
-      
+
       return {
         success: true,
         data: result,

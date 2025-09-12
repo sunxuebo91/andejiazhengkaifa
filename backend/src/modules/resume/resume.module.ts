@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { JwtModule } from '@nestjs/jwt';
+
 import { Resume, ResumeSchema } from './models/resume.entity';
 import { WorkExperienceSchema, WorkExperienceSchemaFactory } from './models/work-experience.schema';
 import { FileInfoSchema, FileInfoSchemaFactory } from './models/file-info.schema';
@@ -15,6 +17,11 @@ import { UploadModule } from '../upload/upload.module';
       { name: FileInfoSchema.name, schema: FileInfoSchemaFactory }
     ]),
     UploadModule,
+    // 为分享令牌签发/验证提供 JwtService
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || 'andejiazheng-secret-key',
+      signOptions: { algorithm: 'HS256' }
+    }),
   ],
   controllers: [ResumeController],
   providers: [ResumeService],

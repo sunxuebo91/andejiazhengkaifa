@@ -127,7 +127,7 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'workExperi
   religion?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
-  // 文件相关字段
+  // 文件相关字段 - 旧格式
   idCardFront?: { url: string };
   idCardBack?: { url: string };
   photoUrls?: string[];
@@ -135,6 +135,10 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'workExperi
   medicalReportUrls?: string[];
   idCardFrontUrl?: string;
   idCardBackUrl?: string;
+  // 文件相关字段 - 新格式
+  personalPhoto?: { url: string; filename?: string; size?: number; mimetype?: string };
+  certificates?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
+  reports?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
 }
 
 // 添加类型转换辅助函数
@@ -726,49 +730,126 @@ const CreateResume: React.FC = () => {
           medical: { files: [] as CustomUploadFile[] }
         };
         
-        // 设置个人照片
+        // 设置个人照片 - 同时处理新格式和旧格式
+        const allPhotoFiles: CustomUploadFile[] = [];
+
+        console.log('🖼️ 编辑模式：加载个人照片');
+        console.log('  - 新格式个人照片:', extendedResume.personalPhoto);
+        console.log('  - 旧格式个人照片:', extendedResume.photoUrls);
+
+        // 处理新格式的个人照片
+        if (extendedResume.personalPhoto?.url) {
+          console.log('  ✅ 添加新格式个人照片:', extendedResume.personalPhoto.url);
+          allPhotoFiles.push({
+            uid: `existing-photo-new-0`,
+            name: extendedResume.personalPhoto.filename || '个人照片',
+            status: 'done' as const,
+            url: extendedResume.personalPhoto.url,
+            isExisting: true,
+            size: extendedResume.personalPhoto.size || 0
+          });
+        }
+
+        // 处理旧格式的个人照片
         if (extendedResume.photoUrls && extendedResume.photoUrls.length > 0) {
-          const existingPhotoFiles = extendedResume.photoUrls.map((url, index) => ({
-            uid: `existing-photo-${index}`,
+          console.log('  ✅ 添加旧格式个人照片:', extendedResume.photoUrls.length, '张');
+          const oldPhotoFiles = extendedResume.photoUrls.map((url, index) => ({
+            uid: `existing-photo-old-${index}`,
             name: `个人照片${index + 1}`,
             status: 'done' as const,
             url: url,
             isExisting: true,
             size: 0
           }));
-          updatedFileUploadState.photo.files = existingPhotoFiles as CustomUploadFile[];
-          // 同时保持旧的 state 以兼容其他逻辑
-          setPhotoFiles(existingPhotoFiles as CustomUploadFile[]);
+          allPhotoFiles.push(...oldPhotoFiles as CustomUploadFile[]);
         }
-        
-        // 设置技能证书
+
+        if (allPhotoFiles.length > 0) {
+          console.log('  📸 最终个人照片数量:', allPhotoFiles.length);
+          updatedFileUploadState.photo.files = allPhotoFiles;
+          setPhotoFiles(allPhotoFiles);
+        }
+
+        // 设置技能证书 - 同时处理新格式和旧格式
+        const allCertFiles: CustomUploadFile[] = [];
+
+        console.log('📜 编辑模式：加载证书');
+        console.log('  - 新格式证书:', extendedResume.certificates?.length || 0, '个');
+        console.log('  - 旧格式证书:', extendedResume.certificateUrls?.length || 0, '个');
+
+        // 处理新格式的证书
+        if (extendedResume.certificates && extendedResume.certificates.length > 0) {
+          console.log('  ✅ 添加新格式证书:', extendedResume.certificates.length, '个');
+          const newCertFiles = extendedResume.certificates.map((cert, index) => ({
+            uid: `existing-cert-new-${index}`,
+            name: cert.filename || `证书${index + 1}`,
+            status: 'done' as const,
+            url: cert.url,
+            isExisting: true,
+            size: cert.size || 0
+          }));
+          allCertFiles.push(...newCertFiles as CustomUploadFile[]);
+        }
+
+        // 处理旧格式的证书
         if (extendedResume.certificateUrls && extendedResume.certificateUrls.length > 0) {
-          const existingCertFiles = extendedResume.certificateUrls.map((url, index) => ({
-            uid: `existing-cert-${index}`,
+          console.log('  ✅ 添加旧格式证书:', extendedResume.certificateUrls.length, '个');
+          const oldCertFiles = extendedResume.certificateUrls.map((url, index) => ({
+            uid: `existing-cert-old-${index}`,
             name: `证书${index + 1}`,
             status: 'done' as const,
             url: url,
             isExisting: true,
             size: 0
           }));
-          updatedFileUploadState.certificate.files = existingCertFiles as CustomUploadFile[];
-          // 同时保持旧的 state 以兼容其他逻辑
-          setCertificateFiles(existingCertFiles as CustomUploadFile[]);
+          allCertFiles.push(...oldCertFiles as CustomUploadFile[]);
         }
-        
-        // 设置体检报告
+
+        if (allCertFiles.length > 0) {
+          console.log('  📜 最终证书数量:', allCertFiles.length);
+          updatedFileUploadState.certificate.files = allCertFiles;
+          setCertificateFiles(allCertFiles);
+        }
+
+        // 设置体检报告 - 同时处理新格式和旧格式
+        const allMedicalFiles: CustomUploadFile[] = [];
+
+        console.log('🏥 编辑模式：加载体检报告');
+        console.log('  - 新格式体检报告:', extendedResume.reports?.length || 0, '个');
+        console.log('  - 旧格式体检报告:', extendedResume.medicalReportUrls?.length || 0, '个');
+
+        // 处理新格式的体检报告
+        if (extendedResume.reports && extendedResume.reports.length > 0) {
+          console.log('  ✅ 添加新格式体检报告:', extendedResume.reports.length, '个');
+          const newMedicalFiles = extendedResume.reports.map((report, index) => ({
+            uid: `existing-medical-new-${index}`,
+            name: report.filename || `体检报告${index + 1}`,
+            status: 'done' as const,
+            url: report.url,
+            isExisting: true,
+            size: report.size || 0
+          }));
+          allMedicalFiles.push(...newMedicalFiles as CustomUploadFile[]);
+        }
+
+        // 处理旧格式的体检报告
         if (extendedResume.medicalReportUrls && extendedResume.medicalReportUrls.length > 0) {
-          const existingMedicalFiles = extendedResume.medicalReportUrls.map((url, index) => ({
-            uid: `existing-medical-${index}`,
+          console.log('  ✅ 添加旧格式体检报告:', extendedResume.medicalReportUrls.length, '个');
+          const oldMedicalFiles = extendedResume.medicalReportUrls.map((url, index) => ({
+            uid: `existing-medical-old-${index}`,
             name: `体检报告${index + 1}`,
             status: 'done' as const,
             url: url,
             isExisting: true,
             size: 0
           }));
-          updatedFileUploadState.medical.files = existingMedicalFiles as CustomUploadFile[];
-          // 同时保持旧的 state 以兼容其他逻辑
-          setMedicalReportFiles(existingMedicalFiles as CustomUploadFile[]);
+          allMedicalFiles.push(...oldMedicalFiles as CustomUploadFile[]);
+        }
+
+        if (allMedicalFiles.length > 0) {
+          console.log('  🏥 最终体检报告数量:', allMedicalFiles.length);
+          updatedFileUploadState.medical.files = allMedicalFiles;
+          setMedicalReportFiles(allMedicalFiles);
         }
         
         // 更新统一的文件上传状态

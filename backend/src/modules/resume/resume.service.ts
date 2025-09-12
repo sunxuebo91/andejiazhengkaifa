@@ -9,6 +9,8 @@ import { UploadService } from '../upload/upload.service';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 
+import { JwtService } from '@nestjs/jwt';
+
 @Injectable()
 export class ResumeService {
   private readonly logger = new Logger(ResumeService.name);
@@ -16,11 +18,12 @@ export class ResumeService {
   constructor(
     @InjectModel(Resume.name)
     private readonly resumeModel: Model<IResume>,
-    private uploadService: UploadService
+    private uploadService: UploadService,
+    private readonly jwtService: JwtService,
   ) {}
 
   async createWithFiles(
-    createResumeDto: CreateResumeDto & { userId: string }, 
+    createResumeDto: CreateResumeDto & { userId: string },
     files: Express.Multer.File[] = [],
     fileTypes: string[] = []
   ) {
@@ -49,7 +52,7 @@ export class ResumeService {
     // 确保files是数组
     const filesArray = Array.isArray(files) ? files : [];
     const fileUploadErrors: string[] = [];
-    
+
     // 分类存储文件信息
     const categorizedFiles = {
       idCardFront: null,
@@ -60,29 +63,29 @@ export class ResumeService {
       certificates: [],
       reports: []
     };
-    
+
     // 只有在有文件时才处理文件上传
     if (filesArray.length > 0) {
       // 上传文件
       for (let i = 0; i < filesArray.length; i++) {
         const file = filesArray[i];
         const fileType = fileTypes[i] || 'other';
-        
+
         if (file) {  // 确保文件存在
           try {
             // uploadService.uploadFile 返回完整的COS URL
             const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
-            
+
             if (fileUrl) {
               this.logger.debug(`文件上传成功，URL: ${fileUrl}`);
-              
+
               const fileInfo = {
                 url: fileUrl,  // 直接使用返回的完整URL
                 filename: file.originalname,
                 mimetype: file.mimetype,
                 size: file.size
               };
-              
+
               // 根据文件类型分类存储
               switch (fileType) {
                 case 'idCardFront':
@@ -138,7 +141,7 @@ export class ResumeService {
     try {
       const resume = new this.resumeModel(resumeData);
       const savedResume = await resume.save();
-      
+
       this.logger.log(`简历创建成功，文件信息: ${JSON.stringify({
         idCardFront: !!savedResume.idCardFront,
         idCardBack: !!savedResume.idCardBack,
@@ -146,11 +149,11 @@ export class ResumeService {
         certificateCount: savedResume.certificates?.length || 0,
         reportCount: savedResume.reports?.length || 0
       })}`);
-      
+
       return {
         success: true,
         data: savedResume,
-        message: fileUploadErrors.length > 0 
+        message: fileUploadErrors.length > 0
           ? `简历创建成功，但部分文件上传失败: ${fileUploadErrors.join(', ')}`
           : '简历创建成功'
       };
@@ -166,7 +169,7 @@ export class ResumeService {
     try {
       this.logger.log(`🔥 [SORT-FIX-FINAL] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
       console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
-      
+
       // 首次查询时检查updatedAt字段
       if (!this.hasCheckedUpdatedAt) {
         await this.batchFixMissingUpdatedAt();
@@ -175,7 +178,7 @@ export class ResumeService {
 
       // 构建查询条件
       const query: any = {};
-      
+
       // 关键词搜索
       if (keyword) {
         query.$or = [
@@ -184,27 +187,27 @@ export class ResumeService {
           { expectedPosition: { $regex: keyword, $options: 'i' } }
         ];
       }
-      
+
       // 工种筛选
       if (jobType) {
         query.jobType = jobType;
       }
-      
+
       // 接单状态筛选
       if (orderStatus) {
         query.orderStatus = orderStatus;
       }
-      
+
       // 年龄筛选
       if (maxAge !== undefined && maxAge !== null) {
         query.age = { $lte: maxAge };
       }
-      
+
       // 添加籍贯筛选
       if (nativePlace) {
         query.nativePlace = nativePlace;
       }
-      
+
       // 添加民族筛选
       if (ethnicity) {
         query.ethnicity = ethnicity;
@@ -213,7 +216,7 @@ export class ResumeService {
       this.logger.log(`🔥 [SORT-FIX-FINAL] 查询条件: ${JSON.stringify(query)}`);
 
       // 🔥 [SORT-FIX-FINAL] 使用分离的查询，确保排序和分页的执行顺序
-      
+
       // 1. 获取总记录数
       const total = await this.resumeModel.countDocuments(query).exec();
       this.logger.log(`🔥 [SORT-FIX-FINAL] 查询到总数: ${total}`);
@@ -228,22 +231,22 @@ export class ResumeService {
         .lean() // 使用lean提高性能
         .exec();
 
-      // 🔥 [CRITICAL-FIX] 强制二次排序确保正确性  
+      // 🔥 [CRITICAL-FIX] 强制二次排序确保正确性
       items = items.sort((a: any, b: any) => {
         const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
         const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
         return bTime - aTime; // 最新的在前面
       });
-        
+
       this.logger.log(`🔥 [SORT-FIX-FINAL] 查询完成 - 返回 ${items.length} 条记录`);
-      
+
       // 验证强制排序结果
       if (items.length > 0) {
         console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 强制排序后的前3条记录:`);
         items.slice(0, 3).forEach((item: any, index) => {
           console.log(`🔥🔥🔥 [CONSOLE-DEBUG]   ${index + 1}. ${item.name} - ${item.updatedAt}`);
         });
-        
+
         if (items.length > 1) {
           const first = items[0] as any;
           const second = items[1] as any;
@@ -312,17 +315,17 @@ export class ResumeService {
 
   async update(id: string, updateResumeDto: UpdateResumeDto, userId?: string) {
     const updateData: any = { ...updateResumeDto };
-    
+
     // 设置最后更新人
     if (userId) {
       updateData.lastUpdatedBy = new Types.ObjectId(userId);
     }
-    
+
     const resume = await this.resumeModel
       .findByIdAndUpdate(
-        new Types.ObjectId(id), 
-        updateData, 
-        { 
+        new Types.ObjectId(id),
+        updateData,
+        {
           new: true,
           // 确保触发timestamps的updatedAt更新
           timestamps: true,
@@ -363,7 +366,7 @@ export class ResumeService {
     }
 
     const fileIds = [...resume.fileIds];
-    
+
     // 上传新文件
     for (const file of files) {
       const fileId = await this.uploadService.uploadFile(file);
@@ -378,14 +381,14 @@ export class ResumeService {
   async addFileWithType(id: string, file: Express.Multer.File, fileType: string) {
     try {
       this.logger.debug(`开始处理文件上传: id=${id}, type=${fileType}, filename=${file.originalname}`);
-      
+
       // 验证文件类型参数
       const validFileTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport'];
       if (!validFileTypes.includes(fileType)) {
         this.logger.error(`无效的文件类型: ${fileType}, 有效类型: ${validFileTypes.join(', ')}`);
         throw new BadRequestException(`无效的文件类型: ${fileType}`);
       }
-      
+
       // 验证 ID 格式
       if (!Types.ObjectId.isValid(id)) {
         this.logger.error(`无效的简历ID格式: ${id}`);
@@ -394,7 +397,7 @@ export class ResumeService {
 
       const resumeId = new Types.ObjectId(id);
       const resumeDoc = await this.resumeModel.findById(resumeId);
-      
+
       if (!resumeDoc) {
         this.logger.error(`简历不存在: id=${id}`);
         throw new NotFoundException('简历不存在');
@@ -471,7 +474,7 @@ export class ResumeService {
     // 判断传入的是完整URL还是fileId
     let fileUrl: string;
     let fileId: string | null = null;
-    
+
     if (fileUrlOrId.startsWith('http://') || fileUrlOrId.startsWith('https://')) {
       // 传入的是完整URL
       fileUrl = fileUrlOrId;
@@ -487,10 +490,10 @@ export class ResumeService {
     if (fileId) {
       resume.fileIds = resume.fileIds.filter(id => id.toString() !== fileId);
     }
-    
+
     // 从所有URL数组中移除对应的文件URL
     let fileRemoved = false;
-    
+
     if (resume.photoUrls) {
       const originalLength = resume.photoUrls.length;
       resume.photoUrls = resume.photoUrls.filter(url => url !== fileUrl);
@@ -499,7 +502,7 @@ export class ResumeService {
         this.logger.debug(`从photoUrls中移除了文件: ${fileUrl}`);
       }
     }
-    
+
     if (resume.certificateUrls) {
       const originalLength = resume.certificateUrls.length;
       resume.certificateUrls = resume.certificateUrls.filter(url => url !== fileUrl);
@@ -508,7 +511,7 @@ export class ResumeService {
         this.logger.debug(`从certificateUrls中移除了文件: ${fileUrl}`);
       }
     }
-    
+
     if (resume.medicalReportUrls) {
       const originalLength = resume.medicalReportUrls.length;
       resume.medicalReportUrls = resume.medicalReportUrls.filter(url => url !== fileUrl);
@@ -517,14 +520,14 @@ export class ResumeService {
         this.logger.debug(`从medicalReportUrls中移除了文件: ${fileUrl}`);
       }
     }
-    
+
     // 从结构化文件信息中移除
     if (resume.personalPhoto && resume.personalPhoto.url === fileUrl) {
       resume.personalPhoto = undefined;
       fileRemoved = true;
       this.logger.debug(`移除了personalPhoto: ${fileUrl}`);
     }
-    
+
     if (resume.certificates) {
       const originalLength = resume.certificates.length;
       resume.certificates = resume.certificates.filter(cert => cert.url !== fileUrl);
@@ -533,7 +536,7 @@ export class ResumeService {
         this.logger.debug(`从certificates中移除了文件: ${fileUrl}`);
       }
     }
-    
+
     if (resume.reports) {
       const originalLength = resume.reports.length;
       resume.reports = resume.reports.filter(report => report.url !== fileUrl);
@@ -542,14 +545,14 @@ export class ResumeService {
         this.logger.debug(`从reports中移除了文件: ${fileUrl}`);
       }
     }
-    
+
     // 检查身份证照片
     if (resume.idCardFront?.url === fileUrl) {
       resume.idCardFront = undefined;
       fileRemoved = true;
       this.logger.debug(`移除了idCardFront: ${fileUrl}`);
     }
-    
+
     if (resume.idCardBack?.url === fileUrl) {
       resume.idCardBack = undefined;
       fileRemoved = true;
@@ -574,7 +577,7 @@ export class ResumeService {
       this.logger.warn(`物理文件删除失败，但数据库记录已清理: ${deleteError.message}`);
       // 不抛出错误，因为数据库记录已经清理完成
     }
-    
+
     if (fileRemoved) {
       this.logger.log(`文件删除成功: ${fileUrl}`);
       return { message: '文件删除成功' };
@@ -593,23 +596,23 @@ export class ResumeService {
     if (exist) {
       throw new ConflictException('该手机号已被使用');
     }
-    
+
     // 复制DTO以避免修改原始对象
     const resumeData = { ...createResumeDto };
-    
+
     // 如果idNumber为null、空字符串或undefined，则删除它，避免唯一索引问题
     if (resumeData.idNumber === null || resumeData.idNumber === '' || resumeData.idNumber === undefined) {
       delete resumeData.idNumber;
       this.logger.log('检测到空的idNumber字段，已从数据中删除');
     }
-    
+
     const resume = new this.resumeModel(resumeData);
     return resume.save();
   }
 
   async updateWithFiles(
-    id: string, 
-    updateResumeDto: UpdateResumeDto, 
+    id: string,
+    updateResumeDto: UpdateResumeDto,
     files?: Express.Multer.File[],
     fileTypes?: string[],
     userId?: string
@@ -620,46 +623,46 @@ export class ResumeService {
         idNumber: updateResumeDto.idNumber,
         _id: { $ne: id } // 排除当前简历
       });
-      
+
       if (existingResume) {
         throw new ConflictException('身份证号已被其他简历使用');
       }
     }
-    
+
     const resume = await this.resumeModel.findById(new Types.ObjectId(id));
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
-  
+
     // 处理文件上传
     const categorizedFiles: any = {};
     const filesArray = Array.isArray(files) ? files : [];
     const fileTypesArray = Array.isArray(fileTypes) ? fileTypes : [];
-  
+
     // 上传新文件
     for (let i = 0; i < filesArray.length; i++) {
       const file = filesArray[i];
       const fileType = fileTypesArray[i] || 'personalPhoto'; // 默认为个人照片
-  
+
       // 上传文件，获取完整的COS URL
       const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
-      
+
       this.logger.debug(`更新简历文件上传成功，URL: ${fileUrl}`);
-  
+
       const fileInfo = {
         url: fileUrl,  // 直接使用返回的完整URL
         filename: file.originalname,
         mimetype: file.mimetype,
         size: file.size
       };
-  
+
       // 根据文件类型分类存储
       if (!categorizedFiles[fileType]) {
         categorizedFiles[fileType] = [];
       }
       categorizedFiles[fileType].push(fileInfo);
     }
-  
+
     // 更新简历基本信息，但跳过undefined值和文件相关字段
     const updateFields = Object.keys(updateResumeDto)
       .filter(key => updateResumeDto[key] !== undefined && updateResumeDto[key] !== null)
@@ -668,17 +671,17 @@ export class ResumeService {
         obj[key] = updateResumeDto[key];
         return obj;
       }, {});
-    
+
     this.logger.debug(`更新的字段: ${JSON.stringify(Object.keys(updateFields))}`);
-    
+
     // 只更新非undefined和非文件相关的字段
     Object.assign(resume, updateFields);
-    
+
     // 设置最后更新人
     if (userId) {
       resume.lastUpdatedBy = new Types.ObjectId(userId);
     }
-    
+
     // 更新分类文件信息
     Object.keys(categorizedFiles).forEach(type => {
       switch (type) {
@@ -712,10 +715,10 @@ export class ResumeService {
           break;
       }
     });
-  
+
     // 保存更新后的简历
     const savedResume = await resume.save();
-    
+
     this.logger.log(`📝 简历更新成功详情:`);
     this.logger.log(`  - 简历ID: ${id}`);
     this.logger.log(`  - 姓名: ${savedResume.name}`);
@@ -728,7 +731,7 @@ export class ResumeService {
       certificateCount: savedResume.certificates?.length || 0,
       reportCount: savedResume.reports?.length || 0
     })}`);
-    
+
     return {
       success: true,
       data: savedResume,
@@ -743,21 +746,21 @@ export class ResumeService {
   async getFilterOptions() {
     // 获取所有简历记录
     const resumes = await this.resumeModel.find({}, { nativePlace: 1, ethnicity: 1 }).exec();
-    
+
     // 手动收集不同的籍贯和民族
     const nativePlaceSet = new Set<string>();
     const ethnicitySet = new Set<string>();
-    
+
     resumes.forEach(resume => {
       if (resume.nativePlace && typeof resume.nativePlace === 'string' && resume.nativePlace.trim() !== '') {
         nativePlaceSet.add(resume.nativePlace.trim());
       }
-      
+
       if (resume.ethnicity && typeof resume.ethnicity === 'string' && resume.ethnicity.trim() !== '') {
         ethnicitySet.add(resume.ethnicity.trim());
       }
     });
-    
+
     // 转换为数组并排序
     const nativePlaces = Array.from(nativePlaceSet).sort();
     const ethnicities = Array.from(ethnicitySet).sort();
@@ -785,20 +788,20 @@ export class ResumeService {
       if (orConditions.length === 0) {
         return [];
       }
-      
+
       const query = { $or: orConditions };
-      
+
       this.logger.log(`搜索服务人员，查询条件: ${JSON.stringify(query)}`);
-      
+
       const workers = await this.resumeModel
         .find(query)
         .sort({ updatedAt: -1, createdAt: -1 }) // 先排序
         .select('_id name phone idNumber age jobType nativePlace currentAddress')
         .limit(limit)
         .exec();
-      
+
       this.logger.log(`搜索结果: ${JSON.stringify(workers, null, 2)}`);
-      
+
       return workers;
     } catch (error) {
       this.logger.error(`搜索服务人员失败: ${error.message}`, error.stack);
@@ -830,16 +833,16 @@ export class ResumeService {
   public async batchFixMissingUpdatedAt() {
     try {
       this.logger.log('🔧 开始批量修复缺失的updatedAt字段...');
-      
+
       const resumesWithoutUpdatedAt = await this.resumeModel.find({
         $or: [
           { updatedAt: { $exists: false } },
           { updatedAt: null }
         ]
       });
-      
+
       this.logger.log(`发现 ${resumesWithoutUpdatedAt.length} 条记录缺失updatedAt字段`);
-      
+
       for (const resume of resumesWithoutUpdatedAt) {
         const fallbackDate = (resume as any).createdAt || new Date();
         await this.resumeModel.findByIdAndUpdate(
@@ -848,7 +851,7 @@ export class ResumeService {
           { new: true }
         );
       }
-      
+
       this.logger.log(`✅ 批量修复完成，共修复 ${resumesWithoutUpdatedAt.length} 条记录`);
     } catch (error) {
       this.logger.error(`批量修复updatedAt字段失败: ${error.message}`);
@@ -862,53 +865,53 @@ export class ResumeService {
    */
   async importFromExcel(filePath: string, userId: string): Promise<{ success: number; fail: number; errors: string[] }> {
     this.logger.log(`开始处理Excel文件导入: ${filePath}`);
-    
+
     // 统计结果
     const result = {
       success: 0,
       fail: 0,
       errors: [] as string[]
     };
-    
+
     try {
       // 使用ExcelJS读取文件
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(filePath);
-      
+
       // 获取第一个工作表
       const worksheet = workbook.getWorksheet(1);
       if (!worksheet) {
         throw new BadRequestException('Excel文件中没有找到工作表');
       }
-      
+
       // 检查是否有数据
       if (worksheet.rowCount <= 1) {
         throw new BadRequestException('Excel文件中没有数据');
       }
-      
+
       // 获取表头
       const headerRow = worksheet.getRow(1);
       const headers: string[] = [];
       headerRow.eachCell((cell, colNumber) => {
         headers[colNumber - 1] = cell.value?.toString().trim() || '';
       });
-      
+
       // 检查必需的列是否存在
       const requiredColumns = ['姓名', '手机号', '工种'];
       const missingColumns = requiredColumns.filter(col => !headers.includes(col));
-      
+
       if (missingColumns.length > 0) {
         throw new BadRequestException(`Excel文件缺少必需的列: ${missingColumns.join(', ')}`);
       }
-      
+
       // 解析每一行数据
       const promises = [];
-      
+
       // 从第二行开始，跳过表头
       for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
         const row = worksheet.getRow(rowNumber);
         const rowData: Record<string, any> = {};
-        
+
         // 获取每个单元格的值
         row.eachCell((cell, colNumber) => {
           const header = headers[colNumber - 1];
@@ -916,17 +919,17 @@ export class ResumeService {
             rowData[header] = cell.value;
           }
         });
-        
+
         // 检查必填字段
         if (!rowData['姓名'] || !rowData['手机号'] || !rowData['工种']) {
           result.fail++;
           result.errors.push(`第 ${rowNumber} 行缺少必填字段`);
           continue;
         }
-        
+
         // 转换数据为DTO格式
         const resumeData = this.mapExcelRowToResumeDto(rowData, userId);
-        
+
         // 创建简历(异步)
         promises.push(
           this.create(resumeData)
@@ -939,13 +942,13 @@ export class ResumeService {
             })
         );
       }
-      
+
       // 等待所有创建操作完成
       await Promise.all(promises);
-      
+
       // 清理临时文件
       fs.unlinkSync(filePath);
-      
+
       this.logger.log(`Excel导入完成，成功: ${result.success}, 失败: ${result.fail}`);
       return result;
     } catch (error) {
@@ -953,12 +956,12 @@ export class ResumeService {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-      
+
       this.logger.error(`Excel导入过程中发生错误: ${error.message}`);
       throw error;
     }
   }
-  
+
   /**
    * 将Excel行数据映射到简历DTO
    */
@@ -975,13 +978,13 @@ export class ResumeService {
       '小时工': 'xiaoshi',
       '住家护老': 'zhujia-hulao'
     };
-    
+
     // 性别映射
     const genderMap: Record<string, string> = {
       '男': 'male',
       '女': 'female'
     };
-    
+
     // 学历映射
     const educationMap: Record<string, string> = {
       '小学': 'primary',
@@ -993,7 +996,7 @@ export class ResumeService {
       '硕士': 'master',
       '博士': 'doctorate'
     };
-    
+
     // 创建基本数据
     const dto: any = {
       userId,
@@ -1002,49 +1005,49 @@ export class ResumeService {
       jobType: jobTypeMap[rowData['工种']?.toString().trim()] || rowData['工种']?.toString().trim(),
       status: 'pending'
     };
-    
+
     // 可选字段
     if (rowData['性别']) {
       dto.gender = genderMap[rowData['性别']?.toString().trim()] || 'female';
     }
-    
+
     if (rowData['年龄']) {
       dto.age = Number(rowData['年龄']) || 0;
     }
-    
+
     if (rowData['身份证号']) {
       dto.idNumber = rowData['身份证号']?.toString().trim();
     }
-    
+
     if (rowData['微信']) {
       dto.wechat = rowData['微信']?.toString().trim();
     }
-    
+
     if (rowData['期望职位']) {
       dto.expectedPosition = rowData['期望职位']?.toString().trim();
     }
-    
+
     if (rowData['工作经验']) {
       dto.experienceYears = Number(rowData['工作经验']) || 0;
       dto.workExperience = Number(rowData['工作经验']) || 0;
     }
-    
+
     if (rowData['学历']) {
       dto.education = educationMap[rowData['学历']?.toString().trim()] || 'juniorHigh';
     }
-    
+
     if (rowData['期望薪资']) {
       dto.expectedSalary = Number(rowData['期望薪资']) || 0;
     }
-    
+
     if (rowData['籍贯']) {
       dto.nativePlace = rowData['籍贯']?.toString().trim();
     }
-    
+
     if (rowData['民族']) {
       dto.ethnicity = rowData['民族']?.toString().trim();
     }
-    
+
     if (rowData['接单状态']) {
       const statusMap: Record<string, string> = {
         '想接单': 'accepting',
@@ -1053,7 +1056,7 @@ export class ResumeService {
       };
       dto.orderStatus = statusMap[rowData['接单状态']?.toString().trim()] || 'accepting';
     }
-    
+
     // 返回转换后的DTO
     return dto as CreateResumeDto;
   }
@@ -1064,7 +1067,7 @@ export class ResumeService {
   async debugLatestRecords(limit: number = 10) {
     try {
       this.logger.log(`🔍 直接查询最新的${limit}条记录...`);
-      
+
       const records = await this.resumeModel
         .find({})
         .sort({ updatedAt: -1, createdAt: -1 })
@@ -1072,7 +1075,7 @@ export class ResumeService {
         .select('name updatedAt createdAt')
         .lean()
         .exec();
-      
+
       this.logger.log(`🔍 查询到${records.length}条记录`);
       return records;
     } catch (error) {
@@ -1080,4 +1083,159 @@ export class ResumeService {
       throw error;
     }
   }
+
+  /**
+   * 生成分享令牌（仅包含简历ID与有效期）
+   */
+  public createShareToken(resumeId: string, expiresInHours = 72) {
+    if (!resumeId) throw new BadRequestException('简历ID不能为空');
+    const payload = { rid: resumeId };
+    const expiresIn = `${expiresInHours}h`;
+    const token = this.jwtService.sign(payload, { expiresIn });
+    const expireAt = new Date(Date.now() + expiresInHours * 3600 * 1000).toISOString();
+    return { token, expireAt };
+  }
+
+  /**
+   * 通过分享令牌获取脱敏后的公开简历详情
+   */
+  public async findSharedByToken(token: string) {
+    try {
+      const payload: any = this.jwtService.verify(token);
+      const rid = payload?.rid;
+      if (!rid) throw new BadRequestException('无效的分享令牌');
+      const resume = await this.resumeModel.findById(new Types.ObjectId(rid)).lean();
+      if (!resume) throw new NotFoundException('分享已失效或简历不存在');
+      return this.toMaskedPublicResume(resume as any);
+    } catch (e) {
+      this.logger.warn(`分享令牌校验失败: ${e?.message}`);
+      throw new BadRequestException('分享链接无效或已过期');
+    }
+  }
+
+  /** 将原始简历转换为公开可见（脱敏）结构 */
+  private toMaskedPublicResume(r: any) {
+    if (!r) return null;
+    const result: any = {
+      id: (r._id || r.id)?.toString?.(),
+      nameMasked: this.maskName(r.name),
+      phoneMasked: this.maskPhone(r.phone),
+      gender: r.gender,
+      age: r.age,
+      jobType: r.jobType,
+      education: r.education,
+      experienceYears: r.experienceYears,
+      expectedPosition: r.expectedPosition,
+      expectedSalary: r.expectedSalary,
+      nativePlace: r.nativePlace,
+      skills: r.skills,
+      school: r.school,
+      major: r.major,
+      selfIntroduction: r.selfIntroduction,
+      serviceArea: r.serviceArea,
+      photoUrls: r.photoUrls,
+      // 工作经历（保留必要字段）
+      workExperiences: r.workExperiences || r.workHistory || []
+    };
+
+    // 去掉强敏感信息（即使存在也不返回）
+    delete result.idNumber;
+    delete result.idCardFront;
+    delete result.idCardBack;
+    delete result.personalPhoto;
+    delete result.certificates;
+    delete result.reports;
+    delete result.certificateUrls;
+    delete result.medicalReportUrls;
+    delete result.emergencyContactName;
+    delete result.emergencyContactPhone;
+    delete result.currentAddress;
+    delete result.hukouAddress;
+    delete result.birthDate;
+    return result;
+  }
+
+  private maskName(name?: string) {
+    if (!name) return '';
+    const first = name.charAt(0);
+    return `${first}**`;
+  }
+
+  private maskPhone(phone?: string) {
+    if (!phone) return '';
+    const m = String(phone).match(/^(\d{3})(\d{4})(\d{4})$/);
+    if (m) return `${m[1]}****${m[3]}`;
+    // 通用兜底：仅显示前3后2
+    if (phone.length > 5) return `${phone.slice(0,3)}****${phone.slice(-2)}`;
+    return '****';
+  }
+  /**
+   * 获取公开脱敏简历列表（无需登录）
+   */
+  public async findPublicList(page = 1, pageSize = 20, keyword?: string, jobType?: string, nativePlace?: string) {
+    try {
+      const query: any = {};
+
+      // 关键词搜索（姓名、工种）
+      if (keyword) {
+        query.$or = [
+          { name: { $regex: keyword, $options: 'i' } },
+          { jobType: { $regex: keyword, $options: 'i' } }
+        ];
+      }
+
+      // 工种筛选
+      if (jobType) {
+        query.jobType = jobType;
+      }
+
+      // 籍贯筛选
+      if (nativePlace) {
+        query.nativePlace = nativePlace;
+      }
+
+      const skip = (page - 1) * pageSize;
+      const total = await this.resumeModel.countDocuments(query);
+
+      const resumes = await this.resumeModel
+        .find(query)
+        .select('_id name phone gender age jobType education experienceYears nativePlace skills expectedSalary serviceArea photoUrls selfIntroduction school major')
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .lean();
+
+      // 脱敏处理
+      const maskedResumes = resumes.map(resume => ({
+        id: resume._id.toString(),
+        nameMasked: this.maskName(resume.name),
+        phoneMasked: this.maskPhone(resume.phone),
+        gender: resume.gender,
+        age: resume.age,
+        jobType: resume.jobType,
+        education: resume.education,
+        experienceYears: resume.experienceYears,
+        nativePlace: resume.nativePlace,
+        skills: resume.skills,
+        expectedSalary: resume.expectedSalary,
+        serviceArea: resume.serviceArea,
+        photoUrls: resume.photoUrls,
+        selfIntroduction: resume.selfIntroduction,
+        school: resume.school,
+        major: resume.major
+      }));
+
+      return {
+        items: maskedResumes,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+      };
+    } catch (error) {
+      this.logger.error(`获取公开简历列表失败: ${error.message}`);
+      throw error;
+    }
+  }
+
 }

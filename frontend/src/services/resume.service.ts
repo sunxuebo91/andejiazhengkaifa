@@ -36,12 +36,17 @@ export interface Resume {
     position?: string;
   }[];
   
-  // 文件URL
+  // 文件URL - 旧格式
   idCardFrontUrl?: string;
   idCardBackUrl?: string;
   photoUrls?: string[];
   certificateUrls?: string[];
   medicalReportUrls?: string[];
+
+  // 文件对象 - 新格式
+  personalPhoto?: { url: string; filename?: string; size?: number; mimetype?: string };
+  certificates?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
+  reports?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   
   // 时间戳
   createdAt?: Date;

@@ -223,15 +223,15 @@ export class User {
 
 ### 技能标签 (skills)
 - `muying`: 母婴护理师
-- `cuiru`: 催乳
-- `yuezican`: 月子餐
-- `chanhou`: 产后修复
+- `cuiru`: 高级催乳师
+- `yuezican`: 月子餐营养师
+- `chanhou`: 产后修复师
 - `teshu-yinger`: 特殊婴儿护理
 - `yiliaobackground`: 医疗背景
-- `yuying`: 育婴师
-- `zaojiao`: 早教
-- `fushi`: 辅食
-- `ertui`: 儿推
+- `yuying`: 高级育婴师
+- `zaojiao`: 早教师
+- `fushi`: 辅食营养师
+- `ertui`: 小儿推拿师
 - `waiyu`: 外语
 - `zhongcan`: 中餐
 - `xican`: 西餐

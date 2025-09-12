@@ -730,8 +730,9 @@ const CreateResume: React.FC = () => {
           medical: { files: [] as CustomUploadFile[] }
         };
         
-        // 设置个人照片 - 同时处理新格式和旧格式
+        // 设置个人照片 - 同时处理新格式和旧格式，避免重复
         const allPhotoFiles: CustomUploadFile[] = [];
+        const addedPhotoUrls = new Set<string>(); // 用于去重
 
         console.log('🖼️ 编辑模式：加载个人照片');
         console.log('  - 新格式个人照片:', extendedResume.personalPhoto);
@@ -748,20 +749,26 @@ const CreateResume: React.FC = () => {
             isExisting: true,
             size: extendedResume.personalPhoto.size || 0
           });
+          addedPhotoUrls.add(extendedResume.personalPhoto.url);
         }
 
-        // 处理旧格式的个人照片
+        // 处理旧格式的个人照片（去重）
         if (extendedResume.photoUrls && extendedResume.photoUrls.length > 0) {
-          console.log('  ✅ 添加旧格式个人照片:', extendedResume.photoUrls.length, '张');
-          const oldPhotoFiles = extendedResume.photoUrls.map((url, index) => ({
-            uid: `existing-photo-old-${index}`,
-            name: `个人照片${index + 1}`,
-            status: 'done' as const,
-            url: url,
-            isExisting: true,
-            size: 0
-          }));
-          allPhotoFiles.push(...oldPhotoFiles as CustomUploadFile[]);
+          const uniqueOldPhotos = extendedResume.photoUrls.filter(url => !addedPhotoUrls.has(url));
+          if (uniqueOldPhotos.length > 0) {
+            console.log('  ✅ 添加旧格式个人照片:', uniqueOldPhotos.length, '张（已去重）');
+            const oldPhotoFiles = uniqueOldPhotos.map((url, index) => ({
+              uid: `existing-photo-old-${index}`,
+              name: `个人照片${index + 1}`,
+              status: 'done' as const,
+              url: url,
+              isExisting: true,
+              size: 0
+            }));
+            allPhotoFiles.push(...oldPhotoFiles as CustomUploadFile[]);
+          } else {
+            console.log('  ⚠️ 旧格式个人照片已存在，跳过重复项');
+          }
         }
 
         if (allPhotoFiles.length > 0) {
@@ -770,8 +777,9 @@ const CreateResume: React.FC = () => {
           setPhotoFiles(allPhotoFiles);
         }
 
-        // 设置技能证书 - 同时处理新格式和旧格式
+        // 设置技能证书 - 同时处理新格式和旧格式，避免重复
         const allCertFiles: CustomUploadFile[] = [];
+        const addedCertUrls = new Set<string>(); // 用于去重
 
         console.log('📜 编辑模式：加载证书');
         console.log('  - 新格式证书:', extendedResume.certificates?.length || 0, '个');
@@ -789,20 +797,27 @@ const CreateResume: React.FC = () => {
             size: cert.size || 0
           }));
           allCertFiles.push(...newCertFiles as CustomUploadFile[]);
+          // 记录已添加的URL
+          extendedResume.certificates.forEach(cert => addedCertUrls.add(cert.url));
         }
 
-        // 处理旧格式的证书
+        // 处理旧格式的证书（去重）
         if (extendedResume.certificateUrls && extendedResume.certificateUrls.length > 0) {
-          console.log('  ✅ 添加旧格式证书:', extendedResume.certificateUrls.length, '个');
-          const oldCertFiles = extendedResume.certificateUrls.map((url, index) => ({
-            uid: `existing-cert-old-${index}`,
-            name: `证书${index + 1}`,
-            status: 'done' as const,
-            url: url,
-            isExisting: true,
-            size: 0
-          }));
-          allCertFiles.push(...oldCertFiles as CustomUploadFile[]);
+          const uniqueOldCerts = extendedResume.certificateUrls.filter(url => !addedCertUrls.has(url));
+          if (uniqueOldCerts.length > 0) {
+            console.log('  ✅ 添加旧格式证书:', uniqueOldCerts.length, '个（已去重）');
+            const oldCertFiles = uniqueOldCerts.map((url, index) => ({
+              uid: `existing-cert-old-${index}`,
+              name: `证书${index + 1}`,
+              status: 'done' as const,
+              url: url,
+              isExisting: true,
+              size: 0
+            }));
+            allCertFiles.push(...oldCertFiles as CustomUploadFile[]);
+          } else {
+            console.log('  ⚠️ 旧格式证书已存在，跳过重复项');
+          }
         }
 
         if (allCertFiles.length > 0) {
@@ -811,8 +826,9 @@ const CreateResume: React.FC = () => {
           setCertificateFiles(allCertFiles);
         }
 
-        // 设置体检报告 - 同时处理新格式和旧格式
+        // 设置体检报告 - 同时处理新格式和旧格式，避免重复
         const allMedicalFiles: CustomUploadFile[] = [];
+        const addedMedicalUrls = new Set<string>(); // 用于去重
 
         console.log('🏥 编辑模式：加载体检报告');
         console.log('  - 新格式体检报告:', extendedResume.reports?.length || 0, '个');
@@ -830,20 +846,27 @@ const CreateResume: React.FC = () => {
             size: report.size || 0
           }));
           allMedicalFiles.push(...newMedicalFiles as CustomUploadFile[]);
+          // 记录已添加的URL
+          extendedResume.reports.forEach(report => addedMedicalUrls.add(report.url));
         }
 
-        // 处理旧格式的体检报告
+        // 处理旧格式的体检报告（去重）
         if (extendedResume.medicalReportUrls && extendedResume.medicalReportUrls.length > 0) {
-          console.log('  ✅ 添加旧格式体检报告:', extendedResume.medicalReportUrls.length, '个');
-          const oldMedicalFiles = extendedResume.medicalReportUrls.map((url, index) => ({
-            uid: `existing-medical-old-${index}`,
-            name: `体检报告${index + 1}`,
-            status: 'done' as const,
-            url: url,
-            isExisting: true,
-            size: 0
-          }));
-          allMedicalFiles.push(...oldMedicalFiles as CustomUploadFile[]);
+          const uniqueOldMedicals = extendedResume.medicalReportUrls.filter(url => !addedMedicalUrls.has(url));
+          if (uniqueOldMedicals.length > 0) {
+            console.log('  ✅ 添加旧格式体检报告:', uniqueOldMedicals.length, '个（已去重）');
+            const oldMedicalFiles = uniqueOldMedicals.map((url, index) => ({
+              uid: `existing-medical-old-${index}`,
+              name: `体检报告${index + 1}`,
+              status: 'done' as const,
+              url: url,
+              isExisting: true,
+              size: 0
+            }));
+            allMedicalFiles.push(...oldMedicalFiles as CustomUploadFile[]);
+          } else {
+            console.log('  ⚠️ 旧格式体检报告已存在，跳过重复项');
+          }
         }
 
         if (allMedicalFiles.length > 0) {
@@ -2059,15 +2082,15 @@ const CreateResume: React.FC = () => {
                       style={{ width: '100%' }}
                     >
                       <Option value="muying">母婴护理师</Option>
-                      <Option value="cuiru">催乳</Option>
-                      <Option value="yuezican">月子餐</Option>
-                      <Option value="chanhou">产后修复</Option>
+                      <Option value="cuiru">高级催乳师</Option>
+                      <Option value="yuezican">月子餐营养师</Option>
+                      <Option value="chanhou">产后修复师</Option>
                       <Option value="teshu-yinger">特殊婴儿护理</Option>
                       <Option value="yiliaobackground">医疗背景</Option>
-                      <Option value="yuying">育婴师</Option>
-                      <Option value="zaojiao">早教</Option>
-                      <Option value="fushi">辅食</Option>
-                      <Option value="ertui">儿推</Option>
+                      <Option value="yuying">高级育婴师</Option>
+                      <Option value="zaojiao">早教师</Option>
+                      <Option value="fushi">辅食营养师</Option>
+                      <Option value="ertui">小儿推拿师</Option>
                       <Option value="waiyu">外语</Option>
                       <Option value="zhongcan">中餐</Option>
                       <Option value="xican">西餐</Option>

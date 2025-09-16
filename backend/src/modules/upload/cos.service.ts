@@ -41,6 +41,7 @@ export class CosService {
         Key: key,
         Body: file.buffer,
         ContentType: file.mimetype,
+        ACL: 'public-read', // 设置为公共读权限，允许直接访问
       });
 
       if (result.statusCode === 200) {

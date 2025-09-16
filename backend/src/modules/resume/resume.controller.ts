@@ -664,31 +664,8 @@ export class ResumeController {
 
       this.logger.log(`小程序上传文件: 简历ID=${id}, 文件类型=${type}, 文件名=${file.originalname}`);
 
-      const resume = await this.resumeService.addFileWithType(id, file, type);
-
-      // 根据文件类型返回相应的URL
-      let uploadedFileUrl = '';
-      switch (type) {
-        case 'idCardFront':
-          uploadedFileUrl = resume.idCardFront?.url || '';
-          break;
-        case 'idCardBack':
-          uploadedFileUrl = resume.idCardBack?.url || '';
-          break;
-        case 'personalPhoto':
-          uploadedFileUrl = (resume.personalPhoto && resume.personalPhoto.length > 0 && resume.personalPhoto[resume.personalPhoto.length - 1]?.url) || (resume.photoUrls && resume.photoUrls[resume.photoUrls.length - 1]) || '';
-          break;
-        case 'certificate':
-          uploadedFileUrl = resume.certificates && resume.certificates.length > 0
-            ? resume.certificates[resume.certificates.length - 1].url
-            : (resume.certificateUrls && resume.certificateUrls[resume.certificateUrls.length - 1]) || '';
-          break;
-        case 'medicalReport':
-          uploadedFileUrl = resume.reports && resume.reports.length > 0
-            ? resume.reports[resume.reports.length - 1].url
-            : (resume.medicalReportUrls && resume.medicalReportUrls[resume.medicalReportUrls.length - 1]) || '';
-          break;
-      }
+      const result = await this.resumeService.addFileWithType(id, file, type);
+      const uploadedFileUrl = result.fileUrl;
 
       return {
         success: true,
@@ -908,9 +885,56 @@ export class ResumeController {
     }
   }
 
+  @Post(':id/upload')
+  @UseInterceptors(FileInterceptor('file', multerConfig))
+  @ApiOperation({ summary: '上传单个简历文件' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+        type: {
+          type: 'string',
+          description: '文件类型：idCardFront/idCardBack/personalPhoto/certificate/medicalReport'
+        },
+      },
+    },
+  })
+  async uploadSingleFile(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('type') type: string,
+  ) {
+    try {
+      const result = await this.resumeService.addFileWithType(id, file, type);
+
+      return {
+        success: true,
+        data: {
+          fileUrl: result.fileUrl,
+          filename: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size
+        },
+        message: '上传文件成功'
+      };
+    } catch (error) {
+      this.logger.error(`上传文件失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `上传文件失败: ${error.message}`
+      };
+    }
+  }
+
   @Post(':id/files')
   @UseInterceptors(FilesInterceptor('files', 30, multerConfig))
-  @ApiOperation({ summary: '上传简历文件' })
+  @ApiOperation({ summary: '批量上传简历文件' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -988,47 +1012,6 @@ export class ResumeController {
         success: false,
         data: null,
         message: `删除文件失败: ${error.message}`
-      };
-    }
-  }
-
-  @Post(':id/upload')
-  @UseInterceptors(FileInterceptor('file', multerConfig))
-  @ApiOperation({ summary: '上传简历文件' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-        type: {
-          type: 'string',
-          description: '文件类型：idCardFront/idCardBack/personalPhoto/certificate/medicalReport'
-        },
-      },
-    },
-  })
-  async uploadFile(
-    @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File,
-    @Body('type') type: string,
-  ) {
-    try {
-      const resume = await this.resumeService.addFileWithType(id, file, type);
-      return {
-        success: true,
-        data: resume,
-        message: '上传文件成功'
-      };
-    } catch (error) {
-      this.logger.error(`上传文件失败: ${error.message}`);
-      return {
-        success: false,
-        data: null,
-        message: `上传文件失败: ${error.message}`
       };
     }
   }

@@ -496,19 +496,19 @@ const CreateResume: React.FC = () => {
         onRemove={handleRemoveFile(type)}
         beforeUpload={async (file) => {
           // 移除"先保存基本信息"的限制
-          
+
           // 🔄 添加图片压缩处理
           let processedFile: File = file;
           try {
             // 压缩类型映射
             const compressionTypeMapping = {
               'photo': 'photo',
-              'certificate': 'certificate', 
+              'certificate': 'certificate',
               'medical': 'medicalReport'
             } as const;
-            
+
             const compressionType = compressionTypeMapping[type as keyof typeof compressionTypeMapping];
-            
+
             console.log(`🗜️ 开始压缩文件: ${file.name} (${(file.size / 1024).toFixed(2)}KB) - 类型: ${compressionType}`);
             processedFile = await ImageService.compressImage(file, compressionType);
             console.log(`✅ 压缩完成: ${processedFile.name} (${(processedFile.size / 1024).toFixed(2)}KB)`);
@@ -516,51 +516,54 @@ const CreateResume: React.FC = () => {
             console.warn('⚠️ 压缩失败，使用原文件:', error);
             processedFile = file;
           }
-          
+
           const formData = new FormData();
           formData.append('file', processedFile);
-          
+
           // 修复文件类型参数映射
           const fileTypeMapping = {
             'photo': 'personalPhoto',
-            'certificate': 'certificate', 
+            'certificate': 'certificate',
             'medical': 'medicalReport'
           } as const;
-          
+
           const mappedType = fileTypeMapping[type as keyof typeof fileTypeMapping];
           if (!mappedType) {
             console.error(`未知的文件类型: ${type}`);
             messageApi.error(`未知的文件类型: ${type}`);
             return false;
           }
-          
+
           formData.append('type', mappedType);
           console.log(`📂 文件上传类型映射: ${type} -> ${mappedType}`);
-          
+          // 本地临时缩略图，确保上传完成前也能显示
+          const tempPreviewUrl = URL.createObjectURL(processedFile);
+
           // 如果是编辑模式且有简历ID，直接上传
           if (editingResume?._id) {
             try {
               const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
               if (response.success) {
-                const newFile: CustomUploadFile = { 
-                  uid: file.uid, 
-                  name: file.name, 
-                  url: response.data?.url, 
-                  status: "done" as const, 
+                const newFile: CustomUploadFile = {
+                  uid: file.uid,
+                  name: file.name,
+                  url: response.data?.fileUrl, // 统一使用fileUrl字段
+                  thumbUrl: tempPreviewUrl,
+                  status: "done" as const,
                   originFileObj: file, // 保持原始 RcFile 类型
                   size: processedFile.size, // 使用压缩后的大小
                   isExisting: false
                 };
-                
+
                 // 同时更新两套状态
-                setFileUploadState(prev => ({ 
-                  ...prev, 
-                  [type]: { 
-                    ...prev[type], 
-                    files: [...prev[type].files, newFile] 
-                  } 
+                setFileUploadState(prev => ({
+                  ...prev,
+                  [type]: {
+                    ...prev[type],
+                    files: [...prev[type].files, newFile]
+                  }
                 }));
-                
+
                 // 同时更新单独的状态变量（兼容旧逻辑）
                 switch (type) {
                   case 'photo':
@@ -573,7 +576,7 @@ const CreateResume: React.FC = () => {
                     setMedicalReportFiles(prev => [...prev, newFile]);
                     break;
                 }
-                
+
                 messageApi.success(`${file.name} 上传成功`);
               } else {
                 messageApi.error(response.message || "上传失败");
@@ -584,24 +587,25 @@ const CreateResume: React.FC = () => {
             }
           } else {
             // 如果是新建模式，将文件添加到待上传列表
-            const newFile: CustomUploadFile = { 
-              uid: file.uid, 
-              name: file.name, 
-              status: "done" as const, 
+            const newFile: CustomUploadFile = {
+              uid: file.uid,
+              name: file.name,
+              status: "done" as const,
+              thumbUrl: tempPreviewUrl,
               originFileObj: file, // 保持原始 RcFile 类型
               size: processedFile.size, // 使用压缩后的大小
               isExisting: false
             };
-            
+
             // 同时更新两套状态
-            setFileUploadState(prev => ({ 
-              ...prev, 
-              [type]: { 
-                ...prev[type], 
-                files: [...prev[type].files, newFile] 
-              } 
+            setFileUploadState(prev => ({
+              ...prev,
+              [type]: {
+                ...prev[type],
+                files: [...prev[type].files, newFile]
+              }
             }));
-            
+
             // 同时更新单独的状态变量（兼容旧逻辑）
             switch (type) {
               case 'photo':
@@ -2311,54 +2315,64 @@ const CreateResume: React.FC = () => {
                       onPreview={handlePreview}
                       onRemove={handleRemoveFile('photo')}
                       maxCount={FILE_UPLOAD_CONFIG.maxPhotoCount}
-                      beforeUpload={async (file) => {
-                        // 验证文件
-                        if (!validateFile(file, 'photo')) {
-                          return false;
+                      beforeUpload={async (file: RcFile) => {
+                        // 校验
+                        if (!validateFile(file, 'photo')) return false;
+                        // 压缩
+                        let processedFile: File = file;
+                        try {
+                          processedFile = await ImageService.compressImage(file, 'photo');
+                        } catch {
+                          processedFile = file;
                         }
-
-                        // 压缩图片
-                        const processedFile = await ImageService.compressImage(file, 'photo');
-
-                        // 如果是编辑模式且有简历ID，直接上传
+                        const formData = new FormData();
+                        formData.append('file', processedFile);
+                        formData.append('type', 'personalPhoto');
+                        const tempPreviewUrl = URL.createObjectURL(processedFile);
                         if (editingResume?._id) {
                           try {
-                            const formData = new FormData();
-                            formData.append('file', processedFile);
-                            formData.append('type', 'personalPhoto');
-
                             const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
-                            console.log('📤 上传响应:', response);
-                            console.log('📤 上传响应data:', response.data);
                             if (response.success) {
-                              const newFile = {
+                              const newFile: CustomUploadFile = {
                                 uid: file.uid,
                                 name: file.name,
-                                url: response.data?.fileUrl, // 使用后端返回的fileUrl字段
-                                status: "done" as const,
+                                url: response.data?.fileUrl,
+                                thumbUrl: tempPreviewUrl,
+                                status: 'done',
                                 originFileObj: file,
                                 size: processedFile.size,
-                                isExisting: false
+                                isExisting: false,
                               };
-                              console.log('📸 创建的新文件对象:', newFile);
-
-                              // 更新文件列表
-                              const updatedFiles = [...fileUploadState.photo.files, newFile];
                               setFileUploadState(prev => ({
                                 ...prev,
-                                photo: { ...prev.photo, files: updatedFiles }
+                                photo: { ...prev.photo, files: [...prev.photo.files, newFile] },
                               }));
-                              setPhotoFiles(updatedFiles);
-
-                              message.success('个人照片上传成功');
+                              setPhotoFiles(prev => [...prev, newFile]);
+                              messageApi.success(`${file.name} 上传成功`);
+                            } else {
+                              messageApi.error(response.message || '上传失败');
                             }
-                          } catch (error) {
-                            console.error('个人照片上传失败:', error);
-                            message.error('个人照片上传失败');
+                          } catch (err) {
+                            console.error('上传文件时出错', err);
+                            messageApi.error('上传文件时出错');
                           }
+                        } else {
+                          const newFile: CustomUploadFile = {
+                            uid: file.uid,
+                            name: file.name,
+                            status: 'done',
+                            thumbUrl: tempPreviewUrl,
+                            originFileObj: file,
+                            size: processedFile.size,
+                            isExisting: false,
+                          };
+                          setFileUploadState(prev => ({
+                            ...prev,
+                            photo: { ...prev.photo, files: [...prev.photo.files, newFile] },
+                          }));
+                          setPhotoFiles(prev => [...prev, newFile]);
                         }
-
-                        return false; // 阻止默认上传
+                        return false;
                       }}
                       disabled={false}
                     />

@@ -90,9 +90,29 @@ const SortableImageItem: React.FC<SortableImageItemProps> = ({
     }
   };
 
+  // 计算展示用的缩略图地址（顺序：远程URL -> antd生成thumbUrl -> 本地临时URL）
+  const localObjectUrl = React.useMemo(() => {
+    if (!file.url && !file.thumbUrl && file.originFileObj) {
+      try {
+        return URL.createObjectURL(file.originFileObj as File);
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }, [file.url, file.thumbUrl, file.originFileObj]);
+
+  React.useEffect(() => {
+    return () => {
+      if (localObjectUrl) URL.revokeObjectURL(localObjectUrl);
+    };
+  }, [localObjectUrl]);
+
+  const displayUrl = file.url || file.thumbUrl || localObjectUrl;
+
   // 调试日志
   console.log('🖼️ SortableImageItem file:', file);
-  console.log('🖼️ Image URL:', file.url || file.thumbUrl);
+  console.log('🖼️ Image URL:', displayUrl);
 
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -169,7 +189,7 @@ const SortableImageItem: React.FC<SortableImageItemProps> = ({
 
         {/* 图片预览 */}
         <Image
-          src={file.url || file.thumbUrl}
+          src={displayUrl}
           alt={file.name}
           style={{
             width: '100%',

@@ -457,7 +457,12 @@ export class ResumeService {
       const savedResume = await resumeDoc.save();
       this.logger.debug(`简历更新成功，当前文件统计: photoUrls=${savedResume.photoUrls?.length || 0}, certificates=${savedResume.certificates?.length || 0}, reports=${savedResume.reports?.length || 0}`);
 
-      return savedResume;
+      // 返回包含文件URL的结果
+      return {
+        resume: savedResume,
+        fileUrl: fileUrl,
+        fileInfo: uploadedFileInfo
+      };
     } catch (error) {
       this.logger.error(`文件上传处理失败: ${error.message}`, error.stack);
       throw error;

@@ -37,7 +37,11 @@ async function cleanupCos() {
   for (const resume of latestResumes) {
     if (resume.idCardFront?.url) latestFileUrls.add(resume.idCardFront.url);
     if (resume.idCardBack?.url) latestFileUrls.add(resume.idCardBack.url);
-    if (resume.personalPhoto?.url) latestFileUrls.add(resume.personalPhoto.url);
+    if (resume.personalPhoto && Array.isArray(resume.personalPhoto)) {
+      for (const photo of resume.personalPhoto) {
+        if (photo.url) latestFileUrls.add(photo.url);
+      }
+    }
     if (resume.certificates) {
       for (const cert of resume.certificates) {
         if (cert.url) latestFileUrls.add(cert.url);

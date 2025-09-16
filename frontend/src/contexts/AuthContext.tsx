@@ -1,17 +1,22 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  isLoggedIn, 
-  logout as authLogout, 
+import {
+  isLoggedIn,
+  logout as authLogout,
   getCurrentUser,
-  getUserPermissions
+  getUserPermissions,
+  fetchCurrentUser
 } from '../services/auth';
 
 interface User {
   id: string;
   username: string;
   name: string;
+  phone?: string;
+  email?: string;
+  avatar?: string;
   role: string;
+  department?: string;
   permissions?: string[];
 }
 
@@ -23,6 +28,8 @@ interface AuthContextType {
   hasRole: (role: string) => boolean;
   login: (user: User) => void;
   logout: () => Promise<void>;
+  updateUser: (userData: Partial<User>) => void;
+  refreshUserInfo: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -33,6 +40,8 @@ const AuthContext = createContext<AuthContextType>({
   hasRole: () => false,
   login: () => {},
   logout: async () => {},
+  updateUser: () => {},
+  refreshUserInfo: async () => {},
 });
 
 export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
@@ -102,6 +111,34 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
 
+  // 更新用户信息
+  const updateUser = (userData: Partial<User>) => {
+    if (user) {
+      const updatedUser = { ...user, ...userData };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    }
+  };
+
+  // 从服务器刷新用户信息
+  const refreshUserInfo = async () => {
+    try {
+      if (!isLoggedIn()) {
+        return;
+      }
+
+      const updatedUser = await fetchCurrentUser();
+      setUser(updatedUser);
+
+      // 更新权限
+      if (updatedUser.permissions) {
+        setPermissions(updatedUser.permissions);
+      }
+    } catch (error) {
+      console.error('刷新用户信息失败:', error);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -112,6 +149,8 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         hasRole,
         login,
         logout,
+        updateUser,
+        refreshUserInfo,
       }}
     >
       {children}

@@ -31,6 +31,7 @@ const ESignaturePage = React.lazy(() => import('./pages/esign/ESignaturePage'));
 const SignContractPage = React.lazy(() => import('./pages/esign/SignContractPage'));
 const PaymentGuide = React.lazy(() => import('./pages/PaymentGuide'));
 const Payment = React.lazy(() => import('./pages/Payment'));
+const TestSortableUpload = React.lazy(() => import('./pages/TestSortableUpload'));
 
 interface AppProps {
   children?: ReactNode;
@@ -215,11 +216,17 @@ export default function App({ children }: AppProps) {
                     path="profile" 
                     element={<AuthorizedRoute element={<ProfilePage />} />} 
                   />
-                  <Route 
-                    path="settings/account" 
-                    element={<AuthorizedRoute element={<AccountSettings />} />} 
+                  <Route
+                    path="settings/account"
+                    element={<AuthorizedRoute element={<AccountSettings />} />}
                   />
-                  
+
+                  {/* 测试页面 - 开发环境使用 */}
+                  <Route
+                    path="test/sortable-upload"
+                    element={<AuthorizedRoute element={<TestSortableUpload />} />}
+                  />
+
                   {/* 404页面 */}
                   <Route path="*" element={<NotFound />} />
                 </Route>

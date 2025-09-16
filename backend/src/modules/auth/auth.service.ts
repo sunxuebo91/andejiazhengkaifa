@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import { UploadService } from '../upload/upload.service';
 import * as bcrypt from 'bcrypt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -15,6 +16,7 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private uploadService: UploadService,
     @InjectModel(LoginLog.name) private loginLogModel: Model<LoginLog>,
   ) {}
 
@@ -89,13 +91,17 @@ export class AuthService {
       const token = this.jwtService.sign(payload);
       
       return {
-        token,
+        access_token: token,
         user: {
           id: user._id,
           username: user.username,
+          name: user.name,
+          phone: user.phone,
+          email: user.email,
+          avatar: user.avatar || null,
           role: user.role,
-          permissions: user.permissions,
-          name: user.name
+          department: user.department || null,
+          permissions: user.permissions
         },
       };
     } catch (error) {
@@ -150,6 +156,51 @@ export class AuthService {
     const payload = { username: user.username, sub: user._id };
     return {
       token: this.jwtService.sign(payload)
+    };
+  }
+
+  /**
+   * 获取当前用户详细信息
+   */
+  async getCurrentUser(userId: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    return {
+      id: user._id,
+      username: user.username,
+      name: user.name,
+      phone: user.phone,
+      email: user.email,
+      avatar: user.avatar || null,
+      role: user.role,
+      department: user.department || null,
+      permissions: user.permissions,
+      active: user.active,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+  }
+
+  /**
+   * 上传用户头像
+   */
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    // 上传头像文件
+    const avatarUrl = await this.uploadService.uploadFile(file, { type: 'avatar' });
+
+    // 更新用户头像URL
+    await this.usersService.updateAvatar(userId, avatarUrl);
+
+    return {
+      avatar: avatarUrl
     };
   }
 }

@@ -16,6 +16,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { ESignModule } from './modules/esign/esign.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { WeixinModule } from './modules/weixin/weixin.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     ContractsModule,
     ESignModule,
     DashboardModule,
+    WeixinModule,
   ],
   controllers: [AppController],
   providers: [AppService],

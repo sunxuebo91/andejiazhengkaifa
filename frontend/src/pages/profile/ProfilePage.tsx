@@ -1,9 +1,10 @@
 import React from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Descriptions, Avatar, Button, Space, Typography, Divider } from 'antd';
+import { Card, Descriptions, Button, Space, Typography, Divider } from 'antd';
 import { UserOutlined, MailOutlined, PhoneOutlined, TeamOutlined, CalendarOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import AvatarUpload from '../../components/AvatarUpload';
 
 const { Title, Paragraph } = Typography;
 
@@ -33,14 +34,13 @@ const ProfilePage: React.FC = () => {
     >
       <Card variant="outlined" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
-          <Avatar 
-            size={80} 
-            icon={<UserOutlined />} 
-            style={{ backgroundColor: '#1890ff', marginRight: 24 }}
-          />
+          <div style={{ marginRight: 24 }}>
+            <AvatarUpload size={80} />
+          </div>
           <div>
             <Title level={3} style={{ margin: 0 }}>{user.name}</Title>
             <Paragraph type="secondary">{user.role === 'admin' ? '管理员' : user.role === 'manager' ? '经理' : '普通员工'}</Paragraph>
+            <Paragraph type="secondary" style={{ fontSize: '12px', margin: 0 }}>点击头像可以更换</Paragraph>
           </div>
         </div>
 
@@ -62,13 +62,19 @@ const ProfilePage: React.FC = () => {
           <Descriptions.Item label="电子邮箱">
             <Space>
               <MailOutlined />
-              {(user as any).email || '未设置'}
+              {user.email || '未设置'}
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label="手机号码">
             <Space>
               <PhoneOutlined />
-              {(user as any).phone || '未设置'}
+              {user.phone || '未设置'}
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label="部门">
+            <Space>
+              <TeamOutlined />
+              {user.department || '未设置'}
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label="角色">

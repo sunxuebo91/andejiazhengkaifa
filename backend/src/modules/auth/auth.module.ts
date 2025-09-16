@@ -6,11 +6,13 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
+import { UploadModule } from '../upload/upload.module';
 import { LoginLog, LoginLogSchema } from './models/login-log.entity';
 
 @Module({
   imports: [
     UsersModule,
+    UploadModule,
     PassportModule,
     MongooseModule.forFeature([
       { name: LoginLog.name, schema: LoginLogSchema }

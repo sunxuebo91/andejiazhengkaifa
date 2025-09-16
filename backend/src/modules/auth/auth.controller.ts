@@ -1,7 +1,18 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Get, Req } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Get, Req, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
+// Multer 配置 - 头像上传专用
+const avatarMulterConfig: MulterOptions = {
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+};
+
+@ApiTags('认证管理')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -35,5 +46,51 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async refreshToken(@Req() req) {
     return this.authService.refreshToken(req.user.userId);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '获取当前用户信息' })
+  async getCurrentUser(@Req() req) {
+    try {
+      const data = await this.authService.getCurrentUser(req.user.userId);
+      return { success: true, data, message: '获取用户信息成功' };
+    } catch (error) {
+      return { success: false, data: null, message: error.message || '获取用户信息失败' };
+    }
+  }
+
+  @Post('avatar')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('avatar', avatarMulterConfig))
+  @ApiOperation({ summary: '上传用户头像' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        avatar: {
+          type: 'string',
+          format: 'binary',
+          description: '头像文件'
+        },
+      },
+      required: ['avatar']
+    },
+  })
+  async uploadAvatar(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req,
+  ) {
+    try {
+      if (!file) {
+        throw new BadRequestException('请选择要上传的头像文件');
+      }
+
+      const data = await this.authService.uploadAvatar(req.user.userId, file);
+      return { success: true, data, message: '头像上传成功' };
+    } catch (error) {
+      return { success: false, data: null, message: error.message || '头像上传失败' };
+    }
   }
 }

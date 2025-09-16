@@ -2,8 +2,12 @@ import axios, { AxiosRequestConfig, AxiosError } from 'axios';
 import { getToken, removeToken } from './auth';
 
 // API 基础 URL
-// 统一使用空字符串作为baseURL，API调用时直接使用/api/xxx路径
-const API_BASE_URL = ''; // 开发和生产环境都使用空baseURL，API路径统一为/api/xxx
+// 根据环境判断使用不同的baseURL
+// 生产环境：使用当前域名的/api路径（通过Nginx代理到后端3000端口）
+// 强制使用HTTPS协议，因为生产环境配置了SSL证书
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? (typeof window !== 'undefined' ? `https://${window.location.hostname}` : '')
+  : ''; // 开发环境使用代理
 
 // 创建axios实例
 export const api = axios.create({

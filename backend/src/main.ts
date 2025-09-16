@@ -77,8 +77,8 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
 
     // 启动服务器
-    const port = process.env.NODE_ENV === 'production' ? 3000 : 3001;
-    await app.listen(port);
+    const port = process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3001);
+    await app.listen(port, '0.0.0.0'); // 明确绑定到所有接口
     console.log(`应用已启动，监听端口：${port}，环境：${process.env.NODE_ENV || 'development'}`);
     console.log(`API文档地址：http://localhost:${port}/api/docs`);
   } catch (error) {

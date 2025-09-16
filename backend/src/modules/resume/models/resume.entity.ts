@@ -63,7 +63,7 @@ export interface IResume extends Document {
   workExperiences?: WorkExperience[];
   idCardFront?: FileInfo;
   idCardBack?: FileInfo;
-  personalPhoto?: FileInfo;
+  personalPhoto?: FileInfo[];
   photoUrls?: string[];
   certificates?: FileInfo[];
   reports?: FileInfo[];
@@ -240,8 +240,8 @@ export class Resume extends Document implements IResume {
   @Prop({ type: FileInfoSchema, nullable: true })
   idCardBack?: FileInfo;
 
-  @Prop({ type: FileInfoSchema, nullable: true })
-  personalPhoto?: FileInfo;
+  @Prop({ type: [FileInfoSchema], default: [] })
+  personalPhoto?: FileInfo[];
 
   @Prop({ type: [String], default: [] })
   photoUrls?: string[];

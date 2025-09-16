@@ -428,8 +428,9 @@ export class ResumeService {
         case 'personalPhoto':
           if (!resumeDoc.photoUrls) resumeDoc.photoUrls = [];
           resumeDoc.photoUrls.push(fileUrl);
-          // 同时更新personalPhoto字段（保存最新的一张个人照片）
-          resumeDoc.personalPhoto = uploadedFileInfo;
+          // 同时更新personalPhoto字段（支持多张个人照片）
+          if (!resumeDoc.personalPhoto) resumeDoc.personalPhoto = [];
+          resumeDoc.personalPhoto.push(uploadedFileInfo);
           this.logger.debug(`添加到个人照片: ${fileUrl}, 总数: ${resumeDoc.photoUrls.length}`);
           break;
         case 'certificate':
@@ -522,10 +523,13 @@ export class ResumeService {
     }
 
     // 从结构化文件信息中移除
-    if (resume.personalPhoto && resume.personalPhoto.url === fileUrl) {
-      resume.personalPhoto = undefined;
-      fileRemoved = true;
-      this.logger.debug(`移除了personalPhoto: ${fileUrl}`);
+    if (resume.personalPhoto && Array.isArray(resume.personalPhoto)) {
+      const originalLength = resume.personalPhoto.length;
+      resume.personalPhoto = resume.personalPhoto.filter(photo => photo.url !== fileUrl);
+      if (resume.personalPhoto.length < originalLength) {
+        fileRemoved = true;
+        this.logger.debug(`从personalPhoto数组中移除了文件: ${fileUrl}`);
+      }
     }
 
     if (resume.certificates) {
@@ -585,6 +589,124 @@ export class ResumeService {
       this.logger.warn(`未找到要删除的文件: ${fileUrl}`);
       return { message: '文件未找到，可能已被删除' };
     }
+  }
+
+  /**
+   * 根据文件URL和类型删除文件（小程序专用）
+   */
+  async removeFileByUrl(id: string, fileUrl: string, fileType: string) {
+    const resume = await this.resumeModel.findById(new Types.ObjectId(id));
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    this.logger.debug(`开始删除文件: resumeId=${id}, fileType=${fileType}, fileUrl=${fileUrl}`);
+
+    let fileRemoved = false;
+
+    // 根据文件类型进行删除
+    switch (fileType) {
+      case 'idCardFront':
+        if (resume.idCardFront?.url === fileUrl) {
+          resume.idCardFront = undefined;
+          fileRemoved = true;
+          this.logger.debug(`移除了idCardFront: ${fileUrl}`);
+        }
+        break;
+
+      case 'idCardBack':
+        if (resume.idCardBack?.url === fileUrl) {
+          resume.idCardBack = undefined;
+          fileRemoved = true;
+          this.logger.debug(`移除了idCardBack: ${fileUrl}`);
+        }
+        break;
+
+      case 'personalPhoto':
+        // 从photoUrls数组中移除
+        if (resume.photoUrls) {
+          const originalLength = resume.photoUrls.length;
+          resume.photoUrls = resume.photoUrls.filter(url => url !== fileUrl);
+          if (resume.photoUrls.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从photoUrls中移除了文件: ${fileUrl}`);
+          }
+        }
+        // 从personalPhoto数组中移除匹配的文件
+        if (resume.personalPhoto && Array.isArray(resume.personalPhoto)) {
+          const originalLength = resume.personalPhoto.length;
+          resume.personalPhoto = resume.personalPhoto.filter(photo => photo.url !== fileUrl);
+          if (resume.personalPhoto.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从personalPhoto数组中移除了文件: ${fileUrl}`);
+          }
+        }
+        break;
+
+      case 'certificate':
+        // 从certificates数组中移除
+        if (resume.certificates) {
+          const originalLength = resume.certificates.length;
+          resume.certificates = resume.certificates.filter(cert => cert.url !== fileUrl);
+          if (resume.certificates.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从certificates中移除了文件: ${fileUrl}`);
+          }
+        }
+        // 从certificateUrls数组中移除
+        if (resume.certificateUrls) {
+          const originalLength = resume.certificateUrls.length;
+          resume.certificateUrls = resume.certificateUrls.filter(url => url !== fileUrl);
+          if (resume.certificateUrls.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从certificateUrls中移除了文件: ${fileUrl}`);
+          }
+        }
+        break;
+
+      case 'medicalReport':
+        // 从reports数组中移除
+        if (resume.reports) {
+          const originalLength = resume.reports.length;
+          resume.reports = resume.reports.filter(report => report.url !== fileUrl);
+          if (resume.reports.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从reports中移除了文件: ${fileUrl}`);
+          }
+        }
+        // 从medicalReportUrls数组中移除
+        if (resume.medicalReportUrls) {
+          const originalLength = resume.medicalReportUrls.length;
+          resume.medicalReportUrls = resume.medicalReportUrls.filter(url => url !== fileUrl);
+          if (resume.medicalReportUrls.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从medicalReportUrls中移除了文件: ${fileUrl}`);
+          }
+        }
+        break;
+
+      default:
+        throw new BadRequestException(`不支持的文件类型: ${fileType}`);
+    }
+
+    if (!fileRemoved) {
+      throw new NotFoundException('未找到要删除的文件');
+    }
+
+    // 保存更新后的简历
+    await resume.save();
+
+    // 尝试删除物理文件
+    try {
+      await this.uploadService.deleteFile(fileUrl);
+      this.logger.log(`物理文件删除成功: ${fileUrl}`);
+    } catch (deleteError) {
+      this.logger.warn(`物理文件删除失败，但数据库记录已清理: ${deleteError.message}`);
+      // 不抛出错误，因为数据库记录已经清理完成
+    }
+
+    this.logger.log(`文件删除成功: ${fileUrl}`);
+    return resume;
   }
 
   /**
@@ -686,9 +808,11 @@ export class ResumeService {
     Object.keys(categorizedFiles).forEach(type => {
       switch (type) {
         case 'personalPhoto':
-          resume.personalPhoto = categorizedFiles[type][0]; // 个人照片只保存一个
+          // 支持多张个人照片
+          if (!resume.personalPhoto) resume.personalPhoto = [];
+          resume.personalPhoto.push(...categorizedFiles[type]);
           if (!resume.photoUrls) resume.photoUrls = [];
-          resume.photoUrls.push(categorizedFiles[type][0].url);
+          resume.photoUrls.push(...categorizedFiles[type].map(f => f.url));
           break;
         case 'idCardFront':
           resume.idCardFront = categorizedFiles[type][0];
@@ -1236,6 +1360,34 @@ export class ResumeService {
       this.logger.error(`获取公开简历列表失败: ${error.message}`);
       throw error;
     }
+  }
+
+  async updatePersonalPhotos(id: string, photos: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>, userId?: string) {
+    const resume = await this.resumeModel.findById(new Types.ObjectId(id));
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    // 更新个人照片数组，保持传入的顺序
+    resume.personalPhoto = photos.map(photo => ({
+      url: photo.url,
+      filename: photo.filename || '',
+      size: photo.size || 0,
+      mimetype: photo.mimetype || 'image/jpeg'
+    }));
+
+    // 同时更新photoUrls数组以保持兼容性
+    resume.photoUrls = photos.map(photo => photo.url);
+
+    // 设置最后更新人
+    if (userId) {
+      resume.lastUpdatedBy = new Types.ObjectId(userId);
+    }
+
+    await resume.save();
+
+    this.logger.log(`个人照片排序更新成功: ${id}, 照片数量: ${photos.length}`);
+    return resume;
   }
 
 }

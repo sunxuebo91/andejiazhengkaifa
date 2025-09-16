@@ -18,6 +18,7 @@ import { Gender, GenderType, JobType, Education, FormValues, WorkExperience } fr
 import type { Resume } from '../../services/resume.service';
 import { isLoggedIn } from '../../services/auth';
 import { JOB_TYPE_MAP } from '../../constants/jobTypes'; // 引入共享的工种映射
+import SortableImageUpload from '../../components/SortableImageUpload';
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
 dayjs.extend(isSameOrBefore);
@@ -1377,6 +1378,27 @@ const CreateResume: React.FC = () => {
         //   );
         // });
         
+        // 更新个人照片排序
+        if (fileUploadState.photo.files.length > 0) {
+          console.log('📸 更新个人照片排序');
+          const photoData = {
+            photos: fileUploadState.photo.files.map(file => ({
+              url: file.url,
+              filename: file.name,
+              size: file.size,
+              mimetype: file.type || 'image/jpeg'
+            }))
+          };
+
+          try {
+            await apiService.patch(`/api/resumes/${editingResume._id}/personal-photos`, photoData);
+            console.log('✅ 个人照片排序更新成功');
+          } catch (error) {
+            console.error('❌ 个人照片排序更新失败:', error);
+            // 不阻断流程，只记录错误
+          }
+        }
+
         // 等待所有新文件上传完成
         if (uploadPromises.length > 0) {
           console.log(`⏳ 等待 ${uploadPromises.length} 个新文件上传完成...`);
@@ -2271,12 +2293,75 @@ const CreateResume: React.FC = () => {
             >
               <Row gutter={24}>
                 <Col span={8}>
-                  <Card 
-                    size="small" 
-                    title="个人照片" 
+                  <Card
+                    size="small"
+                    title="个人照片"
                     style={{ marginBottom: 16 }}
                   >
-                    {renderUploadList('photo')}
+                    <SortableImageUpload
+                      fileList={fileUploadState.photo.files}
+                      onChange={(newFileList) => {
+                        const typedFileList = newFileList as CustomUploadFile[];
+                        setFileUploadState(prev => ({
+                          ...prev,
+                          photo: { ...prev.photo, files: typedFileList }
+                        }));
+                        setPhotoFiles(typedFileList);
+                      }}
+                      onPreview={handlePreview}
+                      onRemove={handleRemoveFile('photo')}
+                      maxCount={FILE_UPLOAD_CONFIG.maxPhotoCount}
+                      beforeUpload={async (file) => {
+                        // 验证文件
+                        if (!validateFile(file, 'photo')) {
+                          return false;
+                        }
+
+                        // 压缩图片
+                        const processedFile = await ImageService.compressImage(file, 'photo');
+
+                        // 如果是编辑模式且有简历ID，直接上传
+                        if (editingResume?._id) {
+                          try {
+                            const formData = new FormData();
+                            formData.append('file', processedFile);
+                            formData.append('type', 'personalPhoto');
+
+                            const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
+                            console.log('📤 上传响应:', response);
+                            console.log('📤 上传响应data:', response.data);
+                            if (response.success) {
+                              const newFile = {
+                                uid: file.uid,
+                                name: file.name,
+                                url: response.data?.fileUrl, // 使用后端返回的fileUrl字段
+                                status: "done" as const,
+                                originFileObj: file,
+                                size: processedFile.size,
+                                isExisting: false
+                              };
+                              console.log('📸 创建的新文件对象:', newFile);
+
+                              // 更新文件列表
+                              const updatedFiles = [...fileUploadState.photo.files, newFile];
+                              setFileUploadState(prev => ({
+                                ...prev,
+                                photo: { ...prev.photo, files: updatedFiles }
+                              }));
+                              setPhotoFiles(updatedFiles);
+
+                              message.success('个人照片上传成功');
+                            }
+                          } catch (error) {
+                            console.error('个人照片上传失败:', error);
+                            message.error('个人照片上传失败');
+                          }
+                        }
+
+                        return false; // 阻止默认上传
+                      }}
+                      disabled={false}
+                    />
                   </Card>
                 </Col>
                 

@@ -108,12 +108,40 @@ export class UsersService {
         username: 'admin',
         password: 'admin123',
         name: '系统管理员',
+        email: 'admin@andejiazheng.com',
+        phone: '13800138000',
         role: 'admin',
         permissions: ['*'],
         active: true
       });
       console.log('初始管理员账户已创建');
+    } else {
+      // 如果管理员存在但缺少email或phone字段，则更新
+      if (!adminExists.email || !adminExists.phone) {
+        await this.userModel.findByIdAndUpdate(adminExists._id, {
+          email: adminExists.email || 'admin@andejiazheng.com',
+          phone: adminExists.phone || '13800138000'
+        });
+        console.log('管理员账户信息已更新');
+      }
     }
+  }
+
+  /**
+   * 更新用户头像
+   */
+  async updateAvatar(id: string, avatarUrl: string): Promise<UserWithoutPassword> {
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(id, { avatar: avatarUrl }, { new: true })
+      .select('-password')
+      .lean()
+      .exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    return updatedUser as UserWithoutPassword;
   }
 
   // 根据角色获取默认权限

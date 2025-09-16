@@ -8,7 +8,9 @@ export interface UserWithoutPassword {
   name: string;
   email?: string;
   phone?: string;
+  avatar?: string;
   role: string;
+  department?: string;
   permissions: string[];
   active: boolean;
   createdAt?: any;
@@ -33,8 +35,14 @@ export class User extends Document {
   @Prop()
   phone?: string;
 
+  @Prop()
+  avatar?: string;
+
   @Prop({ required: true })
   role: string;
+
+  @Prop()
+  department?: string;
 
   @Prop({ type: [String], default: [] })
   permissions: string[];

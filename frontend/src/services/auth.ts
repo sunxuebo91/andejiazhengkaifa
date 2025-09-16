@@ -124,15 +124,15 @@ export const login = async (username: string, password: string): Promise<any> =>
       throw new Error(response?.message || '登录失败');
     }
     
-    const { token, user } = response.data;
-    
-    if (!token || !user) {
-      console.error('Missing token or user data:', response.data);
+    const { access_token, user } = response.data;
+
+    if (!access_token || !user) {
+      console.error('Missing access_token or user data:', response.data);
       throw new Error('登录响应数据不完整');
     }
-    
+
     // 存储token和用户信息
-    setToken(token);
+    setToken(access_token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     
     return response.data;
@@ -183,5 +183,49 @@ export const getUserPermissions = async (): Promise<string[]> => {
   } catch (error) {
     console.error('Error getting permissions:', error);
     return [];
+  }
+};
+
+// 从服务器获取当前用户信息
+export const fetchCurrentUser = async (): Promise<any> => {
+  try {
+    if (!isLoggedIn()) {
+      throw new Error('用户未登录');
+    }
+
+    const response = await apiService.get('/api/auth/me');
+    if (!response || !response.success) {
+      throw new Error(response?.message || '获取用户信息失败');
+    }
+
+    // 更新本地存储的用户信息
+    localStorage.setItem(USER_KEY, JSON.stringify(response.data));
+
+    return response.data;
+  } catch (error: any) {
+    console.error('获取用户信息失败:', error);
+    throw error;
+  }
+};
+
+// 上传用户头像
+export const uploadAvatar = async (file: File): Promise<string> => {
+  try {
+    if (!isLoggedIn()) {
+      throw new Error('用户未登录');
+    }
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const response = await apiService.upload('/api/auth/avatar', formData);
+    if (!response || !response.success) {
+      throw new Error(response?.message || '头像上传失败');
+    }
+
+    return response.data.avatar;
+  } catch (error: any) {
+    console.error('头像上传失败:', error);
+    throw error;
   }
 };

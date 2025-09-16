@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Tabs, Form, Input, Button, Switch, Select, App } from 'antd';
+import { Card, Tabs, Form, Input, Button, Switch, Select, App, Divider } from 'antd';
 import { UserOutlined, LockOutlined, BellOutlined, SettingOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
+import AvatarUpload from '../../components/AvatarUpload';
 
 const { TabPane } = Tabs;
 const { Option } = Select;
@@ -44,18 +45,30 @@ const AccountSettings: React.FC = () => {
             }
             key="profile"
           >
-            <Form
-              layout="vertical"
-              form={form}
-              initialValues={{
-                username: user?.username || '',
-                name: user?.name || '',
-                email: (user as any)?.email || '',
-                phone: (user as any)?.phone || '',
-              }}
-              onFinish={handleSubmit}
-              style={{ maxWidth: 500, margin: '0 auto' }}
-            >
+            <div style={{ maxWidth: 500, margin: '0 auto' }}>
+              {/* 头像上传区域 */}
+              <div style={{ textAlign: 'center', marginBottom: 32 }}>
+                <AvatarUpload size={120} />
+                <div style={{ marginTop: 16, color: '#666', fontSize: '14px' }}>
+                  点击头像可以更换
+                  <br />
+                  支持 JPG、PNG 格式，文件大小不超过 5MB
+                </div>
+              </div>
+
+              <Divider />
+
+              <Form
+                layout="vertical"
+                form={form}
+                initialValues={{
+                  username: user?.username || '',
+                  name: user?.name || '',
+                  email: user?.email || '',
+                  phone: user?.phone || '',
+                }}
+                onFinish={handleSubmit}
+              >
               <Form.Item label="用户名" name="username">
                 <Input disabled prefix={<UserOutlined />} />
               </Form.Item>
@@ -90,6 +103,7 @@ const AccountSettings: React.FC = () => {
                 </Button>
               </Form.Item>
             </Form>
+            </div>
           </TabPane>
           
           <TabPane

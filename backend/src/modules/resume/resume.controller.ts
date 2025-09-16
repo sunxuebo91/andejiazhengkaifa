@@ -514,6 +514,257 @@ export class ResumeController {
     }
   }
 
+  // ==================== 小程序专用接口 ====================
+
+  @Post('miniprogram/create')
+  @ApiOperation({ summary: '小程序创建简历（JSON格式）' })
+  @ApiBody({ type: CreateResumeDto })
+  async createForMiniprogram(
+    @Body() dto: CreateResumeDto,
+    @Req() req,
+  ) {
+    try {
+      this.logger.log(`小程序创建简历: ${JSON.stringify(dto, null, 2)}`);
+
+      const resume = await this.resumeService.create({
+        ...dto,
+        userId: req.user.userId
+      });
+
+      return {
+        success: true,
+        data: {
+          id: resume._id || resume.id,
+          name: resume.name,
+          phone: resume.phone,
+          age: resume.age,
+          gender: resume.gender,
+          jobType: resume.jobType,
+          education: resume.education,
+          experienceYears: resume.experienceYears,
+          expectedSalary: resume.expectedSalary,
+          nativePlace: resume.nativePlace,
+          skills: resume.skills,
+          serviceArea: resume.serviceArea,
+          selfIntroduction: resume.selfIntroduction,
+          school: resume.school,
+          major: resume.major,
+          workExperiences: resume.workExperiences || resume.workHistory || [],
+          createdAt: (resume as any).createdAt,
+          updatedAt: (resume as any).updatedAt
+        },
+        message: '创建简历成功'
+      };
+    } catch (error) {
+      this.logger.error(`小程序创建简历失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `创建简历失败: ${error.message}`
+      };
+    }
+  }
+
+  @Patch('miniprogram/:id')
+  @ApiOperation({ summary: '小程序更新简历（JSON格式）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiBody({ type: UpdateResumeDto })
+  async updateForMiniprogram(
+    @Param('id') id: string,
+    @Body() dto: UpdateResumeDto,
+    @Req() req,
+  ) {
+    try {
+      this.logger.log(`小程序更新简历 ${id}: ${JSON.stringify(dto, null, 2)}`);
+
+      const resume = await this.resumeService.update(id, dto);
+
+      return {
+        success: true,
+        data: {
+          id: resume._id || resume.id,
+          name: resume.name,
+          phone: resume.phone,
+          age: resume.age,
+          gender: resume.gender,
+          jobType: resume.jobType,
+          education: resume.education,
+          experienceYears: resume.experienceYears,
+          expectedSalary: resume.expectedSalary,
+          nativePlace: resume.nativePlace,
+          skills: resume.skills,
+          serviceArea: resume.serviceArea,
+          selfIntroduction: resume.selfIntroduction,
+          school: resume.school,
+          major: resume.major,
+          workExperiences: resume.workExperiences || resume.workHistory || [],
+          // 文件相关字段
+          idCardFrontUrl: resume.idCardFront?.url,
+          idCardBackUrl: resume.idCardBack?.url,
+          photoUrls: resume.photoUrls || [],
+          certificateUrls: resume.certificateUrls || [],
+          medicalReportUrls: resume.medicalReportUrls || [],
+          // 新格式文件字段
+          idCardFront: resume.idCardFront,
+          idCardBack: resume.idCardBack,
+          personalPhoto: resume.personalPhoto,
+          certificates: resume.certificates || [],
+          reports: resume.reports || [],
+          updatedAt: (resume as any).updatedAt
+        },
+        message: '更新简历成功'
+      };
+    } catch (error) {
+      this.logger.error(`小程序更新简历失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `更新简历失败: ${error.message}`
+      };
+    }
+  }
+
+  @Post('miniprogram/:id/upload-file')
+  @UseInterceptors(FileInterceptor('file', multerConfig))
+  @ApiOperation({ summary: '小程序上传单个文件' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: '要上传的文件'
+        },
+        type: {
+          type: 'string',
+          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport'],
+          description: '文件类型'
+        },
+      },
+      required: ['file', 'type']
+    },
+  })
+  async uploadFileForMiniprogram(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('type') type: string,
+    @Req() req,
+  ) {
+    try {
+      if (!file) {
+        throw new BadRequestException('请选择要上传的文件');
+      }
+
+      if (!type || !['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport'].includes(type)) {
+        throw new BadRequestException('请指定正确的文件类型');
+      }
+
+      this.logger.log(`小程序上传文件: 简历ID=${id}, 文件类型=${type}, 文件名=${file.originalname}`);
+
+      const resume = await this.resumeService.addFileWithType(id, file, type);
+
+      // 根据文件类型返回相应的URL
+      let uploadedFileUrl = '';
+      switch (type) {
+        case 'idCardFront':
+          uploadedFileUrl = resume.idCardFront?.url || '';
+          break;
+        case 'idCardBack':
+          uploadedFileUrl = resume.idCardBack?.url || '';
+          break;
+        case 'personalPhoto':
+          uploadedFileUrl = (resume.personalPhoto && resume.personalPhoto.length > 0 && resume.personalPhoto[resume.personalPhoto.length - 1]?.url) || (resume.photoUrls && resume.photoUrls[resume.photoUrls.length - 1]) || '';
+          break;
+        case 'certificate':
+          uploadedFileUrl = resume.certificates && resume.certificates.length > 0
+            ? resume.certificates[resume.certificates.length - 1].url
+            : (resume.certificateUrls && resume.certificateUrls[resume.certificateUrls.length - 1]) || '';
+          break;
+        case 'medicalReport':
+          uploadedFileUrl = resume.reports && resume.reports.length > 0
+            ? resume.reports[resume.reports.length - 1].url
+            : (resume.medicalReportUrls && resume.medicalReportUrls[resume.medicalReportUrls.length - 1]) || '';
+          break;
+      }
+
+      return {
+        success: true,
+        data: {
+          fileUrl: uploadedFileUrl,
+          fileType: type,
+          fileName: file.originalname,
+          fileSize: file.size,
+          resumeId: id
+        },
+        message: '文件上传成功'
+      };
+    } catch (error) {
+      this.logger.error(`小程序文件上传失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `文件上传失败: ${error.message}`
+      };
+    }
+  }
+
+  @Delete('miniprogram/:id/delete-file')
+  @ApiOperation({ summary: '小程序删除文件' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        fileUrl: {
+          type: 'string',
+          description: '要删除的文件URL'
+        },
+        fileType: {
+          type: 'string',
+          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport'],
+          description: '文件类型'
+        },
+      },
+      required: ['fileUrl', 'fileType']
+    },
+  })
+  async deleteFileForMiniprogram(
+    @Param('id') id: string,
+    @Body('fileUrl') fileUrl: string,
+    @Body('fileType') fileType: string,
+    @Req() req,
+  ) {
+    try {
+      if (!fileUrl || !fileType) {
+        throw new BadRequestException('请提供文件URL和文件类型');
+      }
+
+      this.logger.log(`小程序删除文件: 简历ID=${id}, 文件类型=${fileType}, 文件URL=${fileUrl}`);
+
+      const resume = await this.resumeService.removeFileByUrl(id, fileUrl, fileType);
+
+      return {
+        success: true,
+        data: {
+          resumeId: id,
+          deletedFileUrl: fileUrl,
+          fileType: fileType
+        },
+        message: '文件删除成功'
+      };
+    } catch (error) {
+      this.logger.error(`小程序文件删除失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `文件删除失败: ${error.message}`
+      };
+    }
+  }
+
 
 
   @Get(':id')
@@ -870,6 +1121,32 @@ export class ResumeController {
         success: false,
         data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 },
         message: `获取简历列表失败: ${error.message}`
+      };
+    }
+  }
+
+  @Patch(':id/personal-photos')
+  @ApiOperation({ summary: '更新个人照片排序' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  async updatePersonalPhotos(
+    @Param('id') id: string,
+    @Body() photoData: { photos: Array<{ url: string; filename?: string; size?: number; mimetype?: string }> },
+    @Req() req: any,
+  ) {
+    try {
+      const userId = req.user?.sub;
+      const result = await this.resumeService.updatePersonalPhotos(id, photoData.photos, userId);
+      return {
+        success: true,
+        data: result,
+        message: '个人照片排序更新成功'
+      };
+    } catch (error) {
+      this.logger.error(`更新个人照片排序失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `更新个人照片排序失败: ${error.message}`
       };
     }
   }

@@ -163,6 +163,24 @@
   }
   ```
 
+
+#### 获取公开简历（无认证）
+- URL: `/api/resumes/:id/public`
+- 方法: `GET`
+- 认证: 无需
+- 成功响应:
+  ```json
+  {
+    "success": true,
+    "data": { /* 完整简历原始数据（不脱敏）*/ },
+    "message": "获取简历详情成功"
+  }
+  ```
+- 错误响应:
+  ```json
+  { "success": false, "message": "简历不存在" }
+  ```
+
 #### 创建简历
 - **URL**: `/api/resumes`
 - **方法**: `POST`

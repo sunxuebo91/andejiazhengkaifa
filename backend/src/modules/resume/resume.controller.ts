@@ -744,6 +744,36 @@ export class ResumeController {
 
 
 
+  @Get(':id/public')
+  @Public()
+  @ApiOperation({ summary: '获取简历公开详情（无认证）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  async findOnePublic(@Param('id') id: string) {
+    try {
+      this.logger.log(`获取公开简历详情: id=${id}`);
+      const resume = await this.resumeService.findOne(id);
+      if (!resume) {
+        return {
+          success: false,
+          data: null,
+          message: '简历不存在'
+        };
+      }
+      return {
+        success: true,
+        data: resume,
+        message: '获取简历详情成功'
+      };
+    } catch (error) {
+      this.logger.warn(`获取公开简历详情失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: error?.message || '服务器内部错误'
+      };
+    }
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '获取简历详情' })
   @ApiResponse({ status: 200, description: '获取成功' })

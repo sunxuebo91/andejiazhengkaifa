@@ -1,4 +1,5 @@
 import { Controller, Post, Get, UseInterceptors, UploadedFile, BadRequestException, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Public } from '../auth/decorators/public.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TencentOcrService } from './tencent-ocr.service';
 import { ImageProcessor } from '../../utils/image-processor';
@@ -26,6 +27,7 @@ export class OcrController {
   constructor(private readonly ocrService: TencentOcrService) {}
 
   @Post('idcard')
+  @Public()
   @UseInterceptors(FileInterceptor('file', multerOptions))
   @ApiOperation({ summary: '身份证识别' })
   @ApiConsumes('multipart/form-data')

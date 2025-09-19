@@ -1,14 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger, UploadedFile, BadRequestException, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger, UploadedFile, BadRequestException, Req, Headers, ConflictException } from '@nestjs/common';
 import { FilesInterceptor, FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody, ApiParam } from '@nestjs/swagger';
 import { ResumeService } from './resume.service';
-import { CreateResumeDto } from './dto/create-resume.dto';
+import { CreateResumeDto, CreateResumeV2Dto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Resume } from './models/resume.entity';
 import { UploadService } from '../upload/upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UseGuards } from '@nestjs/common';
-import { ConflictException } from '@nestjs/common';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -304,6 +303,141 @@ export class ResumeController {
     }
   }
 
+  @Get('enums')
+  @Public()
+  @ApiOperation({ summary: '获取枚举字典（供前端使用）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async getEnums() {
+    try {
+      const enums = {
+        gender: [
+          { value: 'female', label: '女' },
+          { value: 'male', label: '男' }
+        ],
+        jobType: [
+          { value: 'yuexin', label: '月嫂' },
+          { value: 'zhujia-yuer', label: '住家育儿嫂' },
+          { value: 'baiban-yuer', label: '白班育儿' },
+          { value: 'baojie', label: '保洁' },
+          { value: 'baiban-baomu', label: '白班保姆' },
+          { value: 'zhujia-baomu', label: '住家保姆' },
+          { value: 'yangchong', label: '养宠' },
+          { value: 'xiaoshi', label: '小时工' },
+          { value: 'zhujia-hulao', label: '住家护老' }
+        ],
+        education: [
+          { value: 'no', label: '无学历' },
+          { value: 'primary', label: '小学' },
+          { value: 'middle', label: '初中' },
+          { value: 'secondary', label: '中专' },
+          { value: 'vocational', label: '职业学校' },
+          { value: 'high', label: '高中' },
+          { value: 'college', label: '大专' },
+          { value: 'bachelor', label: '本科' },
+          { value: 'graduate', label: '研究生' }
+        ],
+        skills: [
+          { value: 'chanhou', label: '产后护理' },
+          { value: 'teshu-yinger', label: '特殊婴儿护理' },
+          { value: 'yiliaobackground', label: '医疗背景' },
+          { value: 'yuying', label: '育婴' },
+          { value: 'zaojiao', label: '早教' },
+          { value: 'fushi', label: '辅食' },
+          { value: 'ertui', label: '儿推' },
+          { value: 'waiyu', label: '外语' },
+          { value: 'zhongcan', label: '中餐' },
+          { value: 'xican', label: '西餐' },
+          { value: 'mianshi', label: '面食' },
+          { value: 'jiashi', label: '家事' },
+          { value: 'shouyi', label: '手艺' },
+          { value: 'muying', label: '母婴' },
+          { value: 'cuiru', label: '催乳' },
+          { value: 'yuezican', label: '月子餐' },
+          { value: 'yingyang', label: '营养' },
+          { value: 'liliao-kangfu', label: '理疗康复' },
+          { value: 'shuangtai-huli', label: '双胎护理' },
+          { value: 'yanglao-huli', label: '养老护理' }
+        ],
+        maritalStatus: [
+          { value: 'single', label: '未婚' },
+          { value: 'married', label: '已婚' },
+          { value: 'divorced', label: '离异' },
+          { value: 'widowed', label: '丧偶' }
+        ],
+        religion: [
+          { value: 'none', label: '无' },
+          { value: 'buddhism', label: '佛教' },
+          { value: 'taoism', label: '道教' },
+          { value: 'christianity', label: '基督教' },
+          { value: 'catholicism', label: '天主教' },
+          { value: 'islam', label: '伊斯兰教' },
+          { value: 'other', label: '其他' }
+        ],
+        zodiac: [
+          { value: 'rat', label: '鼠' },
+          { value: 'ox', label: '牛' },
+          { value: 'tiger', label: '虎' },
+          { value: 'rabbit', label: '兔' },
+          { value: 'dragon', label: '龙' },
+          { value: 'snake', label: '蛇' },
+          { value: 'horse', label: '马' },
+          { value: 'goat', label: '羊' },
+          { value: 'monkey', label: '猴' },
+          { value: 'rooster', label: '鸡' },
+          { value: 'dog', label: '狗' },
+          { value: 'pig', label: '猪' }
+        ],
+        zodiacSign: [
+          { value: 'capricorn', label: '摩羯座' },
+          { value: 'aquarius', label: '水瓶座' },
+          { value: 'pisces', label: '双鱼座' },
+          { value: 'aries', label: '白羊座' },
+          { value: 'taurus', label: '金牛座' },
+          { value: 'gemini', label: '双子座' },
+          { value: 'cancer', label: '巨蟹座' },
+          { value: 'leo', label: '狮子座' },
+          { value: 'virgo', label: '处女座' },
+          { value: 'libra', label: '天秤座' },
+          { value: 'scorpio', label: '天蝎座' },
+          { value: 'sagittarius', label: '射手座' }
+        ],
+        orderStatus: [
+          { value: 'accepting', label: '想接单' },
+          { value: 'not-accepting', label: '不接单' },
+          { value: 'on-service', label: '已上户' }
+        ],
+        leadSource: [
+          { value: 'referral', label: '转介绍' },
+          { value: 'paid-lead', label: '付费线索' },
+          { value: 'community', label: '社群线索' },
+          { value: 'door-to-door', label: '地推' },
+          { value: 'shared-order', label: '合单' },
+          { value: 'other', label: '其他' }
+        ],
+        fileTypes: [
+          { value: 'idCardFront', label: '身份证正面' },
+          { value: 'idCardBack', label: '身份证背面' },
+          { value: 'personalPhoto', label: '个人照片' },
+          { value: 'certificate', label: '技能证书' },
+          { value: 'medicalReport', label: '体检报告' }
+        ]
+      };
+
+      return {
+        success: true,
+        data: enums,
+        message: '获取枚举字典成功'
+      };
+    } catch (error) {
+      this.logger.error(`获取枚举字典失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `获取枚举字典失败: ${error.message}`
+      };
+    }
+  }
+
   @Get()
   @ApiOperation({ summary: '获取简历列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -417,6 +551,8 @@ export class ResumeController {
 
 
 
+
+
   @Get('search-workers')
   @Public()
   @ApiOperation({ summary: '搜索服务人员' })
@@ -517,53 +653,65 @@ export class ResumeController {
   // ==================== 小程序专用接口 ====================
 
   @Post('miniprogram/create')
-  @ApiOperation({ summary: '小程序创建简历（JSON格式）' })
-  @ApiBody({ type: CreateResumeDto })
+  @ApiOperation({ summary: '小程序创建简历（支持幂等性和去重）' })
+  @ApiBody({ type: CreateResumeV2Dto })
   async createForMiniprogram(
-    @Body() dto: CreateResumeDto,
-    @Req() req,
+    @Body() dto: CreateResumeV2Dto,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+    @Headers('api-version') apiVersion?: string,
+    @Headers('x-request-id') requestId?: string,
+    @Req() req?,
   ) {
     try {
       this.logger.log(`小程序创建简历: ${JSON.stringify(dto, null, 2)}`);
+      this.logger.log(`请求头: idempotencyKey=${idempotencyKey}, apiVersion=${apiVersion}, requestId=${requestId}`);
 
-      const resume = await this.resumeService.create({
-        ...dto,
-        userId: req.user.userId
-      });
+      // 调用服务层的创建方法
+      const result = await this.resumeService.createV2(dto, idempotencyKey, req.user.userId);
 
       return {
         success: true,
         data: {
-          id: resume._id || resume.id,
-          name: resume.name,
-          phone: resume.phone,
-          age: resume.age,
-          gender: resume.gender,
-          jobType: resume.jobType,
-          education: resume.education,
-          experienceYears: resume.experienceYears,
-          expectedSalary: resume.expectedSalary,
-          nativePlace: resume.nativePlace,
-          skills: resume.skills,
-          serviceArea: resume.serviceArea,
-          selfIntroduction: resume.selfIntroduction,
-          school: resume.school,
-          major: resume.major,
-          workExperiences: resume.workExperiences || resume.workHistory || [],
-          createdAt: (resume as any).createdAt,
-          updatedAt: (resume as any).updatedAt
+          id: result.id,
+          createdAt: result.createdAt,
+          action: result.action || 'CREATED'
         },
-        message: '创建简历成功'
+        message: result.action === 'UPDATED' ? '简历已更新' : '创建简历成功'
       };
     } catch (error) {
       this.logger.error(`小程序创建简历失败: ${error.message}`);
+
+      // 处理特定错误类型
+      if (error instanceof ConflictException) {
+        const errorData = error.getResponse() as any;
+        return {
+          success: false,
+          code: 'DUPLICATE',
+          data: errorData.existingId ? { existingId: errorData.existingId } : null,
+          message: error.message
+        };
+      }
+
+      if (error instanceof BadRequestException) {
+        const errorData = error.getResponse() as any;
+        return {
+          success: false,
+          code: 'VALIDATION_ERROR',
+          data: errorData.errors || null,
+          message: error.message
+        };
+      }
+
       return {
         success: false,
-        data: null,
+        code: 'INTERNAL_ERROR',
+        data: { requestId },
         message: `创建简历失败: ${error.message}`
       };
     }
   }
+
+
 
   @Patch('miniprogram/:id')
   @ApiOperation({ summary: '小程序更新简历（JSON格式）' })
@@ -746,11 +894,33 @@ export class ResumeController {
 
   @Get(':id/public')
   @Public()
-  @ApiOperation({ summary: '获取简历公开详情（无认证）' })
+  @ApiOperation({ summary: '获取简历公开详情（无认证，脱敏）' })
   @ApiParam({ name: 'id', description: '简历ID' })
-  async findOnePublic(@Param('id') id: string) {
+  async findOnePublic(@Param('id') id: string, @Query('shared') shared?: string) {
     try {
-      this.logger.log(`获取公开简历详情: id=${id}`);
+      this.logger.log(`获取公开简历详情: id=${id}, shared=${shared}`);
+
+      // 如果是分享模式，返回脱敏的公开字段
+      if (shared === '1') {
+        const resume = await this.resumeService.findOne(id);
+        if (!resume) {
+          return {
+            success: false,
+            data: null,
+            message: '简历不存在'
+          };
+        }
+
+        // 返回公开字段（脱敏）
+        const publicData = this.filterPublicFields(resume);
+        return {
+          success: true,
+          data: publicData,
+          message: '获取简历详情成功'
+        };
+      }
+
+      // 默认行为：返回完整数据（需要权限控制）
       const resume = await this.resumeService.findOne(id);
       if (!resume) {
         return {
@@ -772,6 +942,36 @@ export class ResumeController {
         message: error?.message || '服务器内部错误'
       };
     }
+  }
+
+  /**
+   * 过滤出公开可见字段（脱敏处理）
+   */
+  private filterPublicFields(resume: any) {
+    if (!resume) return null;
+
+    return {
+      id: resume._id?.toString() || resume.id,
+      name: resume.name,
+      gender: resume.gender,
+      age: resume.age,
+      jobType: resume.jobType,
+      education: resume.education,
+      experienceYears: resume.experienceYears,
+      expectedSalary: resume.expectedSalary,
+      serviceArea: resume.serviceArea,
+      skills: resume.skills,
+      nativePlace: resume.nativePlace,
+      selfIntroduction: resume.selfIntroduction,
+      school: resume.school,
+      major: resume.major,
+      // 处理过的头像（如果已生成）
+      avatarProcessed: resume.avatarProcessed,
+      avatarRound: resume.avatarRound,
+      // 工作经历（保留必要信息）
+      workExperiences: resume.workExperiences || resume.workHistory || []
+    };
+    // 严禁返回：phone、idNumber、身份证照片、报告、内部备注等敏感信息
   }
 
   @Get(':id')

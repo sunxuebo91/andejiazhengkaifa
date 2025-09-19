@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Resume, IResume } from './models/resume.entity';
-import { CreateResumeDto } from './dto/create-resume.dto';
+import { CreateResumeDto, CreateResumeV2Dto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Logger } from '@nestjs/common';
 import { UploadService } from '../upload/upload.service';
@@ -10,10 +10,12 @@ import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 
 import { JwtService } from '@nestjs/jwt';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class ResumeService {
   private readonly logger = new Logger(ResumeService.name);
+  private readonly idempotencyCache = new Map<string, any>(); // 简单内存缓存，生产环境应使用Redis
 
   constructor(
     @InjectModel(Resume.name)
@@ -711,6 +713,149 @@ export class ResumeService {
     }
 
     this.logger.log(`文件删除成功: ${fileUrl}`);
+    return resume;
+  }
+
+  /**
+   * V2版本创建简历 - 支持幂等性、去重和规范化
+   */
+  async createV2(dto: CreateResumeV2Dto, idempotencyKey?: string, userId?: string) {
+    // 1. 幂等性检查
+    if (idempotencyKey) {
+      const cacheKey = `idempotency:${idempotencyKey}`;
+      const cached = this.idempotencyCache.get(cacheKey);
+      if (cached) {
+        this.logger.log(`幂等性命中，返回缓存结果: ${idempotencyKey}`);
+        return cached;
+      }
+    }
+
+    // 2. 数据规范化和校验
+    const normalizedDto = this.normalizeResumeData(dto);
+
+    // 3. 手机号去重检查
+    const existingResume = await this.resumeModel.findOne({ phone: normalizedDto.phone });
+    if (existingResume) {
+      if (dto.createOrUpdate) {
+        // 允许更新模式
+        const updatedResume = await this.updateExistingResume(existingResume._id.toString(), normalizedDto, userId);
+        const result = {
+          id: updatedResume._id.toString(),
+          createdAt: (updatedResume as any).createdAt,
+          action: 'UPDATED'
+        };
+
+        // 缓存结果
+        if (idempotencyKey) {
+          this.idempotencyCache.set(`idempotency:${idempotencyKey}`, result);
+          // 5分钟后清除缓存
+          setTimeout(() => this.idempotencyCache.delete(`idempotency:${idempotencyKey}`), 5 * 60 * 1000);
+        }
+
+        return result;
+      } else {
+        // 返回409冲突
+        throw new ConflictException({
+          message: '该手机号已被使用',
+          existingId: existingResume._id.toString()
+        });
+      }
+    }
+
+    // 4. 创建新简历
+    const resumeData: any = {
+      ...normalizedDto,
+      userId: userId ? new Types.ObjectId(userId) : undefined,
+      status: 'pending',
+      fileIds: []
+    };
+
+    // 清理空值避免索引问题
+    if (!resumeData.idNumber) {
+      delete resumeData.idNumber;
+    }
+
+    try {
+      const resume = new this.resumeModel(resumeData);
+      const savedResume = await resume.save();
+
+      const result = {
+        id: savedResume._id.toString(),
+        createdAt: (savedResume as any).createdAt,
+        action: 'CREATED'
+      };
+
+      // 缓存结果
+      if (idempotencyKey) {
+        this.idempotencyCache.set(`idempotency:${idempotencyKey}`, result);
+        setTimeout(() => this.idempotencyCache.delete(`idempotency:${idempotencyKey}`), 5 * 60 * 1000);
+      }
+
+      this.logger.log(`v2简历创建成功: ${result.id}`);
+      return result;
+    } catch (error) {
+      this.logger.error('v2简历创建失败:', error);
+      throw new BadRequestException(`创建简历失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 数据规范化处理
+   */
+  private normalizeResumeData(dto: CreateResumeV2Dto) {
+    const normalized = { ...dto };
+
+    // 规范化手机号（已在DTO中处理，这里再次确保）
+    if (normalized.phone) {
+      normalized.phone = normalized.phone.replace(/\D/g, '');
+    }
+
+    // 规范化字符串字段
+    ['name', 'nativePlace', 'selfIntroduction', 'school', 'major'].forEach(field => {
+      if (normalized[field] && typeof normalized[field] === 'string') {
+        normalized[field] = normalized[field].trim().replace(/[\u3000\s]+/g, ' ');
+      }
+    });
+
+    // 确保数组字段
+    if (!Array.isArray(normalized.skills)) {
+      normalized.skills = [];
+    }
+    if (!Array.isArray(normalized.serviceArea)) {
+      normalized.serviceArea = [];
+    }
+
+    // 技能枚举校验和过滤
+    const validSkills = ['chanhou', 'teshu-yinger', 'yiliaobackground', 'yuying', 'zaojiao', 'fushi', 'ertui', 'waiyu', 'zhongcan', 'xican', 'mianshi', 'jiashi', 'shouyi', 'muying', 'cuiru', 'yuezican', 'yingyang', 'liliao-kangfu', 'shuangtai-huli', 'yanglao-huli'];
+    normalized.skills = normalized.skills.filter(skill => validSkills.includes(skill));
+
+    // 设置默认值
+    if (normalized.experienceYears === undefined) {
+      normalized.experienceYears = 0;
+    }
+
+    return normalized;
+  }
+
+  /**
+   * 更新已存在的简历
+   */
+  private async updateExistingResume(id: string, data: any, userId?: string) {
+    const updateData = { ...data };
+    if (userId) {
+      updateData.lastUpdatedBy = new Types.ObjectId(userId);
+    }
+
+    const resume = await this.resumeModel.findByIdAndUpdate(
+      new Types.ObjectId(id),
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
     return resume;
   }
 

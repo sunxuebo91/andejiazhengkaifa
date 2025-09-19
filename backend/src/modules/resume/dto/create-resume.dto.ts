@@ -118,6 +118,395 @@ export enum LeadSource {
   OTHER = 'other'
 }
 
+// V2版本的创建简历DTO - 专为小程序设计，支持宽松输入和强校验
+export class CreateResumeV2Dto {
+  // 必填字段
+  @ApiProperty({ description: '姓名', example: '张三', minLength: 2, maxLength: 20 })
+  @IsNotEmpty({ message: '姓名不能为空' })
+  @IsString({ message: '姓名必须是字符串' })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' '); // 去首尾空格，全角空格转半角
+    }
+    return value;
+  })
+  name: string;
+
+  @ApiProperty({ description: '手机号码', example: '13800138000' })
+  @IsNotEmpty({ message: '手机号码不能为空' })
+  @IsString({ message: '手机号码必须是字符串' })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      // 提取所有数字，支持含空格/短横线的输入
+      const digits = value.replace(/\D/g, '');
+      return digits;
+    }
+    return value;
+  })
+  @Matches(/^1[3-9]\d{9}$/, { message: '请输入正确的11位手机号码' })
+  phone: string;
+
+  @ApiProperty({ description: '性别', enum: ['female', 'male'] })
+  @IsNotEmpty({ message: '性别不能为空' })
+  @IsEnum(['female', 'male'], { message: '性别必须是 female 或 male' })
+  gender: 'female' | 'male';
+
+  @ApiProperty({ description: '年龄', example: 35, minimum: 18, maximum: 65 })
+  @IsNotEmpty({ message: '年龄不能为空' })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const num = Number(value.trim());
+      return isNaN(num) ? value : num;
+    }
+    return value;
+  })
+  @IsNumber({}, { message: '年龄必须是数字' })
+  @Min(18, { message: '年龄必须在18-65岁之间' })
+  @Max(65, { message: '年龄必须在18-65岁之间' })
+  age: number;
+
+  @ApiProperty({
+    description: '工作类型',
+    enum: ['yuexin', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao']
+  })
+  @IsNotEmpty({ message: '工种不能为空' })
+  @IsEnum(['yuexin', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao'],
+    { message: '请选择正确的工种' })
+  jobType: string;
+
+  @ApiProperty({
+    description: '学历',
+    enum: ['no', 'primary', 'middle', 'secondary', 'vocational', 'high', 'college', 'bachelor', 'graduate']
+  })
+  @IsNotEmpty({ message: '学历不能为空' })
+  @IsEnum(['no', 'primary', 'middle', 'secondary', 'vocational', 'high', 'college', 'bachelor', 'graduate'],
+    { message: '请选择正确的学历' })
+  education: string;
+
+  // 可选字段
+  @ApiProperty({ description: '工作经验年限', example: 5, minimum: 0, required: false })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return 0;
+    if (typeof value === 'string') {
+      const num = Number(value.trim());
+      return isNaN(num) ? 0 : Math.max(0, Math.floor(num));
+    }
+    return typeof value === 'number' ? Math.max(0, Math.floor(value)) : 0;
+  })
+  @IsNumber({}, { message: '工作经验年限必须是数字' })
+  @Min(0, { message: '工作经验年限必须大于等于0' })
+  experienceYears?: number;
+
+  @ApiProperty({ description: '期望薪资(元)', example: 8000, minimum: 0, required: false })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'string') {
+      const num = Number(value.trim());
+      return isNaN(num) ? undefined : Math.max(0, Math.floor(num));
+    }
+    return typeof value === 'number' ? Math.max(0, Math.floor(value)) : undefined;
+  })
+  @IsNumber({}, { message: '期望薪资必须是数字' })
+  @Min(0, { message: '期望薪资必须大于等于0' })
+  expectedSalary?: number;
+
+  @ApiProperty({ description: '籍贯', example: '河南省郑州市', maxLength: 20, required: false })
+  @IsOptional()
+  @IsString({ message: '籍贯必须是字符串' })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' ');
+    }
+    return value;
+  })
+  nativePlace?: string;
+
+  @ApiProperty({ description: '技能列表', example: ['chanhou', 'yuying'], required: false })
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [value];
+      } catch {
+        return [value];
+      }
+    }
+    return Array.isArray(value) ? value : [value];
+  })
+  skills?: string[];
+
+  @ApiProperty({ description: '服务区域', example: ['郑州市金水区'], required: false })
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [value];
+      } catch {
+        return [value];
+      }
+    }
+    return Array.isArray(value) ? value : [value];
+  })
+  serviceArea?: string[];
+
+  @ApiProperty({ description: '自我介绍', maxLength: 1000, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' ');
+    }
+    return value;
+  })
+  selfIntroduction?: string;
+
+  @ApiProperty({ description: '毕业院校', maxLength: 50, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' ');
+    }
+    return value;
+  })
+  school?: string;
+
+  @ApiProperty({ description: '专业', maxLength: 50, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' ');
+    }
+    return value;
+  })
+  major?: string;
+
+  // 文件上传相关字段（可选）
+  @ApiProperty({ description: '身份证正面照片URL', required: false })
+  @IsOptional()
+  @IsString()
+  idCardFrontUrl?: string;
+
+  @ApiProperty({ description: '身份证背面照片URL', required: false })
+  @IsOptional()
+  @IsString()
+  idCardBackUrl?: string;
+
+  @ApiProperty({ description: '个人照片URL列表', required: false })
+  @IsOptional()
+  @IsArray()
+  photoUrls?: string[];
+
+  @ApiProperty({ description: '证书照片URL列表', required: false })
+  @IsOptional()
+  @IsArray()
+  certificateUrls?: string[];
+
+  @ApiProperty({ description: '体检报告URL列表', required: false })
+  @IsOptional()
+  @IsArray()
+  medicalReportUrls?: string[];
+
+  @ApiProperty({ description: '紧急联系人姓名', maxLength: 20, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' ');
+    }
+    return value;
+  })
+  emergencyContactName?: string;
+
+  @ApiProperty({ description: '紧急联系人电话', required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const digits = value.replace(/\D/g, '');
+      return digits;
+    }
+    return value;
+  })
+  @Matches(/^1[3-9]\d{9}$/, { message: '紧急联系人电话格式不正确' })
+  emergencyContactPhone?: string;
+
+  @ApiProperty({ description: '体检时间', required: false })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+    if (typeof value === 'string') {
+      const date = new Date(value);
+      if (isNaN(date.getTime())) {
+        return value;
+      }
+      return date.toISOString().split('T')[0];
+    }
+    return value;
+  })
+  medicalExamDate?: string;
+
+  @ApiProperty({ description: '身份证号', required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().toUpperCase();
+    }
+    return value;
+  })
+  @Matches(/(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/, { message: '身份证号格式不正确' })
+  idNumber?: string;
+
+  @ApiProperty({ description: '微信号', maxLength: 50, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    return value;
+  })
+  wechat?: string;
+
+  @ApiProperty({ description: '现居住地址', maxLength: 100, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' ');
+    }
+    return value;
+  })
+  currentAddress?: string;
+
+  @ApiProperty({ description: '户籍地址', maxLength: 100, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' ');
+    }
+    return value;
+  })
+  hukouAddress?: string;
+
+  @ApiProperty({ description: '出生日期', required: false })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+    if (typeof value === 'string') {
+      const date = new Date(value);
+      if (isNaN(date.getTime())) {
+        return value;
+      }
+      return date.toISOString().split('T')[0];
+    }
+    return value;
+  })
+  birthDate?: string;
+
+  @ApiProperty({ description: '婚姻状况', enum: ['single', 'married', 'divorced', 'widowed'], required: false })
+  @IsOptional()
+  @IsEnum(['single', 'married', 'divorced', 'widowed'], { message: '请选择正确的婚姻状况' })
+  maritalStatus?: string;
+
+  @ApiProperty({ description: '民族', maxLength: 20, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    return value;
+  })
+  ethnicity?: string;
+
+  @ApiProperty({ description: '生肖', enum: ['rat', 'ox', 'tiger', 'rabbit', 'dragon', 'snake', 'horse', 'goat', 'monkey', 'rooster', 'dog', 'pig'], required: false })
+  @IsOptional()
+  @IsEnum(['rat', 'ox', 'tiger', 'rabbit', 'dragon', 'snake', 'horse', 'goat', 'monkey', 'rooster', 'dog', 'pig'], { message: '请选择正确的生肖' })
+  zodiac?: string;
+
+  @ApiProperty({ description: '星座', enum: ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo', 'libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces'], required: false })
+  @IsOptional()
+  @IsEnum(['aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo', 'libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces'], { message: '请选择正确的星座' })
+  zodiacSign?: string;
+
+  @ApiProperty({ description: '宗教信仰', enum: ['none', 'buddhism', 'taoism', 'christianity', 'catholicism', 'islam', 'other'], required: false })
+  @IsOptional()
+  @IsEnum(['none', 'buddhism', 'taoism', 'christianity', 'catholicism', 'islam', 'other'], { message: '请选择正确的宗教信仰' })
+  religion?: string;
+
+  @ApiProperty({ description: '接单状态', enum: ['accepting', 'not-accepting', 'on-service'], required: false })
+  @IsOptional()
+  @IsEnum(['accepting', 'not-accepting', 'on-service'], { message: '请选择正确的接单状态' })
+  orderStatus?: string;
+
+  @ApiProperty({ description: '线索来源', enum: ['referral', 'paid-lead', 'community', 'door-to-door', 'shared-order', 'other'], required: false })
+  @IsOptional()
+  @IsEnum(['referral', 'paid-lead', 'community', 'door-to-door', 'shared-order', 'other'], { message: '请选择正确的线索来源' })
+  leadSource?: string;
+
+  @ApiProperty({
+    description: '工作经历',
+    example: [
+      {
+        startDate: '2020-01',
+        endDate: '2022-12',
+        description: '在郑州市某家庭担任育儿嫂，负责照顾2岁幼儿的日常生活和早教'
+      }
+    ],
+    required: false
+  })
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.map(exp => ({
+          startDate: exp.startDate || '',
+          endDate: exp.endDate || '',
+          description: exp.description || ''
+        })) : [];
+      } catch {
+        return [];
+      }
+    }
+    return Array.isArray(value) ? value.map(exp => ({
+      startDate: exp.startDate || '',
+      endDate: exp.endDate || '',
+      description: exp.description || ''
+    })) : [];
+  })
+  workExperiences?: Array<{
+    startDate: string;
+    endDate: string;
+    description: string;
+  }>;
+
+  // 内部字段
+  @IsOptional()
+  userId?: string;
+
+  @IsOptional()
+  createOrUpdate?: boolean; // 是否允许更新已存在的记录
+}
+
 export class CreateResumeDto {
   @ApiProperty({ description: '用户ID' })
   @IsOptional()

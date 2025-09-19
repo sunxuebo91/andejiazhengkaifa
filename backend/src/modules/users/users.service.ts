@@ -24,6 +24,10 @@ export class UsersService {
     return user as UserWithoutPassword;
   }
 
+  async findByPhone(phone: string): Promise<User | null> {
+    return this.userModel.findOne({ phone }).exec();
+  }
+
   async create(createUserDto: CreateUserDto): Promise<UserWithoutPassword> {
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
     const createdUser = new this.userModel({

@@ -29,6 +29,18 @@ export class AuthController {
     return this.authService.login(username, password, ip, userAgent);
   }
 
+  @Post('miniprogram-login')
+  @HttpCode(HttpStatus.OK)
+  async miniprogramLogin(
+    @Body('code') code: string,
+    @Body('phone') phone: string,
+    @Req() req,
+  ) {
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    return this.authService.miniprogramLogin(code, phone, ip, userAgent);
+  }
+
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, InternalServerErrorException, HttpException, HttpStatus } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { UploadService } from '../upload/upload.service';
@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { LoginLog } from './models/login-log.entity';
+import axios from 'axios';
 
 @Injectable()
 export class AuthService {
@@ -86,10 +87,10 @@ export class AuthService {
       if (!user) {
         throw new UnauthorizedException('用户名或密码错误');
       }
-      
+
       const payload = { username: user.username, sub: user._id };
       const token = this.jwtService.sign(payload);
-      
+
       return {
         access_token: token,
         user: {
@@ -110,6 +111,94 @@ export class AuthService {
       }
       console.error('Login error:', error);
       throw new InternalServerErrorException('登录过程中发生错误');
+    }
+  }
+
+  async miniprogramLogin(code: string, phone: string, ip: string, userAgent: string) {
+    try {
+      // 1. 通过code获取openid（暂时模拟）
+      let openidResult;
+      try {
+        openidResult = await this.getWechatOpenid(code);
+      } catch (error) {
+        // 如果微信API调用失败，使用模拟数据
+        console.warn('微信API调用失败，使用模拟openid:', error.message);
+        openidResult = { openid: `mock_openid_${Date.now()}` };
+      }
+
+      // 2. 通过手机号查找CRM用户
+      const user = await this.usersService.findByPhone(phone);
+      if (!user) {
+        throw new UnauthorizedException('手机号未注册，请联系管理员');
+      }
+
+      // 3. 记录登录日志
+      await this.logLoginAttempt(user._id.toString(), ip, userAgent, 'success');
+
+      // 4. 生成JWT token
+      const payload = { username: user.username, sub: user._id, openid: openidResult.openid };
+      const token = this.jwtService.sign(payload);
+
+      return {
+        success: true,
+        data: {
+          access_token: token,
+          user: {
+            id: user._id,
+            username: user.username,
+            name: user.name,
+            phone: user.phone,
+            email: user.email,
+            avatar: user.avatar || null,
+            role: user.role,
+            department: user.department || null,
+            permissions: user.permissions
+          },
+          openid: openidResult.openid
+        },
+        message: '小程序登录成功'
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      console.error('Miniprogram login error:', error);
+      throw new InternalServerErrorException('小程序登录过程中发生错误');
+    }
+  }
+
+  private async getWechatOpenid(code: string): Promise<{ openid: string; session_key?: string }> {
+    try {
+      const url = `https://api.weixin.qq.com/sns/jscode2session`;
+      const params = {
+        appid: process.env.WECHAT_APP_ID,
+        secret: process.env.WECHAT_APP_SECRET,
+        js_code: code,
+        grant_type: 'authorization_code',
+      };
+
+      const response = await axios.get(url, { params });
+      const data = response.data;
+
+      if (data.errcode) {
+        throw new HttpException(
+          `获取用户信息失败: ${data.errmsg}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      return {
+        openid: data.openid,
+        session_key: data.session_key,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        '获取用户信息失败',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 

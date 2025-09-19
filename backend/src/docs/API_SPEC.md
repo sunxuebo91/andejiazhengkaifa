@@ -298,24 +298,46 @@
 #### 创建简历（小程序）
 - **URL**: `/api/resumes/miniprogram/create`
 - **方法**: `POST`
-- **请求头**: `Authorization: Bearer [token]`
+- **功能特性**:
+  - ✅ 支持幂等性操作（防重复提交）
+  - ✅ 自动数据清理和格式化
+  - ✅ 手机号唯一性验证
+  - ✅ 详细的错误信息返回
+- **请求头**:
+  - `Authorization: Bearer [token]` (必需)
+  - `Idempotency-Key: [唯一键]` (可选，防重复提交)
+  - `api-version: [版本号]` (可选)
+  - `x-request-id: [请求ID]` (可选)
+- **必填字段**:
+  - `name` (string): 姓名，2-20字符
+  - `phone` (string): 手机号码，11位数字
+  - `gender` (string): 性别，"female" 或 "male"
+  - `age` (number): 年龄，18-65岁
+  - `jobType` (string): 工种，如 "yuexin", "zhujia-yuer" 等
+  - `education` (string): 学历，如 "high", "college" 等
 - **请求体**: `application/json`
   ```json
   {
-    "name": "姓名",
-    "phone": "手机号",
-    "age": 28,
+    "name": "张三",
+    "phone": "13800138000",
     "gender": "female",
+    "age": 35,
     "jobType": "yuexin",
     "education": "high",
     "experienceYears": 3,
     "expectedSalary": 8000,
-    "nativePlace": "河南省郑州市",
-    "skills": ["muying", "cuiru"],
+    "skills": ["chanhou", "yuying"],
     "serviceArea": ["北京市朝阳区"],
     "selfIntroduction": "自我介绍",
     "school": "学校名称",
-    "major": "专业"
+    "major": "专业",
+    "workExperiences": [
+      {
+        "startDate": "2020-01-01",
+        "endDate": "2023-12-31",
+        "description": "工作描述"
+      }
+    ]
   }
   ```
 - **成功响应**:
@@ -323,25 +345,47 @@
   {
     "success": true,
     "data": {
-      "id": "简历ID",
-      "name": "姓名",
-      "phone": "手机号",
-      "age": 28,
-      "gender": "female",
-      "jobType": "yuexin",
-      "education": "high",
-      "experienceYears": 3,
-      "expectedSalary": 8000,
-      "nativePlace": "河南省郑州市",
-      "skills": ["muying", "cuiru"],
-      "serviceArea": ["北京市朝阳区"],
-      "workExperiences": [],
+      "id": "66e2f4af8b1234567890abcd",
       "createdAt": "2025-09-12T10:19:27.671Z",
-      "updatedAt": "2025-09-12T10:19:27.671Z"
+      "action": "CREATED"
     },
     "message": "创建简历成功"
   }
   ```
+- **错误响应**:
+  - 重复手机号 (409):
+    ```json
+    {
+      "success": false,
+      "code": "DUPLICATE",
+      "data": {
+        "existingId": "66e2f4af8b1234567890abcd"
+      },
+      "message": "该手机号已被使用"
+    }
+    ```
+  - 验证错误 (400):
+    ```json
+    {
+      "success": false,
+      "code": "VALIDATION_ERROR",
+      "data": {
+        "errors": ["姓名不能为空", "手机号码格式不正确"]
+      },
+      "message": "数据验证失败"
+    }
+    ```
+  - 服务器错误 (500):
+    ```json
+    {
+      "success": false,
+      "code": "INTERNAL_ERROR",
+      "data": {
+        "requestId": "req-123456"
+      },
+      "message": "创建简历失败: 内部服务器错误"
+    }
+    ```
 
 #### 更新简历（小程序）
 - **URL**: `/api/resumes/miniprogram/:id`

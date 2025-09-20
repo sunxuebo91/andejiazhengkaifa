@@ -128,6 +128,7 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'workExperi
   religion?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
+  selfIntroduction?: string;
   // 文件相关字段 - 旧格式
   idCardFront?: { url: string };
   idCardBack?: { url: string };

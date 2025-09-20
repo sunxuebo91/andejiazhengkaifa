@@ -92,4 +92,5 @@ export interface FormValues {
   skills?: string[];
   leadSource?: string;
   workExperiences?: WorkExperience[];
-} 
+  selfIntroduction?: string;
+}

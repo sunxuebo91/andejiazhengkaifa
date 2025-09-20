@@ -811,7 +811,7 @@ export class ResumeService {
     }
 
     // 规范化字符串字段
-    ['name', 'nativePlace', 'selfIntroduction', 'school', 'major'].forEach(field => {
+    ['name', 'nativePlace', 'selfIntroduction'].forEach(field => {
       if (normalized[field] && typeof normalized[field] === 'string') {
         normalized[field] = normalized[field].trim().replace(/[\u3000\s]+/g, ' ');
       }
@@ -1403,8 +1403,6 @@ export class ResumeService {
       expectedSalary: r.expectedSalary,
       nativePlace: r.nativePlace,
       skills: r.skills,
-      school: r.school,
-      major: r.major,
       selfIntroduction: r.selfIntroduction,
       serviceArea: r.serviceArea,
       photoUrls: r.photoUrls,
@@ -1473,7 +1471,7 @@ export class ResumeService {
 
       const resumes = await this.resumeModel
         .find(query)
-        .select('_id name phone gender age jobType education experienceYears nativePlace skills expectedSalary serviceArea photoUrls selfIntroduction school major')
+        .select('_id name phone gender age jobType education experienceYears nativePlace skills expectedSalary serviceArea photoUrls selfIntroduction')
         .sort({ updatedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(pageSize)
@@ -1494,9 +1492,7 @@ export class ResumeService {
         expectedSalary: resume.expectedSalary,
         serviceArea: resume.serviceArea,
         photoUrls: resume.photoUrls,
-        selfIntroduction: resume.selfIntroduction,
-        school: resume.school,
-        major: resume.major
+        selfIntroduction: resume.selfIntroduction
       }));
 
       return {
@@ -1538,6 +1534,41 @@ export class ResumeService {
 
     this.logger.log(`个人照片排序更新成功: ${id}, 照片数量: ${photos.length}`);
     return resume;
+  }
+
+  /**
+   * 根据手机号查找简历
+   */
+  async findByPhone(phone: string) {
+    return await this.resumeModel.findOne({ phone }).lean();
+  }
+
+  /**
+   * 统计简历总数
+   */
+  async count(): Promise<number> {
+    return await this.resumeModel.countDocuments();
+  }
+
+  /**
+   * 统计包含自我介绍的简历数量
+   */
+  async countWithSelfIntroduction(): Promise<number> {
+    return await this.resumeModel.countDocuments({
+      selfIntroduction: { $exists: true, $nin: [null, ''] }
+    });
+  }
+
+  /**
+   * 统计最近N天创建的简历数量
+   */
+  async countRecentResumes(days: number): Promise<number> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    return await this.resumeModel.countDocuments({
+      createdAt: { $gte: startDate }
+    });
   }
 
 }

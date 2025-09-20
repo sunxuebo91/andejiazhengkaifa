@@ -1366,6 +1366,26 @@ const ResumeDetail = () => {
             {renderWorkExperiences()}
           </Card>
 
+          {/* 添加自我介绍卡片 */}
+          <Card title="自我介绍" style={{ marginBottom: 24 }}>
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#fafafa',
+              borderRadius: '6px',
+              minHeight: '80px'
+            }}>
+              {resume?.selfIntroduction ? (
+                <Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {resume.selfIntroduction}
+                </Typography.Paragraph>
+              ) : (
+                <Typography.Text type="secondary">
+                  暂无自我介绍
+                </Typography.Text>
+              )}
+            </div>
+          </Card>
+
           <Card title="身份证照片" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
               {resume?.idCardFront ? (

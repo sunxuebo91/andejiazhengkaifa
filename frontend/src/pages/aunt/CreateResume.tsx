@@ -1591,6 +1591,7 @@ const CreateResume: React.FC = () => {
         birthDate: editingResume.birthDate ? dayjs(editingResume.birthDate).format('YYYY-MM-DD') : undefined,
         medicalExamDate: editingResume.medicalExamDate ? dayjs(editingResume.medicalExamDate).format('YYYY-MM-DD') : undefined,
         ethnicity: editingResume.ethnicity,
+        selfIntroduction: editingResume.selfIntroduction,
         zodiac: editingResume.zodiac,
         zodiacSign: editingResume.zodiacSign,
         expectedSalary: editingResume.expectedSalary,
@@ -1891,7 +1892,7 @@ const CreateResume: React.FC = () => {
                   </Form.Item>
                 </Col>
               </Row>
-              
+
               <Row gutter={24} style={{ marginBottom: 16 }}>
                 <Col span={8}>
                   <Form.Item
@@ -2102,8 +2103,8 @@ const CreateResume: React.FC = () => {
                     label="技能标签"
                     name="skills"
                   >
-                    <Select 
-                      mode="multiple" 
+                    <Select
+                      mode="multiple"
                       placeholder="请选择技能标签"
                       style={{ width: '100%' }}
                     >
@@ -2128,6 +2129,25 @@ const CreateResume: React.FC = () => {
                       <Option value="shuangtai-huli">双胎护理</Option>
                       <Option value="yanglao-huli">养老护理</Option>
                     </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              {/* 🔥 添加自我介绍字段 */}
+              <Row gutter={24}>
+                <Col span={24}>
+                  <Form.Item
+                    label="自我介绍"
+                    name="selfIntroduction"
+                    extra="请简单介绍一下自己的工作经验、技能特长、性格特点等（选填，最多1000字）"
+                  >
+                    <Input.TextArea
+                      placeholder="请简单介绍一下自己的工作经验、技能特长、性格特点等..."
+                      rows={4}
+                      maxLength={1000}
+                      showCount
+                      style={{ width: '100%' }}
+                    />
                   </Form.Item>
                 </Col>
               </Row>

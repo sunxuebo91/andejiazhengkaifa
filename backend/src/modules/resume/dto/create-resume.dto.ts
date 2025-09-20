@@ -268,28 +268,6 @@ export class CreateResumeV2Dto {
   })
   selfIntroduction?: string;
 
-  @ApiProperty({ description: '毕业院校', maxLength: 50, required: false })
-  @IsOptional()
-  @IsString()
-  @Transform(({ value }) => {
-    if (typeof value === 'string') {
-      return value.trim().replace(/[\u3000\s]+/g, ' ');
-    }
-    return value;
-  })
-  school?: string;
-
-  @ApiProperty({ description: '专业', maxLength: 50, required: false })
-  @IsOptional()
-  @IsString()
-  @Transform(({ value }) => {
-    if (typeof value === 'string') {
-      return value.trim().replace(/[\u3000\s]+/g, ' ');
-    }
-    return value;
-  })
-  major?: string;
-
   // 文件上传相关字段（可选）
   @ApiProperty({ description: '身份证正面照片URL', required: false })
   @IsOptional()
@@ -767,8 +745,19 @@ export class CreateResumeDto {
   })
   leadSource?: LeadSource;
 
-  @ApiProperty({ 
-    description: '工作经历', 
+  @ApiProperty({ description: '自我介绍', maxLength: 1000, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim().replace(/[\u3000\s]+/g, ' ');
+    }
+    return value;
+  })
+  selfIntroduction?: string;
+
+  @ApiProperty({
+    description: '工作经历',
     example: [
       {
         startDate: '2020-01',

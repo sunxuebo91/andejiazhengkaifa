@@ -663,18 +663,60 @@ export class ResumeController {
     @Req() req?,
   ) {
     try {
-      this.logger.log(`小程序创建简历: ${JSON.stringify(dto, null, 2)}`);
-      this.logger.log(`请求头: idempotencyKey=${idempotencyKey}, apiVersion=${apiVersion}, requestId=${requestId}`);
+      this.logger.log(`🆕 小程序创建简历:`);
+      this.logger.log(`📝 创建数据: ${JSON.stringify(dto, null, 2)}`);
+      this.logger.log(`🔑 请求头: idempotencyKey=${idempotencyKey}, apiVersion=${apiVersion}, requestId=${requestId}`);
+
+      // 特别记录selfIntroduction字段
+      if (dto.selfIntroduction !== undefined) {
+        this.logger.log(`✨ 包含自我介绍: ${dto.selfIntroduction ? '有内容(' + dto.selfIntroduction.length + '字符)' : '空内容'}`);
+      } else {
+        this.logger.log(`⚠️ 未包含自我介绍字段`);
+      }
 
       // 调用服务层的创建方法
       const result = await this.resumeService.createV2(dto, idempotencyKey, req.user.userId);
+
+      this.logger.log(`✅ 小程序创建简历成功: ${result.id}, 操作类型: ${result.action}`);
+
+      // 获取完整的简历数据用于响应
+      const createdResume = await this.resumeService.findOne(result.id);
 
       return {
         success: true,
         data: {
           id: result.id,
           createdAt: result.createdAt,
-          action: result.action || 'CREATED'
+          action: result.action || 'CREATED',
+          // 返回完整的简历数据，方便小程序端使用
+          resume: {
+            id: createdResume._id || createdResume.id,
+            name: createdResume.name,
+            phone: createdResume.phone,
+            age: createdResume.age,
+            gender: createdResume.gender,
+            jobType: createdResume.jobType,
+            education: createdResume.education,
+            experienceYears: createdResume.experienceYears,
+            nativePlace: createdResume.nativePlace,
+            selfIntroduction: createdResume.selfIntroduction, // 🔥 确保包含
+            wechat: createdResume.wechat,
+            currentAddress: createdResume.currentAddress,
+            hukouAddress: createdResume.hukouAddress,
+            birthDate: createdResume.birthDate,
+            skills: createdResume.skills || [],
+            serviceArea: createdResume.serviceArea || [],
+            expectedSalary: createdResume.expectedSalary,
+            workExperiences: createdResume.workExperiences || [],
+            // 文件字段
+            idCardFront: createdResume.idCardFront,
+            idCardBack: createdResume.idCardBack,
+            personalPhoto: createdResume.personalPhoto || [],
+            certificates: createdResume.certificates || [],
+            reports: createdResume.reports || [],
+            createdAt: (createdResume as any).createdAt || new Date(),
+            updatedAt: (createdResume as any).updatedAt || new Date()
+          }
         },
         message: result.action === 'UPDATED' ? '简历已更新' : '创建简历成功'
       };
@@ -711,7 +753,80 @@ export class ResumeController {
     }
   }
 
+  @Get('miniprogram/:id')
+  @ApiOperation({ summary: '小程序获取简历详情' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  async getForMiniprogram(
+    @Param('id') id: string,
+    @Req() req,
+  ) {
+    try {
+      this.logger.log(`🔍 小程序获取简历详情: ${id}`);
 
+      const resume = await this.resumeService.findOne(id);
+
+      if (!resume) {
+        return {
+          success: false,
+          data: null,
+          message: '简历不存在'
+        };
+      }
+
+      // 构建小程序友好的响应数据
+      const responseData = {
+        id: resume._id || resume.id,
+        name: resume.name,
+        phone: resume.phone,
+        age: resume.age,
+        gender: resume.gender,
+        jobType: resume.jobType,
+        education: resume.education,
+        experienceYears: resume.experienceYears,
+        nativePlace: resume.nativePlace,
+        selfIntroduction: resume.selfIntroduction, // 🔥 重要字段
+        wechat: resume.wechat,
+        currentAddress: resume.currentAddress,
+        hukouAddress: resume.hukouAddress,
+        birthDate: resume.birthDate,
+        skills: resume.skills || [],
+        serviceArea: resume.serviceArea || [],
+        expectedSalary: resume.expectedSalary,
+        workExperiences: resume.workExperiences || [],
+        // 文件信息
+        idCardFront: resume.idCardFront,
+        idCardBack: resume.idCardBack,
+        personalPhoto: resume.personalPhoto || [],
+        certificates: resume.certificates || [],
+        reports: resume.reports || [],
+        // 兼容旧格式
+        idCardFrontUrl: resume.idCardFront?.url,
+        idCardBackUrl: resume.idCardBack?.url,
+        photoUrls: resume.photoUrls || [],
+        certificateUrls: resume.certificateUrls || [],
+        medicalReportUrls: resume.medicalReportUrls || [],
+        // 时间戳
+        createdAt: (resume as any).createdAt || new Date(),
+        updatedAt: (resume as any).updatedAt || new Date()
+      };
+
+      this.logger.log(`✅ 小程序获取简历详情成功: ${id}`);
+      this.logger.log(`📋 自我介绍字段: ${responseData.selfIntroduction ? '有内容(' + responseData.selfIntroduction.length + '字符)' : '无内容'}`);
+
+      return {
+        success: true,
+        data: responseData,
+        message: '获取简历详情成功'
+      };
+    } catch (error) {
+      this.logger.error(`❌ 小程序获取简历详情失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `获取简历详情失败: ${error.message}`
+      };
+    }
+  }
 
   @Patch('miniprogram/:id')
   @ApiOperation({ summary: '小程序更新简历（JSON格式）' })
@@ -723,9 +838,18 @@ export class ResumeController {
     @Req() req,
   ) {
     try {
-      this.logger.log(`小程序更新简历 ${id}: ${JSON.stringify(dto, null, 2)}`);
+      this.logger.log(`🔄 小程序更新简历 ${id}:`);
+      this.logger.log(`📝 更新数据: ${JSON.stringify(dto, null, 2)}`);
+
+      // 特别记录selfIntroduction字段
+      if (dto.selfIntroduction !== undefined) {
+        this.logger.log(`✨ 包含自我介绍更新: ${dto.selfIntroduction ? '有内容(' + dto.selfIntroduction.length + '字符)' : '清空'}`);
+      }
 
       const resume = await this.resumeService.update(id, dto);
+
+      this.logger.log(`✅ 小程序更新简历成功: ${id}`);
+      this.logger.log(`📋 返回的自我介绍: ${resume.selfIntroduction ? '有内容(' + resume.selfIntroduction.length + '字符)' : '无内容'}`);
 
       return {
         success: true,
@@ -743,8 +867,6 @@ export class ResumeController {
           skills: resume.skills,
           serviceArea: resume.serviceArea,
           selfIntroduction: resume.selfIntroduction,
-          school: resume.school,
-          major: resume.major,
           workExperiences: resume.workExperiences || resume.workHistory || [],
           // 文件相关字段
           idCardFrontUrl: resume.idCardFront?.url,
@@ -836,6 +958,91 @@ export class ResumeController {
     }
   }
 
+  @Post('miniprogram/:id/upload-files')
+  @UseInterceptors(FilesInterceptor('files', 10, multerConfig))
+  @ApiOperation({ summary: '小程序批量上传文件' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary'
+          },
+          description: '要上传的文件数组'
+        },
+        types: {
+          type: 'string',
+          description: '文件类型数组，JSON字符串格式，如["personalPhoto","certificate"]'
+        }
+      },
+      required: ['files', 'types']
+    },
+  })
+  async uploadFilesForMiniprogram(
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body('types') types: string,
+    @Req() req,
+  ) {
+    try {
+      if (!files || files.length === 0) {
+        throw new BadRequestException('请选择要上传的文件');
+      }
+
+      let fileTypes: string[];
+      try {
+        fileTypes = JSON.parse(types);
+      } catch {
+        throw new BadRequestException('文件类型格式错误，应为JSON数组');
+      }
+
+      if (files.length !== fileTypes.length) {
+        throw new BadRequestException('文件数量与类型数量不匹配');
+      }
+
+      this.logger.log(`📁 小程序批量上传文件: 简历ID=${id}, 文件数量=${files.length}`);
+
+      const uploadResults = [];
+      const uploadPromises = files.map(async (file, index) => {
+        const fileType = fileTypes[index];
+        const result = await this.resumeService.addFileWithType(id, file, fileType);
+        return {
+          fileUrl: result.fileUrl,
+          fileType: fileType,
+          fileName: file.originalname,
+          fileSize: file.size,
+          index: index
+        };
+      });
+
+      const results = await Promise.all(uploadPromises);
+
+      this.logger.log(`✅ 小程序批量上传成功: ${results.length}个文件`);
+
+      return {
+        success: true,
+        data: {
+          resumeId: id,
+          uploadedFiles: results,
+          totalCount: results.length
+        },
+        message: `成功上传${results.length}个文件`
+      };
+    } catch (error) {
+      this.logger.error(`❌ 小程序批量文件上传失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `批量文件上传失败: ${error.message}`
+      };
+    }
+  }
+
   @Delete('miniprogram/:id/delete-file')
   @ApiOperation({ summary: '小程序删除文件' })
   @ApiParam({ name: 'id', description: '简历ID' })
@@ -890,7 +1097,100 @@ export class ResumeController {
     }
   }
 
+  @Post('miniprogram/validate')
+  @ApiOperation({ summary: '小程序数据验证' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        phone: { type: 'string', description: '手机号' },
+        idNumber: { type: 'string', description: '身份证号' }
+      }
+    }
+  })
+  async validateForMiniprogram(
+    @Body() data: { phone?: string; idNumber?: string },
+    @Req() req,
+  ) {
+    try {
+      this.logger.log(`🔍 小程序数据验证: ${JSON.stringify(data)}`);
 
+      const validationResults = {
+        phone: { valid: true, exists: false, message: '' },
+        idNumber: { valid: true, exists: false, message: '' }
+      };
+
+      // 验证手机号
+      if (data.phone) {
+        const phoneRegex = /^1[3-9]\d{9}$/;
+        if (!phoneRegex.test(data.phone)) {
+          validationResults.phone = { valid: false, exists: false, message: '手机号格式不正确' };
+        } else {
+          const existingResume = await this.resumeService.findByPhone(data.phone);
+          if (existingResume) {
+            validationResults.phone = { valid: true, exists: true, message: '手机号已存在' };
+          }
+        }
+      }
+
+      // 验证身份证号
+      if (data.idNumber) {
+        const idRegex = /^[1-9]\d{5}(18|19|20)\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\d{3}[0-9Xx]$/;
+        if (!idRegex.test(data.idNumber)) {
+          validationResults.idNumber = { valid: false, exists: false, message: '身份证号格式不正确' };
+        }
+      }
+
+      return {
+        success: true,
+        data: validationResults,
+        message: '验证完成'
+      };
+    } catch (error) {
+      this.logger.error(`❌ 小程序数据验证失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `数据验证失败: ${error.message}`
+      };
+    }
+  }
+
+  @Get('miniprogram/stats')
+  @ApiOperation({ summary: '小程序统计信息' })
+  async getStatsForMiniprogram(@Req() req) {
+    try {
+      this.logger.log(`📊 小程序获取统计信息`);
+
+      // 获取基础统计
+      const totalResumes = await this.resumeService.count();
+      const resumesWithSelfIntro = await this.resumeService.countWithSelfIntroduction();
+      const recentResumes = await this.resumeService.countRecentResumes(7); // 最近7天
+
+      const stats = {
+        totalResumes,
+        resumesWithSelfIntroduction: resumesWithSelfIntro,
+        selfIntroductionRate: totalResumes > 0 ? ((resumesWithSelfIntro / totalResumes) * 100).toFixed(2) : '0.00',
+        recentResumes,
+        lastUpdated: new Date().toISOString()
+      };
+
+      this.logger.log(`📈 统计结果: 总数=${totalResumes}, 有自我介绍=${resumesWithSelfIntro}, 比例=${stats.selfIntroductionRate}%`);
+
+      return {
+        success: true,
+        data: stats,
+        message: '获取统计信息成功'
+      };
+    } catch (error) {
+      this.logger.error(`❌ 小程序获取统计信息失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `获取统计信息失败: ${error.message}`
+      };
+    }
+  }
 
   @Get(':id/public')
   @Public()
@@ -963,8 +1263,6 @@ export class ResumeController {
       skills: resume.skills,
       nativePlace: resume.nativePlace,
       selfIntroduction: resume.selfIntroduction,
-      school: resume.school,
-      major: resume.major,
       // 处理过的头像（如果已生成）
       avatarProcessed: resume.avatarProcessed,
       avatarRound: resume.avatarRound,

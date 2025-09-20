@@ -40,8 +40,6 @@ export interface IResume extends Document {
   expectedSalary: number;
   workExperience: number;
   education: Education;
-  school: string;
-  major: string;
   workHistory: WorkExperience[];
   skills: Skill[];
   selfIntroduction?: string;
@@ -147,16 +145,6 @@ export class Resume extends Document implements IResume {
   @Prop({ type: String, enum: Education })
   @IsEnum(Education)
   education: Education;
-
-  @ApiProperty({ description: '毕业院校' })
-  @Prop()
-  @IsString()
-  school: string;
-
-  @ApiProperty({ description: '专业' })
-  @Prop()
-  @IsString()
-  major: string;
 
   @ApiProperty({ description: '工作经历' })
   @Prop({ type: [WorkExperienceSchema], default: [] })

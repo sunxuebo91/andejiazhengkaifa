@@ -45,7 +45,7 @@ const Authorized: React.FC<AuthorizedProps> = ({
     const hasAuthority = authorities.some(auth => hasPermission(auth));
     
     if (!hasAuthority) {
-      return noMatch as React.ReactElement;
+      return noMatch ? (noMatch as React.ReactElement) : null;
     }
   }
   
@@ -55,7 +55,7 @@ const Authorized: React.FC<AuthorizedProps> = ({
     const hasRoleAuth = roles.some(r => hasRole(r));
     
     if (!hasRoleAuth) {
-      return noMatch as React.ReactElement;
+      return noMatch ? (noMatch as React.ReactElement) : null;
     }
   }
   

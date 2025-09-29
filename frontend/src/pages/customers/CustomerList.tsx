@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Table, 
-  Card, 
-  Input, 
-  Button, 
-  Select, 
-  Space, 
+import {
+  Table,
+  Card,
+  Input,
+  Button,
+  Select,
+  Space,
   Tag,
   message,
   Row,
@@ -14,14 +14,16 @@ import {
 } from 'antd';
 import { SearchOutlined, PlusOutlined, MessageOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
-import { 
-  Customer, 
-  LEAD_SOURCES, 
-  SERVICE_CATEGORIES, 
+import {
+  Customer,
+  LEAD_SOURCES,
+  SERVICE_CATEGORIES,
   CONTRACT_STATUSES,
-  LEAD_LEVELS 
+  LEAD_LEVELS
 } from '../../types/customer.types';
 import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
+import AssignCustomerModal from '../../components/AssignCustomerModal';
+import Authorized from '../../components/Authorized';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -38,6 +40,11 @@ const CustomerList: React.FC = () => {
     customerId: '',
     customerName: ''
   });
+
+  // 分配弹窗状态
+  const [assignModal, setAssignModal] = useState<{ visible: boolean; customerId: string | null; customerName: string }>(
+    { visible: false, customerId: null, customerName: '' }
+  );
 
   // 搜索条件
   const [searchFilters, setSearchFilters] = useState<{
@@ -69,7 +76,7 @@ const CustomerList: React.FC = () => {
           Object.entries(searchFilters).filter(([_, value]) => value !== '' && value !== undefined)
         )
       };
-      
+
       const response = await customerService.getCustomers(params);
       setCustomers(response.customers);
       setTotal(response.total);
@@ -161,7 +168,7 @@ const CustomerList: React.FC = () => {
       width: 160,
       fixed: 'left' as const,
       render: (customerId: string, record: Customer) => (
-        <Link 
+        <Link
           to={`/customers/${record._id}`}
           style={{ color: '#1890ff', fontWeight: 'bold' }}
         >
@@ -234,7 +241,7 @@ const CustomerList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 260,
       fixed: 'right' as const,
       render: (_: any, record: Customer) => (
         <Space size="small">
@@ -252,6 +259,17 @@ const CustomerList: React.FC = () => {
           >
             添加跟进
           </Button>
+          {/* 分配按钮（仅管理员/经理可见） */}
+          <Authorized role={["admin", "manager"]} noMatch={null}>
+            <Button
+              size="small"
+              onClick={() => {
+                setAssignModal({ visible: true, customerId: record._id, customerName: record.name });
+              }}
+            >
+              分配
+            </Button>
+          </Authorized>
         </Space>
       ),
     },
@@ -361,6 +379,8 @@ const CustomerList: React.FC = () => {
             total: total,
             showSizeChanger: true,
             showQuickJumper: true,
+
+
             showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
             onChange: (page, size) => {
               loadCustomers(page, size);
@@ -377,8 +397,19 @@ const CustomerList: React.FC = () => {
         onCancel={() => setFollowUpModal({ visible: false, customerId: '', customerName: '' })}
         onSuccess={handleFollowUpSuccess}
       />
+
+      {/* 分配负责人弹窗 */}
+      <AssignCustomerModal
+        visible={assignModal.visible}
+        customerId={assignModal.customerId}
+        onCancel={() => setAssignModal({ visible: false, customerId: null, customerName: '' })}
+        onSuccess={() => {
+          setAssignModal({ visible: false, customerId: null, customerName: '' });
+          loadCustomers(currentPage, pageSize);
+        }}
+      />
     </div>
   );
 };
 
-export default CustomerList; 
+export default CustomerList;

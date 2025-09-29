@@ -223,11 +223,11 @@ const BasicLayout = () => {
               arrow
             >
               <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                <Avatar 
+                <Avatar
                   style={{ marginRight: 8, backgroundColor: '#1890ff' }}
                   icon={<UserOutlined />}
                 />
-                <span>{user.name || user.username}</span>
+                <span>{String(user?.name ?? user?.username ?? '')}</span>
               </div>
             </Dropdown>
           </div>

@@ -17,6 +17,7 @@ import { ContractsModule } from './modules/contracts/contracts.module';
 import { ESignModule } from './modules/esign/esign.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { WeixinModule } from './modules/weixin/weixin.module';
+import { WeChatModule } from './modules/wechat/wechat.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { WeixinModule } from './modules/weixin/weixin.module';
     ESignModule,
     DashboardModule,
     WeixinModule,
+    WeChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

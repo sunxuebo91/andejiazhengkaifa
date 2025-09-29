@@ -1,10 +1,10 @@
 import { apiService } from './api';
-import { 
-  Customer, 
-  CreateCustomerData, 
-  CustomerQuery, 
-  CustomerListResponse, 
-  CustomerStatistics 
+import {
+  Customer,
+  CreateCustomerData,
+  CustomerQuery,
+  CustomerListResponse,
+  CustomerStatistics
 } from '../types/customer.types';
 
 export const customerService = {
@@ -43,9 +43,28 @@ export const customerService = {
     await apiService.delete(`/api/customers/${id}`);
   },
 
+
+  // 分配客户归属人
+  async assignCustomer(id: string, assignedTo: string, assignmentReason?: string): Promise<Customer> {
+    const response = await apiService.patch(`/api/customers/${id}/assign`, { assignedTo, assignmentReason });
+    return response.data;
+  },
+
+  // 可分配的用户列表
+  async getAssignableUsers(): Promise<Array<{ _id: string; name: string; username: string; role: string; department?: string }>> {
+    const response = await apiService.get('/api/customers/assignable-users');
+    return response.data;
+  },
+
+  // 获取客户分配历史
+  async getAssignmentLogs(id: string): Promise<any[]> {
+    const response = await apiService.get(`/api/customers/${id}/assignment-logs`);
+    return response.data;
+  },
+
   // 获取客户统计信息
   async getStatistics(): Promise<CustomerStatistics> {
     const response = await apiService.get('/api/customers/statistics');
     return response.data;
   },
-}; 
+};

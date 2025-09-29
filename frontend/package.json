@@ -10,9 +10,9 @@
     "preview": "vite preview",
     "serve": "serve -s dist -l 8080",
     "start:prod": "serve -s dist -l 8080",
-    "test": "jest --config jest.config.cjs --tsconfig tsconfig.test.json",
-    "test:watch": "jest --watch --config jest.config.cjs --tsconfig tsconfig.test.json",
-    "test:coverage": "jest --coverage --config jest.config.cjs --tsconfig tsconfig.test.json"
+    "test": "jest --config jest.config.cjs",
+    "test:watch": "jest --watch --config jest.config.cjs",
+    "test:coverage": "jest --coverage --config jest.config.cjs"
   },
   "dependencies": {
     "@ant-design/pro-components": "^2.6.43",

@@ -28,6 +28,13 @@ export interface Customer {
   lastUpdatedBy?: string;
   lastUpdatedByUser?: { name: string; username: string } | null;
   followUps?: CustomerFollowUp[];
+  // 分配信息
+  assignedTo?: string;
+  assignedBy?: string;
+  assignedToUser?: { name: string; username: string } | null;
+  assignedByUser?: { name: string; username: string } | null;
+  assignedAt?: string;
+  assignmentReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -53,6 +60,9 @@ export interface CreateCustomerData {
   educationRequirement?: string;
   expectedDeliveryDate?: string;
   remarks?: string;
+  // 创建时可选指定负责人
+  assignedTo?: string;
+  assignmentReason?: string;
 }
 
 export interface CustomerQuery {
@@ -63,6 +73,7 @@ export interface CustomerQuery {
   serviceCategory?: string;
   contractStatus?: string;
   leadLevel?: string;
+  assignedTo?: string; // 可选：按负责人筛选
   page?: number;
   limit?: number;
   sortBy?: string;

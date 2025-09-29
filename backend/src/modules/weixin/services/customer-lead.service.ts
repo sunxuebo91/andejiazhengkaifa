@@ -59,7 +59,7 @@ export class CustomerLeadService {
         };
       }
 
-      // 3. 创建新客户记录
+      // 3. 创建新客户记录（默认分配给创建顾问）
       const customerData = {
         name: customerName,
         phone: customerPhone,
@@ -69,7 +69,11 @@ export class CustomerLeadService {
         leadLevel: 'B类', // 默认等级
         createdBy: advisorId, // 负责顾问
         customerId: this.generateCustomerId(),
-        remarks: `通过微信小程序${this.getActionTypeText(actionType)}自动创建`
+        remarks: `通过微信小程序${this.getActionTypeText(actionType)}自动创建`,
+        assignedTo: advisorId,
+        assignedBy: advisorId,
+        assignedAt: new Date(),
+        assignmentReason: '系统自动分配-微信',
       };
 
       const newCustomer = new this.customerModel(customerData);

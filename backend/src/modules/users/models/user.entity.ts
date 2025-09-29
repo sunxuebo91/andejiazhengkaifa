@@ -13,6 +13,10 @@ export interface UserWithoutPassword {
   department?: string;
   permissions: string[];
   active: boolean;
+  // 微信相关字段
+  wechatOpenId?: string;
+  wechatNickname?: string;
+  wechatAvatar?: string;
   createdAt?: any;
   updatedAt?: any;
   __v?: number;
@@ -49,6 +53,16 @@ export class User extends Document {
 
   @Prop({ default: true })
   active: boolean;
+
+  // 微信相关字段
+  @Prop()
+  wechatOpenId?: string;
+
+  @Prop()
+  wechatNickname?: string;
+
+  @Prop()
+  wechatAvatar?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

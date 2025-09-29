@@ -112,6 +112,15 @@ export class CreateCustomerDto {
   @IsString()
   remarks?: string;
 
+  // 客户分配相关字段（管理员可选）
+  @IsOptional()
+  @IsString()
+  assignedTo?: string; // 指定负责人ID
+
+  @IsOptional()
+  @IsString()
+  assignmentReason?: string; // 分配原因
+
   // 系统自动填充字段，不需要前端传递
   createdBy?: string;
 } 

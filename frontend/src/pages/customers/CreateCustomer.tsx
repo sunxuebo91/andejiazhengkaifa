@@ -26,6 +26,7 @@ import {
   EDUCATION_REQUIREMENTS,
 } from '../../types/customer.types';
 import dayjs from 'dayjs';
+import { customerService as cs } from '../../services/customerService';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -33,6 +34,20 @@ const { TextArea } = Input;
 const CreateCustomer: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
+  const [assignableUsers, setAssignableUsers] = useState<Array<{ _id: string; name: string; username: string; role: string }>>([]);
+
+  // 加载可分配用户（创建时可指定负责人）
+  React.useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const list = await cs.getAssignableUsers();
+        setAssignableUsers(list || []);
+      } catch (e) {
+        // 静默失败，不影响创建流程
+      }
+    };
+    fetchUsers();
+  }, []);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (values: any) => {
@@ -40,11 +55,11 @@ const CreateCustomer: React.FC = () => {
     try {
       const formattedData: CreateCustomerData = {
         ...values,
-        expectedStartDate: values.expectedStartDate 
-          ? values.expectedStartDate.format('YYYY-MM-DD') 
+        expectedStartDate: values.expectedStartDate
+          ? values.expectedStartDate.format('YYYY-MM-DD')
           : undefined,
-        expectedDeliveryDate: values.expectedDeliveryDate 
-          ? values.expectedDeliveryDate.format('YYYY-MM-DD') 
+        expectedDeliveryDate: values.expectedDeliveryDate
+          ? values.expectedDeliveryDate.format('YYYY-MM-DD')
           : undefined,
       };
 
@@ -68,9 +83,9 @@ const CreateCustomer: React.FC = () => {
       <Card
         title={
           <Space>
-            <Button 
-              type="text" 
-              icon={<ArrowLeftOutlined />} 
+            <Button
+              type="text"
+              icon={<ArrowLeftOutlined />}
               onClick={handleBack}
             >
               返回
@@ -131,9 +146,9 @@ const CreateCustomer: React.FC = () => {
                 label="身份证号"
                 name="idCardNumber"
                 rules={[
-                  { 
-                    pattern: /^[1-9]\d{5}(18|19|20)\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\d{3}[0-9Xx]$/, 
-                    message: '请输入有效的身份证号码' 
+                  {
+                    pattern: /^[1-9]\d{5}(18|19|20)\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\d{3}[0-9Xx]$/,
+                    message: '请输入有效的身份证号码'
                   },
                 ]}
               >
@@ -152,6 +167,26 @@ const CreateCustomer: React.FC = () => {
                     <Option key={source} value={source}>{source}</Option>
                   ))}
                 </Select>
+
+              </Form.Item>
+            </Col>
+            {/* 指定负责人（可选） */}
+            <Col span={8}>
+              <Form.Item label="指定负责人（可选）" name="assignedTo">
+                <Select allowClear placeholder="请选择负责人">
+                  {assignableUsers.map(u => (
+                    <Option key={u._id} value={u._id}>{u.name || u.username} ({u.role})</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* 分配信息行 - 靠左对齐 */}
+          <Row gutter={24}>
+            <Col span={8}>
+              <Form.Item label="分配备注（可选）" name="assignmentReason">
+                <Input placeholder="请输入分配原因或备注" />
               </Form.Item>
             </Col>
 
@@ -401,4 +436,4 @@ const CreateCustomer: React.FC = () => {
   );
 };
 
-export default CreateCustomer; 
+export default CreateCustomer;

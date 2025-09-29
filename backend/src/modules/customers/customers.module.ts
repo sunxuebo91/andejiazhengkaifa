@@ -5,17 +5,21 @@ import { CustomersController } from './customers.controller';
 import { Customer, CustomerSchema } from './models/customer.model';
 import { CustomerFollowUp, CustomerFollowUpSchema } from './models/customer-follow-up.entity';
 import { User, UserSchema } from '../users/models/user.entity';
+import { CustomerAssignmentLog, CustomerAssignmentLogSchema } from './models/customer-assignment-log.model';
+import { WeChatModule } from '../wechat/wechat.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Customer.name, schema: CustomerSchema },
+      { name: CustomerAssignmentLog.name, schema: CustomerAssignmentLogSchema },
       { name: CustomerFollowUp.name, schema: CustomerFollowUpSchema },
-      { name: 'User', schema: UserSchema }
+      { name: User.name, schema: UserSchema }
     ]),
+    WeChatModule,
   ],
   controllers: [CustomersController],
   providers: [CustomersService],
   exports: [CustomersService],
 })
-export class CustomersModule {} 
+export class CustomersModule {}

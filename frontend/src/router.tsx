@@ -14,6 +14,8 @@ const AuntCreateResume = lazy(() => import('./pages/aunt/CreateResume'));
 const AuntResumeDetail = lazy(() => import('./pages/aunt/ResumeDetail'));
 const ESignaturePage = lazy(() => import('./pages/esign/ESignaturePage'));
 const SignContractPage = lazy(() => import('./pages/esign/SignContractPage'));
+const WeChatBind = lazy(() => import('./pages/wechat/WeChatBind'));
+const WeChatTest = lazy(() => import('./pages/wechat/WeChatTest'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 export interface RouteConfig {
@@ -85,6 +87,24 @@ export const basicLayoutRoutes: RouteConfig[] = [
         meta: {
           title: '签署合同',
           description: '在线签署电子合同'
+        }
+      },
+      {
+        path: 'wechat/bind',
+        name: '微信绑定',
+        element: <WeChatBind />,
+        meta: {
+          title: '微信绑定',
+          description: '绑定微信账号以接收通知'
+        }
+      },
+      {
+        path: 'wechat/test',
+        name: '微信测试',
+        element: <WeChatTest />,
+        meta: {
+          title: '微信通知测试',
+          description: '测试微信通知功能'
         }
       },
     ],

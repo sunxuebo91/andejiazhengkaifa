@@ -17,8 +17,10 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { CreateCustomerFollowUpDto } from './dto/create-customer-follow-up.dto';
+import { AssignCustomerDto } from './dto/assign-customer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiResponse } from '../../common/interfaces/api-response.interface';
+import { Public } from '../auth/decorators/public.decorator';
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard)
@@ -54,9 +56,9 @@ export class CustomersController {
   }
 
   @Get()
-  async findAll(@Query() query: CustomerQueryDto): Promise<ApiResponse> {
+  async findAll(@Query() query: CustomerQueryDto, @Request() req): Promise<ApiResponse> {
     try {
-      const result = await this.customersService.findAll(query);
+      const result = await this.customersService.findAll(query, req.user.userId);
       return this.createResponse(true, '客户列表获取成功', result);
     } catch (error) {
       return this.createResponse(false, '客户列表获取失败', null, error.message);
@@ -80,6 +82,17 @@ export class CustomersController {
       return this.createResponse(true, '客户详情获取成功', customer);
     } catch (error) {
       return this.createResponse(false, '客户详情获取失败', null, error.message);
+    }
+  }
+
+  // 可分配的用户列表 - 必须在 :id 路由之前
+  @Get('assignable-users')
+  async getAssignableUsers(): Promise<ApiResponse> {
+    try {
+      const users = await this.customersService.getAssignableUsers();
+      return this.createResponse(true, '可分配用户获取成功', users);
+    } catch (error) {
+      return this.createResponse(false, '可分配用户获取失败', null, error.message);
     }
   }
 
@@ -142,5 +155,36 @@ export class CustomersController {
     } catch (error) {
       return this.createResponse(false, '跟进记录获取失败', null, error.message);
     }
+
   }
-} 
+
+  // 分配客户归属人
+  @Patch(':id/assign')
+  async assignCustomer(
+    @Param('id') id: string,
+    @Body() dto: AssignCustomerDto,
+    @Request() req,
+  ): Promise<ApiResponse> {
+    try {
+      const updated = await this.customersService.assignCustomer(id, dto.assignedTo, dto.assignmentReason, req.user.userId);
+      return this.createResponse(true, '客户分配成功', updated);
+    } catch (error) {
+      return this.createResponse(false, error.message || '客户分配失败', null, error.message);
+    }
+  }
+
+
+
+  // 客户分配历史
+  @Get(':id/assignment-logs')
+  async getAssignmentLogs(@Param('id') id: string): Promise<ApiResponse> {
+    try {
+      const logs = await this.customersService.getAssignmentLogs(id);
+      return this.createResponse(true, '分配历史获取成功', logs);
+    } catch (error) {
+      return this.createResponse(false, '分配历史获取失败', null, error.message);
+    }
+  }
+
+
+}

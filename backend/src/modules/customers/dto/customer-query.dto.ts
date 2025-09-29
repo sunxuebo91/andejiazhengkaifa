@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, Min, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsNumber, Min, IsEnum, IsMongoId } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CustomerQueryDto {
@@ -38,6 +38,12 @@ export class CustomerQueryDto {
   @IsEnum(['A类', 'B类', 'C类', 'D类'])
   leadLevel?: string;
 
+  // 按负责人过滤（我的客户/指定负责人）
+  @IsOptional()
+  @IsMongoId()
+  assignedTo?: string;
+
+
   @IsOptional()
   @IsNumber()
   @Min(1)
@@ -61,4 +67,4 @@ export class CustomerQueryDto {
     message: '排序方向必须是：asc或desc'
   })
   sortOrder?: 'asc' | 'desc' = 'desc';
-} 
+}

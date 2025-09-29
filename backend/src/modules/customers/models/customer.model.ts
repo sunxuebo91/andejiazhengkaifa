@@ -17,7 +17,7 @@ export class Customer {
   @Prop()
   idCardNumber: string;
 
-  @Prop({ 
+  @Prop({
     required: true,
     enum: ['美团', '抖音', '快手', '小红书', '转介绍', '其他']
   })
@@ -85,6 +85,19 @@ export class Customer {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   lastUpdatedBy: Types.ObjectId;
 
+  // 客户分配相关字段
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  assignedTo: Types.ObjectId; // 当前负责人
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  assignedBy: Types.ObjectId; // 分配人（管理员）
+
+  @Prop()
+  assignedAt: Date; // 分配时间
+
+  @Prop()
+  assignmentReason: string; // 分配原因/备注
+
   @Prop({ default: Date.now })
   createdAt: Date;
 
@@ -96,4 +109,8 @@ export class Customer {
   customerId: string;
 }
 
-export const CustomerSchema = SchemaFactory.createForClass(Customer); 
+export const CustomerSchema = SchemaFactory.createForClass(Customer);
+
+// 索引：按负责人和更新时间常用查询
+CustomerSchema.index({ assignedTo: 1, updatedAt: -1 });
+CustomerSchema.index({ assignedBy: 1, assignedAt: -1 });

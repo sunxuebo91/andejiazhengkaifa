@@ -76,7 +76,8 @@
     "typeorm-ts-node-commonjs": "^0.3.20",
     "uuid": "^11.1.0",
     "validator": "^13.15.0",
-    "webidl-conversions": "^7.0.0"
+    "webidl-conversions": "^7.0.0",
+    "wechat-api": "^1.35.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

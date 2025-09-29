@@ -161,4 +161,53 @@ export class UsersService {
         return ['resume:view', 'customer:view'];
     }
   }
+
+  // 更新用户微信信息
+  async updateWeChatInfo(userId: string, wechatInfo: {
+    openId: string;
+    nickname?: string;
+    avatar?: string;
+  }): Promise<UserWithoutPassword> {
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          wechatOpenId: wechatInfo.openId,
+          wechatNickname: wechatInfo.nickname,
+          wechatAvatar: wechatInfo.avatar,
+        },
+        { new: true }
+      )
+      .select('-password')
+      .lean()
+      .exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    return updatedUser as UserWithoutPassword;
+  }
+
+  // 根据微信OpenID查找用户
+  async findByWeChatOpenId(openId: string): Promise<UserWithoutPassword | null> {
+    const user = await this.userModel
+      .findOne({ wechatOpenId: openId })
+      .select('-password')
+      .lean()
+      .exec();
+
+    return user as UserWithoutPassword;
+  }
+
+  // 获取已绑定微信的用户列表
+  async findUsersWithWeChat(): Promise<UserWithoutPassword[]> {
+    const users = await this.userModel
+      .find({ wechatOpenId: { $exists: true, $ne: null } })
+      .select('-password')
+      .lean()
+      .exec();
+
+    return users as UserWithoutPassword[];
+  }
 }

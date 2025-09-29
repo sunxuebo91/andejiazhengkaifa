@@ -10,6 +10,7 @@ import {
 
 interface User {
   id: string;
+  _id?: string; // MongoDB ObjectId
   username: string;
   name: string;
   phone?: string;
@@ -18,6 +19,10 @@ interface User {
   role: string;
   department?: string;
   permissions?: string[];
+  // 微信相关字段
+  wechatOpenId?: string;
+  wechatNickname?: string;
+  wechatAvatar?: string;
 }
 
 interface AuthContextType {
@@ -56,7 +61,20 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       if (isLoggedIn()) {
         const currentUser = getCurrentUser();
         if (currentUser) {
-          setUser(currentUser);
+          // 确保用户ID是字符串格式，处理MongoDB的ObjectId
+          const formattedUser: User = {
+            id: currentUser.id || currentUser._id?.toString() || '',
+            username: currentUser.username || '',
+            name: currentUser.name || '',
+            phone: currentUser.phone,
+            email: currentUser.email,
+            avatar: currentUser.avatar,
+            role: currentUser.role || '',
+            department: currentUser.department,
+            permissions: currentUser.permissions || []
+          };
+          
+          setUser(formattedUser);
           
           // 获取用户权限
           const userPermissions = await getUserPermissions();
@@ -85,11 +103,24 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   };
 
   // 设置用户登录
-  const login = (userData: User) => {
-    console.log('用户登录成功，设置状态:', userData);
-    setUser(userData);
-    if (userData.permissions) {
-      setPermissions(userData.permissions);
+  const login = (userData: any) => {
+    // 确保用户ID是字符串格式，处理MongoDB的ObjectId
+    const formattedUser: User = {
+      id: userData.id || userData._id?.toString() || '',
+      username: userData.username || '',
+      name: userData.name || '',
+      phone: userData.phone,
+      email: userData.email,
+      avatar: userData.avatar,
+      role: userData.role || '',
+      department: userData.department,
+      permissions: userData.permissions || []
+    };
+    
+    console.log('用户登录成功，设置状态:', formattedUser);
+    setUser(formattedUser);
+    if (formattedUser.permissions) {
+      setPermissions(formattedUser.permissions);
     } else {
       // 如果登录信息中没有权限，尝试获取
       getUserPermissions().then(perms => {
@@ -128,11 +159,24 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       }
 
       const updatedUser = await fetchCurrentUser();
-      setUser(updatedUser);
+      // 确保用户ID是字符串格式，处理MongoDB的ObjectId
+      const formattedUser: User = {
+        id: updatedUser.id || updatedUser._id?.toString() || '',
+        username: updatedUser.username || '',
+        name: updatedUser.name || '',
+        phone: updatedUser.phone,
+        email: updatedUser.email,
+        avatar: updatedUser.avatar,
+        role: updatedUser.role || '',
+        department: updatedUser.department,
+        permissions: updatedUser.permissions || []
+      };
+      
+      setUser(formattedUser);
 
       // 更新权限
-      if (updatedUser.permissions) {
-        setPermissions(updatedUser.permissions);
+      if (formattedUser.permissions) {
+        setPermissions(formattedUser.permissions);
       }
     } catch (error) {
       console.error('刷新用户信息失败:', error);

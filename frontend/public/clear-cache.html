@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>清理浏览器缓存</title>
+</head>
+<body>
+    <h1>清理安得家政CRM缓存数据</h1>
+    <button onclick="clearStorage()">清理所有本地存储</button>
+    <div id="result"></div>
+
+    <script>
+        function clearStorage() {
+            try {
+                // 清理localStorage
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('user');
+                
+                // 清理sessionStorage
+                sessionStorage.clear();
+                
+                // 清理cookies
+                document.cookie.split(";").forEach(function(c) { 
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                });
+                
+                document.getElementById('result').innerHTML = '<p style="color: green;">✅ 缓存已清理，请刷新页面或重新打开应用</p>';
+            } catch (error) {
+                document.getElementById('result').innerHTML = '<p style="color: red;">❌ 清理失败: ' + error.message + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>

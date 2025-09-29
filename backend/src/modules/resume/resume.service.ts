@@ -265,12 +265,19 @@ export class ResumeService {
         }
       }
 
+      // 为列表项补充 avatarUrl（个人照片第一张或旧格式 photoUrls 第一张）
+      const itemsWithAvatar = items.map((it: any) => {
+        const firstPersonal = Array.isArray(it?.personalPhoto) && it.personalPhoto.length > 0 ? it.personalPhoto[0]?.url : undefined;
+        const firstLegacy = Array.isArray(it?.photoUrls) && it.photoUrls.length > 0 ? it.photoUrls[0] : undefined;
+        return { ...it, avatarUrl: firstPersonal || firstLegacy || '' };
+      });
+
       return {
-        items,
+        items: itemsWithAvatar,
         total,
         page,
         pageSize,
-        totalPages: Math.ceil(total / pageSize)
+        totalPages: Math.ceil(total / pageSize),
       };
     } catch (error) {
       this.logger.error(`🔥 [SORT-FIX-FINAL] 查询失败: ${error.message}`, error.stack);

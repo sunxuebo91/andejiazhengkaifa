@@ -309,9 +309,14 @@ export class CreateResumeV2Dto {
   @IsOptional()
   @IsString()
   @Transform(({ value }) => {
+    // 如果是空值，返回undefined让@IsOptional跳过验证
+    if (!value || value === '' || value === null || value === undefined) {
+      return undefined;
+    }
     if (typeof value === 'string') {
       const digits = value.replace(/\D/g, '');
-      return digits;
+      // 如果清理后是空字符串，返回undefined
+      return digits === '' ? undefined : digits;
     }
     return value;
   })

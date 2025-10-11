@@ -1,0 +1,195 @@
+<!-- 小程序客户列表页面模板 -->
+<!-- 文件: pages/customer/list.wxml -->
+
+<view class="container">
+  <!-- 搜索栏 -->
+  <view class="search-bar">
+    <view class="search-input-wrapper {{searchFocused ? 'focused' : ''}}">
+      <icon class="search-icon" type="search" size="16" color="#999"></icon>
+      <input 
+        class="search-input" 
+        placeholder="搜索客户姓名或手机号"
+        value="{{query.search}}"
+        bindinput="onSearchInput"
+        bindfocus="onSearchFocus"
+        bindblur="onSearchBlur"
+        confirm-type="search"
+      />
+      <view wx:if="{{query.search}}" class="clear-btn" bindtap="onSearchClear">
+        <icon type="clear" size="14" color="#999"></icon>
+      </view>
+    </view>
+    
+    <view class="filter-btn {{showFilter ? 'active' : ''}}" bindtap="toggleFilter">
+      <icon type="filter" size="16"></icon>
+      <text>筛选</text>
+    </view>
+  </view>
+
+  <!-- 筛选面板 -->
+  <view class="filter-panel {{showFilter ? 'show' : ''}}" wx:if="{{showFilter}}">
+    <view class="filter-section">
+      <text class="filter-title">客户状态</text>
+      <view class="filter-options">
+        <view 
+          wx:for="{{filterOptions.contractStatus}}" 
+          wx:key="value"
+          class="filter-option {{query.contractStatus === item.value ? 'active' : ''}}"
+          data-type="contractStatus"
+          data-value="{{item.value}}"
+          bindtap="onFilterChange"
+        >
+          {{item.label}}
+        </view>
+      </view>
+    </view>
+    
+    <view class="filter-section">
+      <text class="filter-title">线索来源</text>
+      <view class="filter-options">
+        <view 
+          wx:for="{{filterOptions.leadSource}}" 
+          wx:key="value"
+          class="filter-option {{query.leadSource === item.value ? 'active' : ''}}"
+          data-type="leadSource"
+          data-value="{{item.value}}"
+          bindtap="onFilterChange"
+        >
+          {{item.label}}
+        </view>
+      </view>
+    </view>
+    
+    <view class="filter-actions">
+      <button class="reset-btn" bindtap="resetFilter">重置</button>
+      <button class="confirm-btn" bindtap="toggleFilter">确定</button>
+    </view>
+  </view>
+
+  <!-- 客户列表 -->
+  <view class="customer-list">
+    <!-- 加载状态 -->
+    <view wx:if="{{loading && customers.length === 0}}" class="loading-wrapper">
+      <view class="loading-spinner"></view>
+      <text class="loading-text">加载中...</text>
+    </view>
+
+    <!-- 错误状态 -->
+    <view wx:elif="{{error && customers.length === 0}}" class="error-wrapper">
+      <icon type="warn" size="48" color="#ff6b6b"></icon>
+      <text class="error-text">{{error}}</text>
+      <button class="retry-btn" bindtap="onRetry">重试</button>
+    </view>
+
+    <!-- 空状态 -->
+    <view wx:elif="{{customers.length === 0 && !loading}}" class="empty-wrapper">
+      <icon type="info" size="48" color="#ccc"></icon>
+      <text class="empty-text">暂无客户数据</text>
+      <button wx:if="{{userPermissions.canCreate}}" class="create-btn" bindtap="onCreateCustomer">
+        创建客户
+      </button>
+    </view>
+
+    <!-- 客户列表项 -->
+    <view wx:else class="customer-items">
+      <view 
+        wx:for="{{customers}}" 
+        wx:key="_id"
+        class="customer-item"
+        data-id="{{item._id}}"
+        bindtap="onCustomerTap"
+      >
+        <!-- 客户基本信息 -->
+        <view class="customer-header">
+          <view class="customer-name">{{item.name}}</view>
+          <view class="customer-status" style="color: {{getCustomerStatusStyle(item.contractStatus).color}}; background-color: {{getCustomerStatusStyle(item.contractStatus).backgroundColor}};">
+            {{item.contractStatus}}
+          </view>
+        </view>
+        
+        <view class="customer-info">
+          <view class="info-row">
+            <icon class="info-icon" type="phone" size="12" color="#666"></icon>
+            <text class="info-text">{{item.phone}}</text>
+          </view>
+          
+          <view class="info-row" wx:if="{{item.serviceCategory}}">
+            <icon class="info-icon" type="service" size="12" color="#666"></icon>
+            <text class="info-text">{{item.serviceCategory}}</text>
+          </view>
+          
+          <view class="info-row">
+            <icon class="info-icon" type="time" size="12" color="#666"></icon>
+            <text class="info-text">{{formatRelativeTime(item.createdAt)}}</text>
+          </view>
+        </view>
+
+        <!-- 客户标签 -->
+        <view class="customer-tags">
+          <view class="tag lead-source">{{item.leadSource}}</view>
+          <view wx:if="{{item.leadLevel}}" class="tag lead-level" style="color: {{getLeadLevelStyle(item.leadLevel).color}}; background-color: {{getLeadLevelStyle(item.leadLevel).backgroundColor}};">
+            {{item.leadLevel}}
+          </view>
+        </view>
+
+        <!-- 操作按钮 -->
+        <view class="customer-actions" catchtap="stopPropagation">
+          <button 
+            class="action-btn contact-btn" 
+            data-phone="{{item.phone}}"
+            bindtap="onContactCustomer"
+          >
+            联系
+          </button>
+          
+          <button 
+            wx:if="{{userPermissions.canEdit}}"
+            class="action-btn edit-btn" 
+            data-id="{{item._id}}"
+            bindtap="onEditCustomer"
+          >
+            编辑
+          </button>
+          
+          <button 
+            wx:if="{{userPermissions.canAssign}}"
+            class="action-btn assign-btn" 
+            data-id="{{item._id}}"
+            bindtap="onAssignCustomer"
+          >
+            分配
+          </button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 加载更多 -->
+    <view wx:if="{{hasMore && customers.length > 0}}" class="load-more">
+      <view wx:if="{{loadingMore}}" class="loading-more">
+        <view class="loading-spinner small"></view>
+        <text>加载更多...</text>
+      </view>
+      <text wx:else class="load-more-text">上拉加载更多</text>
+    </view>
+
+    <!-- 没有更多数据 -->
+    <view wx:elif="{{!hasMore && customers.length > 0}}" class="no-more">
+      <text>已加载全部数据</text>
+    </view>
+  </view>
+
+  <!-- 悬浮创建按钮 -->
+  <view 
+    wx:if="{{userPermissions.canCreate && customers.length > 0}}" 
+    class="fab-btn"
+    bindtap="onCreateCustomer"
+  >
+    <icon type="plus" size="24" color="#fff"></icon>
+  </view>
+
+  <!-- 刷新指示器 -->
+  <view wx:if="{{refreshing}}" class="refresh-indicator">
+    <view class="loading-spinner"></view>
+    <text>刷新中...</text>
+  </view>
+</view>

@@ -1,0 +1,385 @@
+/* 小程序客户列表页面样式 */
+/* 文件: pages/customer/list.wxss */
+
+.container {
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+/* 搜索栏样式 */
+.search-bar {
+  display: flex;
+  align-items: center;
+  padding: 20rpx;
+  background-color: #fff;
+  border-bottom: 1rpx solid #eee;
+}
+
+.search-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 70rpx;
+  padding: 0 20rpx;
+  background-color: #f8f8f8;
+  border-radius: 35rpx;
+  transition: all 0.3s ease;
+}
+
+.search-input-wrapper.focused {
+  background-color: #e8f4fd;
+  border: 1rpx solid #1890ff;
+}
+
+.search-icon {
+  margin-right: 10rpx;
+}
+
+.search-input {
+  flex: 1;
+  height: 100%;
+  font-size: 28rpx;
+  color: #333;
+}
+
+.clear-btn {
+  padding: 10rpx;
+  margin-left: 10rpx;
+}
+
+.filter-btn {
+  display: flex;
+  align-items: center;
+  padding: 0 20rpx;
+  margin-left: 20rpx;
+  height: 70rpx;
+  background-color: #f8f8f8;
+  border-radius: 35rpx;
+  font-size: 26rpx;
+  color: #666;
+  transition: all 0.3s ease;
+}
+
+.filter-btn.active {
+  background-color: #1890ff;
+  color: #fff;
+}
+
+.filter-btn icon {
+  margin-right: 8rpx;
+}
+
+/* 筛选面板样式 */
+.filter-panel {
+  background-color: #fff;
+  border-bottom: 1rpx solid #eee;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.filter-panel.show {
+  max-height: 800rpx;
+}
+
+.filter-section {
+  padding: 30rpx 20rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.filter-section:last-child {
+  border-bottom: none;
+}
+
+.filter-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20rpx;
+}
+
+.filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+
+.filter-option {
+  padding: 12rpx 24rpx;
+  background-color: #f8f8f8;
+  border-radius: 20rpx;
+  font-size: 26rpx;
+  color: #666;
+  transition: all 0.3s ease;
+}
+
+.filter-option.active {
+  background-color: #1890ff;
+  color: #fff;
+}
+
+.filter-actions {
+  display: flex;
+  padding: 20rpx;
+  gap: 20rpx;
+}
+
+.reset-btn, .confirm-btn {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  border: none;
+}
+
+.reset-btn {
+  background-color: #f8f8f8;
+  color: #666;
+}
+
+.confirm-btn {
+  background-color: #1890ff;
+  color: #fff;
+}
+
+/* 客户列表样式 */
+.customer-list {
+  flex: 1;
+}
+
+.customer-items {
+  padding: 0 20rpx;
+}
+
+.customer-item {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.customer-item:active {
+  transform: scale(0.98);
+  box-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.1);
+}
+
+.customer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.customer-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.customer-status {
+  padding: 8rpx 16rpx;
+  border-radius: 12rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+}
+
+.customer-info {
+  margin-bottom: 20rpx;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-icon {
+  margin-right: 12rpx;
+}
+
+.info-text {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.customer-tags {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.tag {
+  padding: 6rpx 12rpx;
+  border-radius: 8rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+}
+
+.tag.lead-source {
+  background-color: #e6f7ff;
+  color: #1890ff;
+}
+
+.tag.lead-level {
+  /* 动态样式通过内联样式设置 */
+}
+
+.customer-actions {
+  display: flex;
+  gap: 20rpx;
+}
+
+.action-btn {
+  flex: 1;
+  height: 60rpx;
+  line-height: 60rpx;
+  text-align: center;
+  border-radius: 30rpx;
+  font-size: 24rpx;
+  border: none;
+}
+
+.contact-btn {
+  background-color: #52c41a;
+  color: #fff;
+}
+
+.edit-btn {
+  background-color: #faad14;
+  color: #fff;
+}
+
+.assign-btn {
+  background-color: #722ed1;
+  color: #fff;
+}
+
+/* 状态样式 */
+.loading-wrapper, .error-wrapper, .empty-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 40rpx;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 4rpx solid #f0f0f0;
+  border-top: 4rpx solid #1890ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20rpx;
+}
+
+.loading-spinner.small {
+  width: 40rpx;
+  height: 40rpx;
+  border-width: 3rpx;
+  margin-bottom: 10rpx;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-text, .error-text, .empty-text {
+  font-size: 28rpx;
+  color: #666;
+  margin-bottom: 20rpx;
+}
+
+.retry-btn, .create-btn {
+  padding: 20rpx 40rpx;
+  background-color: #1890ff;
+  color: #fff;
+  border-radius: 25rpx;
+  font-size: 26rpx;
+  border: none;
+}
+
+/* 加载更多样式 */
+.load-more, .no-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40rpx;
+  font-size: 26rpx;
+  color: #999;
+}
+
+.loading-more {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+/* 悬浮按钮样式 */
+.fab-btn {
+  position: fixed;
+  right: 40rpx;
+  bottom: 40rpx;
+  width: 100rpx;
+  height: 100rpx;
+  background-color: #1890ff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4rpx 12rpx rgba(24, 144, 255, 0.4);
+  z-index: 100;
+  transition: all 0.3s ease;
+}
+
+.fab-btn:active {
+  transform: scale(0.9);
+}
+
+/* 刷新指示器样式 */
+.refresh-indicator {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40rpx;
+  background-color: rgba(0, 0, 0, 0.7);
+  border-radius: 16rpx;
+  color: #fff;
+  font-size: 26rpx;
+  z-index: 1000;
+}
+
+.refresh-indicator .loading-spinner {
+  border-color: rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+}
+
+/* 响应式适配 */
+@media (max-width: 375px) {
+  .customer-item {
+    padding: 24rpx;
+  }
+  
+  .customer-name {
+    font-size: 30rpx;
+  }
+  
+  .action-btn {
+    font-size: 22rpx;
+  }
+}

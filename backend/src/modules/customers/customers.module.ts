@@ -7,6 +7,8 @@ import { CustomerFollowUp, CustomerFollowUpSchema } from './models/customer-foll
 import { User, UserSchema } from '../users/models/user.entity';
 import { CustomerAssignmentLog, CustomerAssignmentLogSchema } from './models/customer-assignment-log.model';
 import { WeChatModule } from '../wechat/wechat.module';
+import { WeixinModule } from '../weixin/weixin.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { WeChatModule } from '../wechat/wechat.module';
       { name: User.name, schema: UserSchema }
     ]),
     WeChatModule,
+    WeixinModule,
+    UsersModule,
   ],
   controllers: [CustomersController],
   providers: [CustomersService],

@@ -88,7 +88,12 @@ export class AuthService {
         throw new UnauthorizedException('用户名或密码错误');
       }
 
-      const payload = { username: user.username, sub: user._id };
+      const payload = {
+        username: user.username,
+        sub: user._id,
+        role: user.role,
+        permissions: user.permissions || []
+      };
       const token = this.jwtService.sign(payload);
 
       return {
@@ -136,7 +141,13 @@ export class AuthService {
       await this.logLoginAttempt(user._id.toString(), ip, userAgent, 'success');
 
       // 4. 生成JWT token
-      const payload = { username: user.username, sub: user._id, openid: openidResult.openid };
+      const payload = {
+        username: user.username,
+        sub: user._id,
+        openid: openidResult.openid,
+        role: user.role,
+        permissions: user.permissions || []
+      };
       const token = this.jwtService.sign(payload);
 
       return {
@@ -242,7 +253,12 @@ export class AuthService {
       throw new NotFoundException('用户不存在');
     }
 
-    const payload = { username: user.username, sub: user._id };
+    const payload = {
+      username: user.username,
+      sub: user._id,
+      role: user.role,
+      permissions: user.permissions || []
+    };
     return {
       token: this.jwtService.sign(payload)
     };

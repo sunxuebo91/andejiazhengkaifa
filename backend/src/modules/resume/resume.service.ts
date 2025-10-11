@@ -330,6 +330,77 @@ export class ResumeService {
       updateData.lastUpdatedBy = new Types.ObjectId(userId);
     }
 
+    // 🔧 修复：同步更新 certificateUrls 和 certificates 字段
+    // 当小程序提交空数组时，需要同时清空两个字段
+    if (updateResumeDto.certificateUrls !== undefined) {
+      updateData.certificateUrls = updateResumeDto.certificateUrls;
+      // 同步更新 certificates 字段（包括空数组的情况）
+      if (Array.isArray(updateResumeDto.certificateUrls)) {
+        if (updateResumeDto.certificateUrls.length === 0) {
+          // 如果是空数组，清空 certificates
+          updateData.certificates = [];
+        } else {
+          // 如果有数据，转换为 FileInfo 格式
+          updateData.certificates = updateResumeDto.certificateUrls.map(url => ({
+            url: url,
+            filename: url.split('/').pop() || '',
+            mimetype: 'image/jpeg',
+            size: 0
+          }));
+        }
+      }
+    }
+
+    // 🔧 修复：同步更新 medicalReportUrls 和 reports 字段
+    if (updateResumeDto.medicalReportUrls !== undefined) {
+      updateData.medicalReportUrls = updateResumeDto.medicalReportUrls;
+      // 同步更新 reports 字段（包括空数组的情况）
+      if (Array.isArray(updateResumeDto.medicalReportUrls)) {
+        if (updateResumeDto.medicalReportUrls.length === 0) {
+          updateData.reports = [];
+        } else {
+          updateData.reports = updateResumeDto.medicalReportUrls.map(url => ({
+            url: url,
+            filename: url.split('/').pop() || '',
+            mimetype: url.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
+            size: 0
+          }));
+        }
+      }
+    }
+
+    // 🔧 修复：同步更新 photoUrls 和 personalPhoto 字段
+    if (updateResumeDto.photoUrls !== undefined) {
+      updateData.photoUrls = updateResumeDto.photoUrls;
+      // 同步更新 personalPhoto 字段（包括空数组的情况）
+      if (Array.isArray(updateResumeDto.photoUrls)) {
+        if (updateResumeDto.photoUrls.length === 0) {
+          updateData.personalPhoto = [];
+        } else {
+          updateData.personalPhoto = updateResumeDto.photoUrls.map(url => ({
+            url: url,
+            filename: url.split('/').pop() || '',
+            mimetype: 'image/jpeg',
+            size: 0
+          }));
+        }
+      }
+    }
+
+    this.logger.log(`📝 更新简历 ${id}，字段同步情况:`);
+    if (updateResumeDto.certificateUrls !== undefined) {
+      this.logger.log(`  - certificateUrls: ${updateData.certificateUrls?.length || 0} 项`);
+      this.logger.log(`  - certificates: ${updateData.certificates?.length || 0} 项 (已同步)`);
+    }
+    if (updateResumeDto.medicalReportUrls !== undefined) {
+      this.logger.log(`  - medicalReportUrls: ${updateData.medicalReportUrls?.length || 0} 项`);
+      this.logger.log(`  - reports: ${updateData.reports?.length || 0} 项 (已同步)`);
+    }
+    if (updateResumeDto.photoUrls !== undefined) {
+      this.logger.log(`  - photoUrls: ${updateData.photoUrls?.length || 0} 项`);
+      this.logger.log(`  - personalPhoto: ${updateData.personalPhoto?.length || 0} 项 (已同步)`);
+    }
+
     const resume = await this.resumeModel
       .findByIdAndUpdate(
         new Types.ObjectId(id),
@@ -349,7 +420,7 @@ export class ResumeService {
       throw new NotFoundException('简历不存在');
     }
 
-    this.logger.log(`简历更新成功: ${id}, updatedAt: ${(resume as any).updatedAt}`);
+    this.logger.log(`✅ 简历更新成功: ${id}, updatedAt: ${(resume as any).updatedAt}`);
     return resume;
   }
 

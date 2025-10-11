@@ -1,0 +1,284 @@
+<!-- 小程序客户创建页面模板 -->
+<!-- 文件: pages/customer/create.wxml -->
+
+<view class="container">
+  <!-- 页面头部 -->
+  <view class="page-header">
+    <view class="header-left" bindtap="onBack">
+      <icon type="back" size="20" color="#333"></icon>
+      <text class="back-text">返回</text>
+    </view>
+    <view class="header-title">创建客户</view>
+    <view class="header-right">
+      <text class="scan-btn" bindtap="onScanCode">扫码</text>
+    </view>
+  </view>
+
+  <!-- 表单内容 -->
+  <scroll-view class="form-container" scroll-y="true">
+    <!-- 基本信息 -->
+    <view class="form-section">
+      <view class="section-title">基本信息</view>
+      
+      <!-- 客户姓名 -->
+      <view class="form-item {{errors.name ? 'error' : ''}}">
+        <view class="item-label required">客户姓名</view>
+        <input 
+          class="item-input" 
+          placeholder="请输入客户姓名"
+          value="{{formData.name}}"
+          data-field="name"
+          bindinput="onInputChange"
+          maxlength="20"
+        />
+        <view wx:if="{{errors.name}}" class="error-text">{{errors.name}}</view>
+      </view>
+      
+      <!-- 客户电话 -->
+      <view class="form-item {{errors.phone ? 'error' : ''}}">
+        <view class="item-label required">客户电话</view>
+        <input 
+          class="item-input" 
+          placeholder="请输入手机号码"
+          value="{{formData.phone}}"
+          data-field="phone"
+          bindinput="onInputChange"
+          type="number"
+          maxlength="11"
+        />
+        <view wx:if="{{errors.phone}}" class="error-text">{{errors.phone}}</view>
+      </view>
+      
+      <!-- 微信号 -->
+      <view class="form-item">
+        <view class="item-label">微信号</view>
+        <input 
+          class="item-input" 
+          placeholder="请输入微信号（可选）"
+          value="{{formData.wechatId}}"
+          data-field="wechatId"
+          bindinput="onInputChange"
+          maxlength="50"
+        />
+      </view>
+    </view>
+
+    <!-- 线索信息 -->
+    <view class="form-section">
+      <view class="section-title">线索信息</view>
+      
+      <!-- 线索来源 -->
+      <view class="form-item {{errors.leadSource ? 'error' : ''}}">
+        <view class="item-label required">线索来源</view>
+        <picker 
+          class="item-picker"
+          mode="selector"
+          range="{{options.leadSource}}"
+          range-key="label"
+          value="{{getPickerIndex('leadSource', formData.leadSource)}}"
+          data-field="leadSource"
+          bindchange="onPickerChange"
+        >
+          <view class="picker-text {{formData.leadSource ? '' : 'placeholder'}}">
+            {{formData.leadSource || '请选择线索来源'}}
+          </view>
+          <icon class="picker-arrow" type="arrow_right" size="16" color="#ccc"></icon>
+        </picker>
+        <view wx:if="{{errors.leadSource}}" class="error-text">{{errors.leadSource}}</view>
+      </view>
+      
+      <!-- 服务类别 -->
+      <view class="form-item">
+        <view class="item-label">服务类别</view>
+        <picker 
+          class="item-picker"
+          mode="selector"
+          range="{{options.serviceCategory}}"
+          range-key="label"
+          value="{{getPickerIndex('serviceCategory', formData.serviceCategory)}}"
+          data-field="serviceCategory"
+          bindchange="onPickerChange"
+        >
+          <view class="picker-text {{formData.serviceCategory ? '' : 'placeholder'}}">
+            {{formData.serviceCategory || '请选择服务类别'}}
+          </view>
+          <icon class="picker-arrow" type="arrow_right" size="16" color="#ccc"></icon>
+        </picker>
+      </view>
+      
+      <!-- 客户状态 -->
+      <view class="form-item {{errors.contractStatus ? 'error' : ''}}">
+        <view class="item-label required">客户状态</view>
+        <picker 
+          class="item-picker"
+          mode="selector"
+          range="{{options.contractStatus}}"
+          range-key="label"
+          value="{{getPickerIndex('contractStatus', formData.contractStatus)}}"
+          data-field="contractStatus"
+          bindchange="onPickerChange"
+        >
+          <view class="picker-text {{formData.contractStatus ? '' : 'placeholder'}}">
+            {{formData.contractStatus || '请选择客户状态'}}
+          </view>
+          <icon class="picker-arrow" type="arrow_right" size="16" color="#ccc"></icon>
+        </picker>
+        <view wx:if="{{errors.contractStatus}}" class="error-text">{{errors.contractStatus}}</view>
+      </view>
+      
+      <!-- 线索等级 -->
+      <view class="form-item">
+        <view class="item-label">线索等级</view>
+        <picker 
+          class="item-picker"
+          mode="selector"
+          range="{{options.leadLevel}}"
+          range-key="label"
+          value="{{getPickerIndex('leadLevel', formData.leadLevel)}}"
+          data-field="leadLevel"
+          bindchange="onPickerChange"
+        >
+          <view class="picker-text {{formData.leadLevel ? '' : 'placeholder'}}">
+            {{formData.leadLevel || '请选择线索等级'}}
+          </view>
+          <icon class="picker-arrow" type="arrow_right" size="16" color="#ccc"></icon>
+        </picker>
+      </view>
+    </view>
+
+    <!-- 需求信息 -->
+    <view class="form-section">
+      <view class="section-title">需求信息</view>
+      
+      <!-- 薪资预算 -->
+      <view class="form-item {{errors.salaryBudget ? 'error' : ''}}">
+        <view class="item-label">薪资预算</view>
+        <view class="input-with-unit">
+          <input 
+            class="item-input" 
+            placeholder="请输入薪资预算"
+            value="{{formData.salaryBudget}}"
+            data-field="salaryBudget"
+            bindinput="onInputChange"
+            type="number"
+          />
+          <text class="input-unit">元/月</text>
+        </view>
+        <view wx:if="{{errors.salaryBudget}}" class="error-text">{{errors.salaryBudget}}</view>
+      </view>
+      
+      <!-- 期望开始日期 -->
+      <view class="form-item">
+        <view class="item-label">期望开始日期</view>
+        <picker 
+          class="item-picker"
+          mode="date"
+          value="{{formData.expectedStartDate}}"
+          start="{{getCurrentDate()}}"
+          data-field="expectedStartDate"
+          bindchange="onDateChange"
+        >
+          <view class="picker-text {{formData.expectedStartDate ? '' : 'placeholder'}}">
+            {{formData.expectedStartDate || '请选择期望开始日期'}}
+          </view>
+          <icon class="picker-arrow" type="arrow_right" size="16" color="#ccc"></icon>
+        </picker>
+      </view>
+      
+      <!-- 家庭面积 -->
+      <view class="form-item {{errors.homeArea ? 'error' : ''}}">
+        <view class="item-label">家庭面积</view>
+        <view class="input-with-unit">
+          <input 
+            class="item-input" 
+            placeholder="请输入家庭面积"
+            value="{{formData.homeArea}}"
+            data-field="homeArea"
+            bindinput="onInputChange"
+            type="number"
+          />
+          <text class="input-unit">平方米</text>
+        </view>
+        <view wx:if="{{errors.homeArea}}" class="error-text">{{errors.homeArea}}</view>
+      </view>
+      
+      <!-- 家庭人口 -->
+      <view class="form-item {{errors.familySize ? 'error' : ''}}">
+        <view class="item-label">家庭人口</view>
+        <view class="input-with-unit">
+          <input 
+            class="item-input" 
+            placeholder="请输入家庭人口"
+            value="{{formData.familySize}}"
+            data-field="familySize"
+            bindinput="onInputChange"
+            type="number"
+          />
+          <text class="input-unit">人</text>
+        </view>
+        <view wx:if="{{errors.familySize}}" class="error-text">{{errors.familySize}}</view>
+      </view>
+      
+      <!-- 休息安排 -->
+      <view class="form-item">
+        <view class="item-label">休息安排</view>
+        <picker 
+          class="item-picker"
+          mode="selector"
+          range="{{options.restSchedule}}"
+          range-key="label"
+          value="{{getPickerIndex('restSchedule', formData.restSchedule)}}"
+          data-field="restSchedule"
+          bindchange="onPickerChange"
+        >
+          <view class="picker-text {{formData.restSchedule ? '' : 'placeholder'}}">
+            {{formData.restSchedule || '请选择休息安排'}}
+          </view>
+          <icon class="picker-arrow" type="arrow_right" size="16" color="#ccc"></icon>
+        </picker>
+      </view>
+      
+      <!-- 客户地址 -->
+      <view class="form-item">
+        <view class="item-label">客户地址</view>
+        <input 
+          class="item-input" 
+          placeholder="请输入客户地址"
+          value="{{formData.address}}"
+          data-field="address"
+          bindinput="onInputChange"
+          maxlength="100"
+        />
+      </view>
+      
+      <!-- 备注信息 -->
+      <view class="form-item">
+        <view class="item-label">备注信息</view>
+        <textarea 
+          class="item-textarea" 
+          placeholder="请输入备注信息（可选）"
+          value="{{formData.remarks}}"
+          data-field="remarks"
+          bindinput="onInputChange"
+          maxlength="500"
+          show-confirm-bar="false"
+        />
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 底部操作按钮 -->
+  <view class="form-actions">
+    <button class="reset-btn" bindtap="onReset" disabled="{{submitting}}">
+      重置
+    </button>
+    <button 
+      class="submit-btn {{submitting ? 'loading' : ''}}" 
+      bindtap="onSubmit" 
+      disabled="{{submitting}}"
+    >
+      <view wx:if="{{submitting}}" class="loading-spinner"></view>
+      <text>{{submitting ? '创建中...' : '创建客户'}}</text>
+    </button>
+  </view>
+</view>

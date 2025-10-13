@@ -29,8 +29,8 @@ export class CreateCustomerDto {
   @IsString()
   idCardNumber?: string;
 
-  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '其他'], {
-    message: '线索来源必须是：美团、抖音、快手、小红书、转介绍、其他之一'
+  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '杭州同馨', '握个手平台', '线索购买', '其他'], {
+    message: '线索来源必须是：美团、抖音、快手、小红书、转介绍、杭州同馨、握个手平台、线索购买、其他之一'
   })
   leadSource: string;
 

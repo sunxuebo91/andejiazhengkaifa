@@ -19,7 +19,7 @@ export class Customer {
 
   @Prop({
     required: true,
-    enum: ['美团', '抖音', '快手', '小红书', '转介绍', '其他']
+    enum: ['美团', '抖音', '快手', '小红书', '转介绍', '杭州同馨', '握个手平台', '线索购买', '其他']
   })
   leadSource: string;
 

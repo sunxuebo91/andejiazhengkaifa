@@ -3,8 +3,7 @@ import {
   Customer,
   CreateCustomerData,
   CustomerQuery,
-  CustomerListResponse,
-  CustomerStatistics
+  CustomerListResponse
 } from '../types/customer.types';
 
 // 小程序专用的API响应接口

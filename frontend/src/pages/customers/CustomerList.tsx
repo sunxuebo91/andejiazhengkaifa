@@ -10,10 +10,14 @@ import {
   Tag,
   message,
   Row,
-  Col
+  Col,
+  Upload,
+  Modal,
+  UploadProps
 } from 'antd';
-import { SearchOutlined, PlusOutlined, MessageOutlined } from '@ant-design/icons';
+import { SearchOutlined, PlusOutlined, MessageOutlined, UploadOutlined, InboxOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
+import { apiService } from '../../services/api';
 import {
   Customer,
   LEAD_SOURCES,
@@ -45,6 +49,15 @@ const CustomerList: React.FC = () => {
   const [assignModal, setAssignModal] = useState<{ visible: boolean; customerId: string | null; customerName: string }>(
     { visible: false, customerId: null, customerName: '' }
   );
+
+  // 导入相关状态
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: number;
+    fail: number;
+    errors: string[];
+  } | null>(null);
 
   // 搜索条件
   const [searchFilters, setSearchFilters] = useState<{
@@ -133,6 +146,91 @@ const CustomerList: React.FC = () => {
     });
     // 刷新当前页面数据
     loadCustomers(currentPage, pageSize);
+  };
+
+  // 处理Excel导入
+  const handleExcelImport: UploadProps['customRequest'] = async (options) => {
+    setImportLoading(true);
+    setImportResult(null);
+
+    try {
+      const { file } = options;
+      const uploadFile = file as File;
+
+      // 验证文件类型
+      const isExcel =
+        uploadFile.name.endsWith('.xlsx') ||
+        uploadFile.name.endsWith('.xls') ||
+        uploadFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        uploadFile.type === 'application/vnd.ms-excel';
+
+      if (!isExcel) {
+        message.error('只支持Excel文件(.xlsx, .xls)');
+        setImportLoading(false);
+        return;
+      }
+
+      // 准备表单数据
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+
+      // 发送请求
+      const response = await apiService.upload('/api/customers/import-excel', formData);
+
+      if (response.success) {
+        message.success(response.message || '导入成功');
+        setImportResult(response.data);
+
+        // 刷新列表
+        loadCustomers(1, pageSize);
+
+        // 如果导入全部成功且没有错误，自动关闭弹窗
+        if (response.data.success > 0 && response.data.fail === 0) {
+          setTimeout(() => {
+            setImportModalVisible(false);
+          }, 2000);
+        }
+      } else {
+        message.error(response.message || '导入失败');
+      }
+    } catch (error) {
+      console.error('导入Excel失败:', error);
+      message.error('导入失败，请检查文件格式或网络连接');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  // 下载Excel导入模板
+  const downloadExcelTemplate = () => {
+    const columns = ['姓名', '电话', '线索来源', '微信号', '需求品类', '客户状态', '薪资预算', '地址', '备注'];
+    const data = [
+      ['张三', '13800138000', '美团', 'wx123', '月嫂', '待定', '8000', '北京市朝阳区', '备注信息'],
+      ['李四', '13900139000', '抖音', '', '住家育儿嫂', '匹配中', '9000', '上海市浦东新区', '']
+    ];
+
+    // 创建CSV内容（添加BOM以支持中文）
+    let csv = '\ufeff' + columns.join(',') + '\n';
+    data.forEach(row => {
+      csv += row.join(',') + '\n';
+    });
+
+    // 创建Blob并下载
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', '客户导入模板.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 关闭导入结果并重置状态
+  const handleCloseImport = () => {
+    setImportModalVisible(false);
+    setImportResult(null);
   };
 
   // 状态标签颜色
@@ -355,13 +453,21 @@ const CustomerList: React.FC = () => {
               </Space>
             </Col>
             <Col span={3}>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => navigate('/customers/create')}
-              >
-                新增客户
-              </Button>
+              <Space>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => navigate('/customers/create')}
+                >
+                  新增客户
+                </Button>
+                <Button
+                  icon={<UploadOutlined />}
+                  onClick={() => setImportModalVisible(true)}
+                >
+                  批量导入
+                </Button>
+              </Space>
             </Col>
           </Row>
         </div>
@@ -408,6 +514,83 @@ const CustomerList: React.FC = () => {
           loadCustomers(currentPage, pageSize);
         }}
       />
+
+      {/* 批量导入弹窗 */}
+      <Modal
+        title="批量导入客户"
+        open={importModalVisible}
+        onCancel={handleCloseImport}
+        footer={[
+          <Button key="template" onClick={downloadExcelTemplate}>
+            下载模板
+          </Button>,
+          <Button key="close" onClick={handleCloseImport}>
+            关闭
+          </Button>
+        ]}
+        width={600}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ marginBottom: 8 }}>
+            <strong>导入说明：</strong>
+          </p>
+          <ul style={{ paddingLeft: 20, marginBottom: 16 }}>
+            <li>支持 .xlsx 和 .xls 格式的Excel文件</li>
+            <li>必填字段：姓名、电话、线索来源</li>
+            <li>可选字段：微信号、需求品类、客户状态、薪资预算、地址、备注等</li>
+            <li>线索来源可选值：美团、抖音、快手、小红书、转介绍、杭州同馨、握个手平台、线索购买、其他</li>
+            <li>手机号重复的客户将导入失败</li>
+          </ul>
+        </div>
+
+        <Upload.Dragger
+          name="file"
+          accept=".xlsx,.xls"
+          customRequest={handleExcelImport}
+          showUploadList={false}
+          disabled={importLoading}
+        >
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p className="ant-upload-text">
+            {importLoading ? '正在导入...' : '点击或拖拽Excel文件到此区域上传'}
+          </p>
+          <p className="ant-upload-hint">
+            支持 .xlsx 和 .xls 格式
+          </p>
+        </Upload.Dragger>
+
+        {/* 导入结果 */}
+        {importResult && (
+          <div style={{ marginTop: 16, padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
+            <p style={{ marginBottom: 8 }}>
+              <strong>导入结果：</strong>
+            </p>
+            <p style={{ marginBottom: 4 }}>
+              成功导入：<span style={{ color: '#52c41a', fontWeight: 'bold' }}>{importResult.success}</span> 条
+            </p>
+            <p style={{ marginBottom: 8 }}>
+              导入失败：<span style={{ color: '#ff4d4f', fontWeight: 'bold' }}>{importResult.fail}</span> 条
+            </p>
+
+            {importResult.errors && importResult.errors.length > 0 && (
+              <div>
+                <p style={{ marginBottom: 4, color: '#ff4d4f' }}>
+                  <strong>错误详情：</strong>
+                </p>
+                <div style={{ maxHeight: 200, overflow: 'auto', background: '#fff', padding: 8, borderRadius: 4 }}>
+                  {importResult.errors.map((error, index) => (
+                    <p key={index} style={{ margin: 0, fontSize: 12, color: '#666' }}>
+                      {error}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

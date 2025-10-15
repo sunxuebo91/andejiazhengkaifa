@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from './models/customer.model';
@@ -10,10 +10,14 @@ import { CreateCustomerFollowUpDto } from './dto/create-customer-follow-up.dto';
 import { User } from '../users/models/user.entity';
 import { WeChatService } from '../wechat/wechat.service';
 import { CustomerAssignmentLog } from './models/customer-assignment-log.model';
+import * as ExcelJS from 'exceljs';
+import * as fs from 'fs';
 
 
 @Injectable()
 export class CustomersService {
+  private readonly logger = new Logger(CustomersService.name);
+
   constructor(
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(User.name) private userModel: Model<User>,
@@ -490,5 +494,168 @@ export class CustomersService {
       console.error(`发送微信通知失败：${error.message}`, error);
       // 不抛出错误，避免影响主业务流程
     }
+  }
+
+  /**
+   * 从Excel文件导入客户数据
+   * @param filePath Excel文件路径
+   * @param userId 当前用户ID
+   */
+  async importFromExcel(filePath: string, userId: string): Promise<{ success: number; fail: number; errors: string[] }> {
+    this.logger.log(`开始处理客户Excel文件导入: ${filePath}`);
+
+    const result = {
+      success: 0,
+      fail: 0,
+      errors: [] as string[]
+    };
+
+    try {
+      // 使用ExcelJS读取文件
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+
+      // 获取第一个工作表
+      const worksheet = workbook.getWorksheet(1);
+      if (!worksheet) {
+        throw new BadRequestException('Excel文件中没有找到工作表');
+      }
+
+      // 检查是否有数据
+      if (worksheet.rowCount <= 1) {
+        throw new BadRequestException('Excel文件中没有数据');
+      }
+
+      // 获取表头
+      const headerRow = worksheet.getRow(1);
+      const headers: string[] = [];
+      headerRow.eachCell((cell, colNumber) => {
+        headers[colNumber - 1] = cell.value?.toString().trim() || '';
+      });
+
+      // 检查必需的列是否存在
+      const requiredColumns = ['姓名', '电话', '线索来源'];
+      const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+
+      if (missingColumns.length > 0) {
+        throw new BadRequestException(`Excel文件缺少必需的列: ${missingColumns.join(', ')}`);
+      }
+
+      // 解析每一行数据
+      const promises = [];
+
+      // 从第二行开始，跳过表头
+      for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+        const row = worksheet.getRow(rowNumber);
+        const rowData: Record<string, any> = {};
+
+        // 获取每个单元格的值
+        row.eachCell((cell, colNumber) => {
+          const header = headers[colNumber - 1];
+          if (header) {
+            rowData[header] = cell.value;
+          }
+        });
+
+        // 检查必填字段
+        if (!rowData['姓名'] || !rowData['电话'] || !rowData['线索来源']) {
+          result.fail++;
+          result.errors.push(`第 ${rowNumber} 行缺少必填字段`);
+          continue;
+        }
+
+        // 转换数据为DTO格式
+        const customerData = this.mapExcelRowToCustomerDto(rowData, userId);
+
+        // 创建客户(异步)
+        promises.push(
+          this.create(customerData, userId)
+            .then(() => {
+              result.success++;
+            })
+            .catch(error => {
+              result.fail++;
+              const errorMsg = error.message || '未知错误';
+              result.errors.push(`第 ${rowNumber} 行导入失败: ${errorMsg}`);
+            })
+        );
+      }
+
+      // 等待所有创建操作完成
+      await Promise.all(promises);
+
+      // 清理临时文件
+      fs.unlinkSync(filePath);
+
+      this.logger.log(`客户Excel导入完成，成功: ${result.success}, 失败: ${result.fail}`);
+      return result;
+    } catch (error) {
+      // 清理临时文件
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      this.logger.error(`客户Excel导入过程中发生错误: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 将Excel行数据映射到客户DTO
+   */
+  private mapExcelRowToCustomerDto(rowData: Record<string, any>, userId: string): CreateCustomerDto {
+    const dto: any = {
+      name: rowData['姓名']?.toString().trim(),
+      phone: rowData['电话']?.toString().trim(),
+      leadSource: rowData['线索来源']?.toString().trim(),
+      contractStatus: rowData['客户状态']?.toString().trim() || '待定',
+    };
+
+    // 可选字段
+    if (rowData['微信号']) {
+      dto.wechatId = rowData['微信号']?.toString().trim();
+    }
+
+    if (rowData['身份证号']) {
+      dto.idCardNumber = rowData['身份证号']?.toString().trim();
+    }
+
+    if (rowData['需求品类']) {
+      dto.serviceCategory = rowData['需求品类']?.toString().trim();
+    }
+
+    if (rowData['线索等级']) {
+      dto.leadLevel = rowData['线索等级']?.toString().trim();
+    }
+
+    if (rowData['薪资预算']) {
+      dto.salaryBudget = Number(rowData['薪资预算']) || undefined;
+    }
+
+    if (rowData['期望上户日期']) {
+      dto.expectedStartDate = rowData['期望上户日期']?.toString().trim();
+    }
+
+    if (rowData['家庭面积']) {
+      dto.homeArea = Number(rowData['家庭面积']) || undefined;
+    }
+
+    if (rowData['家庭人口']) {
+      dto.familySize = Number(rowData['家庭人口']) || undefined;
+    }
+
+    if (rowData['休息制度']) {
+      dto.restSchedule = rowData['休息制度']?.toString().trim();
+    }
+
+    if (rowData['地址']) {
+      dto.address = rowData['地址']?.toString().trim();
+    }
+
+    if (rowData['备注']) {
+      dto.remarks = rowData['备注']?.toString().trim();
+    }
+
+    return dto as CreateCustomerDto;
   }
 }

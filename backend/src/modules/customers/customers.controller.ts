@@ -13,8 +13,15 @@ import {
   HttpCode,
   Headers,
   ForbiddenException,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiHeader, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -33,6 +40,8 @@ import { UsersService } from '../users/users.service';
 @Controller('customers')
 @UseGuards(JwtAuthGuard)
 export class CustomersController {
+  private readonly logger = new Logger(CustomersController.name);
+
   constructor(
     private readonly customersService: CustomersService,
     private readonly weixinService: WeixinService,
@@ -709,5 +718,65 @@ export class CustomersController {
     return stats;
   }
 
+  // 批量导入客户（Excel格式）
+  @Post('import-excel')
+  @ApiOperation({ summary: '批量导入客户（Excel格式）' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Excel文件',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './uploads/temp',
+      filename: (req, file, callback) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const extension = extname(file.originalname);
+        callback(null, `customer-excel-${uniqueSuffix}${extension}`);
+      },
+    }),
+    fileFilter: (req, file, callback) => {
+      const ext = extname(file.originalname).toLowerCase();
+      if (!['.xlsx', '.xls'].includes(ext)) {
+        return callback(new BadRequestException('仅支持 .xlsx 或 .xls 格式的Excel文件'), false);
+      }
+      callback(null, true);
+    },
+  }))
+  async importExcel(
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req,
+  ): Promise<ApiResponse> {
+    try {
+      if (!file) {
+        throw new BadRequestException('请上传Excel文件');
+      }
+
+      this.logger.log(`开始处理客户Excel导入，文件名: ${file.originalname}`);
+      const importResults = await this.customersService.importFromExcel(file.path, req.user.userId);
+
+      return this.createResponse(
+        true,
+        `成功导入 ${importResults.success} 条客户，失败 ${importResults.fail} 条`,
+        importResults
+      );
+    } catch (error) {
+      this.logger.error(`客户Excel导入失败: ${error.message}`);
+      return this.createResponse(
+        false,
+        `Excel导入失败: ${error.message}`,
+        null,
+        error.message
+      );
+    }
+  }
 
 }

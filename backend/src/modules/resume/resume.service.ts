@@ -16,6 +16,7 @@ import * as crypto from 'crypto';
 export class ResumeService {
   private readonly logger = new Logger(ResumeService.name);
   private readonly idempotencyCache = new Map<string, any>(); // 简单内存缓存，生产环境应使用Redis
+  private readonly rateLimitCache = new Map<string, { count: number; resetTime: number }>(); // 限流缓存
 
   constructor(
     @InjectModel(Resume.name)
@@ -845,7 +846,9 @@ export class ResumeService {
       ...normalizedDto,
       userId: userId ? new Types.ObjectId(userId) : undefined,
       status: 'pending',
-      fileIds: []
+      fileIds: [],
+      // ⭐ 强制设置 leadSource 为销售创建，不信任前端传递的值
+      leadSource: 'other'  // 销售创建的简历默认为 'other'，可根据业务需求调整
     };
 
     // 清理空值避免索引问题
@@ -920,6 +923,13 @@ export class ResumeService {
    */
   private async updateExistingResume(id: string, data: any, userId?: string) {
     const updateData = { ...data };
+
+    // ⭐ 安全检查：不允许更新 leadSource 字段，保持原有来源标记
+    if (updateData.leadSource !== undefined) {
+      this.logger.warn(`⚠️ 前端尝试修改 leadSource 字段，已忽略`);
+      delete updateData.leadSource;
+    }
+
     if (userId) {
       updateData.lastUpdatedBy = new Types.ObjectId(userId);
     }
@@ -1647,6 +1657,106 @@ export class ResumeService {
     return await this.resumeModel.countDocuments({
       createdAt: { $gte: startDate }
     });
+  }
+
+  /**
+   * 根据身份证号查找简历
+   */
+  async findByIdNumber(idNumber: string): Promise<IResume | null> {
+    if (!idNumber) {
+      return null;
+    }
+    return await this.resumeModel.findOne({ idNumber }).exec();
+  }
+
+  /**
+   * 限流检查
+   * @param key 限流键（如IP地址、手机号等）
+   * @param maxRequests 最大请求次数
+   * @param windowSeconds 时间窗口（秒）
+   * @returns { allowed: boolean, remaining: number }
+   */
+  async checkRateLimit(key: string, maxRequests: number, windowSeconds: number): Promise<{ allowed: boolean; remaining: number }> {
+    const now = Date.now();
+    const cached = this.rateLimitCache.get(key);
+
+    if (!cached || now > cached.resetTime) {
+      // 创建新的限流记录
+      this.rateLimitCache.set(key, {
+        count: 1,
+        resetTime: now + windowSeconds * 1000
+      });
+      return { allowed: true, remaining: maxRequests - 1 };
+    }
+
+    if (cached.count >= maxRequests) {
+      return { allowed: false, remaining: 0 };
+    }
+
+    // 增加计数
+    cached.count++;
+    this.rateLimitCache.set(key, cached);
+    return { allowed: true, remaining: maxRequests - cached.count };
+  }
+
+  /**
+   * 阿姨自助注册 - 创建简历（无需JWT认证）
+   */
+  async createSelfRegister(dto: CreateResumeV2Dto): Promise<IResume> {
+    // 数据规范化
+    const normalizedDto = this.normalizeResumeData(dto);
+
+    // 检查手机号是否已存在
+    const existingResume = await this.resumeModel.findOne({ phone: normalizedDto.phone });
+    if (existingResume) {
+      throw new ConflictException('该手机号已注册');
+    }
+
+    // 检查身份证号是否已存在（如果提供）
+    if (normalizedDto.idNumber) {
+      const existingWithIdNumber = await this.resumeModel.findOne({ idNumber: normalizedDto.idNumber });
+      if (existingWithIdNumber) {
+        throw new ConflictException('该身份证号已注册');
+      }
+    }
+
+    // 创建简历数据
+    const resumeData: any = {
+      ...normalizedDto,
+      leadSource: 'self-registration',  // 强制设置，使用leadSource字段标记来源
+      status: 'draft',                  // 强制设置
+      userId: null,                     // 自助注册时没有userId
+      fileIds: [],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // 清理空值避免索引问题
+    if (!resumeData.idNumber) {
+      delete resumeData.idNumber;
+    }
+
+    try {
+      const resume = new this.resumeModel(resumeData);
+      const savedResume = await resume.save();
+      this.logger.log(`✅ 自助注册简历创建成功: ${savedResume._id}`);
+      return savedResume;
+    } catch (error) {
+      this.logger.error('❌ 自助注册简历创建失败:', error);
+
+      // 处理MongoDB唯一索引冲突
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyPattern || {})[0];
+        if (field === 'phone') {
+          throw new ConflictException('该手机号已注册');
+        } else if (field === 'idNumber') {
+          throw new ConflictException('该身份证号已注册');
+        }
+        throw new ConflictException('数据重复');
+      }
+
+      throw new BadRequestException(`创建简历失败: ${error.message}`);
+    }
   }
 
 }

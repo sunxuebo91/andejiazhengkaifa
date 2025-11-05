@@ -309,6 +309,7 @@ const leadSourceMap: LeadSourceMapType = {
   community: '社群线索',
   'door-to-door': '地推',
   'shared-order': '合单',
+  'self-registration': '自助注册',  // ⭐ 新增：自助注册来源
   other: '其他'
 };
 
@@ -1348,6 +1349,13 @@ const ResumeDetail = () => {
               </Descriptions.Item>
               <Descriptions.Item label="工作经验">
                 {resume?.experienceYears ? `${resume.experienceYears}年` : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="创建来源">
+                {resume?.userId ? (
+                  <Tag color="orange">员工创建</Tag>
+                ) : (
+                  <Tag color="blue">自助注册</Tag>
+                )}
               </Descriptions.Item>
               <Descriptions.Item label="线索来源">
                 {resume?.leadSource ? leadSourceMap[resume.leadSource] : '-'}

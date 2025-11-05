@@ -654,6 +654,171 @@ export class ResumeController {
 
   // ==================== 小程序专用接口 ====================
 
+  @Post('miniprogram/self-register')
+  @Public()
+  @ApiOperation({ summary: '阿姨自助注册接口（无需JWT认证）' })
+  @ApiBody({ type: CreateResumeV2Dto })
+  async selfRegister(
+    @Body() dto: CreateResumeV2Dto,
+    @Req() req?,
+  ) {
+    try {
+      // 获取请求IP
+      const requestIp = req.ip || req.connection?.remoteAddress || 'unknown';
+
+      this.logger.log(`🆕 阿姨自助注册:`);
+      this.logger.log(`📝 注册数据: ${JSON.stringify(dto, null, 2)}`);
+      this.logger.log(`🌐 请求IP: ${requestIp}`);
+
+      // 数据验证
+      if (!dto.name || dto.name.trim().length < 2 || dto.name.trim().length > 20) {
+        return {
+          success: false,
+          message: '数据验证失败',
+          error: 'VALIDATION_ERROR',
+          details: [{ field: 'name', message: '姓名必须是2-20个字符' }]
+        };
+      }
+
+      if (!dto.phone || !/^1[3-9]\d{9}$/.test(dto.phone)) {
+        return {
+          success: false,
+          message: '数据验证失败',
+          error: 'VALIDATION_ERROR',
+          details: [{ field: 'phone', message: '手机号格式不正确' }]
+        };
+      }
+
+      if (!dto.age || dto.age < 18 || dto.age > 65) {
+        return {
+          success: false,
+          message: '数据验证失败',
+          error: 'VALIDATION_ERROR',
+          details: [{ field: 'age', message: '年龄必须在18-65之间' }]
+        };
+      }
+
+      if (!dto.gender || !['male', 'female'].includes(dto.gender)) {
+        return {
+          success: false,
+          message: '数据验证失败',
+          error: 'VALIDATION_ERROR',
+          details: [{ field: 'gender', message: '性别必须是male或female' }]
+        };
+      }
+
+      if (!dto.jobType) {
+        return {
+          success: false,
+          message: '数据验证失败',
+          error: 'VALIDATION_ERROR',
+          details: [{ field: 'jobType', message: '工种不能为空' }]
+        };
+      }
+
+      // 验证身份证号格式（如果提供）
+      if (dto.idNumber) {
+        const idRegex = /^[1-9]\d{5}(18|19|20)\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\d{3}[0-9Xx]$/;
+        if (!idRegex.test(dto.idNumber)) {
+          return {
+            success: false,
+            message: '数据验证失败',
+            error: 'VALIDATION_ERROR',
+            details: [{ field: 'idNumber', message: '身份证号格式不正确' }]
+          };
+        }
+
+        // 检查身份证号是否已存在
+        const existingWithIdNumber = await this.resumeService.findByIdNumber(dto.idNumber);
+        if (existingWithIdNumber) {
+          return {
+            success: false,
+            message: '该身份证号已注册',
+            error: 'DUPLICATE_ID_NUMBER',
+            status: 409
+          };
+        }
+      }
+
+      // 限流检查（简单实现，生产环境应使用Redis）
+      const rateLimitKey = `rate_limit:${requestIp}`;
+      const rateLimitResult = await this.resumeService.checkRateLimit(rateLimitKey, 3, 60); // 每分钟3次
+      if (!rateLimitResult.allowed) {
+        return {
+          success: false,
+          message: '提交过于频繁，请稍后再试',
+          error: 'RATE_LIMIT_EXCEEDED',
+          status: 429
+        };
+      }
+
+      // 强制设置字段（不信任前端传值）
+      const selfRegisterDto = {
+        ...dto,
+        leadSource: 'self-registration',  // 固定值，标记为自助注册
+        status: 'draft',                  // 固定值
+        education: dto.education || 'middle',
+        expectedSalary: dto.expectedSalary || 0,
+        experienceYears: dto.experienceYears || 0,
+        workExperiences: dto.workExperiences || [],
+        skills: dto.skills || []
+      };
+
+      // 调用服务层创建简历（不需要userId）
+      const result = await this.resumeService.createSelfRegister(selfRegisterDto);
+
+      this.logger.log(`✅ 自助注册成功:`, {
+        resumeId: result._id,
+        name: result.name,
+        phone: result.phone,
+        leadSource: result.leadSource,
+        ip: requestIp
+      });
+
+      return {
+        success: true,
+        message: '简历创建成功',
+        data: {
+          _id: result._id.toString(),
+          id: result._id.toString(),
+          name: result.name,
+          phone: result.phone,
+          status: result.status,
+          leadSource: result.leadSource,
+          createdAt: (result as any).createdAt
+        }
+      };
+    } catch (error) {
+      this.logger.error(`❌ 自助注册失败: ${error.message}`, error.stack);
+
+      // 处理特定错误类型
+      if (error instanceof ConflictException) {
+        return {
+          success: false,
+          message: error.message,
+          error: 'DUPLICATE_ERROR',
+          status: 409
+        };
+      }
+
+      if (error instanceof BadRequestException) {
+        return {
+          success: false,
+          message: error.message,
+          error: 'VALIDATION_ERROR',
+          status: 400
+        };
+      }
+
+      return {
+        success: false,
+        message: '服务器内部错误',
+        error: 'INTERNAL_ERROR',
+        status: 500
+      };
+    }
+  }
+
   @Post('miniprogram/create')
   @ApiOperation({ summary: '小程序创建简历（支持幂等性和去重）' })
   @ApiBody({ type: CreateResumeV2Dto })

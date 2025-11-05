@@ -115,6 +115,7 @@ export enum LeadSource {
   COMMUNITY = 'community',
   DOOR_TO_DOOR = 'door-to-door',
   SHARED_ORDER = 'shared-order',
+  SELF_REGISTRATION = 'self-registration',
   OTHER = 'other'
 }
 

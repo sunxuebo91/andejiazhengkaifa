@@ -31,6 +31,8 @@ const jobTypeMap: Record<string, string> = {
   'zhujia-hulao': '住家护老'
 };
 
+
+
 // 类型定义
 interface SearchParams {
   keyword?: string;
@@ -574,12 +576,24 @@ const ResumeList = () => {
       },
     },
     {
+      title: '创建来源',
+      dataIndex: 'userId',
+      key: 'userId',
+      render: (userId: string) => {
+        if (!userId) {
+          return <Tag color="blue">自助注册</Tag>;
+        } else {
+          return <Tag color="orange">员工创建</Tag>;
+        }
+      },
+    },
+    {
       title: '体检报告',
       dataIndex: 'hasMedicalReport',
       key: 'hasMedicalReport',
       render: (hasMedicalReport: boolean) => (
-        hasMedicalReport ? 
-          <Tag color="green">有</Tag> : 
+        hasMedicalReport ?
+          <Tag color="green">有</Tag> :
           <Tag color="red">无</Tag>
       ),
     },

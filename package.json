@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Configuration protection system for preventing AI mismodification",
   "dependencies": {
-    "axios": "^1.9.0",
+    "axios": "^1.12.2",
     "chokidar": "^3.6.0",
     "mongodb": "^6.17.0",
     "mongoose": "^8.16.1",

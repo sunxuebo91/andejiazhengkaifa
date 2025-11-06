@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Tabs, Form, Input, Button, Switch, Select, App, Divider } from 'antd';
+import { Card, Tabs, Form, Input, Button, Switch, Select, App, Divider, Spin } from 'antd';
 import { UserOutlined, LockOutlined, BellOutlined, SettingOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
 import AvatarUpload from '../../components/AvatarUpload';
+import { apiService } from '../../services/api';
 
 const { TabPane } = Tabs;
 const { Option } = Select;
 
 const AccountSettings: React.FC = () => {
   const [activeTab, setActiveTab] = useState('profile');
-  const { user } = useAuth();
+  const { user, refreshUserInfo } = useAuth();
   const [form] = Form.useForm();
   const { message } = App.useApp();
   const location = useLocation();
+  const [loading, setLoading] = useState(false);
 
   // 从路由状态获取活动标签
   useEffect(() => {
@@ -23,7 +25,83 @@ const AccountSettings: React.FC = () => {
     }
   }, [location.state]);
 
-  const handleSubmit = (values: any) => {
+  // 更新个人信息
+  const handleProfileSubmit = async (values: any) => {
+    try {
+      setLoading(true);
+      console.log('提交表单:', values);
+      console.log('当前用户信息:', user);
+
+      // 获取用户ID (优先使用 _id, 其次使用 id)
+      const userId = user?._id || user?.id;
+
+      if (!userId) {
+        console.error('用户ID不存在:', user);
+        message.error('用户信息不存在');
+        return;
+      }
+
+      console.log('使用的用户ID:', userId);
+
+      // 调用后端 API 更新用户信息
+      const response = await apiService.patch(`/api/users/${userId}`, {
+        name: values.name,
+        email: values.email,
+        phone: values.phone,
+      });
+
+      if (response.success) {
+        message.success('个人信息更新成功');
+        // 刷新用户信息
+        await refreshUserInfo();
+      } else {
+        throw new Error(response.message || '更新失败');
+      }
+    } catch (error: any) {
+      console.error('更新个人信息失败:', error);
+      message.error(error.message || '更新失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 更新密码
+  const handlePasswordSubmit = async (values: any) => {
+    try {
+      setLoading(true);
+      console.log('更新密码:', values);
+
+      // 获取用户ID (优先使用 _id, 其次使用 id)
+      const userId = user?._id || user?.id;
+
+      if (!userId) {
+        console.error('用户ID不存在:', user);
+        message.error('用户信息不存在');
+        return;
+      }
+
+      // 调用后端 API 更新密码
+      const response = await apiService.patch(`/api/users/${userId}`, {
+        password: values.newPassword,
+      });
+
+      if (response.success) {
+        message.success('密码更新成功');
+        // 清空表单
+        form.resetFields();
+      } else {
+        throw new Error(response.message || '更新失败');
+      }
+    } catch (error: any) {
+      console.error('更新密码失败:', error);
+      message.error(error.message || '更新失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 其他设置（通知、偏好等）
+  const handleOtherSubmit = (values: any) => {
     console.log('提交表单:', values);
     message.success('设置已保存');
   };
@@ -58,51 +136,53 @@ const AccountSettings: React.FC = () => {
 
               <Divider />
 
-              <Form
-                layout="vertical"
-                form={form}
-                initialValues={{
-                  username: user?.username || '',
-                  name: user?.name || '',
-                  email: user?.email || '',
-                  phone: user?.phone || '',
-                }}
-                onFinish={handleSubmit}
-              >
-              <Form.Item label="用户名" name="username">
-                <Input disabled prefix={<UserOutlined />} />
-              </Form.Item>
-              <Form.Item
-                label="姓名"
-                name="name"
-                rules={[{ required: true, message: '请输入姓名' }]}
-              >
-                <Input prefix={<UserOutlined />} />
-              </Form.Item>
-              <Form.Item
-                label="电子邮箱"
-                name="email"
-                rules={[
-                  { type: 'email', message: '请输入有效的电子邮箱' },
-                ]}
-              >
-                <Input />
-              </Form.Item>
-              <Form.Item
-                label="手机号码"
-                name="phone"
-                rules={[
-                  { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号码' },
-                ]}
-              >
-                <Input />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit">
-                  保存变更
-                </Button>
-              </Form.Item>
-            </Form>
+              <Spin spinning={loading}>
+                <Form
+                  layout="vertical"
+                  form={form}
+                  initialValues={{
+                    username: user?.username || '',
+                    name: user?.name || '',
+                    email: user?.email || '',
+                    phone: user?.phone || '',
+                  }}
+                  onFinish={handleProfileSubmit}
+                >
+                <Form.Item label="用户名" name="username">
+                  <Input disabled prefix={<UserOutlined />} />
+                </Form.Item>
+                <Form.Item
+                  label="姓名"
+                  name="name"
+                  rules={[{ required: true, message: '请输入姓名' }]}
+                >
+                  <Input prefix={<UserOutlined />} />
+                </Form.Item>
+                <Form.Item
+                  label="电子邮箱"
+                  name="email"
+                  rules={[
+                    { type: 'email', message: '请输入有效的电子邮箱' },
+                  ]}
+                >
+                  <Input />
+                </Form.Item>
+                <Form.Item
+                  label="手机号码"
+                  name="phone"
+                  rules={[
+                    { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号码' },
+                  ]}
+                >
+                  <Input />
+                </Form.Item>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    保存变更
+                  </Button>
+                </Form.Item>
+              </Form>
+              </Spin>
             </div>
           </TabPane>
           
@@ -115,41 +195,50 @@ const AccountSettings: React.FC = () => {
             }
             key="security"
           >
-            <Form
-              layout="vertical"
-              style={{ maxWidth: 500, margin: '0 auto' }}
-              onFinish={handleSubmit}
-            >
-              <Form.Item label="当前密码" name="currentPassword" rules={[{ required: true }]}>
-                <Input.Password />
-              </Form.Item>
-              <Form.Item label="新密码" name="newPassword" rules={[{ required: true }]}>
-                <Input.Password />
-              </Form.Item>
-              <Form.Item
-                label="确认新密码"
-                name="confirmPassword"
-                dependencies={['newPassword']}
-                rules={[
-                  { required: true },
-                  ({ getFieldValue }) => ({
-                    validator(_, value) {
-                      if (!value || getFieldValue('newPassword') === value) {
-                        return Promise.resolve();
-                      }
-                      return Promise.reject(new Error('两次输入的密码不一致'));
-                    },
-                  }),
-                ]}
+            <Spin spinning={loading}>
+              <Form
+                layout="vertical"
+                style={{ maxWidth: 500, margin: '0 auto' }}
+                onFinish={handlePasswordSubmit}
               >
-                <Input.Password />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit">
-                  更新密码
-                </Button>
-              </Form.Item>
-            </Form>
+                <Form.Item label="当前密码" name="currentPassword" rules={[{ required: true, message: '请输入当前密码' }]}>
+                  <Input.Password />
+                </Form.Item>
+                <Form.Item
+                  label="新密码"
+                  name="newPassword"
+                  rules={[
+                    { required: true, message: '请输入新密码' },
+                    { min: 6, message: '密码至少6个字符' }
+                  ]}
+                >
+                  <Input.Password />
+                </Form.Item>
+                <Form.Item
+                  label="确认新密码"
+                  name="confirmPassword"
+                  dependencies={['newPassword']}
+                  rules={[
+                    { required: true, message: '请确认新密码' },
+                    ({ getFieldValue }) => ({
+                      validator(_, value) {
+                        if (!value || getFieldValue('newPassword') === value) {
+                          return Promise.resolve();
+                        }
+                        return Promise.reject(new Error('两次输入的密码不一致'));
+                      },
+                    }),
+                  ]}
+                >
+                  <Input.Password />
+                </Form.Item>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    更新密码
+                  </Button>
+                </Form.Item>
+              </Form>
+            </Spin>
           </TabPane>
           
           <TabPane
@@ -164,7 +253,7 @@ const AccountSettings: React.FC = () => {
             <Form
               layout="vertical"
               style={{ maxWidth: 500, margin: '0 auto' }}
-              onFinish={handleSubmit}
+              onFinish={handleOtherSubmit}
               initialValues={{
                 emailNotifications: true,
                 smsNotifications: true,
@@ -203,7 +292,7 @@ const AccountSettings: React.FC = () => {
             <Form
               layout="vertical"
               style={{ maxWidth: 500, margin: '0 auto' }}
-              onFinish={handleSubmit}
+              onFinish={handleOtherSubmit}
               initialValues={{
                 language: 'zh-CN',
                 theme: 'light',

@@ -22,10 +22,223 @@ const JoinInterview: React.FC = () => {
   const meetingContainerRef = useRef<HTMLDivElement>(null);
   const zegoInstanceRef = useRef<any>(null);
   const [zegoToken, setZegoToken] = useState<string | null>(null);
-  const [guestInfo, setGuestInfo] = useState<{ userName: string; role: GuestRole } | null>(null);
+  const [guestInfo, setGuestInfo] = useState<{ userName: string; role: GuestRole; guestId: string } | null>(null);
+
+  // 📝 提词器相关状态
+  const [teleprompterVisible, setTeleprompterVisible] = useState(false);
+  const [teleprompterContent, setTeleprompterContent] = useState('');
+  const [teleprompterSpeed, setTeleprompterSpeed] = useState(50);
+  const [teleprompterHeight, setTeleprompterHeight] = useState('50vh');
+  const [isScrolling, setIsScrolling] = useState(false);
+  const teleprompterRef = useRef<HTMLDivElement>(null);
+  const scrollIntervalRef = useRef<any>(null);
+  const roomCheckIntervalRef = useRef<any>(null);
+  const teleprompterPollIntervalRef = useRef<any>(null);
+  const lastTeleprompterTimestampRef = useRef<number>(0);
 
   // 从 URL 获取房间名称（可选）
   const roomName = searchParams.get('name') || '视频面试';
+
+  // 📝 提词器控制函数
+
+  // 开始自动滚动
+  const startScrolling = () => {
+    if (scrollIntervalRef.current) {
+      clearInterval(scrollIntervalRef.current);
+    }
+
+    setIsScrolling(true);
+    scrollIntervalRef.current = setInterval(() => {
+      if (teleprompterRef.current) {
+        const container = teleprompterRef.current;
+        const maxScroll = container.scrollHeight - container.clientHeight;
+
+        if (container.scrollTop >= maxScroll) {
+          // 滚动到底部，停止
+          stopScrolling();
+        } else {
+          container.scrollTop += teleprompterSpeed / 60; // 每帧滚动的像素数
+        }
+      }
+    }, 1000 / 60); // 60 FPS
+  };
+
+  // 停止滚动
+  const stopScrolling = () => {
+    if (scrollIntervalRef.current) {
+      clearInterval(scrollIntervalRef.current);
+      scrollIntervalRef.current = null;
+    }
+    setIsScrolling(false);
+  };
+
+  // 重置滚动位置
+  const resetScroll = () => {
+    if (teleprompterRef.current) {
+      teleprompterRef.current.scrollTop = 0;
+    }
+  };
+
+  // 检查房间状态
+  const checkRoomStatus = async () => {
+    try {
+      if (!roomId) return;
+
+      const response = await axios.post('/api/zego/check-room', {
+        roomId,
+      });
+
+      if (response.data.success && response.data.data.isDismissed) {
+        // 房间已解散，自动强制离开（不需要用户点击确定）
+        console.log('⚠️ 检测到房间已解散，自动离开');
+        message.warning('主持人已解散房间，您已被强制离开', 3);
+        handleRoomDismissed();
+      }
+    } catch (error) {
+      console.error('检查房间状态失败:', error);
+    }
+  };
+
+  // 轮询获取提词器消息
+  const pollTeleprompterMessages = async () => {
+    try {
+      if (!roomId || !guestInfo) return;
+
+      const response = await axios.post('/api/zego/get-teleprompter', {
+        roomId,
+        userId: guestInfo.guestId,
+        lastTimestamp: lastTeleprompterTimestampRef.current,
+      });
+
+      if (response.data.success && response.data.data.length > 0) {
+        const messages = response.data.data;
+
+        // 处理每条消息
+        messages.forEach((msg: any) => {
+          if (msg.type === 'CONTENT') {
+            // 更新提词内容
+            setTeleprompterContent(msg.content);
+            setTeleprompterSpeed(msg.scrollSpeed);
+            setTeleprompterHeight(msg.displayHeight);
+            setTeleprompterVisible(true);
+            console.log('收到提词内容:', msg.content);
+          } else if (msg.type === 'CONTROL') {
+            // 控制播放状态
+            if (msg.action === 'PLAY') {
+              startScrolling();
+              console.log('开始播放提词器');
+            } else if (msg.action === 'PAUSE') {
+              stopScrolling(); // 暂停就是停止滚动
+              console.log('暂停提词器');
+            } else if (msg.action === 'STOP') {
+              stopScrolling();
+              setTeleprompterVisible(false);
+              console.log('停止提词器');
+            }
+          }
+
+          // 更新最后接收的时间戳
+          if (msg.timestamp > lastTeleprompterTimestampRef.current) {
+            lastTeleprompterTimestampRef.current = msg.timestamp;
+          }
+        });
+      }
+    } catch (error) {
+      console.error('获取提词器消息失败:', error);
+    }
+  };
+
+  // 处理房间解散
+  const handleRoomDismissed = () => {
+    // 停止定时检查
+    if (roomCheckIntervalRef.current) {
+      clearInterval(roomCheckIntervalRef.current);
+      roomCheckIntervalRef.current = null;
+    }
+
+    // 停止提词器轮询
+    if (teleprompterPollIntervalRef.current) {
+      clearInterval(teleprompterPollIntervalRef.current);
+      teleprompterPollIntervalRef.current = null;
+    }
+
+    // 强制离开房间
+    if (zegoInstanceRef.current) {
+      try {
+        zegoInstanceRef.current.destroy();
+      } catch (error) {
+        console.error('销毁实例失败:', error);
+      }
+      zegoInstanceRef.current = null;
+    }
+
+    setZegoToken(null);
+    setGuestInfo(null);
+    setInMeeting(false);
+    message.error('房间已解散');
+
+    // 尝试关闭窗口
+    setTimeout(() => {
+      window.close();
+    }, 1000);
+  };
+
+  // 处理房间消息
+  const handleRoomMessage = (message: any) => {
+    try {
+      const data = JSON.parse(message.message);
+      console.log('收到房间消息:', data);
+
+      // 检查是否是发给自己的消息
+      const currentUserId = guestInfo?.userName || '';
+      const isTargeted =
+        data.targetUserIds === 'ALL' ||
+        data.targetUserIds.includes('ALL') ||
+        data.targetUserIds.includes(currentUserId);
+
+      if (!isTargeted) {
+        console.log('消息不是发给我的，忽略');
+        return;
+      }
+
+      // 处理提词器内容推送
+      if (data.type === 'TELEPROMPTER_CONTENT') {
+        setTeleprompterContent(data.content);
+        setTeleprompterSpeed(data.scrollSpeed || 50);
+        setTeleprompterHeight(data.displayHeight || '50vh');
+        message.info('收到新的提词内容');
+      }
+
+      // 处理提词器控制指令
+      if (data.type === 'TELEPROMPTER_CONTROL') {
+        if (data.action === 'PLAY') {
+          setTeleprompterVisible(true);
+          resetScroll();
+          setTimeout(() => startScrolling(), 100);
+        } else if (data.action === 'PAUSE') {
+          stopScrolling();
+        } else if (data.action === 'STOP') {
+          stopScrolling();
+          setTeleprompterVisible(false);
+          resetScroll();
+        }
+      }
+    } catch (error) {
+      console.error('处理房间消息失败:', error);
+    }
+  };
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (scrollIntervalRef.current) {
+        clearInterval(scrollIntervalRef.current);
+      }
+      if (roomCheckIntervalRef.current) {
+        clearInterval(roomCheckIntervalRef.current);
+      }
+    };
+  }, []);
 
   // 生成访客 Token（调用公开接口）
   const generateGuestToken = async (guestId: string, userName: string, role: GuestRole) => {
@@ -91,7 +304,7 @@ const JoinInterview: React.FC = () => {
 
       // 保存信息并进入房间
       setZegoToken(kitToken);
-      setGuestInfo({ userName: displayName, role: values.role });
+      setGuestInfo({ userName: displayName, role: values.role, guestId });
       setInMeeting(true);
       setLoading(false);
     } catch (error: any) {
@@ -117,32 +330,84 @@ const JoinInterview: React.FC = () => {
         const config = {
           container: meetingContainerRef.current,
           scenario: {
-            mode: ZegoUIKitPrebuilt.GroupCall, // 使用群组通话模式（官方推荐）
+            mode: ZegoUIKitPrebuilt.GroupCall, // 使用群组通话模式
           },
           showPreJoinView: false, // 跳过预加入页面，直接进入房间
           turnOnMicrophoneWhenJoining: true,
           turnOnCameraWhenJoining: true,
           showMyCameraToggleButton: true,
           showMyMicrophoneToggleButton: true,
-          showAudioVideoSettingsButton: true,
+          showAudioVideoSettingsButton: true, // 访客也可以使用美颜
           showScreenSharingButton: false, // 访客不允许屏幕共享
           showTextChat: true,
           showUserList: true,
-          maxUsers: 6,
-          layout: 'Grid' as const, // 使用网格布局（类似您的截图）
+          maxUsers: 6, // 最多6人
+          layout: 'Grid' as const, // 使用网格布局
           showLayoutButton: false, // 不显示布局切换按钮
           showNonVideoUser: true, // 显示没有视频的用户
           showOnlyAudioUser: true, // 显示纯音频用户
           showUserName: true, // 显示用户名
           // 视频配置
           videoResolutionDefault: ZegoUIKitPrebuilt.VideoResolution_360P,
+          // 访客权限：隐藏管理按钮
+          showRemoveUserButton: false, // 访客不能踢人
+          showTurnOffRemoteMicrophoneButton: false, // 访客不能禁言他人
+          showTurnOffRemoteCameraButton: false, // 访客不能关闭他人摄像头
           // 加入房间成功回调
           onJoinRoom: () => {
             console.log('✅ 访客端成功加入房间');
             message.success('成功加入视频面试房间');
+
+            // 启动定期检查房间状态（每5秒检查一次）
+            roomCheckIntervalRef.current = setInterval(() => {
+              checkRoomStatus();
+            }, 5000);
+
+            // 启动提词器消息轮询（每2秒检查一次）
+            teleprompterPollIntervalRef.current = setInterval(() => {
+              pollTeleprompterMessages();
+            }, 2000);
+          },
+          // 监听房间状态变化（被服务端强制踢出）
+          onRoomStateChanged: (roomID: string, state: string, errorCode: number, extendedData: any) => {
+            console.log('房间状态变化:', { roomID, state, errorCode, extendedData });
+
+            // state: 'DISCONNECTED', errorCode: 3 表示被服务端强制踢出
+            if (state === 'DISCONNECTED' && errorCode === 3) {
+              console.log('⚠️ 被服务端强制踢出房间');
+
+              // 立即显示提示并自动处理
+              message.warning('主持人已解散房间，您已被强制离开', 3);
+
+              // 自动清理并关闭
+              handleRoomDismissed();
+            }
           },
           onLeaveRoom: () => {
             console.log('访客端离开房间');
+
+            // 停止定期检查
+            if (roomCheckIntervalRef.current) {
+              clearInterval(roomCheckIntervalRef.current);
+              roomCheckIntervalRef.current = null;
+            }
+
+            // 停止提词器轮询
+            if (teleprompterPollIntervalRef.current) {
+              clearInterval(teleprompterPollIntervalRef.current);
+              teleprompterPollIntervalRef.current = null;
+            }
+
+            // 通知后端用户离开
+            if (roomId && guestInfo) {
+              axios.post('/api/zego/leave-room', {
+                roomId,
+                userId: guestInfo.guestId,
+              }).catch(error => {
+                console.error('通知后端离开房间失败:', error);
+              });
+            }
+
             zegoInstanceRef.current = null;
             setZegoToken(null);
             setGuestInfo(null);
@@ -160,6 +425,11 @@ const JoinInterview: React.FC = () => {
           onUserLeave: (users: any[]) => {
             console.log('用户离开房间:', users);
             message.info(`${users.map(u => u.userName).join(', ')} 离开了房间`);
+          },
+          // 📝 监听房间消息（用于接收提词器指令）
+          onInRoomMessageReceived: (messageInfo: any) => {
+            console.log('收到房间消息:', messageInfo);
+            handleRoomMessage(messageInfo);
           },
         };
 
@@ -191,17 +461,104 @@ const JoinInterview: React.FC = () => {
   // 如果已经在会议中，只显示视频容器
   if (inMeeting) {
     return (
-      <div
-        ref={meetingContainerRef}
-        style={{
-          width: '100vw',
-          height: '100vh',
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          zIndex: 9999,
-        }}
-      />
+      <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+        {/* 视频容器 */}
+        <div
+          ref={meetingContainerRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            zIndex: 1,
+          }}
+        />
+
+        {/* 📝 提词器显示组件 */}
+        {teleprompterVisible && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '60px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '80%',
+              height: teleprompterHeight,
+              backgroundColor: 'rgba(0, 0, 0, 0.85)',
+              borderRadius: '12px',
+              zIndex: 10000,
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {/* 标题栏 */}
+            <div
+              style={{
+                padding: '12px 20px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              }}
+            >
+              <span style={{ color: 'white', fontSize: '16px', fontWeight: 500 }}>
+                📝 提词器
+              </span>
+              <Space>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    if (isScrolling) {
+                      stopScrolling();
+                    } else {
+                      startScrolling();
+                    }
+                  }}
+                >
+                  {isScrolling ? '⏸️ 暂停' : '▶️ 播放'}
+                </Button>
+                <Button
+                  size="small"
+                  danger
+                  onClick={() => {
+                    stopScrolling();
+                    setTeleprompterVisible(false);
+                  }}
+                >
+                  关闭
+                </Button>
+              </Space>
+            </div>
+
+            {/* 内容区域 */}
+            <div
+              ref={teleprompterRef}
+              style={{
+                flex: 1,
+                padding: '40px',
+                color: 'white',
+                fontSize: '24px',
+                lineHeight: '2',
+                whiteSpace: 'pre-wrap',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+              onWheel={(e) => {
+                // 允许用户手动滚动
+                if (e.deltaY !== 0) {
+                  stopScrolling(); // 手动滚动时停止自动滚动
+                }
+              }}
+            >
+              {teleprompterContent || '等待提词内容...'}
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 

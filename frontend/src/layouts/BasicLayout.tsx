@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps } from 'antd';
 import { useMemo } from 'react';
@@ -120,7 +120,12 @@ const BasicLayout = () => {
       baseMenus.push(contractMenu);
     }
 
-
+    // 视频面试菜单 - 所有用户可见
+    baseMenus.push({
+      path: '/interview/video',
+      name: '视频面试',
+      icon: <VideoCameraOutlined />,
+    });
 
     // 用户管理菜单 - 仅管理员可见
     if (hasRole('admin')) {

@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { lazy } from 'react';
 import { Navigate } from 'react-router-dom';
+import VideoInterviewTest from './pages/interview/VideoInterviewTest';
 
 // 路由懒加载
 const BasicLayout = lazy(() => import('./layouts/BasicLayout'));
@@ -16,6 +17,9 @@ const ESignaturePage = lazy(() => import('./pages/esign/ESignaturePage'));
 const SignContractPage = lazy(() => import('./pages/esign/SignContractPage'));
 const WeChatBind = lazy(() => import('./pages/wechat/WeChatBind'));
 const WeChatTest = lazy(() => import('./pages/wechat/WeChatTest'));
+// const VideoInterview = lazy(() => import('./pages/interview/VideoInterview'));
+// const VideoInterview = lazy(() => import('./pages/interview/VideoInterviewTest'));
+const VideoInterview = VideoInterviewTest;
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 export interface RouteConfig {
@@ -105,6 +109,15 @@ export const basicLayoutRoutes: RouteConfig[] = [
         meta: {
           title: '微信通知测试',
           description: '测试微信通知功能'
+        }
+      },
+      {
+        path: 'interview/video',
+        name: '视频面试',
+        element: <VideoInterview />,
+        meta: {
+          title: '视频面试',
+          description: '家政人员视频面试功能'
         }
       },
     ],

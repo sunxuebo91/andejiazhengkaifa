@@ -32,6 +32,8 @@ const SignContractPage = React.lazy(() => import('./pages/esign/SignContractPage
 const PaymentGuide = React.lazy(() => import('./pages/PaymentGuide'));
 const Payment = React.lazy(() => import('./pages/Payment'));
 const TestSortableUpload = React.lazy(() => import('./pages/TestSortableUpload'));
+const VideoInterview = React.lazy(() => import('./pages/interview/VideoInterview'));
+const JoinInterview = React.lazy(() => import('./pages/interview/JoinInterview'));
 
 interface AppProps {
   children?: ReactNode;
@@ -75,9 +77,10 @@ export default function App({ children }: AppProps) {
           <AuthProvider>
             <Suspense fallback={<LoadingComponent />}>
               <Routes>
-                {/* 登录页面 - 不需要权限 */}
+                {/* 公开访问页面 - 不需要登录 */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
+                <Route path="/interview/join/:roomId" element={<JoinInterview />} />
                 
                 {/* 需要登录的路由 */}
                 <Route
@@ -226,6 +229,14 @@ export default function App({ children }: AppProps) {
                     path="test/sortable-upload"
                     element={<AuthorizedRoute element={<TestSortableUpload />} />}
                   />
+
+                  {/* 视频面试 - 所有登录用户可访问 */}
+                  <Route path="interview">
+                    <Route
+                      path="video"
+                      element={<AuthorizedRoute element={<VideoInterview />} />}
+                    />
+                  </Route>
 
                   {/* 404页面 */}
                   <Route path="*" element={<NotFound />} />

@@ -25,6 +25,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@reduxjs/toolkit": "^1.9.7",
     "@types/qrcode.react": "^1.0.5",
+    "@zegocloud/zego-uikit-prebuilt": "^2.17.0",
     "antd": "^5.11.1",
     "axios": "^1.6.1",
     "browser-image-compression": "^2.0.2",

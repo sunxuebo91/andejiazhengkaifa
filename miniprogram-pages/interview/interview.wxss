@@ -1,0 +1,12 @@
+/* 视频面试页面样式 */
+page {
+  height: 100%;
+  width: 100%;
+  background-color: #f5f5f5;
+}
+
+web-view {
+  width: 100%;
+  height: 100%;
+}
+

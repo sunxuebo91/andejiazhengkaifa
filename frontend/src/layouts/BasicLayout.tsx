@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, MobileOutlined, DesktopOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps } from 'antd';
 import { useMemo } from 'react';
@@ -122,9 +122,21 @@ const BasicLayout = () => {
 
     // 视频面试菜单 - 所有用户可见
     baseMenus.push({
-      path: '/interview/video',
+      path: '/interview',
       name: '视频面试',
       icon: <VideoCameraOutlined />,
+      routes: [
+        {
+          path: '/interview/video',
+          name: 'PC端面试',
+          icon: <DesktopOutlined />,
+        },
+        {
+          path: '/interview/h5-entry',
+          name: 'H5调试入口',
+          icon: <MobileOutlined />,
+        },
+      ],
     });
 
     // 用户管理菜单 - 仅管理员可见
@@ -229,7 +241,7 @@ const BasicLayout = () => {
             >
               <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                 <Avatar
-                  style={{ marginRight: 8, backgroundColor: '#1890ff' }}
+                  style={{ marginRight: 8, backgroundColor: '#5DBFB3' }}
                   icon={<UserOutlined />}
                 />
                 <span>{String(user?.name ?? user?.username ?? '')}</span>

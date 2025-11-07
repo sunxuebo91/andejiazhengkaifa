@@ -34,6 +34,10 @@ const Payment = React.lazy(() => import('./pages/Payment'));
 const TestSortableUpload = React.lazy(() => import('./pages/TestSortableUpload'));
 const VideoInterview = React.lazy(() => import('./pages/interview/VideoInterview'));
 const JoinInterview = React.lazy(() => import('./pages/interview/JoinInterview'));
+const VideoInterviewMobile = React.lazy(() => import('./pages/interview/VideoInterviewMobile'));
+const JoinInterviewMobile = React.lazy(() => import('./pages/interview/JoinInterviewMobile'));
+const H5Entry = React.lazy(() => import('./pages/interview/H5Entry'));
+const VideoInterviewMiniprogram = React.lazy(() => import('./pages/interview/VideoInterviewMiniprogram'));
 
 interface AppProps {
   children?: ReactNode;
@@ -66,7 +70,7 @@ export default function App({ children }: AppProps) {
     <ConfigProvider
       theme={{
         token: {
-          colorPrimary: '#2B5AED',
+          colorPrimary: '#5DBFB3',
           borderRadius: 4,
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif',
         },
@@ -81,6 +85,8 @@ export default function App({ children }: AppProps) {
                 <Route path="/login" element={<Login />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
                 <Route path="/interview/join/:roomId" element={<JoinInterview />} />
+                <Route path="/interview/join-mobile/:roomId" element={<JoinInterviewMobile />} />
+                <Route path="/interview/miniprogram" element={<VideoInterviewMiniprogram />} />
                 
                 {/* 需要登录的路由 */}
                 <Route
@@ -235,6 +241,14 @@ export default function App({ children }: AppProps) {
                     <Route
                       path="video"
                       element={<AuthorizedRoute element={<VideoInterview />} />}
+                    />
+                    <Route
+                      path="h5-entry"
+                      element={<AuthorizedRoute element={<H5Entry />} />}
+                    />
+                    <Route
+                      path="video-mobile/:roomId"
+                      element={<AuthorizedRoute element={<VideoInterviewMobile />} />}
                     />
                   </Route>
 

@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Body, UseGuards, Request, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Request, HttpException, HttpStatus, Req } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { ZegoService } from './zego.service';
 import { GenerateTokenDto } from './dto/generate-token.dto';
 import { GenerateGuestTokenDto } from './dto/generate-guest-token.dto';
@@ -144,15 +145,38 @@ export class ZegoController {
 
   /**
    * 用户离开房间（公开接口）
+   * 支持 sendBeacon 发送的请求（Content-Type: text/plain）
    */
   @Post('leave-room')
-  leaveRoom(@Body() body: { roomId: string; userId: string }) {
-    this.zegoService.leaveRoom(body.roomId, body.userId);
+  leaveRoom(@Body() body: any, @Req() req: ExpressRequest) {
+    try {
+      let roomId: string;
+      let userId: string;
 
-    return {
-      success: true,
-      message: '已离开房间',
-    };
+      // 处理 sendBeacon 发送的 text/plain 请求
+      if (typeof body === 'string') {
+        const parsed = JSON.parse(body);
+        roomId = parsed.roomId;
+        userId = parsed.userId;
+      } else {
+        roomId = body.roomId;
+        userId = body.userId;
+      }
+
+      console.log('🔧 用户离开房间:', { roomId, userId });
+      this.zegoService.leaveRoom(roomId, userId);
+
+      return {
+        success: true,
+        message: '已离开房间',
+      };
+    } catch (error) {
+      console.error('处理离开房间请求失败:', error);
+      return {
+        success: false,
+        message: '处理失败',
+      };
+    }
   }
 
   /**

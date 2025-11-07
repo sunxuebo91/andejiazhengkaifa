@@ -35,6 +35,7 @@ const JoinInterview: React.FC = () => {
   const roomCheckIntervalRef = useRef<any>(null);
   const teleprompterPollIntervalRef = useRef<any>(null);
   const lastTeleprompterTimestampRef = useRef<number>(0);
+  // const cleanupIntervalRef = useRef<any>(null); // 🔧 定期清理检查定时器
 
   // 从 URL 获取房间名称（可选）
   const roomName = searchParams.get('name') || '视频面试';
@@ -150,6 +151,8 @@ const JoinInterview: React.FC = () => {
 
   // 处理房间解散
   const handleRoomDismissed = () => {
+    console.log('🔧 房间已解散，开始清理...');
+
     // 停止定时检查
     if (roomCheckIntervalRef.current) {
       clearInterval(roomCheckIntervalRef.current);
@@ -166,10 +169,26 @@ const JoinInterview: React.FC = () => {
     if (zegoInstanceRef.current) {
       try {
         zegoInstanceRef.current.destroy();
+        console.log('✅ ZEGO 实例已销毁');
       } catch (error) {
         console.error('销毁实例失败:', error);
       }
       zegoInstanceRef.current = null;
+    }
+
+    // 🔧 清理容器内容
+    if (meetingContainerRef.current) {
+      meetingContainerRef.current.innerHTML = '';
+      console.log('✅ 容器内容已清理');
+    }
+
+    // 🔧 清理 localStorage 中的访客ID和时间戳（房间解散时）
+    if (guestInfo && roomId) {
+      const storageKey = `guest_id_${roomId}_${guestInfo.userName}_${guestInfo.role}`;
+      const storageTimeKey = `guest_id_time_${roomId}_${guestInfo.userName}_${guestInfo.role}`;
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(storageTimeKey);
+      console.log('✅ 已清理访客ID缓存（房间解散）');
     }
 
     setZegoToken(null);
@@ -275,11 +294,33 @@ const JoinInterview: React.FC = () => {
         throw new Error('房间ID无效');
       }
 
-      // 生成访客 ID（使用时间戳 + 随机数）
-      const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      // 🔧 生成或获取持久化的访客 ID（支持会话恢复）
+      // 使用 localStorage 存储访客ID，确保同一个访客重新进入时使用相同的ID
+      const storageKey = `guest_id_${roomId}_${values.userName}_${values.role}`;
+      const storageTimeKey = `guest_id_time_${roomId}_${values.userName}_${values.role}`;
+
+      let guestId = localStorage.getItem(storageKey);
+      const storedTime = localStorage.getItem(storageTimeKey);
+
+      // 检查是否过期（1小时 = 3600000ms）
+      const isExpired = storedTime && (Date.now() - parseInt(storedTime)) > 3600000;
+
+      if (!guestId || isExpired) {
+        // 首次进入或ID已过期，生成新的访客ID
+        guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        localStorage.setItem(storageKey, guestId);
+        localStorage.setItem(storageTimeKey, Date.now().toString());
+        console.log(isExpired ? '⏰ ID已过期，生成新访客ID:' : '✅ 首次进入，生成新访客ID:', guestId);
+      } else {
+        // 重新进入，使用已有的访客ID（会话恢复）
+        console.log('🔄 会话恢复，使用已有访客ID:', guestId);
+        // 更新时间戳
+        localStorage.setItem(storageTimeKey, Date.now().toString());
+      }
+
       const displayName = `${values.userName}（${values.role === 'customer' ? '客户' : '阿姨'}）`;
 
-      console.log('生成访客ID:', guestId);
+      console.log('访客信息:', { guestId, displayName, roomId });
 
       // 获取 Token（传递 guestId）
       const { token: baseToken, appId } = await generateGuestToken(guestId, displayName, values.role);
@@ -318,6 +359,12 @@ const JoinInterview: React.FC = () => {
   useEffect(() => {
     if (inMeeting && zegoToken && guestInfo && meetingContainerRef.current && !zegoInstanceRef.current) {
       console.log('容器已渲染，开始初始化 ZEGO...');
+
+      // 🔧 清理容器内容，确保没有残留的DOM元素
+      if (meetingContainerRef.current) {
+        meetingContainerRef.current.innerHTML = '';
+      }
+
       try {
         const zp = ZegoUIKitPrebuilt.create(zegoToken);
         zegoInstanceRef.current = zp;
@@ -349,6 +396,7 @@ const JoinInterview: React.FC = () => {
           showUserName: true, // 显示用户名
           // 视频配置
           videoResolutionDefault: ZegoUIKitPrebuilt.VideoResolution_360P,
+          // 🎨 美颜功能通过音视频设置按钮访问（访客也可以使用）
           // 访客权限：隐藏管理按钮
           showRemoveUserButton: false, // 访客不能踢人
           showTurnOffRemoteMicrophoneButton: false, // 访客不能禁言他人
@@ -408,6 +456,19 @@ const JoinInterview: React.FC = () => {
               });
             }
 
+            // 🔧 清理容器内容
+            if (meetingContainerRef.current) {
+              meetingContainerRef.current.innerHTML = '';
+              console.log('✅ 容器内容已清理');
+            }
+
+            // 🎯 关键修改：不再清理 localStorage 中的访客ID
+            // 保留访客ID，让用户重新进入时能够恢复会话，避免重复画面
+            // localStorage 中的ID会在房间解散时清理，或者1小时后自动过期
+            if (guestInfo && roomId) {
+              console.log('✅ 保留访客ID缓存，支持会话恢复');
+            }
+
             zegoInstanceRef.current = null;
             setZegoToken(null);
             setGuestInfo(null);
@@ -423,7 +484,82 @@ const JoinInterview: React.FC = () => {
             message.success(`${users.map(u => u.userName).join(', ')} 加入了房间`);
           },
           onUserLeave: (users: any[]) => {
-            console.log('用户离开房间:', users);
+            console.log('🔧 用户离开房间:', users);
+
+            // 🔧 手动清理离开用户的视频元素，防止画面卡住
+            const cleanupUser = (user: any, attempt: number = 1) => {
+              try {
+                if (!meetingContainerRef.current) return;
+
+                console.log(`🔍 开始清理用户 ${user.userName} (${user.userID}) - 尝试${attempt}`);
+
+                // 🔍 先打印所有可能的视频元素，帮助调试
+                if (attempt === 1) {
+                  const allElements = meetingContainerRef.current.querySelectorAll('*');
+                  console.log('📊 容器内所有元素数量:', allElements.length);
+
+                  // 查找所有包含 video 标签的元素
+                  const videoElements = meetingContainerRef.current.querySelectorAll('video');
+                  console.log('📹 找到的 video 元素:', videoElements.length);
+                  videoElements.forEach((video: any, index) => {
+                    console.log(`  Video ${index}:`, {
+                      id: video.id,
+                      className: video.className,
+                      parentId: video.parentElement?.id,
+                      parentClass: video.parentElement?.className,
+                    });
+                  });
+                }
+
+                // 尝试多种选择器来查找用户的视频元素
+                const selectors = [
+                  `[data-userid="${user.userID}"]`,
+                  `[id*="${user.userID}"]`,
+                  `[class*="${user.userID}"]`,
+                  `video[id*="${user.userID}"]`,
+                  `div[id*="${user.userID}"]`,
+                ];
+
+                let found = false;
+                selectors.forEach(selector => {
+                  const elements = meetingContainerRef.current?.querySelectorAll(selector);
+                  if (elements && elements.length > 0) {
+                    elements.forEach(element => {
+                      console.log(`✅ 清理用户 ${user.userName} (${user.userID}) 的视频元素 (尝试${attempt}, 选择器: ${selector})`);
+                      element.remove();
+                      found = true;
+                    });
+                  }
+                });
+
+                if (!found) {
+                  console.log(`⚠️ 未找到用户 ${user.userName} (${user.userID}) 的视频元素 (尝试${attempt})`);
+
+                  // 如果第一次没找到，3秒后再试一次（可能 DOM 还没更新）
+                  if (attempt === 1) {
+                    setTimeout(() => cleanupUser(user, 2), 3000);
+                  } else {
+                    // 🔥 第二次还是没找到，打印详细信息帮助调试
+                    console.log('🔥 第二次尝试仍未找到，打印所有视频元素信息：');
+                    const allVideos = meetingContainerRef.current?.querySelectorAll('video');
+                    allVideos?.forEach((video: any, index) => {
+                      console.log(`  Video ${index}:`, {
+                        id: video.id,
+                        className: video.className,
+                        parentId: video.parentElement?.id,
+                        parentClass: video.parentElement?.className,
+                        grandParentId: video.parentElement?.parentElement?.id,
+                      });
+                    });
+                  }
+                }
+              } catch (error) {
+                console.error(`清理用户 ${user.userName} 视频元素失败:`, error);
+              }
+            };
+
+            users.forEach(user => cleanupUser(user));
+
             message.info(`${users.map(u => u.userName).join(', ')} 离开了房间`);
           },
           // 📝 监听房间消息（用于接收提词器指令）
@@ -445,15 +581,58 @@ const JoinInterview: React.FC = () => {
     }
   }, [inMeeting, zegoToken, guestInfo]);
 
-  // 清理
+  // 🔧 监听浏览器标签页关闭/刷新事件
   useEffect(() => {
-    return () => {
+    const handleBeforeUnload = () => {
+      console.log('🔧 检测到页面即将关闭/刷新，主动调用离开房间');
+
+      // 🎯 关键：主动调用 ZEGO 的 destroy 方法，触发正常的离开流程
       if (zegoInstanceRef.current) {
         try {
+          // 调用 ZEGO 的销毁方法，这会触发 onLeaveRoom 回调
           zegoInstanceRef.current.destroy();
+          console.log('✅ ZEGO 实例已销毁（页面关闭）');
         } catch (error) {
           console.error('销毁 ZEGO 实例失败:', error);
         }
+      }
+
+      // 同时通知后端
+      if (guestInfo && roomId) {
+        const userId = guestInfo.guestId || `guest_${guestInfo.userName}`;
+        const leaveData = JSON.stringify({ roomId, userId });
+        const blob = new Blob([leaveData], { type: 'application/json' });
+        navigator.sendBeacon(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/zego/leave-room`, blob);
+        console.log('✅ 已发送离开房间请求（sendBeacon）');
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [guestInfo, roomId]);
+
+  // 清理
+  useEffect(() => {
+    return () => {
+      console.log('🔧 组件卸载，开始清理...');
+
+      if (zegoInstanceRef.current) {
+        try {
+          zegoInstanceRef.current.destroy();
+          console.log('✅ ZEGO 实例已销毁');
+        } catch (error) {
+          console.error('销毁 ZEGO 实例失败:', error);
+        }
+        zegoInstanceRef.current = null;
+      }
+
+      // 🔧 清理容器内容
+      if (meetingContainerRef.current) {
+        meetingContainerRef.current.innerHTML = '';
+        console.log('✅ 容器内容已清理');
       }
     };
   }, []);
@@ -582,7 +761,7 @@ const JoinInterview: React.FC = () => {
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <VideoCameraOutlined style={{ fontSize: 48, color: '#1890ff', marginBottom: 16 }} />
+          <VideoCameraOutlined style={{ fontSize: 48, color: '#5DBFB3', marginBottom: 16 }} />
           <h2 style={{ margin: 0, fontSize: 24, fontWeight: 600 }}>{roomName}</h2>
           <p style={{ color: '#666', marginTop: 8 }}>请填写您的信息加入视频面试</p>
         </div>

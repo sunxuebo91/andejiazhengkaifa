@@ -1,0 +1,292 @@
+/* 小程序端视频面试样式 */
+
+.miniprogram-video-interview {
+  width: 100%;
+  height: 100vh;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+
+/* 加载状态 */
+.miniprogram-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: #f5f5f5;
+  z-index: 9999;
+}
+
+/* 视频容器 */
+.miniprogram-video-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: #000;
+}
+
+/* 美颜设置抽屉 */
+.miniprogram-beauty-drawer .ant-drawer-body {
+  padding: 24px;
+  background: #fff;
+}
+
+.miniprogram-beauty-drawer .ant-slider {
+  margin: 12px 0;
+}
+
+.miniprogram-beauty-drawer .ant-slider-rail {
+  height: 6px;
+  background: #f0f0f0;
+}
+
+.miniprogram-beauty-drawer .ant-slider-track {
+  height: 6px;
+  background: #5DBFB3;
+}
+
+.miniprogram-beauty-drawer .ant-slider-handle {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #5DBFB3;
+  background: #fff;
+}
+
+/* 提词器设置抽屉 */
+.miniprogram-teleprompter-drawer .ant-drawer-body {
+  padding: 24px;
+  background: #fff;
+}
+
+.miniprogram-teleprompter-drawer .ant-input-textarea textarea {
+  border-radius: 8px;
+  border: 1px solid #d9d9d9;
+  padding: 12px;
+}
+
+.miniprogram-teleprompter-drawer .ant-input-textarea textarea:focus {
+  border-color: #5DBFB3;
+  box-shadow: 0 0 0 2px rgba(93, 191, 179, 0.2);
+}
+
+/* 分享弹窗 */
+.miniprogram-share-modal .ant-modal-body {
+  padding: 24px;
+}
+
+.miniprogram-share-modal .ant-input {
+  border-radius: 8px;
+  border: 1px solid #d9d9d9;
+}
+
+.miniprogram-share-modal .ant-input:focus {
+  border-color: #5DBFB3;
+  box-shadow: 0 0 0 2px rgba(93, 191, 179, 0.2);
+}
+
+.miniprogram-share-modal .ant-input-group-addon {
+  background: #f5f5f5;
+  border-radius: 0 8px 8px 0;
+  border: 1px solid #d9d9d9;
+  border-left: none;
+}
+
+/* 按钮样式 */
+.miniprogram-video-interview .ant-btn-primary {
+  background: #5DBFB3;
+  border-color: #5DBFB3;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.miniprogram-video-interview .ant-btn-primary:hover {
+  background: #4da89d;
+  border-color: #4da89d;
+}
+
+.miniprogram-video-interview .ant-btn-primary:active {
+  background: #3d8a81;
+  border-color: #3d8a81;
+}
+
+.miniprogram-video-interview .ant-btn {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+/* 抽屉标题 */
+.miniprogram-beauty-drawer .ant-drawer-header,
+.miniprogram-teleprompter-drawer .ant-drawer-header {
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 16px 24px;
+}
+
+.miniprogram-beauty-drawer .ant-drawer-title,
+.miniprogram-teleprompter-drawer .ant-drawer-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #262626;
+}
+
+/* 抽屉关闭按钮 */
+.miniprogram-beauty-drawer .ant-drawer-close,
+.miniprogram-teleprompter-drawer .ant-drawer-close {
+  color: #8c8c8c;
+  font-size: 20px;
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+  .miniprogram-beauty-drawer,
+  .miniprogram-teleprompter-drawer {
+    height: 80% !important;
+  }
+
+  .miniprogram-beauty-drawer .ant-drawer-body,
+  .miniprogram-teleprompter-drawer .ant-drawer-body {
+    padding: 16px;
+  }
+
+  .miniprogram-share-modal .ant-modal-body {
+    padding: 16px;
+  }
+}
+
+/* 小程序特定样式 */
+@media (max-width: 480px) {
+  .miniprogram-video-interview {
+    font-size: 14px;
+  }
+
+  .miniprogram-beauty-drawer .ant-drawer-title,
+  .miniprogram-teleprompter-drawer .ant-drawer-title {
+    font-size: 16px;
+  }
+
+  .miniprogram-video-interview .ant-btn-lg {
+    height: 44px;
+    font-size: 15px;
+  }
+
+  .miniprogram-video-interview .ant-input-lg {
+    height: 44px;
+    font-size: 15px;
+  }
+
+  .miniprogram-video-interview .ant-input-textarea textarea {
+    font-size: 15px;
+  }
+}
+
+/* 确保视频容器全屏 */
+.miniprogram-video-container > div {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ZEGO UI Kit 样式覆盖 */
+.miniprogram-video-container .zego-uikit-prebuilt {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 工具栏固定在底部 */
+.miniprogram-video-container .zego-uikit-prebuilt-footer {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(10px) !important;
+  padding: 12px 16px !important;
+  z-index: 1000 !important;
+}
+
+/* 工具栏按钮样式 */
+.miniprogram-video-container .zego-uikit-prebuilt-footer button {
+  min-width: 48px !important;
+  min-height: 48px !important;
+  border-radius: 50% !important;
+  margin: 0 4px !important;
+}
+
+/* 视频画面样式 */
+.miniprogram-video-container .zego-uikit-prebuilt-video {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+/* 用户名标签 */
+.miniprogram-video-container .zego-uikit-prebuilt-username {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(5px) !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+}
+
+/* 顶部信息栏 */
+.miniprogram-video-container .zego-uikit-prebuilt-header {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(10px) !important;
+  padding: 12px 16px !important;
+  z-index: 1000 !important;
+}
+
+/* 通知提示 */
+.miniprogram-video-container .zego-uikit-prebuilt-notification {
+  bottom: 80px !important;
+  left: 16px !important;
+  right: 16px !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
+  border-radius: 8px !important;
+  padding: 12px 16px !important;
+  font-size: 14px !important;
+}
+
+/* 加载动画 */
+.miniprogram-loading .ant-spin {
+  color: #5DBFB3;
+}
+
+.miniprogram-loading .ant-spin-dot-item {
+  background-color: #5DBFB3;
+}
+
+.miniprogram-loading .ant-spin-text {
+  color: #262626;
+  font-size: 16px;
+  margin-top: 16px;
+}
+
+/* 安全区域适配（iPhone X等） */
+@supports (padding: max(0px)) {
+  .miniprogram-video-container .zego-uikit-prebuilt-footer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+  }
+
+  .miniprogram-video-container .zego-uikit-prebuilt-header {
+    padding-top: max(12px, env(safe-area-inset-top)) !important;
+  }
+}
+
+/* 横屏适配 */
+@media (orientation: landscape) {
+  .miniprogram-video-container .zego-uikit-prebuilt-footer {
+    padding-left: max(16px, env(safe-area-inset-left)) !important;
+    padding-right: max(16px, env(safe-area-inset-right)) !important;
+  }
+}
+

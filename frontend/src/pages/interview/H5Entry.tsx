@@ -12,7 +12,7 @@ const { Title, Paragraph, Text } = Typography;
  * 用于家政人员的视频面试功能
  * 支持：3-6人视频面试、美颜、踢人、邀人、房间管理等功能
  */
-const VideoInterview: React.FC = () => {
+const H5Entry: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [inMeeting, setInMeeting] = useState(false);
@@ -1191,28 +1191,35 @@ const VideoInterview: React.FC = () => {
 
   // 显示加入房间表单
   return (
-    <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
-      <Card>
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <VideoCameraOutlined
-            style={{ fontSize: '64px', color: '#5DBFB3', marginBottom: '16px' }}
-          />
-          <Title level={2}>视频面试</Title>
-          <Paragraph type="secondary">
-            支持 3-6 人视频面试，内置美颜、屏幕共享、聊天等功能
-          </Paragraph>
-        </div>
+    <div style={{
+      minHeight: '100vh',
+      background: '#f5f5f5',
+      padding: '20px',
+      maxWidth: '500px',
+      margin: '0 auto'
+    }}>
+      {/* 标题区域 */}
+      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <VideoCameraOutlined style={{ fontSize: '48px', color: '#5DBFB3', marginBottom: '12px' }} />
+        <Title level={2} style={{ marginBottom: '8px' }}>视频面试</Title>
+        <Paragraph type="secondary" style={{ fontSize: '14px' }}>
+          支持 3-6 人视频面试，内置美颜、屏幕共享、聊天等功能
+        </Paragraph>
+      </div>
 
-        {/* 用户信息卡片 */}
-        <Card
-          style={{
-            marginBottom: '24px',
-            background: 'linear-gradient(135deg, #5DBFB3 0%, #4AA89E 100%)',
-            border: 'none'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{
+      {/* 用户信息卡片 */}
+      <Card
+        style={{
+          marginBottom: '16px',
+          background: 'linear-gradient(135deg, #5DBFB3 0%, #4AA89E 100%)',
+          border: 'none',
+          borderRadius: '12px'
+        }}
+        bodyStyle={{ padding: '20px' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div
+            style={{
               width: '60px',
               height: '60px',
               borderRadius: '50%',
@@ -1224,33 +1231,43 @@ const VideoInterview: React.FC = () => {
               fontWeight: 'bold',
               color: '#5DBFB3',
               marginRight: '16px',
-              overflow: 'hidden'
-            }}>
-              {getCurrentUser().avatar ? (
-                <img
-                  src={getCurrentUser().avatar}
-                  alt="avatar"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover'
-                  }}
-                />
-              ) : (
-                getCurrentUser().name?.substring(0, 1) || 'HR'
-              )}
+              overflow: 'hidden',
+              flexShrink: 0
+            }}
+          >
+            {getCurrentUser().avatar ? (
+              <img
+                src={getCurrentUser().avatar}
+                alt="avatar"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }}
+              />
+            ) : (
+              getCurrentUser().name?.substring(0, 1) || 'HR'
+            )}
+          </div>
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginBottom: '4px' }}>
+              {getCurrentUser().name || '加载中...'}
             </div>
-            <div>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginBottom: '4px' }}>
-                {getCurrentUser().name || '加载中...'}
-              </div>
-              <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)' }}>
-                主持人
-              </div>
+            <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)' }}>
+              主持人
             </div>
           </div>
-        </Card>
+        </div>
+      </Card>
 
+      {/* 操作按钮卡片 */}
+      <Card
+        style={{
+          marginBottom: '16px',
+          borderRadius: '12px'
+        }}
+        bodyStyle={{ padding: '20px' }}
+      >
         <Spin spinning={loading}>
           <Form
             form={form}
@@ -1271,7 +1288,7 @@ const VideoInterview: React.FC = () => {
               <Input />
             </Form.Item>
 
-            <Form.Item style={{ marginBottom: '16px' }}>
+            <Form.Item style={{ marginBottom: 0 }}>
               <Space style={{ width: '100%' }} direction="vertical" size="middle">
                 <Button
                   type="primary"
@@ -1285,7 +1302,8 @@ const VideoInterview: React.FC = () => {
                     fontSize: '18px',
                     fontWeight: 'bold',
                     background: '#5DBFB3',
-                    borderColor: '#5DBFB3'
+                    borderColor: '#5DBFB3',
+                    borderRadius: '8px'
                   }}
                 >
                   创建面试间
@@ -1300,7 +1318,8 @@ const VideoInterview: React.FC = () => {
                     style={{
                       height: '48px',
                       borderColor: '#5DBFB3',
-                      color: '#5DBFB3'
+                      color: '#5DBFB3',
+                      borderRadius: '8px'
                     }}
                     onClick={() => {
                       const lastRoomId = localStorage.getItem('lastRoomId');
@@ -1317,22 +1336,44 @@ const VideoInterview: React.FC = () => {
             </Form.Item>
           </Form>
         </Spin>
+      </Card>
 
-        <div style={{ marginTop: '32px', padding: '16px', background: '#f5f5f5', borderRadius: '8px' }}>
-          <Title level={4}>功能说明</Title>
-          <ul style={{ marginBottom: 0 }}>
-            <li>✅ 支持 3-6 人同时视频面试</li>
-            <li>✅ 内置美颜功能（点击设置按钮调节）</li>
-            <li>✅ 支持屏幕共享（可展示简历）</li>
-            <li>✅ 支持文字聊天</li>
-            <li>✅ 支持查看成员列表</li>
-            <li>✅ 支持踢出成员（房主权限）</li>
-          </ul>
-        </div>
+      {/* 功能说明 */}
+      <Card
+        title="功能说明"
+        style={{ borderRadius: '12px' }}
+        bodyStyle={{ padding: '20px' }}
+      >
+        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <span style={{ marginRight: '8px' }}>✅</span>
+            <span>支持 3-6 人同时视频面试</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <span style={{ marginRight: '8px' }}>✅</span>
+            <span>内置美颜功能（点击设置按钮调节）</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <span style={{ marginRight: '8px' }}>✅</span>
+            <span>支持屏幕共享（可展示简历）</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <span style={{ marginRight: '8px' }}>✅</span>
+            <span>支持文字聊天</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <span style={{ marginRight: '8px' }}>✅</span>
+            <span>支持查看成员列表</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <span style={{ marginRight: '8px' }}>✅</span>
+            <span>支持踢出成员（房主权限）</span>
+          </div>
+        </Space>
       </Card>
     </div>
   );
 };
 
-export default VideoInterview;
+export default H5Entry;
 

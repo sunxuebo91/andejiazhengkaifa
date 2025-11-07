@@ -12,7 +12,7 @@ const VideoInterviewTest: React.FC = () => {
     <div style={{ padding: '24px' }}>
       <Card>
         <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <VideoCameraOutlined style={{ fontSize: '64px', color: '#1890ff', marginBottom: '24px' }} />
+          <VideoCameraOutlined style={{ fontSize: '64px', color: '#5DBFB3', marginBottom: '24px' }} />
           <Title level={2}>视频面试功能</Title>
           <Paragraph type="secondary">
             页面加载成功！

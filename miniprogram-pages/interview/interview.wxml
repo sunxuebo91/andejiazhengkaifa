@@ -1,0 +1,3 @@
+<!-- 视频面试页面 -->
+<web-view src="{{webviewUrl}}" bindmessage="handleMessage"></web-view>
+

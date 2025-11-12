@@ -206,6 +206,10 @@
       object-fit: cover;
     }
 
+    /* ✅ ZEGO SDK 默认已经设置了 OnlyPreviewMirror 模式（本地预览镜像，推流不镜像）
+     * 所以不需要用 CSS 再次翻转，否则会翻转两次导致画面反向
+     */
+
     .video-label {
       position: absolute;
       bottom: 10px;
@@ -215,6 +219,105 @@
       padding: 5px 10px;
       border-radius: 6px;
       font-size: 12px;
+    }
+
+    /* 管理按钮 */
+    .manage-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 32px;
+      height: 32px;
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      z-index: 10;
+    }
+
+    .manage-btn:hover {
+      background: rgba(0, 0, 0, 0.85);
+      transform: scale(1.05);
+    }
+
+    .manage-btn:active {
+      transform: scale(0.95);
+    }
+
+    .manage-icon {
+      color: white;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    /* 管理菜单 */
+    .manage-menu {
+      position: absolute;
+      top: 45px;
+      right: 10px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+      z-index: 20;
+      min-width: 140px;
+      display: none;
+    }
+
+    .manage-menu.show {
+      display: block;
+      animation: menuFadeIn 0.2s ease;
+    }
+
+    @keyframes menuFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-5px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .manage-menu-item {
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #333;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .manage-menu-item:last-child {
+      border-bottom: none;
+    }
+
+    .manage-menu-item:hover {
+      background: #f5f5f5;
+    }
+
+    .manage-menu-item:active {
+      background: #e8e8e8;
+    }
+
+    .manage-menu-item.danger {
+      color: #ff4d4f;
+    }
+
+    .manage-menu-item.danger:hover {
+      background: #fff1f0;
+    }
+
+    .manage-menu-icon {
+      font-size: 16px;
+      line-height: 1;
     }
 
     .video-placeholder {
@@ -319,6 +422,19 @@
     .control-label {
       font-size: 11px;
       color: #666;
+    }
+
+    /* 关闭状态样式 */
+    .control-item.disabled {
+      opacity: 0.5;
+    }
+
+    .control-item.disabled .control-icon-text {
+      color: #999;
+    }
+
+    .control-item.disabled .control-label {
+      color: #999;
     }
 
     .control-item-danger .control-label {
@@ -680,9 +796,13 @@
         <div class="control-icon-text">📹</div>
         <div class="control-label">摄像头</div>
       </div>
+      <div class="control-item" id="flipBtn" onclick="flipCamera()">
+        <div class="control-icon-text">🔄</div>
+        <div class="control-label">翻转</div>
+      </div>
       <div class="control-item control-item-danger" onclick="leaveRoom()">
         <div class="control-icon-text">📞</div>
-        <div class="control-label">结束通话</div>
+        <div class="control-label">结束面试</div>
       </div>
     </div>
   </div>
@@ -731,9 +851,11 @@
     let remoteStreams = {}; // 存储远程流 { streamID: MediaStream }
     let isMicOn = true;
     let isCameraOn = true;
+    let isFrontCamera = true; // 默认使用前置摄像头
     let currentUserId = '';
     let currentUserName = '';
     let currentUserRole = ''; // 用户身份：customer 或 ayi
+    let currentStreamId = ''; // 当前推流ID
     let interviewStartTime = null;
     let interviewTimer = null;
 
@@ -765,7 +887,7 @@
         }
 
         // 调用后端API
-        const response = await fetch('https://crm.andejiazheng.com/api/zego/generate-token', {
+        const response = await fetch('/api/zego/generate-token', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -927,9 +1049,15 @@
 
         // 创建本地流
         console.log('正在创建本地流...');
+        // ✅ 设置视频质量为 720p
         localStream = await zg.createStream({
           camera: {
-            video: true,
+            video: {
+              width: 1280,
+              height: 720,
+              frameRate: 15,
+              bitrate: 1500
+            },
             audio: true
           }
         });
@@ -943,9 +1071,9 @@
         document.getElementById('localLabel').textContent = '主持人';
 
         // 推流
-        const streamID = 'stream_' + currentUserId;
-        console.log('正在推流:', streamID);
-        await zg.startPublishingStream(streamID, localStream);
+        currentStreamId = 'stream_' + currentUserId;
+        console.log('正在推流:', currentStreamId);
+        await zg.startPublishingStream(currentStreamId, localStream);
         console.log('推流成功');
 
         // 隐藏加入面板，显示主界面
@@ -1019,10 +1147,16 @@
         
         // 创建本地流
         console.log('正在创建本地流...');
+        // ✅ 设置视频质量为 720p
         localStream = await zg.createStream({
-          camera: { 
-            video: true, 
-            audio: true 
+          camera: {
+            video: {
+              width: 1280,
+              height: 720,
+              frameRate: 15,
+              bitrate: 1500
+            },
+            audio: true
           }
         });
         console.log('创建本地流成功');
@@ -1030,11 +1164,11 @@
         // 播放本地视频
         const localVideo = document.getElementById('localVideo');
         localVideo.srcObject = localStream;
-        
+
         // 更新本地标签（显示身份 + 姓名）
         const roleText = currentUserRole === 'customer' ? '客户' : '阿姨';
         document.getElementById('localLabel').textContent = `${roleText}：${userName}`;
-        
+
         // 推流
         const streamID = 'stream_' + currentUserId;
         console.log('正在推流:', streamID);
@@ -1078,21 +1212,68 @@
       try {
         const remoteStream = await zg.startPlayingStream(stream.streamID);
         remoteStreams[stream.streamID] = remoteStream;
+        console.log('✅ 开始播放远程流:', stream.streamID);
 
         // 找到空闲的视频位置（最多5个远程用户）
         for (let i = 1; i <= 5; i++) {
           const box = document.getElementById(`remoteBox${i}`);
           if (box.querySelector('.video-placeholder')) {
             // 这个位置是空的，使用它
+            // 转换用户名中的英文角色为中文
+            let displayName = stream.user.userName || '访客';
+            // 处理两种情况：1. "customer-张三" 2. "customer"（没有姓名）
+            if (displayName === 'customer') {
+              displayName = '客户';
+            } else if (displayName === 'helper') {
+              displayName = '阿姨';
+            } else {
+              displayName = displayName.replace(/^customer-/, '客户-').replace(/^helper-/, '阿姨-');
+            }
+
+            // ✅ 远程视频不应该静音！只有本地预览才需要静音
             box.innerHTML = `
-              <video id="remote${i}" class="video-player" autoplay playsinline></video>
-              <div class="video-label">${stream.user.userName || '访客'}</div>
+              <video id="remote${i}" class="video-player" autoplay playsinline webkit-playsinline x5-playsinline></video>
+              <div class="video-label">${displayName}</div>
+              <div class="manage-btn" onclick="toggleManageMenu(event, '${stream.streamID}', '${stream.user.userID}')">
+                <div class="manage-icon">⋮</div>
+              </div>
+              <div class="manage-menu" id="menu_${stream.streamID}">
+                <div class="manage-menu-item" onclick="remoteControlCamera('${stream.user.userID}', false)">
+                  <span class="manage-menu-icon">📹</span>
+                  <span>关闭摄像头</span>
+                </div>
+                <div class="manage-menu-item" onclick="remoteControlMic('${stream.user.userID}', false)">
+                  <span class="manage-menu-icon">🎤</span>
+                  <span>关闭麦克风</span>
+                </div>
+                <div class="manage-menu-item danger" onclick="kickUser('${stream.user.userID}', '${displayName}')">
+                  <span class="manage-menu-icon">🚪</span>
+                  <span>移出面试间</span>
+                </div>
+              </div>
             `;
             const video = document.getElementById(`remote${i}`);
             video.srcObject = remoteStream;
 
-            // 保存streamID到box的data属性，方便后续查找
+            // ✅ iOS 兼容性：强制播放
+            try {
+              await video.play();
+              console.log('✅ 远程视频播放成功（有声音）:', stream.streamID);
+            } catch (error) {
+              console.error('❌ 远程视频播放失败:', error);
+              // iOS 可能需要用户交互才能播放，尝试再次播放
+              try {
+                await video.play();
+                console.log('✅ 远程视频播放成功（重试）:', stream.streamID);
+              } catch (e) {
+                console.error('❌ 远程视频播放失败（重试也失败）:', e);
+                alert('播放远程视频失败，请刷新页面重试');
+              }
+            }
+
+            // 保存streamID和userID到box的data属性，方便后续查找
             box.setAttribute('data-stream-id', stream.streamID);
+            box.setAttribute('data-user-id', stream.user.userID);
             break;
           }
         }
@@ -1107,8 +1288,14 @@
     function removeRemoteStream(streamID) {
       console.log('🗑️ 移除远程流:', streamID);
 
+      // 停止播放流
       if (remoteStreams[streamID]) {
-        zg.stopPlayingStream(streamID);
+        try {
+          zg.stopPlayingStream(streamID);
+          console.log('✅ 已停止播放流:', streamID);
+        } catch (error) {
+          console.error('停止播放流失败:', error);
+        }
         delete remoteStreams[streamID];
       }
 
@@ -1116,13 +1303,29 @@
       for (let i = 1; i <= 5; i++) {
         const box = document.getElementById(`remoteBox${i}`);
         if (box.getAttribute('data-stream-id') === streamID) {
+          console.log(`🧹 清理视频容器 remoteBox${i}`);
+
+          // 清理 video 元素
+          const video = box.querySelector('video');
+          if (video) {
+            video.srcObject = null;
+            video.pause();
+            video.remove();
+          }
+
+          // 移除属性
           box.removeAttribute('data-stream-id');
+          box.removeAttribute('data-user-id');
+
+          // 恢复占位符
           box.innerHTML = `
             <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
               <div class="placeholder-icon">+</div>
               <div class="placeholder-text">邀请用户</div>
             </div>
           `;
+
+          console.log(`✅ 视频容器 remoteBox${i} 已清理`);
           break;
         }
       }
@@ -1156,7 +1359,17 @@
 
       const btn = document.getElementById('micBtn');
       const iconText = btn.querySelector('.control-icon-text');
-      iconText.textContent = isMicOn ? '🎤' : '🔇';
+      const label = btn.querySelector('.control-label');
+
+      if (isMicOn) {
+        btn.classList.remove('disabled');
+        iconText.textContent = '🎤';
+        label.textContent = '麦克风';
+      } else {
+        btn.classList.add('disabled');
+        iconText.textContent = '🎤';
+        label.textContent = '已静音';
+      }
 
       console.log('麦克风:', isMicOn ? '开启' : '关闭');
     }
@@ -1169,11 +1382,213 @@
 
       const btn = document.getElementById('cameraBtn');
       const iconText = btn.querySelector('.control-icon-text');
-      iconText.textContent = isCameraOn ? '📹' : '📷';
+      const label = btn.querySelector('.control-label');
+
+      if (isCameraOn) {
+        btn.classList.remove('disabled');
+        iconText.textContent = '📹';
+        label.textContent = '摄像头';
+      } else {
+        btn.classList.add('disabled');
+        iconText.textContent = '📹';
+        label.textContent = '已关闭';
+      }
 
       console.log('摄像头:', isCameraOn ? '开启' : '关闭');
     }
-    
+
+    // ==================== 管理功能 ====================
+    // 切换管理菜单
+    function toggleManageMenu(event, streamId, userId) {
+      event.stopPropagation();
+
+      const menu = document.getElementById(`menu_${streamId}`);
+      const allMenus = document.querySelectorAll('.manage-menu');
+
+      // 关闭其他菜单
+      allMenus.forEach(m => {
+        if (m !== menu) {
+          m.classList.remove('show');
+        }
+      });
+
+      // 切换当前菜单
+      menu.classList.toggle('show');
+    }
+
+    // 点击其他地方关闭菜单
+    document.addEventListener('click', () => {
+      const allMenus = document.querySelectorAll('.manage-menu');
+      allMenus.forEach(m => m.classList.remove('show'));
+    });
+
+    // 远程控制摄像头
+    async function remoteControlCamera(targetUserId, enabled) {
+      try {
+        const jwtToken = getJwtToken();
+        if (!jwtToken) {
+          alert('未找到认证信息');
+          return;
+        }
+
+        const response = await fetch('/api/zego/remote-control', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`
+          },
+          body: JSON.stringify({
+            roomId: roomId,
+            targetUserId: targetUserId,
+            controlType: 'camera',
+            enabled: enabled
+          })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          console.log('✅ 远程控制摄像头成功');
+          alert(enabled ? '已开启对方摄像头' : '已关闭对方摄像头');
+        } else {
+          console.error('❌ 远程控制摄像头失败:', result.message);
+          alert('操作失败: ' + result.message);
+        }
+      } catch (error) {
+        console.error('❌ 远程控制摄像头失败:', error);
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 远程控制麦克风
+    async function remoteControlMic(targetUserId, enabled) {
+      try {
+        const jwtToken = getJwtToken();
+        if (!jwtToken) {
+          alert('未找到认证信息');
+          return;
+        }
+
+        const response = await fetch('/api/zego/remote-control', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`
+          },
+          body: JSON.stringify({
+            roomId: roomId,
+            targetUserId: targetUserId,
+            controlType: 'microphone',
+            enabled: enabled
+          })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          console.log('✅ 远程控制麦克风成功');
+          alert(enabled ? '已开启对方麦克风' : '已关闭对方麦克风');
+        } else {
+          console.error('❌ 远程控制麦克风失败:', result.message);
+          alert('操作失败: ' + result.message);
+        }
+      } catch (error) {
+        console.error('❌ 远程控制麦克风失败:', error);
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 踢出用户
+    async function kickUser(targetUserId, userName) {
+      if (!confirm(`确定要将 ${userName} 移出面试间吗？`)) {
+        return;
+      }
+
+      try {
+        const jwtToken = getJwtToken();
+        if (!jwtToken) {
+          alert('未找到认证信息');
+          return;
+        }
+
+        showMessage('正在移出用户...');
+
+        const response = await fetch('/api/zego/kick-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`
+          },
+          body: JSON.stringify({
+            roomId: roomId,
+            userId: targetUserId
+          })
+        });
+
+        const result = await response.json();
+        hideMessage();
+
+        if (result.success) {
+          console.log('✅ 踢出用户成功');
+          alert(`已将 ${userName} 移出面试间`);
+        } else {
+          console.error('❌ 踢出用户失败:', result.message);
+          alert('操作失败: ' + result.message);
+        }
+      } catch (error) {
+        console.error('❌ 踢出用户失败:', error);
+        hideMessage();
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 翻转镜头（前置/后置切换）
+    // ✅ 使用即构官方推荐的方式二：stopCaptureVideo + startCaptureCamera + updatePublishingStream
+    async function flipCamera() {
+      if (!localStream || !isCameraOn) {
+        alert('请先打开摄像头');
+        return;
+      }
+
+      try {
+        showMessage('正在切换摄像头...');
+        console.log('🔄 开始切换摄像头，当前:', isFrontCamera ? '前置' : '后置');
+
+        // 切换摄像头方向
+        isFrontCamera = !isFrontCamera;
+        console.log('🔄 切换到:', isFrontCamera ? '前置' : '后置');
+
+        // ✅ 步骤1：停止当前摄像头采集
+        console.log('⏸️ 停止视频采集...');
+        await zg.stopCaptureVideo();
+
+        // ✅ 步骤2：重新开始采集（指定前置或后置摄像头）
+        console.log('📹 重新开始采集...');
+        const videoConfig = {
+          width: 1280,
+          height: 720,
+          frameRate: 15,
+          bitrate: 1500,
+          facingMode: isFrontCamera ? 'user' : 'environment'
+        };
+        await zg.startCaptureCamera(videoConfig);
+
+        // ✅ 步骤3：更新推流
+        console.log('📤 更新推流...');
+        await zg.updatePublishingStream(localStream);
+        console.log('✅ 推流更新成功');
+
+        hideMessage();
+        console.log('✅ 摄像头切换成功:', isFrontCamera ? '前置' : '后置');
+        alert('摄像头已切换到' + (isFrontCamera ? '前置' : '后置'));
+      } catch (error) {
+        console.error('❌ 切换摄像头失败:', error);
+        hideMessage();
+
+        // 尝试切换回原来的方向
+        isFrontCamera = !isFrontCamera;
+        alert('切换摄像头失败，可能您的设备不支持前后摄像头切换');
+      }
+    }
+
     // 显示邀请弹窗
     function showInviteModal() {
       const modal = document.getElementById('inviteModal');
@@ -1229,27 +1644,83 @@
       }
     });
 
-    function leaveRoom() {
-      if (confirm('确定要离开面试间吗？')) {
+    async function leaveRoom() {
+      if (confirm('确定要结束面试并解散房间吗？所有参与者将被踢出。')) {
         try {
-          // 停止计时器
-          stopTimer();
+          showMessage('正在结束面试...');
 
-          if (zg && localStream) {
-            zg.destroyStream(localStream);
-            zg.logoutRoom(roomId);
+          // 1. 调用后端API解散房间（踢出所有人）
+          const jwtToken = getJwtToken();
+          if (jwtToken) {
+            try {
+              const response = await fetch('/api/zego/dismiss-room', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${jwtToken}`
+                },
+                body: JSON.stringify({ roomId: roomId })
+              });
+
+              const result = await response.json();
+              if (result.success) {
+                console.log('✅ 房间已解散，所有用户已被踢出');
+              } else {
+                console.warn('⚠️ 解散房间失败:', result.message);
+              }
+            } catch (error) {
+              console.error('❌ 调用解散房间API失败:', error);
+            }
           }
 
-          // 尝试通知小程序关闭
+          // 2. 停止计时器
+          stopTimer();
+
+          // 3. 停止推流并销毁本地流
+          if (zg && localStream) {
+            try {
+              const streamID = 'stream_' + currentUserId;
+              await zg.stopPublishingStream(streamID);
+              console.log('✅ 已停止推流');
+            } catch (error) {
+              console.error('停止推流失败:', error);
+            }
+
+            try {
+              zg.destroyStream(localStream);
+              console.log('✅ 已销毁本地流');
+            } catch (error) {
+              console.error('销毁本地流失败:', error);
+            }
+
+            localStream = null;
+          }
+
+          // 4. 登出房间
+          if (zg) {
+            try {
+              await zg.logoutRoom(roomId);
+              console.log('✅ 已登出房间');
+            } catch (error) {
+              console.error('登出房间失败:', error);
+            }
+          }
+
+          hideMessage();
+
+          // 5. 关闭面试间界面
           if (typeof wx !== 'undefined' && wx.miniProgram) {
+            // 在小程序中，返回上一页
             wx.miniProgram.navigateBack();
           } else {
-            // 如果不在小程序中，显示提示
-            alert('已离开面试间');
+            // 如果不在小程序中，显示提示并刷新页面
+            alert('面试已结束，房间已解散');
             location.reload();
           }
         } catch (error) {
-          console.error('离开房间失败:', error);
+          console.error('❌ 结束面试失败:', error);
+          hideMessage();
+          alert('结束面试失败: ' + error.message);
         }
       }
     }

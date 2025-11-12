@@ -362,3 +362,65 @@
   font-size: 15px;
 }
 
+/* 🎨 美颜设置抽屉 */
+.beauty-drawer-mobile .ant-drawer-body {
+  padding: 24px;
+  background: #fff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.beauty-drawer-mobile .ant-slider {
+  margin: 12px 0;
+  touch-action: none;
+}
+
+.beauty-drawer-mobile .ant-slider-rail {
+  height: 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.beauty-drawer-mobile .ant-slider-track {
+  height: 6px;
+  background: #5DBFB3;
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+.beauty-drawer-mobile .ant-slider-handle {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #5DBFB3;
+  background: #fff;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.beauty-drawer-mobile .ant-slider-handle:active {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 5px rgba(93, 191, 179, 0.2);
+}
+
+/* 性能优化 */
+.join-interview-mobile {
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+}
+
+.video-container-mobile {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform;
+}
+
+.video-container-mobile video {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}

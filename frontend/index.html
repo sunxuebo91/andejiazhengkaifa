@@ -1,13 +1,91 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="安得家政CRM - 视频面试系统" />
+    <meta name="theme-color" content="#5DBFB3" />
+
+    <!-- 性能优化：DNS 预解析 -->
+    <link rel="dns-prefetch" href="https://crm.andejiazheng.com" />
+
+    <!-- 性能优化：预连接 -->
+    <link rel="preconnect" href="https://crm.andejiazheng.com" crossorigin />
+
+    <title>视频面试 - 安得家政CRM</title>
+
+    <!-- 加载动画样式 -->
+    <style>
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.3s ease;
+      }
+
+      #loading-screen.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .loading-content {
+        text-align: center;
+        color: white;
+      }
+
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .loading-text {
+        font-size: 16px;
+        margin-top: 10px;
+      }
+    </style>
   </head>
   <body>
+    <!-- 初始加载屏幕 -->
+    <div id="loading-screen">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在加载视频面试...</div>
+      </div>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- 隐藏加载屏幕 -->
+    <script>
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          var loadingScreen = document.getElementById('loading-screen');
+          if (loadingScreen) {
+            loadingScreen.classList.add('hidden');
+            setTimeout(function() {
+              loadingScreen.remove();
+            }, 300);
+          }
+        }, 500);
+      });
+    </script>
   </body>
 </html>

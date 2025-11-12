@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, MobileOutlined, DesktopOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, DesktopOutlined, QrcodeOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps } from 'antd';
 import { useMemo } from 'react';
@@ -132,9 +132,14 @@ const BasicLayout = () => {
           icon: <DesktopOutlined />,
         },
         {
-          path: '/interview/h5-entry',
-          name: 'H5调试入口',
-          icon: <MobileOutlined />,
+          path: '/interview/miniprogram',
+          name: '小程序视频面试',
+          icon: <QrcodeOutlined />,
+        },
+        {
+          path: '/interview/miniprogram-config',
+          name: '小程序配置',
+          icon: <SettingOutlined />,
         },
       ],
     });

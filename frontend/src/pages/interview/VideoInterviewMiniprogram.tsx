@@ -4,6 +4,7 @@ import { CopyOutlined } from '@ant-design/icons';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { generateZegoToken } from '../../services/zego';
 import { apiService } from '../../services/api';
+import DeviceDetector from '../../utils/deviceDetector';
 import './VideoInterviewMiniprogram.css';
 
 /**
@@ -39,8 +40,65 @@ const VideoInterviewMiniprogram: React.FC = () => {
   });
   const [participants, setParticipants] = useState<Array<{ userId: string; userName: string }>>([]);
 
+  // 🚀 初始化设备检测
+  useEffect(() => {
+    const info = DeviceDetector.getDeviceInfo();
+    setDeviceInfo(info);
+
+    // 获取最优配置
+    const config = DeviceDetector.getOptimalZegoConfig();
+    setOptimalConfig(config);
+
+    // 打印设备信息用于调试
+    DeviceDetector.logDeviceInfo();
+
+    // 检测网络质量
+    checkNetworkQuality();
+
+    // 每30秒检测一次网络质量
+    const networkCheckInterval = setInterval(checkNetworkQuality, 30000);
+
+    return () => {
+      clearInterval(networkCheckInterval);
+    };
+  }, []);
+
+  // 检测网络质量
+  const checkNetworkQuality = async () => {
+    try {
+      const startTime = Date.now();
+      await fetch('https://zego-webrtc-express.zegocloud.com/ping', {
+        method: 'HEAD',
+        cache: 'no-cache',
+      });
+      const latency = Date.now() - startTime;
+
+      let quality = 'good';
+      if (latency > 500) {
+        quality = 'poor';
+        setShowNetworkWarning(true);
+      } else if (latency > 300) {
+        quality = 'fair';
+      } else if (latency < 100) {
+        quality = 'excellent';
+      }
+
+      setNetworkQuality(quality);
+      console.log(`📶 网络质量: ${quality} (延迟: ${latency}ms)`);
+    } catch (error) {
+      console.error('网络质量检测失败:', error);
+      setNetworkQuality('unknown');
+    }
+  };
+
   // 🔧 定期清理检查定时器
   const cleanupIntervalRef = useRef<any>(null);
+
+  // 📱 设备信息和性能优化
+  const [deviceInfo, setDeviceInfo] = useState<any>(null);
+  const [networkQuality, setNetworkQuality] = useState<string>('unknown');
+  const [showNetworkWarning, setShowNetworkWarning] = useState(false);
+  const [optimalConfig, setOptimalConfig] = useState<any>(null);
 
   // 📝 提词器控制函数
   const pushTeleprompterContent = async () => {
@@ -120,6 +178,17 @@ const VideoInterviewMiniprogram: React.FC = () => {
         console.error('Failed to parse user:', e);
       }
     }
+
+    // 检查小程序传递的用户名（来自/interview/miniprogram）
+    const miniprogramUserName = localStorage.getItem('userName');
+    if (miniprogramUserName) {
+      return {
+        id: `user_${Date.now()}`,
+        name: miniprogramUserName,
+        avatar: null,
+      };
+    }
+
     return {
       id: `user_${Date.now()}`,
       name: '用户',
@@ -293,7 +362,19 @@ const VideoInterviewMiniprogram: React.FC = () => {
         zegoInstanceRef.current = zp;
         console.log('📱 小程序端 - ZEGO 实例创建成功');
 
-        // 小程序端配置
+        // 🚀 获取设备优化配置
+        const optimalConfig = DeviceDetector.getOptimalZegoConfig();
+        const optimalResolution = DeviceDetector.getZegoResolutionEnum(ZegoUIKitPrebuilt);
+
+        console.log('📱 小程序端 - 设备优化配置:', {
+          分辨率: optimalConfig.videoResolution,
+          帧率: optimalConfig.frameRate,
+          码率: optimalConfig.bitrate,
+          设备类型: deviceInfo?.isMobile ? '移动设备' : '桌面设备',
+          网络类型: deviceInfo?.networkType || 'unknown',
+        });
+
+        // 小程序端配置 - 使用智能优化
         const config = {
           container: meetingContainerRef.current,
           scenario: {
@@ -306,17 +387,17 @@ const VideoInterviewMiniprogram: React.FC = () => {
           useFrontFacingCamera: true, // 小程序默认使用前置摄像头
           showMyCameraToggleButton: true,
           showMyMicrophoneToggleButton: true,
-          showAudioVideoSettingsButton: true,
+          showAudioVideoSettingsButton: optimalConfig.ui.showAudioVideoSettingsButton,
           showScreenSharingButton: false, // 小程序不支持屏幕共享
           showTextChat: true,
           showUserList: true,
           maxUsers: 6,
           layout: 'Auto' as const, // 小程序使用自动布局
-          showLayoutButton: true,
+          showLayoutButton: optimalConfig.ui.showLayoutButton,
           showNonVideoUser: true,
           showOnlyAudioUser: true,
           showUserName: true,
-          videoResolutionDefault: ZegoUIKitPrebuilt.VideoResolution_720P,
+          videoResolutionDefault: optimalResolution, // 🚀 使用智能分辨率
           showRemoveUserButton: true,
           showTurnOffRemoteMicrophoneButton: true,
           showTurnOffRemoteCameraButton: true,
@@ -490,10 +571,70 @@ const VideoInterviewMiniprogram: React.FC = () => {
 
   return (
     <div className="miniprogram-video-interview">
-      {/* 加载状态 */}
+      {/* 网络质量警告 */}
+      {showNetworkWarning && networkQuality === 'poor' && (
+        <div style={{
+          position: 'fixed',
+          top: 10,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          background: '#ff4d4f',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: 8,
+          fontSize: 14,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span>⚠️</span>
+          <span>网络较慢,已自动降低画质</span>
+          <span
+            onClick={() => setShowNetworkWarning(false)}
+            style={{ cursor: 'pointer', marginLeft: 8, fontSize: 18 }}
+          >
+            ×
+          </span>
+        </div>
+      )}
+
+      {/* 设备信息提示 (仅开发环境) */}
+      {process.env.NODE_ENV === 'development' && deviceInfo && (
+        <div style={{
+          position: 'fixed',
+          bottom: 60,
+          right: 10,
+          zIndex: 9998,
+          background: 'rgba(0,0,0,0.7)',
+          color: 'white',
+          padding: '8px 12px',
+          borderRadius: 6,
+          fontSize: 12,
+          maxWidth: 200,
+        }}>
+          <div>📱 {deviceInfo.isMobile ? '移动' : '桌面'}</div>
+          <div>📶 {networkQuality}</div>
+          <div>🎥 {optimalConfig?.videoResolution || '360P'}</div>
+        </div>
+      )}
+
+      {/* 加载状态 - 优化版 */}
       {loading && (
         <div className="miniprogram-loading">
-          <Spin size="large" tip="正在加入视频面试..." />
+          <Spin size="large" />
+          <div style={{ marginTop: 20, fontSize: 16, color: '#5DBFB3' }}>
+            正在加入视频面试...
+          </div>
+          <div style={{ marginTop: 10, fontSize: 14, color: '#999' }}>
+            {deviceInfo?.isMobile ? '📱 移动端优化中' : '💻 桌面端加载中'}
+          </div>
+          {networkQuality === 'poor' && (
+            <div style={{ marginTop: 10, fontSize: 12, color: '#ff4d4f' }}>
+              ⚠️ 网络较慢,正在优化画质...
+            </div>
+          )}
         </div>
       )}
 

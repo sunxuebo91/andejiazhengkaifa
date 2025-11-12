@@ -4,6 +4,7 @@ import { VideoCameraOutlined, ShareAltOutlined, CopyOutlined, FileTextOutlined, 
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { generateZegoToken } from '../../services/zego';
 import { apiService } from '../../services/api';
+import { setToken } from '../../services/auth';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -42,6 +43,63 @@ const VideoInterview: React.FC = () => {
 
   // 🔧 定期清理检查定时器
   const cleanupIntervalRef = useRef<any>(null);
+
+  // 📱 从URL读取参数，支持小程序传入 roomId/userName/token
+  useEffect(() => {
+    // 设置页面标题
+    document.title = '视频面试';
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const rid = params.get('roomId');
+      const uname = params.get('userName');
+      const token = params.get('token');
+      const isGuest = params.get('isGuest');
+      const skipLogin = params.get('skipLogin');
+
+      console.log('📱 VideoInterview - 接收URL参数:', {
+        token: token ? '✅ 已接收' : '❌ 未接收',
+        roomId: rid,
+        userName: uname,
+        isGuest,
+        skipLogin
+      });
+
+      // 处理Token（HR模式）
+      if (token) {
+        console.log('💾 保存Token到localStorage...');
+        setToken(token, false); // 不记住我，使用localStorage
+        localStorage.setItem('access_token', token);
+        localStorage.setItem('isLoggedIn', 'true');
+        console.log('✅ Token已保存，自动登录成功');
+      }
+
+      // 访客模式
+      if (isGuest === 'true' || skipLogin === 'true') {
+        localStorage.setItem('isGuest', 'true');
+        if (uname) {
+          localStorage.setItem('guestName', decodeURIComponent(uname));
+        }
+        console.log('✅ 访客模式已设置');
+      }
+
+      // 设置表单值
+      if (rid) {
+        form.setFieldsValue({ roomId: rid });
+      }
+      if (uname) {
+        const decodedName = decodeURIComponent(uname);
+        form.setFieldsValue({ userName: decodedName });
+        // 同时保存用户名到localStorage
+        if (token) {
+          localStorage.setItem('userName', decodedName);
+          console.log('💾 保存用户名:', decodedName);
+        }
+      }
+    } catch (error) {
+      console.error('❌ 处理URL参数失败:', error);
+    }
+  }, [form]);
 
   // 生成随机房间ID
   const generateRoomId = () => {
@@ -210,22 +268,17 @@ const VideoInterview: React.FC = () => {
     return `${baseUrl}/interview/join/${roomInfo.roomId}?name=${encodeURIComponent('视频面试')}`;
   };
 
-  // 生成移动端分享链接
+  // 生成移动端分享链接（统一使用 PC 端链接，自动适配移动端）
   const generateMobileShareLink = () => {
     if (!roomInfo) {
       return '';
     }
     const baseUrl = window.location.origin;
-    return `${baseUrl}/interview/join-mobile/${roomInfo.roomId}`;
+    // 统一使用 PC 端链接，ZegoUIKitPrebuilt 会自动适配移动端
+    return `${baseUrl}/interview/join/${roomInfo.roomId}?name=${encodeURIComponent('视频面试')}`;
   };
 
-  // 生成小程序路径
-  const generateMiniprogramPath = () => {
-    if (!roomInfo) {
-      return '';
-    }
-    return `pages/interview/interview?roomId=${roomInfo.roomId}`;
-  };
+
 
   // 🎨 美颜功能控制
   const toggleBeauty = () => {
@@ -1127,48 +1180,6 @@ const VideoInterview: React.FC = () => {
             </Button>
           </div>
 
-          {/* 小程序路径 */}
-          <div style={{ marginBottom: 16, background: '#e6f7ff', padding: 16, borderRadius: 8, border: '1px solid #91d5ff' }}>
-            <Title level={5} style={{ marginTop: 0 }}>
-              🎯 微信小程序（推荐，无警告）
-            </Title>
-            <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
-              在微信小程序中使用，完全没有"非官方网页"警告
-            </Paragraph>
-            <div style={{ background: '#fff', padding: 12, borderRadius: 4, marginBottom: 12 }}>
-              <Text strong>小程序路径：</Text>
-              <Input.TextArea
-                value={generateMiniprogramPath()}
-                readOnly
-                autoSize={{ minRows: 1, maxRows: 2 }}
-                style={{ marginTop: 8 }}
-              />
-            </div>
-            <Button
-              type="primary"
-              icon={<CopyOutlined />}
-              onClick={() => {
-                const path = generateMiniprogramPath();
-                navigator.clipboard.writeText(path).then(() => {
-                  message.success('小程序路径已复制');
-                });
-              }}
-              block
-              style={{ marginBottom: 8 }}
-            >
-              复制小程序路径
-            </Button>
-            <Paragraph style={{ margin: 0, fontSize: 12, color: '#666' }}>
-              <strong>使用方法：</strong>
-              <br />
-              1. 在小程序中使用 wx.navigateTo 跳转到此路径
-              <br />
-              2. 或者生成小程序码让用户扫码进入
-              <br />
-              3. ✅ 完全没有"非官方网页"警告
-            </Paragraph>
-          </div>
-
           {/* 使用说明 */}
           <div style={{ background: '#f0f2f5', padding: 12, borderRadius: 4 }}>
             <Paragraph style={{ margin: 0, fontSize: 12, color: '#666' }}>
@@ -1176,12 +1187,10 @@ const VideoInterview: React.FC = () => {
               <br />
               • <strong>PC端链接</strong>：发送给使用电脑的用户
               <br />
-              • <strong>移动端链接</strong>：发送给使用手机浏览器的用户（会有微信警告）
-              <br />
-              • <strong>小程序路径</strong>：在微信小程序中使用（推荐，无警告）
+              • <strong>移动端链接</strong>：发送给使用手机浏览器的用户
               <br />
               <br />
-              <Text type="warning">⚠️ 注意：直接在微信中打开链接会有"非官方网页"警告，建议使用小程序</Text>
+              <Text type="secondary">💡 提示：复制链接后可通过微信、短信等方式发送给面试者</Text>
             </Paragraph>
           </div>
         </Modal>

@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>视频面试 - HR端</title>
+
+  <!-- 引入 Zego Web SDK -->
+  <script src="./ZegoExpressWebRTC-standalone.js"></script>
+
+  <!-- ZEGO Token 生成库（内嵌实现） -->
+  <script>
+    // Token 生成函数（内嵌实现，避免 CDN 加载问题）
+    function generateToken04(appId, userId, secret, effectiveTimeInSeconds, payload) {
+      if (!payload) {
+        payload = '';
+      }
+
+      // HMAC-SHA256 实现
+      async function hmacSHA256(key, message) {
+        const encoder = new TextEncoder();
+        // 将 secret 作为 UTF-8 字符串编码（不是十六进制）
+        const keyData = encoder.encode(key);
+        const messageData = encoder.encode(message);
+
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          keyData,
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+
+        const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+        return new Uint8Array(signature);
+      }
+
+      // Base64 编码
+      function base64Encode(bytes) {
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      // 生成 Token（同步包装异步函数）
+      const expire = Math.floor(Date.now() / 1000) + effectiveTimeInSeconds;
+      const body = {
+        app_id: appId,
+        user_id: userId,
+        nonce: Math.floor(Math.random() * 2147483647),
+        ctime: Math.floor(Date.now() / 1000),
+        expire: expire
+      };
+
+      if (payload) {
+        body.payload = payload;
+      }
+
+      const header = { alg: 'HS256', typ: 'JWT' };
+      const headerStr = JSON.stringify(header);
+      const bodyStr = JSON.stringify(body);
+
+      const encoder = new TextEncoder();
+      const headerBase64 = base64Encode(encoder.encode(headerStr));
+      const bodyBase64 = base64Encode(encoder.encode(bodyStr));
+      const toSign = headerBase64 + '.' + bodyBase64;
+
+      // 返回 Promise
+      // 使用 UTF-8 编码的 secret（不是十六进制）
+      return hmacSHA256(secret, toSign).then(signature => {
+        const signatureBase64 = base64Encode(signature);
+        return '04' + toSign + '.' + signatureBase64;
+      });
+    }
+  </script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* 欢迎页面 */
+    .welcome-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+    }
+
+    .main-card {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+    }
+
+    .card-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .header-icon {
+      font-size: 60px;
+      margin-bottom: 10px;
+    }
+
+    .header-title {
+      font-size: 28px;
+      font-weight: bold;
+      color: #333;
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    .header-desc {
+      font-size: 14px;
+      color: #666;
+      display: block;
+    }
+
+    .user-card {
+      display: flex;
+      align-items: center;
+      background: #f5f5f5;
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+
+    .user-avatar {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #667eea;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: white;
+      margin-right: 15px;
+    }
+
+    .user-info {
+      flex: 1;
+    }
+
+    .user-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      display: block;
+    }
+
+    .user-role {
+      font-size: 14px;
+      color: #666;
+      display: block;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .btn-create, .btn-rejoin {
+      flex: 1;
+      padding: 15px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.3s;
+    }
+
+    .btn-create {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-create:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-rejoin {
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    .btn-rejoin:hover {
+      background: #e0e0e0;
+    }
+
+    .features-box {
+      background: #f9f9f9;
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .features-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 15px;
+      display: block;
+    }
+
+    .feature-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feature-check {
+      font-size: 16px;
+    }
+
+    .feature-text {
+      font-size: 14px;
+      color: #666;
+    }
+
+    /* 房间页面 */
+    .room-section {
+      display: none;
+    }
+
+    .room-section.active {
+      display: block;
+    }
+
+    .room-header {
+      background: white;
+      border-radius: 12px;
+      padding: 15px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .room-number-label, .interview-time-label {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .room-number-value, .interview-time-value {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      margin-left: 5px;
+    }
+
+    .main-video-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .video-item {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      aspect-ratio: 4/3;
+    }
+
+    .video-box {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .video-player {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .video-label {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .video-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #2a2a2a;
+      color: #999;
+    }
+
+    .placeholder-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+
+    .placeholder-text {
+      font-size: 14px;
+    }
+
+    .control-bar {
+      background: white;
+      border-radius: 12px;
+      padding: 15px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .control-btn {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .control-btn.mic {
+      background: #4CAF50;
+      color: white;
+    }
+
+    .control-btn.mic.off {
+      background: #f44336;
+    }
+
+    .control-btn.camera {
+      background: #2196F3;
+      color: white;
+    }
+
+    .control-btn.camera.off {
+      background: #f44336;
+    }
+
+    .control-btn.leave {
+      background: #f44336;
+      color: white;
+    }
+
+    .control-btn.invite {
+      background: #FF9800;
+      color: white;
+    }
+
+    .control-btn:hover {
+      transform: scale(1.1);
+    }
+
+    /* 加载提示 */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .loading-overlay.show {
+      display: flex;
+    }
+
+    .loading-content {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      font-size: 16px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 欢迎页面 -->
+    <div class="welcome-section" id="welcomeSection">
+      <div class="main-card">
+        <div class="card-header">
+          <div class="header-icon">📹</div>
+          <span class="header-title">视频面试</span>
+          <span class="header-desc">支持 3-6 人视频面试，内置美颜、提词器等功能</span>
+        </div>
+
+        <div class="user-card">
+          <div class="user-avatar">👤</div>
+          <div class="user-info">
+            <span class="user-name" id="userName">HR</span>
+            <span class="user-role">主持人</span>
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button class="btn-create" onclick="createRoom()">
+            <span>📹</span>
+            <span>创建面试间</span>
+          </button>
+          <button class="btn-rejoin" onclick="showRejoinDialog()">
+            <span>🔄</span>
+            <span>重新进入</span>
+          </button>
+        </div>
+
+        <div class="features-box">
+          <span class="features-title">功能说明</span>
+          <div class="feature-list">
+            <div class="feature-item">
+              <span class="feature-check">✅</span>
+              <span class="feature-text">支持 3-6 人同时视频面试</span>
+            </div>
+            <div class="feature-item">
+              <span class="feature-check">✅</span>
+              <span class="feature-text">内置美颜功能（点击设置按钮调节）</span>
+            </div>
+            <div class="feature-item">
+              <span class="feature-check">✅</span>
+              <span class="feature-text">支持提词器（主持人可推送问题）</span>
+            </div>
+            <div class="feature-item">
+              <span class="feature-check">✅</span>
+              <span class="feature-text">支持文字聊天</span>
+            </div>
+            <div class="feature-item">
+              <span class="feature-check">✅</span>
+              <span class="feature-text">支持查看成员列表</span>
+            </div>
+            <div class="feature-item">
+              <span class="feature-check">✅</span>
+              <span class="feature-text">支持踢出成员（房主权限）</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 房间页面 -->
+    <div class="room-section" id="roomSection">
+      <!-- 顶部信息栏 -->
+      <div class="room-header">
+        <div class="room-header-left">
+          <span class="room-number-label">房间号：</span>
+          <span class="room-number-value" id="displayRoomId"></span>
+        </div>
+        <div class="room-header-right">
+          <span class="interview-time-label">面试时间：</span>
+          <span class="interview-time-value" id="interviewTime">00:00</span>
+        </div>
+      </div>
+
+      <!-- 主屏区域：2x2网格 -->
+      <div class="main-video-grid">
+        <!-- 本地视频 -->
+        <div class="video-item">
+          <div class="video-box">
+            <video id="localVideo" class="video-player" autoplay muted playsinline></video>
+            <div class="video-label" id="localLabel">主持人</div>
+          </div>
+        </div>
+
+        <!-- 远程视频1 -->
+        <div class="video-item">
+          <div class="video-box" id="remoteBox1">
+            <div class="video-placeholder">
+              <div class="placeholder-icon">👤</div>
+              <div class="placeholder-text">等待加入...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 远程视频2 -->
+        <div class="video-item">
+          <div class="video-box" id="remoteBox2">
+            <div class="video-placeholder">
+              <div class="placeholder-icon">👤</div>
+              <div class="placeholder-text">等待加入...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 远程视频3 -->
+        <div class="video-item">
+          <div class="video-box" id="remoteBox3">
+            <div class="video-placeholder">
+              <div class="placeholder-icon">👤</div>
+              <div class="placeholder-text">等待加入...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 控制栏 -->
+      <div class="control-bar">
+        <button class="control-btn mic" id="micBtn" onclick="toggleMic()">
+          🎤
+        </button>
+        <button class="control-btn camera" id="cameraBtn" onclick="toggleCamera()">
+          📹
+        </button>
+        <button class="control-btn invite" onclick="inviteUser()">
+          ➕
+        </button>
+        <button class="control-btn leave" onclick="leaveRoom()">
+          📞
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 加载提示 -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <div class="loading-text" id="loadingText">加载中...</div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== 全局变量 ====================
+    const appID = 1279160453;
+    const server = 'wss://webliveroom-api.zego.im/ws';
+    const serverSecret = 'e18cc600e2939d412c48f152e157f01d';
+
+    let zg = null;
+    let localStream = null;
+    let currentRoomId = '';
+    let currentUserId = '';
+    let currentUserName = 'HR';
+    let isMicOn = true;
+    let isCameraOn = true;
+    let interviewStartTime = null;
+    let interviewTimer = null;
+    let remoteStreams = {}; // 存储远程流
+
+    // ==================== 初始化 ====================
+    function initZego() {
+      console.log('🚀 初始化 ZEGO SDK');
+
+      if (typeof ZegoExpressEngine === 'undefined') {
+        console.error('❌ ZEGO SDK 未加载');
+        alert('视频SDK加载失败，请刷新页面重试');
+        return false;
+      }
+
+      try {
+        // 尝试获取正确的构造函数
+        let ZegoEngine = ZegoExpressEngine;
+        if (typeof ZegoExpressEngine === 'object' && ZegoExpressEngine.ZegoExpressEngine) {
+          console.log('检测到 ZegoExpressEngine 是对象，提取构造函数');
+          ZegoEngine = ZegoExpressEngine.ZegoExpressEngine;
+        }
+
+        console.log('使用的构造函数类型:', typeof ZegoEngine);
+
+        // 创建 ZEGO 实例，并设置日志级别为 error（只显示错误）
+        zg = new ZegoEngine(appID, server);
+        zg.setLogConfig({ logLevel: 'error' }); // 关闭详细日志
+        console.log('✅ ZEGO 引擎创建成功');
+
+        // 监听远程流添加
+        zg.on('roomStreamUpdate', async (roomID, updateType, streamList) => {
+          console.log('🔔 房间流更新:', { roomID, updateType, streamList });
+
+          if (updateType === 'ADD') {
+            // 有新的流加入
+            for (const stream of streamList) {
+              await playRemoteStream(stream);
+            }
+          } else if (updateType === 'DELETE') {
+            // 有流离开
+            for (const stream of streamList) {
+              removeRemoteStream(stream.streamID);
+            }
+          }
+        });
+
+        // 监听房间用户更新
+        zg.on('roomUserUpdate', (roomID, updateType, userList) => {
+          console.log('🔔 房间用户更新:', { roomID, updateType, userList });
+        });
+
+        return true;
+      } catch (error) {
+        console.error('❌ ZEGO 引擎创建失败:', error);
+        alert('视频SDK初始化失败: ' + error.message);
+        return false;
+      }
+    }
+
+    // ==================== Token 生成 ====================
+    async function generateToken(userID) {
+      try {
+        // Token 有效期：24小时（单位：秒）
+        const effectiveTimeInSeconds = 3600 * 24;
+        const payload = '';
+
+        // 使用 Token 生成方法
+        if (typeof generateToken04 !== 'undefined') {
+          console.log('🔑 正在生成 Token...');
+          console.log('📱 AppID:', appID);
+          console.log('👤 UserID:', userID);
+          console.log('🔐 ServerSecret:', serverSecret.substring(0, 8) + '...');
+          console.log('⏰ 有效期（秒）:', effectiveTimeInSeconds);
+
+          const token = await generateToken04(appID, userID, serverSecret, effectiveTimeInSeconds, payload);
+          console.log('✅ Token 生成成功，长度:', token.length);
+          console.log('🔐 Token 内容:', token);
+          return token;
+        } else {
+          console.warn('⚠️ Token 生成库未加载，使用空 Token');
+          return '';
+        }
+      } catch (error) {
+        console.error('❌ Token 生成失败:', error);
+        return '';
+      }
+    }
+
+    // ==================== 创建面试间 ====================
+    async function createRoom() {
+      console.log('➕ 创建面试间');
+
+      // 初始化 ZEGO SDK
+      if (!zg) {
+        const success = initZego();
+        if (!success) return;
+        // 等待一下让 SDK 完全初始化
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      showMessage('正在创建面试间...');
+
+      try {
+        // 生成房间号
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 8);
+        currentRoomId = `room_${timestamp}_${randomStr}`;
+        currentUserId = 'user_' + Date.now();
+
+        console.log('✅ 房间信息:', { roomId: currentRoomId, userId: currentUserId });
+
+        // 生成 Token
+        console.log('⏳ 开始生成 Token...');
+        const token = await generateToken(currentUserId);
+        console.log('✅ Token 生成完成:', token ? `长度${token.length}` : '空Token');
+
+        // 登录房间
+        console.log('⏳ 正在登录房间...');
+        console.log('⏳ 登录参数:', {
+          roomId: currentRoomId,
+          token: token ? `${token.substring(0, 20)}...` : '空',
+          userID: currentUserId,
+          userName: currentUserName
+        });
+        await zg.loginRoom(currentRoomId, token, {
+          userID: currentUserId,
+          userName: currentUserName
+        });
+        console.log('✅ 登录房间成功');
+
+        // 创建本地流
+        console.log('⏳ 正在创建本地流...');
+        localStream = await zg.createStream({
+          camera: {
+            video: true,
+            audio: true
+          }
+        });
+        console.log('✅ 创建本地流成功');
+
+        // 播放本地视频
+        const localVideo = document.getElementById('localVideo');
+        localVideo.srcObject = localStream;
+
+        // 推流
+        const streamID = 'stream_' + currentUserId;
+        console.log('⏳ 正在推流:', streamID);
+        await zg.startPublishingStream(streamID, localStream);
+        console.log('✅ 推流成功');
+
+        // 显示房间号（只显示时间戳部分）
+        const displayRoomId = timestamp.toString();
+        document.getElementById('displayRoomId').textContent = displayRoomId;
+
+        // 切换到房间页面
+        document.getElementById('welcomeSection').style.display = 'none';
+        document.getElementById('roomSection').classList.add('active');
+
+        hideMessage();
+
+        // 启动面试计时器
+        startInterviewTimer();
+
+        // 通知小程序页面（用于分享）
+        notifyMiniProgram(currentRoomId);
+
+      } catch (error) {
+        console.error('❌ 创建面试间失败:', error);
+        alert('创建失败: ' + (error.message || '请重试'));
+        hideMessage();
+      }
+    }
+
+    // ==================== 播放远程流 ====================
+    async function playRemoteStream(stream) {
+      console.log('▶️ 播放远程流:', stream);
+
+      try {
+        const remoteStream = await zg.startPlayingStream(stream.streamID);
+        remoteStreams[stream.streamID] = remoteStream;
+
+        // 找到空闲的视频位置
+        for (let i = 1; i <= 3; i++) {
+          const box = document.getElementById(`remoteBox${i}`);
+          if (box.querySelector('.video-placeholder')) {
+            // 这个位置是空的，使用它
+            box.innerHTML = `
+              <video id="remote${i}" class="video-player" autoplay playsinline></video>
+              <div class="video-label">${stream.user.userName || '访客'}</div>
+            `;
+            const video = document.getElementById(`remote${i}`);
+            video.srcObject = remoteStream;
+            break;
+          }
+        }
+
+        console.log('✅ 远程流播放成功');
+      } catch (error) {
+        console.error('❌ 播放远程流失败:', error);
+      }
+    }
+
+    // ==================== 移除远程流 ====================
+    function removeRemoteStream(streamID) {
+      console.log('🗑️ 移除远程流:', streamID);
+
+      if (remoteStreams[streamID]) {
+        zg.stopPlayingStream(streamID);
+        delete remoteStreams[streamID];
+      }
+
+      // 恢复占位符
+      for (let i = 1; i <= 3; i++) {
+        const box = document.getElementById(`remoteBox${i}`);
+        const video = box.querySelector('video');
+        if (video && video.srcObject === remoteStreams[streamID]) {
+          box.innerHTML = `
+            <div class="video-placeholder">
+              <div class="placeholder-icon">👤</div>
+              <div class="placeholder-text">等待加入...</div>
+            </div>
+          `;
+          break;
+        }
+      }
+    }
+
+    // ==================== 面试计时器 ====================
+    function startInterviewTimer() {
+      interviewStartTime = Date.now();
+      interviewTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - interviewStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        document.getElementById('interviewTime').textContent = timeStr;
+      }, 1000);
+    }
+
+    // ==================== 切换麦克风 ====================
+    function toggleMic() {
+      isMicOn = !isMicOn;
+      const btn = document.getElementById('micBtn');
+
+      if (localStream) {
+        localStream.getAudioTracks().forEach(track => {
+          track.enabled = isMicOn;
+        });
+      }
+
+      if (isMicOn) {
+        btn.classList.remove('off');
+        btn.textContent = '🎤';
+      } else {
+        btn.classList.add('off');
+        btn.textContent = '🔇';
+      }
+
+      console.log('🎤 麦克风:', isMicOn ? '开启' : '关闭');
+    }
+
+    // ==================== 切换摄像头 ====================
+    function toggleCamera() {
+      isCameraOn = !isCameraOn;
+      const btn = document.getElementById('cameraBtn');
+
+      if (localStream) {
+        localStream.getVideoTracks().forEach(track => {
+          track.enabled = isCameraOn;
+        });
+      }
+
+      if (isCameraOn) {
+        btn.classList.remove('off');
+        btn.textContent = '📹';
+      } else {
+        btn.classList.add('off');
+        btn.textContent = '📵';
+      }
+
+      console.log('📹 摄像头:', isCameraOn ? '开启' : '关闭');
+    }
+
+    // ==================== 邀请用户 ====================
+    async function inviteUser() {
+      if (!currentRoomId) {
+        alert('请先创建面试间');
+        return;
+      }
+
+      console.log('➕ 邀请用户');
+
+      // 通知小程序页面触发分享
+      if (typeof wx !== 'undefined' && wx.miniProgram) {
+        wx.miniProgram.postMessage({
+          data: {
+            type: 'invite',
+            roomId: currentRoomId
+          }
+        });
+
+        alert('请点击右上角"..."按钮，选择"转发"分享给求职者');
+      } else {
+        // 不在小程序中，生成链接
+        const displayRoomId = currentRoomId.split('_')[1];
+        const link = `https://cloud1-3gasxujzfa738c39-1369203604.tcloudbaseapp.com/video-interview.html?room=${currentRoomId}`;
+
+        // 复制到剪贴板
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(link);
+          alert(`邀请链接已复制！\n\n房间号：${displayRoomId}\n\n请发送给求职者`);
+        } else {
+          alert(`房间号：${displayRoomId}\n\n邀请链接：\n${link}`);
+        }
+      }
+    }
+
+    // ==================== 离开房间 ====================
+    async function leaveRoom() {
+      console.log('👋 离开房间');
+
+      if (confirm('确定要离开面试间吗？')) {
+        try {
+          // 停止推流
+          if (localStream) {
+            const streamID = 'stream_' + currentUserId;
+            await zg.stopPublishingStream(streamID);
+            zg.destroyStream(localStream);
+            localStream = null;
+          }
+
+          // 登出房间
+          await zg.logoutRoom(currentRoomId);
+
+          // 停止计时器
+          if (interviewTimer) {
+            clearInterval(interviewTimer);
+            interviewTimer = null;
+          }
+
+          // 切换回欢迎页面
+          document.getElementById('roomSection').classList.remove('active');
+          document.getElementById('welcomeSection').style.display = 'flex';
+
+          // 重置状态
+          currentRoomId = '';
+          remoteStreams = {};
+
+          console.log('✅ 已离开房间');
+
+          // 通知小程序页面
+          if (typeof wx !== 'undefined' && wx.miniProgram) {
+            wx.miniProgram.postMessage({
+              data: {
+                type: 'leave'
+              }
+            });
+          }
+        } catch (error) {
+          console.error('❌ 离开房间失败:', error);
+        }
+      }
+    }
+
+    // ==================== 重新进入 ====================
+    function showRejoinDialog() {
+      const roomId = prompt('请输入房间号：');
+      if (roomId) {
+        alert('重新进入功能开发中...');
+      }
+    }
+
+    // ==================== 通知小程序 ====================
+    function notifyMiniProgram(roomId) {
+      if (typeof wx !== 'undefined' && wx.miniProgram) {
+        wx.miniProgram.postMessage({
+          data: {
+            type: 'roomCreated',
+            roomId: roomId
+          }
+        });
+      }
+    }
+
+    // ==================== 加载提示 ====================
+    function showMessage(text) {
+      document.getElementById('loadingText').textContent = text;
+      document.getElementById('loadingOverlay').classList.add('show');
+    }
+
+    function hideMessage() {
+      document.getElementById('loadingOverlay').classList.remove('show');
+    }
+
+    // ==================== 等待 SDK 加载 ====================
+    function waitForSDK(maxRetries = 20, interval = 200) {
+      return new Promise((resolve, reject) => {
+        let retries = 0;
+
+        const checkSDK = () => {
+          console.log(`🔄 检查 SDK 加载状态 (${retries + 1}/${maxRetries})...`);
+
+          if (typeof ZegoExpressEngine !== 'undefined') {
+            console.log('✅ ZEGO SDK 加载成功！');
+            resolve(true);
+          } else if (retries >= maxRetries) {
+            console.error('❌ ZEGO SDK 加载超时！');
+            reject(new Error('SDK 加载超时'));
+          } else {
+            retries++;
+            setTimeout(checkSDK, interval);
+          }
+        };
+
+        checkSDK();
+      });
+    }
+
+    // ==================== 页面加载 ====================
+    window.onload = async function() {
+      console.log('📱 HR端页面加载完成');
+      console.log('🔍 ZEGO SDK 状态:', typeof ZegoExpressEngine !== 'undefined' ? '已加载' : '未加载');
+      console.log('🔍 generateToken04 是否存在:', typeof generateToken04 !== 'undefined');
+
+      if (typeof generateToken04 === 'undefined') {
+        console.warn('⚠️ Token 生成库未加载');
+      } else {
+        console.log('✅ Token 生成库加载成功');
+      }
+
+      // 等待 SDK 加载
+      if (typeof ZegoExpressEngine === 'undefined') {
+        console.log('⏳ ZEGO SDK 尚未加载，等待中...');
+        try {
+          await waitForSDK();
+        } catch (error) {
+          console.error('❌ ZEGO SDK 加载失败:', error);
+          alert('视频SDK加载失败，请检查网络连接后刷新页面重试');
+          return;
+        }
+      } else {
+        console.log('✅ ZEGO SDK 已加载');
+      }
+
+      // 初始化 ZEGO SDK
+      initZego();
+    };
+  </script>
+</body>
+</html>

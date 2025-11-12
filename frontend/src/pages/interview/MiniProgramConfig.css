@@ -1,0 +1,31 @@
+.miniprogram-config {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.miniprogram-config pre {
+  margin: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.miniprogram-config code {
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.miniprogram-config .ant-card {
+  margin-bottom: 16px;
+}
+
+.miniprogram-config .ant-alert {
+  margin-bottom: 16px;
+}
+
+.miniprogram-config .ant-tag {
+  margin: 0;
+  word-break: break-all;
+  white-space: normal;
+}
+

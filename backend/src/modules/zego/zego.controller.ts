@@ -6,6 +6,8 @@ import { GenerateGuestTokenDto } from './dto/generate-guest-token.dto';
 import { DismissRoomDto } from './dto/dismiss-room.dto';
 import { CheckRoomDto } from './dto/check-room.dto';
 import { PushTeleprompterDto, ControlTeleprompterDto, GetTeleprompterDto } from './dto/teleprompter.dto';
+import { KickUserDto } from './dto/kick-user.dto';
+import { RemoteControlDto } from './dto/remote-control.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('zego')
@@ -62,6 +64,15 @@ export class ZegoController {
    */
   @Post('generate-guest-token')
   generateGuestToken(@Body() dto: GenerateGuestTokenDto) {
+    console.log('🔍 生成访客Token请求:', {
+      userId: dto.userId,
+      userIdLength: dto.userId?.length,
+      userIdType: typeof dto.userId,
+      roomId: dto.roomId,
+      userName: dto.userName,
+      role: dto.role,
+    });
+
     // 检查房间状态
     const roomStatus = this.zegoService.checkRoom(dto.roomId);
 
@@ -98,6 +109,35 @@ export class ZegoController {
         token,
         appId: this.zegoService.getConfig().appId,
       },
+    };
+  }
+
+  /**
+   * 踢出用户（需要登录，仅主持人）
+   */
+  @Post('kick-user')
+  @UseGuards(JwtAuthGuard)
+  async kickUser(@Body() dto: KickUserDto, @Request() req) {
+    const hostUserId = req.user.userId;
+    console.log('踢出用户请求:', {
+      roomId: dto.roomId,
+      hostUserId: hostUserId,
+      targetUserId: dto.userId,
+    });
+
+    const success = await this.zegoService.kickUser(dto.roomId, hostUserId, dto.userId);
+
+    if (!success) {
+      throw new HttpException({
+        success: false,
+        message: '踢出用户失败，您可能不是房间主持人或房间不存在',
+        error: 'KICK_FAILED',
+      }, HttpStatus.FORBIDDEN);
+    }
+
+    return {
+      success: true,
+      message: '用户已被踢出房间',
     };
   }
 
@@ -242,6 +282,51 @@ export class ZegoController {
       dto.roomId,
       dto.userId,
       dto.lastTimestamp,
+    );
+
+    return {
+      success: true,
+      data: messages,
+    };
+  }
+
+  /**
+   * 远程控制用户设备（需要登录，仅主持人）
+   */
+  @Post('remote-control')
+  @UseGuards(JwtAuthGuard)
+  remoteControl(@Body() dto: RemoteControlDto, @Request() req) {
+    const success = this.zegoService.remoteControl(
+      dto.roomId,
+      req.user.userId,
+      dto.targetUserId,
+      dto.controlType,
+      dto.enabled,
+    );
+
+    if (!success) {
+      throw new HttpException({
+        success: false,
+        message: '远程控制失败，房间不存在、已解散或无权限',
+        error: 'CONTROL_FAILED',
+      }, HttpStatus.BAD_REQUEST);
+    }
+
+    return {
+      success: true,
+      message: `已${dto.enabled ? '开启' : '关闭'}${dto.controlType === 'camera' ? '摄像头' : '麦克风'}`,
+    };
+  }
+
+  /**
+   * 获取远程控制消息（公开接口，用于轮询）
+   */
+  @Post('get-remote-control')
+  getRemoteControl(@Body() body: { roomId: string; userId: string; lastTimestamp?: number }) {
+    const messages = this.zegoService.getRemoteControlMessages(
+      body.roomId,
+      body.userId,
+      body.lastTimestamp,
     );
 
     return {

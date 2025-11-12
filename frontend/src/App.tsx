@@ -34,10 +34,12 @@ const Payment = React.lazy(() => import('./pages/Payment'));
 const TestSortableUpload = React.lazy(() => import('./pages/TestSortableUpload'));
 const VideoInterview = React.lazy(() => import('./pages/interview/VideoInterview'));
 const JoinInterview = React.lazy(() => import('./pages/interview/JoinInterview'));
-const VideoInterviewMobile = React.lazy(() => import('./pages/interview/VideoInterviewMobile'));
 const JoinInterviewMobile = React.lazy(() => import('./pages/interview/JoinInterviewMobile'));
-const H5Entry = React.lazy(() => import('./pages/interview/H5Entry'));
-const VideoInterviewMiniprogram = React.lazy(() => import('./pages/interview/VideoInterviewMiniprogram'));
+const H5Login = React.lazy(() => import('./pages/interview/H5Login'));
+const MiniProgramConfig = React.lazy(() => import('./pages/interview/MiniProgramConfig'));
+const MiniProgramHost = React.lazy(() => import('./pages/interview/MiniProgramHost'));
+// const MiniProgramEntry = React.lazy(() => import('./pages/interview/MiniProgramEntry'));
+// const VideoInterviewMiniprogram = React.lazy(() => import('./pages/interview/VideoInterviewMiniprogram'));
 
 interface AppProps {
   children?: ReactNode;
@@ -86,8 +88,12 @@ export default function App({ children }: AppProps) {
                 <Route path="/unauthorized" element={<Unauthorized />} />
                 <Route path="/interview/join/:roomId" element={<JoinInterview />} />
                 <Route path="/interview/join-mobile/:roomId" element={<JoinInterviewMobile />} />
-                <Route path="/interview/miniprogram" element={<VideoInterviewMiniprogram />} />
-                
+                {/* 移动端视频面试登录页 */}
+                <Route path="/interview/h5-login" element={<H5Login />} />
+                <Route path="/interview/video" element={<VideoInterview />} />
+                <Route path="/interview/miniprogram" element={<MiniProgramHost />} />
+                <Route path="/interview/miniprogram-config" element={<MiniProgramConfig />} />
+
                 {/* 需要登录的路由 */}
                 <Route
                   path="/"
@@ -236,21 +242,6 @@ export default function App({ children }: AppProps) {
                     element={<AuthorizedRoute element={<TestSortableUpload />} />}
                   />
 
-                  {/* 视频面试 - 所有登录用户可访问 */}
-                  <Route path="interview">
-                    <Route
-                      path="video"
-                      element={<AuthorizedRoute element={<VideoInterview />} />}
-                    />
-                    <Route
-                      path="h5-entry"
-                      element={<AuthorizedRoute element={<H5Entry />} />}
-                    />
-                    <Route
-                      path="video-mobile/:roomId"
-                      element={<AuthorizedRoute element={<VideoInterviewMobile />} />}
-                    />
-                  </Route>
 
                   {/* 404页面 */}
                   <Route path="*" element={<NotFound />} />

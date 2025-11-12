@@ -12,6 +12,7 @@ interface RoomState {
   lastActivityAt: number;
   isDismissed: boolean;
   participants: Set<string>;
+  kickedUsers: Set<string>; // ✅ 被踢出的用户黑名单
 }
 
 // 提词器消息接口
@@ -22,6 +23,15 @@ interface TeleprompterMessage {
   displayHeight?: string;
   action?: 'PLAY' | 'PAUSE' | 'STOP';
   targetUserIds: string[];
+  timestamp: number;
+}
+
+// 远程控制消息接口
+interface RemoteControlMessage {
+  type: 'REMOTE_CONTROL';
+  controlType: 'camera' | 'microphone';
+  enabled: boolean;
+  targetUserId: string;
   timestamp: number;
 }
 
@@ -38,6 +48,9 @@ export class ZegoService {
 
   // 提词器消息队列 (roomId -> messages[])
   private teleprompterMessages: Map<string, TeleprompterMessage[]> = new Map();
+
+  // 远程控制消息队列 (roomId -> userId -> messages[])
+  private remoteControlMessages: Map<string, Map<string, RemoteControlMessage[]>> = new Map();
 
   constructor(private configService: ConfigService) {
     this.appId = parseInt(this.configService.get<string>('ZEGO_APP_ID') || '0');
@@ -104,6 +117,7 @@ export class ZegoService {
       lastActivityAt: now,
       isDismissed: false,
       participants: new Set([hostUserId]),
+      kickedUsers: new Set<string>(), // ✅ 初始化黑名单
     };
     this.rooms.set(roomId, roomState);
     this.logger.log(`✅ 房间已创建: ${roomId}, 主持人: ${hostUserId}, 当前房间总数: ${this.rooms.size}`);
@@ -125,6 +139,12 @@ export class ZegoService {
     // 检查房间是否已解散
     if (room.isDismissed) {
       this.logger.warn(`❌ 用户 ${userId} 尝试加入已解散的房间: ${roomId}`);
+      return false;
+    }
+
+    // ✅ 检查用户是否在黑名单中
+    if (room.kickedUsers.has(userId)) {
+      this.logger.warn(`❌ 用户 ${userId} 在黑名单中，无法加入房间: ${roomId}`);
       return false;
     }
 
@@ -204,6 +224,99 @@ export class ZegoService {
   }
 
   /**
+   * 调用 ZEGO KickoutUser API 踢出单个用户
+   */
+  async callZegoKickoutUser(roomId: string, userId: string): Promise<boolean> {
+    try {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const nonce = Math.floor(Math.random() * 1000000);
+
+      // 构建签名参数
+      const params = {
+        AppId: this.appId.toString(),
+        RoomId: roomId,
+        UserId: userId,  // 要踢出的用户ID
+        SignatureNonce: nonce.toString(),
+        SignatureVersion: '2.0',
+        Timestamp: timestamp.toString(),
+      };
+
+      // 按字母顺序排序参数
+      const sortedKeys = Object.keys(params).sort();
+      const signString = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
+
+      // 生成签名
+      const signature = crypto
+        .createHmac('sha256', this.serverSecret)
+        .update(signString)
+        .digest('hex');
+
+      // 调用 ZEGO API
+      const url = `https://rtc-api.zego.im/?Action=KickoutUser&${signString}&Signature=${signature}`;
+
+      this.logger.log(`🚫 调用 ZEGO KickoutUser API: 房间=${roomId}, 用户=${userId}`);
+
+      const response = await axios.get(url, {
+        timeout: 10000,
+      });
+
+      this.logger.log(`🚫 ZEGO KickoutUser API 响应:`, response.data);
+
+      if (response.data.Code === 0) {
+        this.logger.log(`✅ ZEGO 服务端已踢出用户: ${userId} from ${roomId}`);
+        return true;
+      } else {
+        this.logger.error(`❌ ZEGO KickoutUser API 返回错误: ${response.data.Message}`);
+        return false;
+      }
+    } catch (error) {
+      this.logger.error(`❌ 调用 ZEGO KickoutUser API 失败:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * 踢出用户（主持人权限）
+   */
+  async kickUser(roomId: string, hostUserId: string, targetUserId: string): Promise<boolean> {
+    this.logger.log(`🚫 尝试踢出用户: 房间=${roomId}, 主持人=${hostUserId}, 目标用户=${targetUserId}`);
+
+    const room = this.rooms.get(roomId);
+
+    if (!room) {
+      this.logger.warn(`❌ 房间不存在: ${roomId}`);
+      return false;
+    }
+
+    // 检查是否是主持人
+    if (room.hostUserId !== hostUserId) {
+      this.logger.warn(`❌ 用户 ${hostUserId} 无权踢人，只有主持人 ${room.hostUserId} 可以踢人`);
+      return false;
+    }
+
+    // 不能踢出自己
+    if (targetUserId === hostUserId) {
+      this.logger.warn(`❌ 主持人不能踢出自己`);
+      return false;
+    }
+
+    // ✅ 调用 ZEGO API 强制踢出用户
+    const success = await this.callZegoKickoutUser(roomId, targetUserId);
+
+    if (success) {
+      // 从参与者列表中移除
+      room.participants.delete(targetUserId);
+      // ✅ 添加到黑名单
+      room.kickedUsers.add(targetUserId);
+      this.logger.log(`✅ 用户 ${targetUserId} 已被踢出房间 ${roomId} 并加入黑名单`);
+      return true;
+    } else {
+      this.logger.error(`❌ 调用 ZEGO API 踢出用户失败`);
+      return false;
+    }
+  }
+
+  /**
    * 解散房间（主持人权限）- 强制踢出所有用户
    */
   async dismissRoom(roomId: string, userId: string): Promise<boolean> {
@@ -236,8 +349,9 @@ export class ZegoService {
     room.participants.clear();
     this.logger.log(`✅ 房间 ${roomId} 已被主持人 ${userId} 解散`);
 
-    // 清理提词器消息
+    // 清理提词器消息和远程控制消息
     this.clearTeleprompterMessages(roomId);
+    this.clearRemoteControlMessages(roomId);
 
     // 延迟删除房间记录（给前端时间接收消息）
     setTimeout(() => {
@@ -403,6 +517,95 @@ export class ZegoService {
   clearTeleprompterMessages(roomId: string): void {
     this.teleprompterMessages.delete(roomId);
     this.logger.log(`清理房间 ${roomId} 的提词器消息`);
+  }
+
+  /**
+   * 远程控制用户设备（摄像头/麦克风）
+   */
+  remoteControl(
+    roomId: string,
+    hostUserId: string,
+    targetUserId: string,
+    controlType: 'camera' | 'microphone',
+    enabled: boolean,
+  ): boolean {
+    const room = this.rooms.get(roomId);
+
+    if (!room || room.isDismissed) {
+      this.logger.warn(`远程控制失败: 房间 ${roomId} 不存在或已解散`);
+      return false;
+    }
+
+    // 验证是否是主持人
+    if (room.hostUserId !== hostUserId) {
+      this.logger.warn(`远程控制失败: 用户 ${hostUserId} 不是主持人`);
+      return false;
+    }
+
+    // 验证目标用户是否在房间中
+    if (!room.participants.has(targetUserId)) {
+      this.logger.warn(`远程控制失败: 目标用户 ${targetUserId} 不在房间中`);
+      return false;
+    }
+
+    // 创建控制消息
+    const message: RemoteControlMessage = {
+      type: 'REMOTE_CONTROL',
+      controlType,
+      enabled,
+      targetUserId,
+      timestamp: Date.now(),
+    };
+
+    // 存储消息到队列
+    if (!this.remoteControlMessages.has(roomId)) {
+      this.remoteControlMessages.set(roomId, new Map());
+    }
+
+    const roomMessages = this.remoteControlMessages.get(roomId);
+    if (!roomMessages.has(targetUserId)) {
+      roomMessages.set(targetUserId, []);
+    }
+
+    roomMessages.get(targetUserId).push(message);
+
+    // 限制消息队列长度（最多保留最近10条）
+    const userMessages = roomMessages.get(targetUserId);
+    if (userMessages.length > 10) {
+      userMessages.shift();
+    }
+
+    this.logger.log(`远程控制: 房间 ${roomId}, 目标用户 ${targetUserId}, 控制类型 ${controlType}, 状态 ${enabled}`);
+    return true;
+  }
+
+  /**
+   * 获取远程控制消息
+   */
+  getRemoteControlMessages(
+    roomId: string,
+    userId: string,
+    lastTimestamp?: number,
+  ): RemoteControlMessage[] {
+    const roomMessages = this.remoteControlMessages.get(roomId);
+    if (!roomMessages) {
+      return [];
+    }
+
+    const userMessages = roomMessages.get(userId) || [];
+
+    // 过滤出新消息
+    return userMessages.filter(msg => {
+      return !lastTimestamp || msg.timestamp > lastTimestamp;
+    });
+  }
+
+  /**
+   * 清理房间的远程控制消息
+   */
+  clearRemoteControlMessages(roomId: string): void {
+    this.remoteControlMessages.delete(roomId);
+    this.logger.log(`清理房间 ${roomId} 的远程控制消息`);
   }
 }
 

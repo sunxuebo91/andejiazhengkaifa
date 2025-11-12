@@ -1,4 +1,4 @@
-/* 小程序端视频面试样式 */
+/* 小程序端视频面试样式 - 性能优化版 */
 
 .miniprogram-video-interview {
   width: 100%;
@@ -6,9 +6,17 @@
   position: relative;
   background: #000;
   overflow: hidden;
+  /* 性能优化 */
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  /* 硬件加速 */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
 }
 
-/* 加载状态 */
+/* 加载状态 - 优化动画 */
 .miniprogram-loading {
   position: absolute;
   top: 0;
@@ -21,34 +29,86 @@
   align-items: center;
   background: #f5f5f5;
   z-index: 9999;
+  /* 淡入动画 */
+  animation: fadeIn 0.3s ease-in;
 }
 
-/* 视频容器 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 加载文字动画 */
+.miniprogram-loading > div {
+  animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 视频容器 - 性能优化 */
 .miniprogram-video-container {
   width: 100%;
   height: 100%;
   position: relative;
   background: #000;
+  /* 硬件加速 */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* 流畅渲染 */
+  will-change: transform;
 }
 
-/* 美颜设置抽屉 */
+/* 视频元素优化 */
+.miniprogram-video-container video {
+  /* 硬件加速 */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* 防止闪烁 */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* 美颜设置抽屉 - 优化动画 */
 .miniprogram-beauty-drawer .ant-drawer-body {
   padding: 24px;
   background: #fff;
+  /* 流畅滚动 */
+  -webkit-overflow-scrolling: touch;
 }
 
 .miniprogram-beauty-drawer .ant-slider {
   margin: 12px 0;
+  /* 触摸优化 */
+  touch-action: none;
 }
 
 .miniprogram-beauty-drawer .ant-slider-rail {
   height: 6px;
   background: #f0f0f0;
+  border-radius: 3px;
 }
 
 .miniprogram-beauty-drawer .ant-slider-track {
   height: 6px;
   background: #5DBFB3;
+  border-radius: 3px;
+  /* 流畅过渡 */
+  transition: width 0.2s ease;
 }
 
 .miniprogram-beauty-drawer .ant-slider-handle {
@@ -56,6 +116,13 @@
   height: 20px;
   border: 3px solid #5DBFB3;
   background: #fff;
+  /* 流畅过渡 */
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.miniprogram-beauty-drawer .ant-slider-handle:active {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 5px rgba(93, 191, 179, 0.2);
 }
 
 /* 提词器设置抽屉 */
@@ -135,11 +202,49 @@
   color: #262626;
 }
 
-/* 抽屉关闭按钮 */
+/* 抽屉关闭按钮 - 添加动画 */
 .miniprogram-beauty-drawer .ant-drawer-close,
 .miniprogram-teleprompter-drawer .ant-drawer-close {
   color: #8c8c8c;
   font-size: 20px;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.miniprogram-beauty-drawer .ant-drawer-close:hover,
+.miniprogram-teleprompter-drawer .ant-drawer-close:hover {
+  color: #262626;
+  transform: rotate(90deg);
+}
+
+.miniprogram-beauty-drawer .ant-drawer-close:active,
+.miniprogram-teleprompter-drawer .ant-drawer-close:active {
+  transform: rotate(90deg) scale(0.9);
+}
+
+/* 按钮通用动画 */
+.miniprogram-video-interview .ant-btn {
+  transition: all 0.3s ease;
+  /* 触摸优化 */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.miniprogram-video-interview .ant-btn:active {
+  transform: scale(0.95);
+}
+
+.miniprogram-video-interview .ant-btn-primary {
+  box-shadow: 0 2px 8px rgba(93, 191, 179, 0.3);
+}
+
+.miniprogram-video-interview .ant-btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(93, 191, 179, 0.4);
+  transform: translateY(-2px);
+}
+
+.miniprogram-video-interview .ant-btn-primary:active {
+  box-shadow: 0 1px 4px rgba(93, 191, 179, 0.3);
+  transform: translateY(0) scale(0.95);
 }
 
 /* 响应式适配 */
@@ -159,10 +264,13 @@
   }
 }
 
-/* 小程序特定样式 */
+/* 小程序特定样式 - 触摸优化 */
 @media (max-width: 480px) {
   .miniprogram-video-interview {
     font-size: 14px;
+    /* 禁用文本选择 */
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .miniprogram-beauty-drawer .ant-drawer-title,
@@ -170,14 +278,17 @@
     font-size: 16px;
   }
 
+  /* 增大触摸目标 */
   .miniprogram-video-interview .ant-btn-lg {
-    height: 44px;
-    font-size: 15px;
+    height: 48px;
+    font-size: 16px;
+    min-width: 48px;
+    padding: 0 20px;
   }
 
   .miniprogram-video-interview .ant-input-lg {
-    height: 44px;
-    font-size: 15px;
+    height: 48px;
+    font-size: 16px;
   }
 
   .miniprogram-video-interview .ant-input-textarea textarea {
@@ -256,9 +367,12 @@
   font-size: 14px !important;
 }
 
-/* 加载动画 */
+/* 加载动画 - 优化 */
 .miniprogram-loading .ant-spin {
   color: #5DBFB3;
+  /* 硬件加速 */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .miniprogram-loading .ant-spin-dot-item {
@@ -290,3 +404,62 @@
   }
 }
 
+/* 🚀 性能优化 - 全局规则 */
+
+/* 禁用不必要的动画 (低性能设备) */
+@media (prefers-reduced-motion: reduce) {
+  .miniprogram-video-interview *,
+  .miniprogram-video-interview *::before,
+  .miniprogram-video-interview *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 优化滚动性能 */
+.miniprogram-beauty-drawer .ant-drawer-body,
+.miniprogram-teleprompter-drawer .ant-drawer-body {
+  /* 使用 GPU 加速滚动 */
+  -webkit-overflow-scrolling: touch;
+  /* 优化滚动性能 */
+  scroll-behavior: smooth;
+}
+
+/* 优化文本渲染 */
+.miniprogram-video-interview {
+  /* 优化文本渲染 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 优化图片渲染 */
+.miniprogram-video-interview img {
+  /* 图片渲染优化 */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* 防止内容溢出 */
+.miniprogram-video-interview * {
+  box-sizing: border-box;
+}
+
+/* 优化输入框性能 */
+.miniprogram-video-interview input,
+.miniprogram-video-interview textarea {
+  /* 禁用自动缩放 (iOS) */
+  font-size: 16px;
+  /* 优化输入性能 */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* 优化按钮性能 */
+.miniprogram-video-interview button {
+  /* 优化点击性能 */
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}

@@ -8,7 +8,15 @@ const USER_KEY = 'user';
 
 // 获取token
 export const getToken = (): string | null => {
-  return Cookies.load(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  // 优先检查标准的auth_token
+  let token = Cookies.load(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+
+  // 如果没有找到，检查小程序传递的token（来自/interview/miniprogram）
+  if (!token) {
+    token = localStorage.getItem('access_token') || localStorage.getItem('token');
+  }
+
+  return token;
 };
 
 // 设置token

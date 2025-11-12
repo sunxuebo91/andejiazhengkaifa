@@ -294,10 +294,13 @@ const JoinInterview: React.FC = () => {
         throw new Error('房间ID无效');
       }
 
+      // 如果姓名为空，使用默认名称
+      const userName = values.userName?.trim() || (values.role === 'customer' ? '客户' : '阿姨');
+
       // 🔧 生成或获取持久化的访客 ID（支持会话恢复）
       // 使用 localStorage 存储访客ID，确保同一个访客重新进入时使用相同的ID
-      const storageKey = `guest_id_${roomId}_${values.userName}_${values.role}`;
-      const storageTimeKey = `guest_id_time_${roomId}_${values.userName}_${values.role}`;
+      const storageKey = `guest_id_${roomId}_${userName}_${values.role}`;
+      const storageTimeKey = `guest_id_time_${roomId}_${userName}_${values.role}`;
 
       let guestId = localStorage.getItem(storageKey);
       const storedTime = localStorage.getItem(storageTimeKey);
@@ -307,7 +310,11 @@ const JoinInterview: React.FC = () => {
 
       if (!guestId || isExpired) {
         // 首次进入或ID已过期，生成新的访客ID
-        guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        // ZEGO userId 要求：只能包含字母、数字、下划线，长度不超过32位
+        // 使用纯数字+字母的格式，避免下划线开头
+        const timestamp = Date.now().toString();
+        const randomStr = Math.random().toString(36).substring(2, 9);
+        guestId = `guest${timestamp}${randomStr}`; // 移除下划线，避免 ZEGO userId invalid 错误
         localStorage.setItem(storageKey, guestId);
         localStorage.setItem(storageTimeKey, Date.now().toString());
         console.log(isExpired ? '⏰ ID已过期，生成新访客ID:' : '✅ 首次进入，生成新访客ID:', guestId);
@@ -318,7 +325,7 @@ const JoinInterview: React.FC = () => {
         localStorage.setItem(storageTimeKey, Date.now().toString());
       }
 
-      const displayName = `${values.userName}（${values.role === 'customer' ? '客户' : '阿姨'}）`;
+      const displayName = `${userName}（${values.role === 'customer' ? '客户' : '阿姨'}）`;
 
       console.log('访客信息:', { guestId, displayName, roomId });
 
@@ -793,7 +800,6 @@ const JoinInterview: React.FC = () => {
             label="您的姓名"
             name="userName"
             rules={[
-              { required: true, message: '请输入您的姓名' },
               { min: 2, message: '姓名至少2个字符' },
               { max: 20, message: '姓名最多20个字符' },
             ]}

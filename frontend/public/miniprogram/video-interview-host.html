@@ -206,9 +206,12 @@
       object-fit: cover;
     }
 
-    /* ✅ ZEGO SDK 默认已经设置了 OnlyPreviewMirror 模式（本地预览镜像，推流不镜像）
-     * 所以不需要用 CSS 再次翻转，否则会翻转两次导致画面反向
+    /* ✅ 本地视频镜像：让前置摄像头的画面符合自拍习惯（左右翻转）
+     * 注意：只对本地预览镜像，推流给对方的画面是正常的（不镜像）
      */
+    #localVideo {
+      transform: scaleX(-1);  /* 水平翻转本地视频 */
+    }
 
     .video-label {
       position: absolute;
@@ -1002,6 +1005,44 @@
       return true;
     }
 
+    // ==================== 检查麦克风权限 ====================
+    async function checkMicrophonePermission() {
+      try {
+        console.log('🎤 检查麦克风权限...');
+        // 请求麦克风权限（会触发浏览器权限提示）
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // 立即停止，只是为了触发权限请求
+        stream.getTracks().forEach(track => track.stop());
+        console.log('✅ 麦克风权限已授予');
+        return true;
+      } catch (error) {
+        console.error('❌ 麦克风权限被拒绝:', error);
+        alert('请允许使用麦克风，否则无法进行语音通话');
+        return false;
+      }
+    }
+
+    // ==================== 检查音频设备 ====================
+    async function checkAudioDevices() {
+      try {
+        console.log('🔍 检测音频设备...');
+        const devices = await zg.enumDevices();
+        const microphones = devices.microphones;
+
+        if (microphones.length === 0) {
+          console.error('❌ 未检测到麦克风设备');
+          alert('未检测到麦克风，请检查设备连接');
+          return false;
+        }
+
+        console.log('✅ 可用的麦克风:', microphones);
+        return true;
+      } catch (error) {
+        console.error('❌ 检测音频设备失败:', error);
+        return false;
+      }
+    }
+
     // ==================== 创建面试间 ====================
     async function createRoom() {
       console.log('➕ 创建面试间');
@@ -1020,6 +1061,20 @@
 
       try {
         showMessage('正在创建面试间...');
+
+        // 🎤 步骤1: 检查麦克风权限
+        const hasPermission = await checkMicrophonePermission();
+        if (!hasPermission) {
+          hideMessage();
+          return;
+        }
+
+        // 🔍 步骤2: 检查音频设备
+        const hasAudioDevice = await checkAudioDevices();
+        if (!hasAudioDevice) {
+          hideMessage();
+          return;
+        }
 
         // 生成房间号
         const timestamp = Date.now();
@@ -1049,16 +1104,21 @@
 
         // 创建本地流
         console.log('正在创建本地流...');
-        // ✅ 设置视频质量为 720p
+        // ✅ 设置视频质量为 720p，并配置音频参数
         localStream = await zg.createStream({
           camera: {
             video: {
               width: 1280,
               height: 720,
               frameRate: 15,
-              bitrate: 1500
+              bitrate: 1500,
+              facingMode: 'user'  // 前置摄像头
             },
-            audio: true
+            audio: {
+              ANS: true,  // 自动降噪 (Automatic Noise Suppression)
+              AGC: true,  // 自动增益控制 (Automatic Gain Control)
+              AEC: true   // 回声消除 (Acoustic Echo Cancellation)
+            }
           }
         });
         console.log('创建本地流成功');
@@ -1119,6 +1179,20 @@
       try {
         showMessage('正在加入房间...');
 
+        // 🎤 步骤1: 检查麦克风权限
+        const hasPermission = await checkMicrophonePermission();
+        if (!hasPermission) {
+          hideMessage();
+          return;
+        }
+
+        // 🔍 步骤2: 检查音频设备
+        const hasAudioDevice = await checkAudioDevices();
+        if (!hasAudioDevice) {
+          hideMessage();
+          return;
+        }
+
         // 生成用户ID
         currentUserId = 'user_' + Date.now();
         currentUserName = userName;
@@ -1144,19 +1218,24 @@
           userName: currentUserName
         });
         console.log('✅ 登录房间成功');
-        
+
         // 创建本地流
         console.log('正在创建本地流...');
-        // ✅ 设置视频质量为 720p
+        // ✅ 设置视频质量为 720p，并配置音频参数
         localStream = await zg.createStream({
           camera: {
             video: {
               width: 1280,
               height: 720,
               frameRate: 15,
-              bitrate: 1500
+              bitrate: 1500,
+              facingMode: 'user'  // 前置摄像头
             },
-            audio: true
+            audio: {
+              ANS: true,  // 自动降噪
+              AGC: true,  // 自动增益控制
+              AEC: true   // 回声消除
+            }
           }
         });
         console.log('创建本地流成功');

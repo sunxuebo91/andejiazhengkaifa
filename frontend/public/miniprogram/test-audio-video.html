@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>音视频测试页面</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(180deg, #5fb3a3 0%, #4a9d8e 100%);
+      padding: 20px;
+      min-height: 100vh;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    
+    .test-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #f5f5f5;
+      border-radius: 8px;
+    }
+    
+    .test-section h2 {
+      color: #5fb3a3;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    
+    .test-item {
+      margin-bottom: 15px;
+      padding: 15px;
+      background: white;
+      border-radius: 6px;
+      border-left: 4px solid #5fb3a3;
+    }
+    
+    .test-item h3 {
+      color: #333;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    
+    .test-item p {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+    
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .status.pending {
+      background: #ffeaa7;
+      color: #d63031;
+    }
+    
+    .status.success {
+      background: #55efc4;
+      color: #00b894;
+    }
+    
+    .status.error {
+      background: #fab1a0;
+      color: #d63031;
+    }
+    
+    button {
+      background: #5fb3a3;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    button:hover {
+      background: #4a9d8e;
+      transform: translateY(-1px);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .video-container {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    .video-box {
+      width: 200px;
+      height: 150px;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .video-box video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    .video-box.mirror video {
+      transform: scaleX(-1);
+    }
+    
+    .video-label {
+      position: absolute;
+      bottom: 5px;
+      left: 5px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    
+    .log {
+      margin-top: 15px;
+      padding: 10px;
+      background: #2d3436;
+      color: #dfe6e9;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .log-item {
+      margin-bottom: 5px;
+    }
+    
+    .log-item.success {
+      color: #55efc4;
+    }
+    
+    .log-item.error {
+      color: #fab1a0;
+    }
+    
+    .log-item.info {
+      color: #74b9ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎥 音视频功能测试</h1>
+    
+    <!-- 测试1: 麦克风权限 -->
+    <div class="test-section">
+      <h2>测试1: 麦克风权限检查</h2>
+      <div class="test-item">
+        <h3>检查浏览器是否授予麦克风权限</h3>
+        <p>点击按钮后，浏览器会弹出权限请求，请点击"允许"</p>
+        <button onclick="testMicrophonePermission()">开始测试</button>
+        <span id="mic-status" class="status pending">未测试</span>
+        <div id="mic-log" class="log" style="display:none;"></div>
+      </div>
+    </div>
+    
+    <!-- 测试2: 音频设备检测 -->
+    <div class="test-section">
+      <h2>测试2: 音频设备检测</h2>
+      <div class="test-item">
+        <h3>检测系统中可用的麦克风设备</h3>
+        <p>需要先通过测试1的权限检查</p>
+        <button onclick="testAudioDevices()">开始测试</button>
+        <span id="device-status" class="status pending">未测试</span>
+        <div id="device-log" class="log" style="display:none;"></div>
+      </div>
+    </div>
+    
+    <!-- 测试3: 视频镜像 -->
+    <div class="test-section">
+      <h2>测试3: 视频镜像效果</h2>
+      <div class="test-item">
+        <h3>测试前置摄像头的镜像效果</h3>
+        <p>左边是正常视频，右边是镜像视频。请举起右手，观察两个视频的区别。</p>
+        <button onclick="testVideoMirror()">开始测试</button>
+        <span id="mirror-status" class="status pending">未测试</span>
+        <div class="video-container">
+          <div class="video-box">
+            <video id="video-normal" autoplay playsinline muted></video>
+            <div class="video-label">正常视频</div>
+          </div>
+          <div class="video-box mirror">
+            <video id="video-mirror" autoplay playsinline muted></video>
+            <div class="video-label">镜像视频</div>
+          </div>
+        </div>
+        <div id="mirror-log" class="log" style="display:none;"></div>
+      </div>
+    </div>
+    
+    <!-- 测试4: 音频采集 -->
+    <div class="test-section">
+      <h2>测试4: 音频采集测试</h2>
+      <div class="test-item">
+        <h3>测试麦克风是否能正常采集声音</h3>
+        <p>点击开始后，对着麦克风说话，观察音量条的变化</p>
+        <button onclick="testAudioCapture()">开始测试</button>
+        <button onclick="stopAudioCapture()" style="background:#e74c3c;">停止测试</button>
+        <span id="audio-status" class="status pending">未测试</span>
+        <div style="margin-top:10px;">
+          <div style="background:#ddd;height:20px;border-radius:4px;overflow:hidden;">
+            <div id="audio-level" style="background:#5fb3a3;height:100%;width:0%;transition:width 0.1s;"></div>
+          </div>
+          <p style="margin-top:5px;font-size:12px;color:#666;">音量: <span id="audio-value">0</span>%</p>
+        </div>
+        <div id="audio-log" class="log" style="display:none;"></div>
+      </div>
+    </div>
+    
+    <!-- 测试结果总结 -->
+    <div class="test-section">
+      <h2>📊 测试结果总结</h2>
+      <div class="test-item">
+        <p>✅ 所有测试通过后，视频面试功能应该可以正常使用</p>
+        <p>❌ 如果有测试失败，请检查浏览器权限设置和设备连接</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let audioContext = null;
+    let analyser = null;
+    let microphone = null;
+    let audioStream = null;
+
+    // 日志函数
+    function log(elementId, message, type = 'info') {
+      const logElement = document.getElementById(elementId);
+      logElement.style.display = 'block';
+      const logItem = document.createElement('div');
+      logItem.className = `log-item ${type}`;
+      logItem.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logElement.appendChild(logItem);
+      logElement.scrollTop = logElement.scrollHeight;
+    }
+
+    // 测试1: 麦克风权限
+    async function testMicrophonePermission() {
+      const statusEl = document.getElementById('mic-status');
+      const logId = 'mic-log';
+      
+      try {
+        log(logId, '🎤 开始检查麦克风权限...', 'info');
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        log(logId, '✅ 麦克风权限已授予', 'success');
+        
+        // 立即停止
+        stream.getTracks().forEach(track => track.stop());
+        log(logId, '✅ 测试完成，已释放麦克风', 'success');
+        
+        statusEl.textContent = '✅ 通过';
+        statusEl.className = 'status success';
+      } catch (error) {
+        log(logId, `❌ 麦克风权限被拒绝: ${error.message}`, 'error');
+        statusEl.textContent = '❌ 失败';
+        statusEl.className = 'status error';
+        alert('请允许使用麦克风，否则无法进行语音通话');
+      }
+    }
+
+    // 测试2: 音频设备检测
+    async function testAudioDevices() {
+      const statusEl = document.getElementById('device-status');
+      const logId = 'device-log';
+      
+      try {
+        log(logId, '🔍 开始检测音频设备...', 'info');
+        
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const microphones = devices.filter(device => device.kind === 'audioinput');
+        
+        if (microphones.length === 0) {
+          log(logId, '❌ 未检测到麦克风设备', 'error');
+          statusEl.textContent = '❌ 失败';
+          statusEl.className = 'status error';
+          alert('未检测到麦克风，请检查设备连接');
+          return;
+        }
+        
+        log(logId, `✅ 检测到 ${microphones.length} 个麦克风设备:`, 'success');
+        microphones.forEach((mic, index) => {
+          log(logId, `  ${index + 1}. ${mic.label || '未命名设备'}`, 'info');
+        });
+        
+        statusEl.textContent = '✅ 通过';
+        statusEl.className = 'status success';
+      } catch (error) {
+        log(logId, `❌ 检测失败: ${error.message}`, 'error');
+        statusEl.textContent = '❌ 失败';
+        statusEl.className = 'status error';
+      }
+    }
+
+    // 测试3: 视频镜像
+    async function testVideoMirror() {
+      const statusEl = document.getElementById('mirror-status');
+      const logId = 'mirror-log';
+      
+      try {
+        log(logId, '📹 开始测试视频镜像...', 'info');
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user' },
+          audio: false 
+        });
+        
+        log(logId, '✅ 摄像头已打开', 'success');
+        
+        // 正常视频
+        const videoNormal = document.getElementById('video-normal');
+        videoNormal.srcObject = stream;
+        
+        // 镜像视频
+        const videoMirror = document.getElementById('video-mirror');
+        videoMirror.srcObject = stream;
+        
+        log(logId, '✅ 视频已显示', 'success');
+        log(logId, '💡 请举起右手，观察两个视频的区别', 'info');
+        log(logId, '💡 左边视频：举右手显示左手（正常）', 'info');
+        log(logId, '💡 右边视频：举右手显示右手（镜像）', 'info');
+        
+        statusEl.textContent = '✅ 通过';
+        statusEl.className = 'status success';
+      } catch (error) {
+        log(logId, `❌ 测试失败: ${error.message}`, 'error');
+        statusEl.textContent = '❌ 失败';
+        statusEl.className = 'status error';
+      }
+    }
+
+    // 测试4: 音频采集
+    async function testAudioCapture() {
+      const statusEl = document.getElementById('audio-status');
+      const logId = 'audio-log';
+      
+      try {
+        log(logId, '🎤 开始测试音频采集...', 'info');
+        
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        log(logId, '✅ 麦克风已打开', 'success');
+        
+        // 创建音频上下文
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(audioStream);
+        
+        analyser.fftSize = 256;
+        microphone.connect(analyser);
+        
+        log(logId, '✅ 音频分析器已创建', 'success');
+        log(logId, '💡 请对着麦克风说话，观察音量条变化', 'info');
+        
+        // 开始监听音量
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        
+        function updateVolume() {
+          if (!analyser) return;
+          
+          analyser.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+          const volume = Math.round((average / 255) * 100);
+          
+          document.getElementById('audio-level').style.width = volume + '%';
+          document.getElementById('audio-value').textContent = volume;
+          
+          requestAnimationFrame(updateVolume);
+        }
+        
+        updateVolume();
+        
+        statusEl.textContent = '✅ 运行中';
+        statusEl.className = 'status success';
+      } catch (error) {
+        log(logId, `❌ 测试失败: ${error.message}`, 'error');
+        statusEl.textContent = '❌ 失败';
+        statusEl.className = 'status error';
+      }
+    }
+
+    // 停止音频采集
+    function stopAudioCapture() {
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+      }
+      
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+      
+      analyser = null;
+      microphone = null;
+      
+      document.getElementById('audio-level').style.width = '0%';
+      document.getElementById('audio-value').textContent = '0';
+      document.getElementById('audio-status').textContent = '⏹️ 已停止';
+      document.getElementById('audio-status').className = 'status pending';
+      
+      log('audio-log', '⏹️ 音频采集已停止', 'info');
+    }
+  </script>
+</body>
+</html>
+

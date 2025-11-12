@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>加入视频面试</title>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: #fff;
+      border-radius: 20px;
+      padding: 40px 30px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .room-info {
+      background: #f5f5f5;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .room-info label {
+      font-size: 13px;
+      color: #999;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .room-info .room-id {
+      font-size: 16px;
+      color: #333;
+      font-weight: 600;
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      font-size: 15px;
+      transition: border-color 0.3s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #5fb3a3;
+    }
+
+    .role-group {
+      margin-bottom: 30px;
+    }
+
+    .role-group label {
+      display: block;
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 12px;
+    }
+
+    .role-options {
+      display: flex;
+      gap: 12px;
+    }
+
+    .role-option {
+      flex: 1;
+      position: relative;
+    }
+
+    .role-option input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+    }
+
+    .role-option label {
+      display: block;
+      padding: 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 15px;
+      color: #666;
+    }
+
+    .role-option input[type="radio"]:checked + label {
+      border-color: #5fb3a3;
+      background: rgba(95, 179, 163, 0.1);
+      color: #5fb3a3;
+      font-weight: 600;
+    }
+
+    .role-option label:hover {
+      border-color: #5fb3a3;
+    }
+
+    .join-btn {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 16px rgba(95, 179, 163, 0.3);
+    }
+
+    .join-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(95, 179, 163, 0.4);
+    }
+
+    .join-btn:active {
+      transform: translateY(0);
+    }
+
+    .join-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .error-message {
+      background: #fee;
+      color: #c33;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎥 加入视频面试</h1>
+    </div>
+
+    <div class="room-info">
+      <label>房间号</label>
+      <div class="room-id" id="roomIdDisplay">-</div>
+    </div>
+
+    <div class="error-message" id="errorMessage"></div>
+
+    <form id="joinForm">
+      <div class="form-group">
+        <label>您的姓名（选填）</label>
+        <input type="text" id="nameInput" placeholder="请输入您的姓名">
+      </div>
+
+      <div class="role-group">
+        <label>选择您的角色 <span style="color: #f44;">*</span></label>
+        <div class="role-options">
+          <div class="role-option">
+            <input type="radio" id="roleCustomer" name="role" value="customer" checked>
+            <label for="roleCustomer">👤 我是客户</label>
+          </div>
+          <div class="role-option">
+            <input type="radio" id="roleHelper" name="role" value="helper">
+            <label for="roleHelper">👩 我是阿姨</label>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="join-btn" id="joinBtn">确定加入</button>
+    </form>
+  </div>
+
+  <script>
+    // 获取URL参数
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomId = urlParams.get('roomId');
+
+    // 显示房间号
+    if (roomId) {
+      document.getElementById('roomIdDisplay').textContent = roomId;
+    } else {
+      showError('无效的邀请链接，缺少房间号');
+      document.getElementById('joinBtn').disabled = true;
+    }
+
+    // 表单提交
+    document.getElementById('joinForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const name = document.getElementById('nameInput').value.trim();
+      const role = document.querySelector('input[name="role"]:checked').value;
+
+      if (!role) {
+        showError('请选择您的角色');
+        return;
+      }
+
+      // 构建用户名
+      let userName = role;
+      if (name) {
+        userName = `${role}-${name}`;
+      }
+
+      // 跳转到视频通话页面
+      const videoUrl = `video-interview-guest-room.html?roomId=${roomId}&userName=${encodeURIComponent(userName)}&role=${encodeURIComponent(role)}`;
+      window.location.href = videoUrl;
+    });
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.classList.add('show');
+    }
+  </script>
+</body>
+</html>
+

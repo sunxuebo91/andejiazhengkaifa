@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>视频面试 - HR主持人</title>
+
+  <!-- 微信环境检测和自动跳转 -->
+  <script>
+    (function() {
+      // 检测是否在微信中
+      function isWechat() {
+        return /MicroMessenger/i.test(navigator.userAgent);
+      }
+
+      // 检测是否在小程序 WebView 中
+      function isInMiniProgram() {
+        return window.__wxjs_environment === 'miniprogram';
+      }
+
+      // 获取房间号参数
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomId = urlParams.get('room') || '';
+
+      console.log('🔍 环境检测:');
+      console.log('  - 是否在微信中:', isWechat());
+      console.log('  - 是否在小程序 WebView 中:', isInMiniProgram());
+      console.log('  - 房间号:', roomId);
+
+      // 注意：这个 H5 页面现在只用于浏览器访问
+      // 微信中的跳转使用加密 URL Scheme（由云函数生成）
+
+      if (isInMiniProgram()) {
+        console.log('✅ 已在小程序 WebView 中，正常加载 H5 页面');
+      } else if (!isWechat()) {
+        console.log('🌐 浏览器环境，正常加载 H5 页面');
+      } else if (isWechat() && !isInMiniProgram()) {
+        console.log('⚠️ 微信浏览器环境，但不在小程序中');
+        console.log('💡 提示：请使用小程序分享的加密链接打开');
+      }
+    })();
+  </script>
+
+  <!-- 使用本地 ZEGO SDK（v3.11.0 独立打包版本，包含所有依赖） -->
+  <script src="./ZegoExpressWebRTC-standalone.js"></script>
+  <!-- ZEGO Token 生成库（内嵌实现） -->
+  <script>
+    // Token 生成函数（内嵌实现，避免 CDN 加载问题）
+    function generateToken04(appId, userId, secret, effectiveTimeInSeconds, payload) {
+      if (!payload) {
+        payload = '';
+      }
+
+      // HMAC-SHA256 实现
+      async function hmacSHA256(key, message) {
+        const encoder = new TextEncoder();
+        // 将 secret 作为 UTF-8 字符串编码（不是十六进制）
+        const keyData = encoder.encode(key);
+        const messageData = encoder.encode(message);
+
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          keyData,
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+
+        const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+        return new Uint8Array(signature);
+      }
+
+      // Base64 编码
+      function base64Encode(bytes) {
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      // 生成 Token（同步包装异步函数）
+      const expire = Math.floor(Date.now() / 1000) + effectiveTimeInSeconds;
+      const body = {
+        app_id: appId,
+        user_id: userId,
+        nonce: Math.floor(Math.random() * 2147483647),
+        ctime: Math.floor(Date.now() / 1000),
+        expire: expire
+      };
+
+      if (payload) {
+        body.payload = payload;
+      }
+
+      const header = { alg: 'HS256', typ: 'JWT' };
+      const headerStr = JSON.stringify(header);
+      const bodyStr = JSON.stringify(body);
+
+      const encoder = new TextEncoder();
+      const headerBase64 = base64Encode(encoder.encode(headerStr));
+      const bodyBase64 = base64Encode(encoder.encode(bodyStr));
+      const toSign = headerBase64 + '.' + bodyBase64;
+
+      // 返回 Promise
+      // 使用 UTF-8 编码的 secret（不是十六进制）
+      return hmacSHA256(secret, toSign).then(signature => {
+        const signatureBase64 = base64Encode(signature);
+        return '04' + toSign + '.' + signatureBase64;
+      });
+    }
+  </script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+      background: linear-gradient(180deg, #5fb3a3 0%, #4a9d8e 100%);
+      overflow: hidden;
+    }
+    
+    .container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 头部信息栏 */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 8px;
+      margin: 8px 8px 0 8px;
+      box-shadow: 0 2px 6px rgba(95, 179, 163, 0.1);
+      flex-shrink: 0;
+    }
+
+    .header-left,
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .room-label,
+    .time-label {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .room-value,
+    .time-value {
+      font-size: 13px;
+      color: #333;
+      font-weight: 500;
+    }
+    
+    /* 视频网格 */
+    .video-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-auto-rows: calc((100% - 8px) / 2);
+      gap: 8px;
+      padding: 8px;
+      background: transparent;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* 隐藏滚动条 */
+    .video-grid::-webkit-scrollbar {
+      display: none;
+    }
+
+    .video-grid {
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
+    }
+
+    .video-item {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .video-box {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .video-player {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .video-label {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .video-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #2a2a2a;
+      color: #999;
+    }
+
+    /* 邀请按钮样式 */
+    .invite-placeholder {
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: rgba(95, 179, 163, 0.1) !important;
+      border: 2px dashed rgba(95, 179, 163, 0.3);
+    }
+
+    .invite-placeholder .placeholder-icon {
+      color: #5fb3a3;
+      font-size: 64px;
+      font-weight: 300;
+      line-height: 1;
+    }
+
+    .invite-placeholder .placeholder-text {
+      color: #fff;
+    }
+
+    .invite-placeholder:hover {
+      background: rgba(95, 179, 163, 0.2) !important;
+      border-color: rgba(95, 179, 163, 0.5);
+    }
+
+    .invite-placeholder:hover .placeholder-icon {
+      transform: rotate(90deg);
+    }
+
+    .invite-placeholder:active {
+      transform: scale(0.98);
+    }
+
+    .placeholder-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+
+    .placeholder-text {
+      font-size: 14px;
+    }
+
+    .empty-video {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      font-size: 14px;
+    }
+    
+    /* 控制按钮 */
+    .controls {
+      padding: 10px 6px;
+      margin: 10px;
+      background: rgba(255, 255, 255, 0.98);
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      box-shadow: 0 -2px 10px rgba(95, 179, 163, 0.15);
+    }
+
+    .control-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 6px;
+      border-radius: 6px;
+      transition: all 0.3s;
+      cursor: pointer;
+      flex: 1;
+    }
+
+    .control-item:active {
+      background: rgba(95, 179, 163, 0.1);
+    }
+
+    .control-item-danger:active {
+      background: rgba(255, 107, 107, 0.1);
+    }
+
+    .control-icon-text {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .control-label {
+      font-size: 11px;
+      color: #666;
+    }
+
+    .control-item-danger .control-label {
+      color: #ff6b6b;
+    }
+    
+    /* 加入面试面板 */
+    .join-panel {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    /* 隐藏类 */
+    .join-panel.hidden {
+      display: none !important;
+    }
+    
+    .join-box {
+      background: #fff;
+      padding: 32px 24px;
+      border-radius: 16px;
+      width: 85%;
+      max-width: 400px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+
+    .join-box h2 {
+      margin-bottom: 12px;
+      text-align: center;
+      color: #333;
+      font-size: 22px;
+      font-weight: bold;
+    }
+    
+    .join-box .room-hint {
+      text-align: center;
+      color: #999;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    /* 身份选择 */
+    .role-selector {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .role-option {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: #fff;
+    }
+
+    .role-option:hover {
+      border-color: #5fb3a3;
+      background: rgba(95, 179, 163, 0.05);
+    }
+
+    .role-option.selected {
+      border-color: #5fb3a3;
+      background: rgba(95, 179, 163, 0.1);
+    }
+
+    .role-icon {
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .role-text {
+      font-size: 14px;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .role-option.selected .role-text {
+      color: #5fb3a3;
+      font-weight: 600;
+    }
+
+    .join-box input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 15px;
+      transition: border-color 0.3s;
+    }
+    
+    .join-box input:focus {
+      outline: none;
+      border-color: #5fb3a3;
+    }
+
+    .join-box button {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 16px rgba(95, 179, 163, 0.3);
+    }
+
+    .join-box button:active {
+      transform: scale(0.98);
+    }
+    
+    /* 加载提示 */
+    .loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 20px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      z-index: 2000;
+    }
+
+    /* 邀请弹窗样式 */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 3000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #fff;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 450px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      animation: modalSlideIn 0.3s ease;
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        transform: translateY(-50px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 18px;
+      color: #333;
+    }
+
+    .modal-close {
+      font-size: 28px;
+      color: #999;
+      cursor: pointer;
+      line-height: 1;
+      transition: color 0.3s;
+    }
+
+    .modal-close:hover {
+      color: #333;
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .modal-tip {
+      margin: 0 0 12px 0;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .invite-link-box {
+      background: #f5f5f5;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .invite-link-input {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: #333;
+      font-size: 13px;
+      outline: none;
+      word-break: break-all;
+    }
+
+    .invite-copy-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 16px rgba(95, 179, 163, 0.3);
+    }
+
+    .invite-copy-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(95, 179, 163, 0.4);
+    }
+
+    .invite-copy-btn:active {
+      transform: translateY(0);
+    }
+
+    .modal-hint {
+      margin: 16px 0 0 0;
+      text-align: center;
+      color: #999;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 创建面试间面板 -->
+    <div class="join-panel" id="joinPanel">
+      <div class="join-box">
+        <h2>🎥 视频面试 - HR主持人</h2>
+        <div class="room-hint">点击下方按钮创建面试间</div>
+
+        <button onclick="createRoom()">创建面试间</button>
+      </div>
+    </div>
+    
+    <!-- 房间信息 -->
+    <div class="header">
+      <div class="header-left">
+        <span class="room-label">房间号：</span>
+        <span class="room-value" id="roomId"></span>
+      </div>
+      <div class="header-right">
+        <span class="time-label">面试时间：</span>
+        <span class="time-value" id="interviewTime">00:00</span>
+      </div>
+    </div>
+    
+    <!-- 视频网格 -->
+    <div class="video-grid" id="videoGrid">
+      <!-- 本地视频 -->
+      <div class="video-item">
+        <div class="video-box">
+          <video id="localVideo" class="video-player" autoplay muted playsinline></video>
+          <div class="video-label" id="localLabel">主持人</div>
+        </div>
+      </div>
+
+      <!-- 远程视频1 -->
+      <div class="video-item">
+        <div class="video-box" id="remoteBox1">
+          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
+            <div class="placeholder-icon">+</div>
+            <div class="placeholder-text">邀请用户</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 远程视频2 -->
+      <div class="video-item">
+        <div class="video-box" id="remoteBox2">
+          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
+            <div class="placeholder-icon">+</div>
+            <div class="placeholder-text">邀请用户</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 远程视频3 -->
+      <div class="video-item">
+        <div class="video-box" id="remoteBox3">
+          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
+            <div class="placeholder-icon">+</div>
+            <div class="placeholder-text">邀请用户</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 远程视频4 -->
+      <div class="video-item">
+        <div class="video-box" id="remoteBox4">
+          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
+            <div class="placeholder-icon">+</div>
+            <div class="placeholder-text">邀请用户</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 远程视频5 -->
+      <div class="video-item">
+        <div class="video-box" id="remoteBox5">
+          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
+            <div class="placeholder-icon">+</div>
+            <div class="placeholder-text">邀请用户</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 控制按钮 -->
+    <div class="controls">
+      <div class="control-item" id="micBtn" onclick="toggleMic()">
+        <div class="control-icon-text">🎤</div>
+        <div class="control-label">麦克风</div>
+      </div>
+      <div class="control-item" id="cameraBtn" onclick="toggleCamera()">
+        <div class="control-icon-text">📹</div>
+        <div class="control-label">摄像头</div>
+      </div>
+      <div class="control-item control-item-danger" onclick="leaveRoom()">
+        <div class="control-icon-text">📞</div>
+        <div class="control-label">结束通话</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 邀请弹窗 -->
+  <div id="inviteModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>邀请候选人加入面试</h3>
+        <span class="modal-close" onclick="closeInviteModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p class="modal-tip">复制以下链接发送给候选人：</p>
+        <div class="invite-link-box">
+          <input type="text" id="inviteLink" class="invite-link-input" readonly>
+        </div>
+        <button class="invite-copy-btn" onclick="copyInviteLink()">
+          📋 复制链接并邀请
+        </button>
+        <p class="modal-hint">💡 候选人点击链接即可加入</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== 脚本开始执行 ====================
+    console.log('🚀 video-interview.html 脚本开始执行');
+    console.log('📅 脚本版本: 2025-11-10 v2.1');
+    console.log('🔍 立即检测 ZegoExpressEngine:', typeof ZegoExpressEngine);
+    console.log('🔍 ZegoExpressEngine 详情:', ZegoExpressEngine);
+    console.log('🔍 ZegoExpressEngine.ZegoExpressEngine:', typeof ZegoExpressEngine !== 'undefined' && ZegoExpressEngine.ZegoExpressEngine);
+    console.log('🔍 立即检测 generateToken04:', typeof generateToken04);
+
+    // ==================== 全局变量 ====================
+    const urlParams = new URLSearchParams(window.location.search);
+    let roomId = urlParams.get('room') || ''; // HR端会自动生成房间号
+
+    // ZEGO 配置
+    const appID = 1279160453;
+    const server = 'wss://webliveroom-api.zego.im/ws';
+    // ServerSecret（UTF-8 格式，用于生成 Token）
+    const serverSecret = 'e18cc600e2939d412c48f152e157f01d';
+
+    let zg = null;
+    let localStream = null;
+    let remoteStreams = {}; // 存储远程流 { streamID: MediaStream }
+    let isMicOn = true;
+    let isCameraOn = true;
+    let currentUserId = '';
+    let currentUserName = '';
+    let currentUserRole = ''; // 用户身份：customer 或 ayi
+    let interviewStartTime = null;
+    let interviewTimer = null;
+
+    // ==================== 获取 JWT Token ====================
+    function getJwtToken() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenFromUrl = urlParams.get('token');
+      if (tokenFromUrl) {
+        console.log('✅ 从 URL 获取到 JWT Token');
+        return tokenFromUrl;
+      }
+      console.warn('⚠️ 未找到 JWT Token');
+      return null;
+    }
+
+    // ==================== Token 生成 ====================
+    async function generateToken(userID, roomID, userName) {
+      try {
+        console.log('🔑 从后端API获取 ZEGO Token...');
+        console.log('📱 AppID:', appID);
+        console.log('👤 UserID:', userID);
+        console.log('🏠 RoomID:', roomID);
+        console.log('👨 UserName:', userName);
+
+        // 获取 JWT Token
+        const jwtToken = getJwtToken();
+        if (!jwtToken) {
+          throw new Error('未找到 JWT Token，请先登录系统');
+        }
+
+        // 调用后端API
+        const response = await fetch('https://crm.andejiazheng.com/api/zego/generate-token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`,
+          },
+          body: JSON.stringify({
+            userId: userID,
+            roomId: roomID,
+            userName: userName,
+            expireTime: 7200
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('✅ 后端响应:', result);
+
+        if (result.success && result.data && result.data.token) {
+          const token = result.data.token;
+          console.log('✅ Token 获取成功，长度:', token.length);
+          return token;
+        } else {
+          throw new Error(result.message || '获取Token失败');
+        }
+      } catch (error) {
+        console.error('❌ Token 获取失败:', error);
+        throw error;
+      }
+    }
+
+    // ==================== 身份选择 ====================
+    function selectRole(role) {
+      currentUserRole = role;
+
+      // 更新选中状态
+      document.querySelectorAll('.role-option').forEach(option => {
+        option.classList.remove('selected');
+      });
+      document.querySelector(`.role-option[data-role="${role}"]`).classList.add('selected');
+
+      console.log('选择身份:', role === 'customer' ? '客户' : '阿姨');
+    }
+
+    // ==================== 初始化 ZEGO ====================
+    function initZego() {
+      console.log('初始化 ZEGO SDK...');
+
+      // 检查 ZEGO SDK 是否加载
+      if (typeof ZegoExpressEngine === 'undefined') {
+        console.error('ZEGO SDK 未加载');
+        alert('视频SDK加载失败，请刷新页面重试');
+        return false;
+      }
+
+      // 尝试获取正确的构造函数
+      let ZegoEngine = ZegoExpressEngine;
+      if (typeof ZegoExpressEngine === 'object' && ZegoExpressEngine.ZegoExpressEngine) {
+        console.log('检测到 ZegoExpressEngine 是对象，提取构造函数');
+        ZegoEngine = ZegoExpressEngine.ZegoExpressEngine;
+      }
+
+      console.log('使用的构造函数类型:', typeof ZegoEngine);
+
+      // 创建 ZEGO 实例，并设置日志级别为 disable（完全关闭日志）
+      zg = new ZegoEngine(appID, server);
+      zg.setLogConfig({
+        logLevel: 'disable',  // 完全关闭 ZEGO SDK 日志
+        remoteLogLevel: 'disable'  // 关闭远程日志
+      });
+
+      console.log('ZEGO SDK 初始化成功');
+      
+      // 监听远程流更新
+      zg.on('roomStreamUpdate', async (roomID, updateType, streamList) => {
+        console.log('🔔 房间流更新 - RoomID:', roomID);
+        console.log('🔔 更新类型:', updateType);
+        console.log('🔔 流列表数量:', streamList.length);
+        console.log('🔔 流详情:', streamList);
+
+        if (updateType === 'ADD') {
+          // 有新的流加入
+          console.log('✅ 检测到新流加入，开始播放...');
+          for (const stream of streamList) {
+            console.log('📺 准备播放流:', stream.streamID, '用户:', stream.user);
+            await playRemoteStream(stream);
+          }
+        } else if (updateType === 'DELETE') {
+          // 有流离开
+          console.log('⚠️ 检测到流离开');
+          for (const stream of streamList) {
+            console.log('📺 移除流:', stream.streamID);
+            removeRemoteStream(stream.streamID);
+          }
+        }
+      });
+      
+      // 监听房间状态
+      zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
+        console.log('房间状态更新:', state, errorCode);
+        if (state === 'DISCONNECTED') {
+          showMessage('已断开连接');
+        } else if (state === 'CONNECTING') {
+          showMessage('正在连接...');
+        } else if (state === 'CONNECTED') {
+          console.log('已连接到房间');
+        }
+      });
+
+      return true;
+    }
+
+    // ==================== 创建面试间 ====================
+    async function createRoom() {
+      console.log('➕ 创建面试间');
+
+      // 检查 ZEGO SDK 是否已初始化
+      if (!zg) {
+        console.error('ZEGO SDK 未初始化');
+        alert('视频SDK未初始化，正在重新初始化...');
+        const success = initZego();
+        if (!success) {
+          return;
+        }
+        // 等待一下让 SDK 完全初始化
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      try {
+        showMessage('正在创建面试间...');
+
+        // 生成房间号
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 8);
+        roomId = `room_${timestamp}_${randomStr}`;
+        currentUserId = 'user_' + Date.now();
+        currentUserName = 'HR';
+
+        console.log('✅ 房间信息:', { roomId: roomId, userId: currentUserId, userName: currentUserName });
+
+        // 更新房间号显示（格式化为 AD-时间戳，去掉后面的随机字母）
+        const displayRoomId = roomId.replace(/^room_/, 'AD-').split('_')[0];
+        document.getElementById('roomId').textContent = displayRoomId;
+
+        // 生成 Token
+        console.log('⏳ 正在生成 Token...');
+        const token = await generateToken(currentUserId, roomId, currentUserName);
+        console.log('✅ Token:', token ? 'Token 已生成' : '使用空 Token');
+
+        // 登录房间
+        console.log('⏳ 正在登录房间...');
+        await zg.loginRoom(roomId, token, {
+          userID: currentUserId,
+          userName: currentUserName
+        });
+        console.log('✅ 登录房间成功');
+
+        // 创建本地流
+        console.log('正在创建本地流...');
+        localStream = await zg.createStream({
+          camera: {
+            video: true,
+            audio: true
+          }
+        });
+        console.log('创建本地流成功');
+
+        // 播放本地视频
+        const localVideo = document.getElementById('localVideo');
+        localVideo.srcObject = localStream;
+
+        // 更新本地标签
+        document.getElementById('localLabel').textContent = '主持人';
+
+        // 推流
+        const streamID = 'stream_' + currentUserId;
+        console.log('正在推流:', streamID);
+        await zg.startPublishingStream(streamID, localStream);
+        console.log('推流成功');
+
+        // 隐藏加入面板，显示主界面
+        document.getElementById('joinPanel').classList.add('hidden');
+
+        // 开始计时
+        startTimer();
+
+        hideMessage();
+        console.log('✅ 面试间创建成功');
+      } catch (error) {
+        console.error('❌ 创建面试间失败:', error);
+        hideMessage();
+        alert('创建面试间失败: ' + error.message);
+      }
+    }
+
+    // ==================== 加入房间 ====================
+    async function joinRoom() {
+      const userName = document.getElementById('userName').value.trim();
+      if (!userName) {
+        alert('请输入您的姓名');
+        return;
+      }
+
+      if (!currentUserRole) {
+        alert('请选择您的身份');
+        return;
+      }
+
+      // 检查 ZEGO SDK 是否已初始化
+      if (!zg) {
+        console.error('ZEGO SDK 未初始化');
+        alert('视频SDK未初始化，正在重新初始化...');
+        const success = initZego();
+        if (!success) {
+          return;
+        }
+        // 等待一下让 SDK 完全初始化
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      try {
+        showMessage('正在加入房间...');
+
+        // 生成用户ID
+        currentUserId = 'user_' + Date.now();
+        currentUserName = userName;
+
+        console.log('✅ 用户信息:', { userId: currentUserId, userName: currentUserName, roomId: roomId, role: currentUserRole });
+
+        // 检查房间号
+        if (!roomId || roomId === 'test_room') {
+          throw new Error('房间号无效，请通过正确的链接进入');
+        }
+
+        // 生成 Token
+        console.log('⏳ 正在生成 Token...');
+        const token = await generateToken(currentUserId);
+        console.log('✅ Token:', token ? 'Token 已生成' : '使用空 Token');
+
+        // 登录房间
+        console.log('⏳ 正在登录房间...');
+        console.log('⏳ 登录参数:', { roomId, token: token ? '已生成' : '空', userID: currentUserId, userName: currentUserName });
+
+        await zg.loginRoom(roomId, token, {
+          userID: currentUserId,
+          userName: currentUserName
+        });
+        console.log('✅ 登录房间成功');
+        
+        // 创建本地流
+        console.log('正在创建本地流...');
+        localStream = await zg.createStream({
+          camera: { 
+            video: true, 
+            audio: true 
+          }
+        });
+        console.log('创建本地流成功');
+        
+        // 播放本地视频
+        const localVideo = document.getElementById('localVideo');
+        localVideo.srcObject = localStream;
+        
+        // 更新本地标签（显示身份 + 姓名）
+        const roleText = currentUserRole === 'customer' ? '客户' : '阿姨';
+        document.getElementById('localLabel').textContent = `${roleText}：${userName}`;
+        
+        // 推流
+        const streamID = 'stream_' + currentUserId;
+        console.log('正在推流:', streamID);
+        await zg.startPublishingStream(streamID, localStream);
+        console.log('推流成功');
+        
+        // 隐藏加入面板
+        document.getElementById('joinPanel').style.display = 'none';
+        hideMessage();
+
+        // 启动面试计时器
+        startInterviewTimer();
+
+      } catch (error) {
+        console.error('❌ 加入房间失败:', error);
+        console.error('❌ 错误详情:', {
+          message: error.message,
+          code: error.code,
+          name: error.name,
+          stack: error.stack
+        });
+
+        let errorMsg = '加入房间失败';
+        if (error.message) {
+          errorMsg += ': ' + error.message;
+        } else if (error.code) {
+          errorMsg += ': 错误代码 ' + error.code;
+        } else {
+          errorMsg += ': ' + JSON.stringify(error);
+        }
+
+        alert(errorMsg);
+        hideMessage();
+      }
+    }
+
+    // ==================== 播放远程流 ====================
+    async function playRemoteStream(stream) {
+      console.log('▶️ 播放远程流:', stream);
+
+      try {
+        const remoteStream = await zg.startPlayingStream(stream.streamID);
+        remoteStreams[stream.streamID] = remoteStream;
+
+        // 找到空闲的视频位置（最多5个远程用户）
+        for (let i = 1; i <= 5; i++) {
+          const box = document.getElementById(`remoteBox${i}`);
+          if (box.querySelector('.video-placeholder')) {
+            // 这个位置是空的，使用它
+            box.innerHTML = `
+              <video id="remote${i}" class="video-player" autoplay playsinline></video>
+              <div class="video-label">${stream.user.userName || '访客'}</div>
+            `;
+            const video = document.getElementById(`remote${i}`);
+            video.srcObject = remoteStream;
+
+            // 保存streamID到box的data属性，方便后续查找
+            box.setAttribute('data-stream-id', stream.streamID);
+            break;
+          }
+        }
+
+        console.log('✅ 远程流播放成功');
+      } catch (error) {
+        console.error('❌ 播放远程流失败:', error);
+      }
+    }
+
+    // ==================== 移除远程流 ====================
+    function removeRemoteStream(streamID) {
+      console.log('🗑️ 移除远程流:', streamID);
+
+      if (remoteStreams[streamID]) {
+        zg.stopPlayingStream(streamID);
+        delete remoteStreams[streamID];
+      }
+
+      // 恢复占位符
+      for (let i = 1; i <= 5; i++) {
+        const box = document.getElementById(`remoteBox${i}`);
+        if (box.getAttribute('data-stream-id') === streamID) {
+          box.removeAttribute('data-stream-id');
+          box.innerHTML = `
+            <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
+              <div class="placeholder-icon">+</div>
+              <div class="placeholder-text">邀请用户</div>
+            </div>
+          `;
+          break;
+        }
+      }
+    }
+
+    // ==================== 面试计时器 ====================
+    function startInterviewTimer() {
+      interviewStartTime = Date.now();
+      interviewTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - interviewStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        document.getElementById('interviewTime').textContent = timeStr;
+      }, 1000);
+    }
+
+    function stopInterviewTimer() {
+      if (interviewTimer) {
+        clearInterval(interviewTimer);
+        interviewTimer = null;
+      }
+    }
+    
+    // ==================== 控制功能 ====================
+    function toggleMic() {
+      if (!localStream) return;
+
+      isMicOn = !isMicOn;
+      zg.muteMicrophone(!isMicOn);
+
+      const btn = document.getElementById('micBtn');
+      const iconText = btn.querySelector('.control-icon-text');
+      iconText.textContent = isMicOn ? '🎤' : '🔇';
+
+      console.log('麦克风:', isMicOn ? '开启' : '关闭');
+    }
+
+    function toggleCamera() {
+      if (!localStream) return;
+
+      isCameraOn = !isCameraOn;
+      zg.mutePublishStreamVideo(localStream, !isCameraOn);
+
+      const btn = document.getElementById('cameraBtn');
+      const iconText = btn.querySelector('.control-icon-text');
+      iconText.textContent = isCameraOn ? '📹' : '📷';
+
+      console.log('摄像头:', isCameraOn ? '开启' : '关闭');
+    }
+    
+    // 显示邀请弹窗
+    function showInviteModal() {
+      const modal = document.getElementById('inviteModal');
+      const inviteLinkInput = document.getElementById('inviteLink');
+
+      // 生成邀请链接
+      const baseUrl = window.location.origin + window.location.pathname.replace('video-interview-host.html', '');
+      const inviteLink = `${baseUrl}video-interview-guest.html?roomId=${roomId}`;
+
+      inviteLinkInput.value = inviteLink;
+      modal.classList.add('show');
+    }
+
+    // 关闭邀请弹窗
+    function closeInviteModal() {
+      const modal = document.getElementById('inviteModal');
+      modal.classList.remove('show');
+    }
+
+    // 复制邀请链接
+    function copyInviteLink() {
+      const inviteLinkInput = document.getElementById('inviteLink');
+
+      // 选中并复制
+      inviteLinkInput.select();
+      inviteLinkInput.setSelectionRange(0, 99999); // 移动端兼容
+
+      try {
+        document.execCommand('copy');
+
+        // 修改按钮文字提示
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '✅ 链接已复制！';
+        btn.style.background = 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)';
+
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.background = 'linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%)';
+          closeInviteModal();
+        }, 1500);
+
+      } catch (err) {
+        alert('复制失败，请手动复制链接');
+      }
+    }
+
+    // 点击弹窗外部关闭
+    document.addEventListener('click', function(e) {
+      const modal = document.getElementById('inviteModal');
+      if (e.target === modal) {
+        closeInviteModal();
+      }
+    });
+
+    function leaveRoom() {
+      if (confirm('确定要离开面试间吗？')) {
+        try {
+          // 停止计时器
+          stopTimer();
+
+          if (zg && localStream) {
+            zg.destroyStream(localStream);
+            zg.logoutRoom(roomId);
+          }
+
+          // 尝试通知小程序关闭
+          if (typeof wx !== 'undefined' && wx.miniProgram) {
+            wx.miniProgram.navigateBack();
+          } else {
+            // 如果不在小程序中，显示提示
+            alert('已离开面试间');
+            location.reload();
+          }
+        } catch (error) {
+          console.error('离开房间失败:', error);
+        }
+      }
+    }
+    
+    // ==================== 工具函数 ====================
+    function showMessage(msg) {
+      let loading = document.getElementById('loading');
+      if (!loading) {
+        loading = document.createElement('div');
+        loading.id = 'loading';
+        loading.className = 'loading';
+        document.body.appendChild(loading);
+      }
+      loading.textContent = msg;
+      loading.style.display = 'block';
+    }
+    
+    function hideMessage() {
+      const loading = document.getElementById('loading');
+      if (loading) {
+        loading.style.display = 'none';
+      }
+    }
+
+    // ==================== 计时器函数 ====================
+    function startTimer() {
+      if (interviewTimer) {
+        clearInterval(interviewTimer);
+      }
+      interviewStartTime = Date.now();
+      interviewTimer = setInterval(updateTimer, 1000);
+      updateTimer(); // 立即更新一次
+    }
+
+    function stopTimer() {
+      if (interviewTimer) {
+        clearInterval(interviewTimer);
+        interviewTimer = null;
+      }
+    }
+
+    function updateTimer() {
+      if (!interviewStartTime) return;
+
+      const elapsed = Math.floor((Date.now() - interviewStartTime) / 1000);
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed % 60;
+
+      const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      const timeElement = document.getElementById('interviewTime');
+      if (timeElement) {
+        timeElement.textContent = timeStr;
+      }
+    }
+    
+    // ==================== 等待 SDK 加载 ====================
+    function waitForSDK(maxRetries = 20, interval = 200) {
+      return new Promise((resolve, reject) => {
+        let retries = 0;
+
+        const checkSDK = () => {
+          console.log(`🔄 检查 SDK 加载状态 (${retries + 1}/${maxRetries})...`);
+
+          if (typeof ZegoExpressEngine !== 'undefined') {
+            console.log('✅ ZEGO SDK 加载成功！');
+            resolve(true);
+          } else if (retries >= maxRetries) {
+            console.error('❌ ZEGO SDK 加载超时！');
+            reject(new Error('SDK 加载超时'));
+          } else {
+            retries++;
+            setTimeout(checkSDK, interval);
+          }
+        };
+
+        checkSDK();
+      });
+    }
+
+    // ==================== 页面加载 ====================
+    window.onload = async function() {
+      console.log('页面加载完成');
+      console.log('房间号:', roomId);
+
+      // 检查 SDK 加载状态
+      console.log('检查 ZEGO SDK 加载状态...');
+      console.log('ZegoExpressEngine 是否存在:', typeof ZegoExpressEngine !== 'undefined');
+      console.log('generateToken04 是否存在:', typeof generateToken04 !== 'undefined');
+
+      if (typeof generateToken04 === 'undefined') {
+        console.warn('⚠️ Token 生成库未加载');
+      } else {
+        console.log('✅ Token 生成库加载成功');
+      }
+
+      // 等待 SDK 加载
+      if (typeof ZegoExpressEngine === 'undefined') {
+        console.log('⏳ ZEGO SDK 尚未加载，等待中...');
+        try {
+          await waitForSDK();
+        } catch (error) {
+          console.error('❌ ZEGO SDK 加载失败:', error);
+          alert('视频SDK加载失败，请检查网络连接后刷新页面重试');
+          return;
+        }
+      } else {
+        console.log('✅ ZEGO SDK 已加载');
+      }
+
+      initZego();
+    };
+    
+    // 页面卸载时清理
+    window.onbeforeunload = function() {
+      if (zg && localStream) {
+        zg.destroyStream(localStream);
+        zg.logoutRoom(roomId);
+      }
+    };
+  </script>
+</body>
+</html>
+

@@ -488,6 +488,50 @@
       to { transform: rotate(360deg); }
     }
 
+    /* 🔍 调试日志显示区域 */
+    #debugLog {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-height: 40vh;
+      background: rgba(0, 0, 0, 0.9);
+      color: #0f0;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 10px;
+      overflow-y: auto;
+      z-index: 99999;
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    #debugLog.show {
+      display: block;
+    }
+
+    #debugToggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      background: #ff4444;
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: bold;
+      z-index: 100000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      display: none;
+    }
+
+    #debugToggle.show {
+      display: block;
+    }
+
     /* ✅ 页面后台提示样式 */
     .background-toast {
       position: fixed;
@@ -506,6 +550,64 @@
 
     .background-toast.show {
       display: block;
+    }
+
+    /* iOS/微信 自动播放问题浮层：引导用户点击“开始面试” */
+    .play-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20000;
+    }
+
+    .play-overlay.show {
+      display: flex;
+    }
+
+    .play-overlay-content {
+      background: #fff;
+      border-radius: 16px;
+      padding: 18px 20px 16px;
+      max-width: 280px;
+      width: 80%;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+      text-align: center;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .play-overlay-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .play-overlay-desc {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .play-overlay-button {
+      display: inline-block;
+      width: 100%;
+      border: none;
+      outline: none;
+      background: linear-gradient(90deg, #ff9800, #ff7043);
+      color: #fff;
+      border-radius: 20px;
+      padding: 10px 0;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .play-overlay-button:active {
+      opacity: 0.85;
     }
   </style>
 </head>
@@ -538,12 +640,15 @@
       </div>
     </div>
 
+    <!-- iOS用户交互提示层已移除 -->
+    <!-- 如果需要用户交互，会在视频框内显示"▶️ 点击播放视频"按钮 -->
+
     <!-- 视频网格 - 6个位置 -->
     <div class="video-grid">
       <!-- 位置1：本地视频 -->
       <div class="video-item">
         <div class="video-box" id="localBox">
-          <video id="localVideo" class="video-player" autoplay muted playsinline></video>
+          <video id="localVideo" class="video-player" autoplay muted playsinline webkit-playsinline x5-playsinline x-webkit-airplay="allow" x5-video-player-type="h5" x5-video-player-fullscreen="false"></video>
           <div class="video-label" id="localLabel">我</div>
         </div>
       </div>
@@ -563,6 +668,17 @@
         <div class="video-box" id="remoteBox2">
           <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
             <div class="placeholder-icon">+</div>
+  <!-- iOS / 微信 自动播放问题浮层：引导用户点击“开始面试” -->
+  <div id="playOverlay" class="play-overlay">
+    <div class="play-overlay-content">
+      <div class="play-overlay-title">开始面试</div>
+      <div class="play-overlay-desc">
+        已进入面试间，如暂时看不到对方画面，请点击下方按钮开始播放。
+      </div>
+      <button id="startInterviewBtn" class="play-overlay-button">开始面试</button>
+    </div>
+  </div>
+
             <div class="placeholder-text">邀请用户</div>
           </div>
         </div>
@@ -622,6 +738,10 @@
 
   <div id="loading" class="loading" style="display: none;">正在连接...</div>
 
+  <!-- 🔍 调试工具 -->
+  <button id="debugToggle" onclick="toggleDebugLog()">DEBUG</button>
+  <div id="debugLog"></div>
+
   <!-- 邀请弹窗 -->
   <div id="inviteModal" class="modal">
     <div class="modal-content">
@@ -643,11 +763,296 @@
   </div>
 
   <script>
-    // 获取URL参数
+    // 🔍 调试模式
     const urlParams = new URLSearchParams(window.location.search);
+    const debugMode = urlParams.get('debug') === '1';
+
+    // 调试日志数组
+    let debugLogs = [];
+    const maxDebugLogs = 100;
+
+    // 重写 console.log 以捕获日志
+    const originalConsoleLog = console.log;
+    const originalConsoleWarn = console.warn;
+    const originalConsoleError = console.error;
+
+    function addDebugLog(type, ...args) {
+      const timestamp = new Date().toLocaleTimeString();
+      const message = args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch (e) {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }).join(' ');
+
+      debugLogs.push(`[${timestamp}] ${type}: ${message}`);
+      if (debugLogs.length > maxDebugLogs) {
+        debugLogs.shift();
+      }
+
+      // 更新调试显示
+      if (debugMode) {
+        const debugLogEl = document.getElementById('debugLog');
+        if (debugLogEl) {
+          debugLogEl.textContent = debugLogs.join('\n');
+          debugLogEl.scrollTop = debugLogEl.scrollHeight;
+        }
+      }
+    }
+
+    if (debugMode) {
+      console.log = function(...args) {
+        addDebugLog('LOG', ...args);
+        originalConsoleLog.apply(console, args);
+      };
+      console.warn = function(...args) {
+        addDebugLog('WARN', ...args);
+        originalConsoleWarn.apply(console, args);
+      };
+      console.error = function(...args) {
+        addDebugLog('ERROR', ...args);
+        originalConsoleError.apply(console, args);
+      };
+
+      // 显示调试按钮 - 立即执行或等待 DOM 加载
+      function showDebugButton() {
+        const btn = document.getElementById('debugToggle');
+        if (btn) {
+          btn.classList.add('show');
+          console.log('✅ 调试模式已启动！');
+        } else {
+          // 如果元素还不存在，等待 DOM 加载
+    // iOS/微信 自动播放问题浮层控制
+    let playOverlayShown = false;
+
+    // 用于“自动播放被拦截”场景：显示浮层并注册解锁逻辑
+    function showPlayOverlay() {
+      try {
+        // 仅在 iOS / 微信 环境下显示
+        if (!isIOS() && !isWeChat()) return;
+
+        const overlay = document.getElementById('playOverlay');
+        if (!overlay) return;
+
+        if (playOverlayShown) {
+          overlay.classList.add('show');
+          return;
+        }
+
+        playOverlayShown = true;
+        overlay.classList.add('show');
+
+        // 确保已注册自动播放解锁逻辑
+        registerAutoPlayUnlock();
+
+        console.log('✅ 已显示“开始面试”浮层（自动播放兜底）');
+      } catch (e) {
+        console.warn('⚠️ 显示开始面试浮层失败:', e);
+      }
+    }
+
+    // iOS 首次进入房间时使用：只负责展示“开始面试”浮层，不注册自动播放解锁
+    function showStartOverlayForInit() {
+      try {
+        const overlay = document.getElementById('playOverlay');
+        if (!overlay) return;
+        overlay.classList.add('show');
+        console.log('✅ iOS 首次进入，显示“开始面试”浮层等待用户点击');
+      } catch (e) {
+        console.warn('⚠️ 显示开始面试浮层失败:', e);
+      }
+    }
+
+    function hidePlayOverlay() {
+      const overlay = document.getElementById('playOverlay');
+      if (!overlay) return;
+      overlay.classList.remove('show');
+    }
+
+    // 绑定“开始面试”按钮事件（如果存在）
+    (function bindStartInterviewButton() {
+      const btn = document.getElementById('startInterviewBtn');
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        console.log('🟢 用户点击“开始面试”按钮');
+        hidePlayOverlay();
+
+        // 如果还没有初始化，则这是第一次“开始面试”点击 → 开始初始化流程
+        if (!hasInitialized) {
+          init();
+        }
+        // 如果已经初始化过，则说明是自动播放兜底场景，实际解锁逻辑在 registerAutoPlayUnlock 注册的全局点击 handler 中处理
+      });
+    })();
+
+
+          setTimeout(showDebugButton, 100);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', showDebugButton);
+      } else {
+        showDebugButton();
+      }
+    }
+
+    // 切换调试日志显示
+    function toggleDebugLog() {
+      const debugLogEl = document.getElementById('debugLog');
+      debugLogEl.classList.toggle('show');
+    }
+
+    // 获取URL参数
     const roomId = urlParams.get('roomId');
     const userName = urlParams.get('userName') || '访客';
     const userRole = urlParams.get('role') || 'customer'; // 英文：customer 或 helper
+
+    // 环境检测：iOS / 微信
+    function isIOS() {
+      const ua = navigator.userAgent;
+      // iPhone / iPod / iPad
+      if (/iP(hone|od|ad)/i.test(ua)) return true;
+      // iPadOS 13+ 伪装成 Mac，但同时支持触控
+      if (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return true;
+      return false;
+    }
+
+    function isWeChat() {
+      return /MicroMessenger/i.test(navigator.userAgent);
+    }
+
+    // 仅 iOS 上的微信内置浏览器
+    function isWeChatIOS() {
+      return isIOS() && isWeChat();
+    }
+
+    // 🔓 iOS / 微信 自动播放解锁兜底：用户任意点击后，统一尝试 play 所有 video
+    function registerAutoPlayUnlock() {
+      if (autoPlayUnlockRegistered) return;
+
+      // 只在 iOS 或 微信 内置浏览器中启用
+      if (!isIOS() && !isWeChat()) {
+        return;
+      }
+
+      autoPlayUnlockRegistered = true;
+
+      const handler = async () => {
+        try {
+          console.log('🔓 用户交互触发，尝试解锁所有视频播放');
+          const videos = document.querySelectorAll('video');
+          for (const video of videos) {
+            try {
+              // 远端视频不静音，本地预览保持 muted
+              if (video.id !== 'localVideo') {
+                video.muted = false;
+                video.volume = 1.0;
+              }
+              await video.play();
+            } catch (e) {
+              console.warn('⚠️ 解锁播放失败:', e);
+            }
+          }
+        } finally {
+
+    // iOS be 	ea H5  db abaffc a WeixinJSBridge e fe	f bb bdbe
+
+    function wechatAutoPlay(videoEl) {
+      try {
+        if (!isWeChatIOS() || !videoEl) return;
+
+        const tryPlay = () => {
+          try {
+            // c ube e ae b fe	f bdcf abc b e
+e b	ddec fe
+dec b
+ play
+            WeixinJSBridge.invoke('getNetworkType', {}, function () {
+              const playPromise = videoEl.play();
+              if (playPromise && typeof playPromise.then === 'function') {
+                playPromise.catch(err => {
+                  console.warn(' e	fff WeixinJSBridge e b	fc video.play()  e
+e b:', err);
+                });
+              }
+            });
+          } catch (e) {
+            console.warn(' e	ff WeixinJSBridge.invoke f
+cddc ab ade	b bb bd bbc play:', e);
+            try {
+              videoEl.play();
+            } catch (innerErr) {
+              console.warn(' e	ff r d play ad
+	e fe b:', innerErr);
+            }
+          }
+        };
+
+        if (typeof WeixinJSBridge !== 'undefined' && WeixinJSBridge.invoke) {
+          tryPlay();
+        } else {
+          document.addEventListener('WeixinJSBridgeReady', tryPlay, false);
+          document.addEventListener('onWeixinJSBridgeReady', tryPlay, false);
+        }
+      } catch (e) {
+        console.warn(' e	ff wechatAutoPlay f
+cddc abe	f:', e);
+      }
+    }
+
+          document.removeEventListener('click', handler);
+          document.removeEventListener('touchstart', handler);
+        }
+      };
+
+      document.addEventListener('click', handler);
+      document.addEventListener('touchstart', handler);
+
+      console.log('✅ 已注册 iOS/微信 自动播放解锁兜底');
+    }
+
+    // Helper: auto play video in iOS WeChat WebView via WeixinJSBridge
+    function wechatAutoPlayGlobal(videoEl) {
+      try {
+        if (!isWeChatIOS() || !videoEl) return;
+
+        const tryPlay = function () {
+          try {
+            WeixinJSBridge.invoke('getNetworkType', {}, function () {
+              const playPromise = videoEl.play();
+              if (playPromise && typeof playPromise.then === 'function') {
+                playPromise.catch(function (err) {
+                  console.warn('WeixinJSBridge video.play() failed:', err);
+                });
+              }
+            });
+          } catch (e) {
+            console.warn('WeixinJSBridge.invoke failed, fallback to plain play:', e);
+            try {
+              videoEl.play();
+            } catch (innerErr) {
+              console.warn('Fallback video.play() also failed:', innerErr);
+            }
+          }
+        };
+
+        if (typeof WeixinJSBridge !== 'undefined' && WeixinJSBridge.invoke) {
+          tryPlay();
+        } else {
+          document.addEventListener('WeixinJSBridgeReady', tryPlay, false);
+          document.addEventListener('onWeixinJSBridgeReady', tryPlay, false);
+        }
+      } catch (e) {
+        console.warn('wechatAutoPlayGlobal error:', e);
+      }
+    }
+
+
 
     // 🔒 防止微信分享直接进入房间：检测是否是正常流程进入
     // 使用 sessionStorage 标记是否从选择身份页面跳转过来
@@ -702,6 +1107,10 @@
     let startTime = null;
     let remoteControlPolling = null; // 远程控制轮询定时器
     let lastRemoteControlTimestamp = 0; // 最后接收的远程控制消息时间戳
+    let remoteStreamPolling = null; // 远程流轮询定时器（兜底防止遗漏已有远端流）
+    let autoPlayUnlockRegistered = false; // iOS/微信 自动播放解锁是否已注册
+    let hasInitialized = false; // 是否已经执行过初始化（用于 iOS “开始面试”流程）
+
 
     // 生成Token（访客模式：调用后端公开接口）
     async function generateToken(userID, roomID) {
@@ -766,6 +1175,12 @@
 
     // 初始化
     async function init() {
+      if (hasInitialized) {
+        console.log('⚠️ 初始化已执行，忽略重复调用');
+        return;
+      }
+      hasInitialized = true;
+
       showLoading('正在初始化...');
 
       try {
@@ -805,10 +1220,15 @@
         hideLoading();
         startTimer();
 
+        // 注册 iOS/微信 自动播放解锁兜底（确保任意点击都能尝试 play 视频）
+        registerAutoPlayUnlock();
+
       } catch (error) {
         console.error('❌ 初始化失败:', error);
         hideLoading();
         alert('连接失败: ' + (error.message || '未知错误'));
+        // 初始化失败时允许用户重新点击“开始面试”再试一次
+        hasInitialized = false;
       }
     }
 
@@ -822,12 +1242,38 @@
       // 获取Token
       const token = await generateToken(currentUserId, roomId);
 
+      // 🔥🔥🔥 关键修复：添加 ZegoRoomConfig 参数，设置 userUpdate: true
+      // 根据 ZEGO 官方文档，这个参数确保：
+      // 1. 能收到 roomUserUpdate 回调（用户进出房间通知）
+      // 2. 能正确触发 roomStreamUpdate 回调（包括登录时房间内已存在的流）
       const result = await zg.loginRoom(roomId, token, {
         userID: currentUserId,
         userName: userName
+      }, {
+        userUpdate: true  // 🔥 关键参数：开启用户和流更新通知
       });
 
       console.log('✅ 登录房间成功');
+      console.log('✅ 已开启用户和流更新通知 (userUpdate: true)');
+
+      // 🔥🔥🔥 微信浏览器关键修复：登录房间后立即查询已存在的流
+      // 原因：微信浏览器的用户交互窗口期非常短（1-2秒）
+      // 必须在用户点击"加入房间"按钮后立即播放，不能等到推流完成后再播放
+      console.log('🔍 [微信修复] 登录房间后立即查询已存在的流...');
+      try {
+        const existingStreams = zg.getRemoteStreams();
+        console.log('🔍 [微信修复] 发现已存在的远程流数量:', existingStreams.length);
+
+        if (existingStreams.length > 0) {
+          console.log('🎬 [微信修复] 在用户交互窗口期内立即播放已存在的流');
+          for (const stream of existingStreams) {
+            console.log('📺 [微信修复] 准备播放已存在的流:', stream.streamID, '用户:', stream.user);
+            await playRemoteStream(stream);
+          }
+        }
+      } catch (error) {
+        console.error('❌ [微信修复] 立即查询远程流失败:', error);
+      }
     }
 
     // ==================== 检查麦克风权限 ====================
@@ -872,21 +1318,28 @@
     async function createLocalStream() {
       showLoading('正在打开摄像头和麦克风...');
 
-      // 🎤 步骤1: 检查麦克风权限
-      const hasPermission = await checkMicrophonePermission();
-      if (!hasPermission) {
-        hideLoading();
-        return;
+      // 🔥 iOS 微信浏览器修复：恢复 AudioContext
+      // 这是解决 iOS 微信浏览器音频播放问题的关键步骤
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          const audioContext = new AudioContext();
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+            console.log('✅ AudioContext 已恢复，状态:', audioContext.state);
+          } else {
+            console.log('✅ AudioContext 状态正常:', audioContext.state);
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ AudioContext 恢复失败:', error);
       }
 
-      // 🔍 步骤2: 检查音频设备
-      const hasAudioDevice = await checkAudioDevices();
-      if (!hasAudioDevice) {
-        hideLoading();
-        return;
-      }
+      // ✅ 关键修复：直接创建流，不要提前检查权限
+      // iOS微信中，提前调用getUserMedia再停止会导致后续无法正常获取音视频
+      // 让ZEGO SDK自己处理权限请求，这样最稳定
 
-      // ✅ 设置视频质量为 720p，并配置音频参数
+      // ✅ 设置视频质量为 720p，并配置音频参数（恢复旧版本配置）
       localStream = await zg.createStream({
         camera: {
           video: {
@@ -904,8 +1357,19 @@
         }
       });
 
+      console.log('✅ 创建本地流成功');
+
+      // 播放本地视频
       const localVideo = document.getElementById('localVideo');
       localVideo.srcObject = localStream;
+
+      // ✅ iOS修复：显式调用play()确保本地视频显示
+      try {
+        await localVideo.play();
+        console.log('✅ 本地视频播放成功');
+      } catch (error) {
+        console.error('❌ 本地视频播放失败:', error);
+      }
 
       // 推流（使用与userId对应的streamID）
       currentStreamId = 'stream_' + currentUserId;
@@ -913,8 +1377,47 @@
 
       console.log('✅ 本地流创建成功, StreamID:', currentStreamId);
 
+      // 🔥🔥🔥 iOS 微信浏览器关键修复：主动获取并播放房间内已存在的远程流
+      // 这是解决"iOS 后进入房间看不到其他人"问题的核心方案
+      // 原因：微信浏览器可能无法及时触发 roomStreamUpdate 回调通知已有流
+      console.log('🔍 主动查询房间内已存在的远程流...');
+      try {
+        const existingStreams = zg.getRemoteStreams();
+        console.log('🔍 发现已存在的远程流数量:', existingStreams.length);
+
+        if (existingStreams.length > 0) {
+          console.log('🎬 开始播放已存在的远程流（在用户交互窗口期内）');
+          for (const stream of existingStreams) {
+            console.log('📺 准备播放已存在的流:', stream.streamID, '用户:', stream.user);
+            // 使用播放函数
+            await playRemoteStream(stream);
+          }
+        } else {
+          console.log('ℹ️ 房间内暂无其他远程流');
+        }
+
+        // 🔥 延迟再查询一次（防止遗漏）
+        // 有时候 getRemoteStreams() 在刚发布本地流时返回空数组
+        // 延迟 2 秒后再查询一次，确保不遗漏任何流
+        setTimeout(async () => {
+          console.log('🔍 延迟查询：再次检查房间内的远程流...');
+          const streams = zg.getRemoteStreams();
+          console.log('🔍 延迟查询：发现远程流数量:', streams.length);
+
+          for (const stream of streams) {
+            // playRemoteStream 内部会检查是否已存在，避免重复播放
+            await playRemoteStream(stream);
+          }
+        }, 2000);
+
+      } catch (error) {
+        console.error('❌ 主动获取远程流失败:', error);
+      }
+
       // 启动远程控制消息轮询
       startRemoteControlPolling();
+      // 启动远程流轮询兜底，防止遗漏已有远端流（特别是 iOS / 微信 环境）
+      startRemoteStreamPolling();
     }
 
     // ==================== 远程控制功能 ====================
@@ -957,6 +1460,42 @@
         clearInterval(remoteControlPolling);
         remoteControlPolling = null;
         console.log('✅ 远程控制消息轮询已停止');
+      }
+    }
+
+    // ==================== 远程流轮询（兜底，防止遗漏已有远端流） ====================
+    function startRemoteStreamPolling() {
+      // 避免重复启动
+      if (remoteStreamPolling) return;
+
+      // 每3秒检查一次房间内已有的远程流，防止 iOS / 微信 环境遗漏回调
+      remoteStreamPolling = setInterval(() => {
+        try {
+          if (!zg) return;
+
+          const streams = zg.getRemoteStreams() || [];
+          console.log('🔍 远程流轮询：当前远程流数量:', streams.length);
+
+          streams.forEach(stream => {
+            // 仅对尚未播放的流做兜底播放，playRemoteStream 内部也会做去重
+            if (!remoteStreams[stream.streamID]) {
+              console.log('🎬 远程流轮询：发现未播放的流，尝试播放:', stream.streamID, '用户:', stream.user);
+              playRemoteStream(stream);
+            }
+          });
+        } catch (error) {
+          console.error('❌ 远程流轮询失败:', error);
+        }
+      }, 3000);
+
+      console.log('✅ 远程流轮询已启动');
+    }
+
+    function stopRemoteStreamPolling() {
+      if (remoteStreamPolling) {
+        clearInterval(remoteStreamPolling);
+        remoteStreamPolling = null;
+        console.log('✅ 远程流轮询已停止');
       }
     }
 
@@ -1032,8 +1571,179 @@
     }
 
     // 远程流管理
-    const remoteStreams = {}; // 存储远程流信息 { streamID: { boxId, stream } }
+    const remoteStreams = {}; // 存储远程流信息 { streamID: { boxId, stream, videoElement } }
     const availableBoxes = ['remoteBox1', 'remoteBox2', 'remoteBox3', 'remoteBox4', 'remoteBox5'];
+
+    // 🔥 按照 PC 端的方式：手动设置 srcObject（不传 video 给 SDK）
+    async function playRemoteStream(stream) {
+      // 🔥 关键修复：检查是否已经在播放这个流
+      if (remoteStreams[stream.streamID]) {
+        console.log('⚠️ 流已存在，跳过:', stream.streamID);
+        return;
+      }
+
+      console.log('📺 准备播放流:', stream.streamID, '用户:', stream.user);
+
+      // 找到第一个空位
+      const emptyBoxId = availableBoxes.find(boxId => {
+        return !Object.values(remoteStreams).some(s => s.boxId === boxId);
+      });
+
+      if (!emptyBoxId) {
+        console.warn('⚠️ 没有空位了');
+        return;
+      }
+
+      // 显示远程视频
+      const box = document.getElementById(emptyBoxId);
+      box.style.display = 'block';
+
+      // 转换用户名显示
+      let displayName = stream.user.userName || '参与者';
+
+      // 如果是主持人（HR），显示为"主持人"
+      if (displayName === 'HR') {
+        displayName = '主持人';
+      } else if (displayName === 'customer') {
+        displayName = '客户';
+      } else if (displayName === 'helper') {
+        displayName = '阿姨';
+      } else {
+        // 转换访客角色：customer-张三 -> 客户-张三
+        displayName = displayName.replace(/^customer-/, '客户-').replace(/^helper-/, '阿姨-');
+      }
+
+      // ✅ 创建唯一的video ID
+      const videoId = `remote-video-${stream.streamID.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+      // ✅ 远程视频不应该静音！只有本地预览才需要静音
+      // ✅ iOS修复：添加所有必要的属性确保视频和音频正常播放
+      box.innerHTML = `
+        <video id="${videoId}" class="video-player" autoplay playsinline webkit-playsinline x5-playsinline x-webkit-airplay="allow" x5-video-player-type="h5" x5-video-player-fullscreen="false"></video>
+        <div class="video-label">${displayName}</div>
+      `;
+
+      const remoteVideo = document.getElementById(videoId);
+
+      // 🔊 关键修复：显式设置远程视频音量为最大（1.0）
+      remoteVideo.volume = 1.0;
+      // ✅ 确保不静音（这是关键！）
+      remoteVideo.muted = false;
+      console.log('🔊 设置远程视频音量为:', remoteVideo.volume, '静音状态:', remoteVideo.muted);
+
+      // 定义播放函数（支持自动重试）
+      const playStream = async (retryCount = 0, maxRetries = 3) => {
+        try {
+          console.log(`🎬 尝试播放远程流 (第${retryCount + 1}次):`, stream.streamID);
+
+          // 🔥 PC端方式：不传 video 元素给 SDK，手动处理所有步骤
+          const remoteStream = await zg.startPlayingStream(stream.streamID);
+
+          console.log('✅ SDK 返回远程流:', remoteStream);
+          console.log('📹 远程流视频轨道数量:', remoteStream.getVideoTracks().length);
+          console.log('🎤 远程流音频轨道数量:', remoteStream.getAudioTracks().length);
+
+          // 🔥 手动设置 srcObject（iOS 关键步骤）
+          remoteVideo.srcObject = remoteStream;
+          console.log('✅ 已设置 srcObject');
+
+          // 🔥 iOS 关键修复：设置音频属性并显式调用 play()
+          remoteVideo.muted = false;  // 确保不静音
+          remoteVideo.volume = 1;     // 确保音量最大
+          remoteVideo.playsInline = true;  // iOS 内联播放
+          remoteVideo.autoplay = true;     // 自动播放
+
+          console.log('🔊 Video元素配置 - 音量:', remoteVideo.volume, '静音:', remoteVideo.muted, 'playsInline:', remoteVideo.playsInline);
+
+          // iOS WeChat H5: 尝试通过 WeixinJSBridge 解锁自动播放
+          wechatAutoPlayGlobal(remoteVideo);
+
+          // 显式调用 play()
+          try {
+            await remoteVideo.play();
+            console.log('✅ 显式调用 play() 成功');
+          } catch (playError) {
+            console.warn('⚠️ play() 调用失败:', playError.message);
+            // 如果 play() 失败，可能需要用户交互
+            if (playError.name === 'NotAllowedError') {
+              console.log('⚠️ 需要用户交互才能播放');
+            }
+          }
+
+          // 记录流信息
+          remoteStreams[stream.streamID] = {
+            boxId: emptyBoxId,
+            stream: remoteStream,
+            videoElement: remoteVideo
+          };
+          console.log('✅ 远程视频播放成功:', stream.streamID);
+
+          return true;
+
+        } catch (error) {
+          console.warn(`⚠️ 播放失败 (第${retryCount + 1}次):`, error.name, error.message);
+
+          // ✅ iOS修复：如果是自动播放策略问题，提示用户点击播放
+          if (error.name === 'NotAllowedError' || error.name === 'NotSupportedError') {
+            console.log('⚠️ 需要用户交互才能播放，显示播放按钮');
+
+            // 同时在 iOS / 微信 环境下显示全局“开始面试”浮层
+            showPlayOverlay();
+
+            // 创建播放按钮覆盖层（视频框内的局部按钮）
+            const playButton = document.createElement('div');
+            playButton.style.cssText = `
+              position: absolute;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              background: rgba(0, 0, 0, 0.7);
+              color: white;
+              padding: 15px 30px;
+              border-radius: 25px;
+              cursor: pointer;
+              font-size: 16px;
+              z-index: 100;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            `;
+            playButton.innerHTML = '▶️ 点击播放视频';
+
+            box.style.position = 'relative';
+            box.appendChild(playButton);
+
+            // 点击播放按钮时重新尝试播放
+            playButton.onclick = async () => {
+              try {
+                await remoteVideo.play();
+                console.log('✅ 用户点击后视频播放成功');
+                playButton.remove();
+                hidePlayOverlay();
+              } catch (e) {
+                console.error('❌ 用户点击后仍然播放失败:', e);
+                alert('播放失败，请检查浏览器权限设置或刷新页面重试');
+              }
+            };
+
+            return false;
+
+          } else if (retryCount < maxRetries) {
+            // ✅ 自动重试机制：其他错误自动重试
+            console.log(`🔄 ${(retryCount + 1) * 1000}ms后自动重试...`);
+            await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 1000));
+            return await playStream(retryCount + 1, maxRetries);
+
+          } else {
+            console.error('❌ 播放失败，已达到最大重试次数');
+            return false;
+          }
+        }
+      };
+
+      // 执行播放
+      await playStream();
+    }
 
     // 监听远程流
     function listenRemoteStream() {
@@ -1047,67 +1757,8 @@
           // 有新的远程流加入
           console.log('✅ 检测到新流加入，开始播放...');
           for (const stream of streamList) {
-            console.log('📺 准备播放流:', stream.streamID, '用户:', stream.user);
-            // 找到第一个空位
-            const emptyBoxId = availableBoxes.find(boxId => {
-              return !Object.values(remoteStreams).some(s => s.boxId === boxId);
-            });
-
-            if (!emptyBoxId) {
-              console.warn('⚠️ 没有空位了');
-              continue;
-            }
-
-            const remoteStream = await zg.startPlayingStream(stream.streamID);
-            console.log('✅ 开始播放远程流:', stream.streamID);
-
-            // 显示远程视频
-            const box = document.getElementById(emptyBoxId);
-            // 转换用户名显示
-            let displayName = stream.user.userName || '参与者';
-
-            // 如果是主持人（HR），显示为"主持人"
-            if (displayName === 'HR') {
-              displayName = '主持人';
-            } else if (displayName === 'customer') {
-              displayName = '客户';
-            } else if (displayName === 'helper') {
-              displayName = '阿姨';
-            } else {
-              // 转换访客角色：customer-张三 -> 客户-张三
-              displayName = displayName.replace(/^customer-/, '客户-').replace(/^helper-/, '阿姨-');
-            }
-
-            // ✅ 远程视频不应该静音！只有本地预览才需要静音
-            box.innerHTML = `
-              <video class="video-player" autoplay playsinline webkit-playsinline x5-playsinline></video>
-              <div class="video-label">${displayName}</div>
-            `;
-
-            const remoteVideo = box.querySelector('video');
-            remoteVideo.srcObject = remoteStream;
-
-            // ✅ iOS 兼容性：强制播放
-            try {
-              await remoteVideo.play();
-              console.log('✅ 远程视频播放成功（有声音）:', stream.streamID);
-            } catch (error) {
-              console.error('❌ 远程视频播放失败:', error);
-              // iOS 可能需要用户交互才能播放，尝试再次播放
-              try {
-                await remoteVideo.play();
-                console.log('✅ 远程视频播放成功（重试）:', stream.streamID);
-              } catch (e) {
-                console.error('❌ 远程视频播放失败（重试也失败）:', e);
-                alert('播放远程视频失败，请刷新页面重试');
-              }
-            }
-
-            // 记录流信息
-            remoteStreams[stream.streamID] = {
-              boxId: emptyBoxId,
-              stream: remoteStream
-            };
+            // 🔥 使用播放函数
+            await playRemoteStream(stream);
           }
         } else if (updateType === 'DELETE') {
           // 远程流离开
@@ -1123,9 +1774,22 @@
               `;
 
               delete remoteStreams[stream.streamID];
-              console.log('✅ 远程流已离开');
+              console.log('✅ 远程流已离开:', stream.streamID);
             }
           }
+        }
+      });
+
+      // ✅ 监听设备错误（iOS设备占用问题）
+      zg.on('deviceError', (errorCode, deviceName) => {
+        console.error('🚨 设备错误:', { errorCode, deviceName });
+
+        // 1106011: 摄像头被占用
+        // 1106012: 麦克风被占用
+        if (errorCode === 1106011 || errorCode === 1106012) {
+          const deviceType = errorCode === 1106011 ? '摄像头' : '麦克风';
+          alert(`${deviceType}被其他页面或应用占用，请关闭其他页面后刷新重试`);
+          console.error(`❌ iOS设备占用问题: ${deviceType}被占用，需要用户关闭其他页面`);
         }
       });
 
@@ -1141,6 +1805,7 @@
           // 停止计时器和轮询
           stopTimer();
           stopRemoteControlPolling();
+          stopRemoteStreamPolling();
 
           // 清理本地流
           if (localStream) {
@@ -1360,6 +2025,7 @@
           // 停止计时器和轮询
           stopTimer();
           stopRemoteControlPolling();
+          stopRemoteStreamPolling();
 
           // 清理本地流
           if (zg && localStream) {
@@ -1431,7 +2097,21 @@
     }
 
     // 页面加载完成后初始化
-    window.addEventListener('load', init);
+    // iOS 微信：先展示“开始面试”按钮，点击后再执行 init()
+    // 其他环境：直接自动初始化
+    window.addEventListener('load', () => {
+      if (isWeChatIOS()) {
+        // iOS 微信：只显示“开始面试”浮层，真正的初始化在按钮点击时触发
+        try {
+          showStartOverlayForInit();
+        } catch (e) {
+          console.warn('⚠️ 显示 iOS 微信开始面试浮层失败:', e);
+        }
+      } else {
+        // 其他环境：保持原来的自动初始化逻辑
+        init();
+      }
+    });
 
     // 页面关闭前清理
     window.addEventListener('beforeunload', () => {

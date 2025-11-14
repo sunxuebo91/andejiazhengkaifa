@@ -210,6 +210,18 @@
     const roomId = urlParams.get('roomId');
     const kicked = urlParams.get('kicked'); // 检测是否被踢出
 
+    // 环境检测：目前主要用于统计/调试（不再在本页做权限区分）
+    function isIOS() {
+      const ua = navigator.userAgent;
+      if (/iP(hone|od|ad)/i.test(ua)) return true;
+      if (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return true; // iPadOS 13+
+      return false;
+    }
+
+    function isWeChat() {
+      return /MicroMessenger/i.test(navigator.userAgent);
+    }
+
     // ✅ 如果是被踢出后跳转过来的，显示提示并清除保存的用户信息
     if (kicked === 'true') {
       showError('您已被主持人移出面试间，无法重新进入');
@@ -251,7 +263,7 @@
     }
 
     // 表单提交
-    document.getElementById('joinForm').addEventListener('submit', function(e) {
+    document.getElementById('joinForm').addEventListener('submit', async function(e) {
       e.preventDefault();
 
       const name = document.getElementById('nameInput').value.trim();
@@ -262,6 +274,8 @@
         return;
       }
 
+      const joinBtn = document.getElementById('joinBtn');
+
       // 构建用户名
       let userName = role;
       if (name) {
@@ -269,18 +283,24 @@
       }
 
       // ✅ 保存用户信息到 localStorage（用于重新进入时恢复）
-      localStorage.setItem(`userInfo_${roomId}`, JSON.stringify({
-        name: name,
-        role: role,
-        userName: userName,
-        timestamp: Date.now()
-      }));
+      if (roomId) {
+        localStorage.setItem(`userInfo_${roomId}`, JSON.stringify({
+          name: name,
+          role: role,
+          userName: userName,
+          timestamp: Date.now()
+        }));
+      }
 
       // 🔒 设置标记：表示是从选择身份页面正常跳转的
       sessionStorage.setItem('fromGuestPage', 'true');
 
-      // 跳转到视频通话页面
       const videoUrl = `video-interview-guest-room.html?roomId=${roomId}&userName=${encodeURIComponent(userName)}&role=${encodeURIComponent(role)}`;
+
+      // ✅ 简化流程：本页不再请求任何音视频权限，统一在面试间内处理
+      // 所有设备（包含 iOS / 安卓 / PC）都直接跳转到面试间，由房间页负责一次性授权 + 播放
+      joinBtn.disabled = true;
+      joinBtn.textContent = '正在进入面试间...';
       window.location.href = videoUrl;
     });
 

@@ -39,7 +39,7 @@ const VideoInterviewOptimized: React.FC = () => {
   const [searchParams] = useSearchParams();
   const meetingContainerRef = useRef<HTMLDivElement>(null);
   const zegoInstanceRef = useRef<any>(null);
-  
+
   const [loading, setLoading] = useState(true);
   const [deviceInfo, setDeviceInfo] = useState(DeviceDetector.getDeviceInfo());
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ const VideoInterviewOptimized: React.FC = () => {
     const cleanup = DeviceDetector.onOrientationChange((orientation) => {
       console.log('📱 屏幕方向变化:', orientation);
       setDeviceInfo(DeviceDetector.getDeviceInfo());
-      
+
       // 重新调整视频布局
       if (zegoInstanceRef.current) {
         // ZEGO会自动处理布局调整
@@ -83,7 +83,7 @@ const VideoInterviewOptimized: React.FC = () => {
           console.error('销毁ZEGO实例失败:', error);
         }
       }
-      
+
       // 解锁屏幕方向
       DeviceDetector.unlockOrientation();
     };
@@ -175,15 +175,17 @@ const VideoInterviewOptimized: React.FC = () => {
         videoResolutionDefault: deviceInfo.isMobile || deviceInfo.isSmallScreen
           ? ZegoUIKitPrebuilt.VideoResolution_360P
           : ZegoUIKitPrebuilt.VideoResolution_720P,
-        
+
+        videoCodec: 'H264' as const,
         // 移动端使用前置摄像头
         turnOnCameraWhenJoining: true,
         turnOnMicrophoneWhenJoining: true,
+	        showPreJoinView: DeviceDetector.isIOS() || DeviceDetector.isWeChat(),
         useFrontFacingCamera: deviceInfo.isMobile,
 
         // 布局配置
         layout: deviceInfo.isMobile ? 'Auto' : 'Grid',
-        
+
         // 最大视频数量 - 移动端限制
         maxUsers: deviceInfo.isMobile ? 4 : 6,
 
@@ -192,7 +194,7 @@ const VideoInterviewOptimized: React.FC = () => {
           console.log('✅ 成功加入房间');
           message.success('已加入视频面试');
           setLoading(false);
-          
+
           // 移动端锁定屏幕方向
           if (deviceInfo.isMobile) {
             DeviceDetector.lockOrientation('portrait');
@@ -238,8 +240,8 @@ const VideoInterviewOptimized: React.FC = () => {
           {deviceInfo.isMobile ? '正在加载移动端视频面试...' : '正在加载视频面试...'}
         </p>
         <p className="loading-tip">
-          {deviceInfo.isMobile 
-            ? '建议使用WiFi网络以获得更好的体验' 
+          {deviceInfo.isMobile
+            ? '建议使用WiFi网络以获得更好的体验'
             : '请确保已允许摄像头和麦克风权限'}
         </p>
       </div>
@@ -253,7 +255,7 @@ const VideoInterviewOptimized: React.FC = () => {
         <div className="error-icon">❌</div>
         <h2>加载失败</h2>
         <p>{error}</p>
-        <button 
+        <button
           className="retry-button"
           onClick={() => {
             setError(null);
@@ -262,7 +264,7 @@ const VideoInterviewOptimized: React.FC = () => {
         >
           重试
         </button>
-        <button 
+        <button
           className="back-button"
           onClick={() => navigate('/interview/list')}
         >
@@ -276,8 +278,8 @@ const VideoInterviewOptimized: React.FC = () => {
   return (
     <div className={`video-interview-container ${deviceInfo.isMobile ? 'mobile' : 'desktop'}`}>
       {/* 视频容器 */}
-      <div 
-        ref={meetingContainerRef} 
+      <div
+        ref={meetingContainerRef}
         className="meeting-container"
         style={{
           width: '100%',

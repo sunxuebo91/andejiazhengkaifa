@@ -386,7 +386,7 @@ const JoinInterview: React.FC = () => {
           scenario: {
             mode: ZegoUIKitPrebuilt.GroupCall, // 使用群组通话模式
           },
-          showPreJoinView: false, // 跳过预加入页面，直接进入房间
+          showPreJoinView: true, // 始终显示预加入页面，确保用户授权摄像头/麦克风
           turnOnMicrophoneWhenJoining: true,
           turnOnCameraWhenJoining: true,
           showMyCameraToggleButton: true,
@@ -403,6 +403,7 @@ const JoinInterview: React.FC = () => {
           showUserName: true, // 显示用户名
           // 视频配置
           videoResolutionDefault: ZegoUIKitPrebuilt.VideoResolution_360P,
+	          videoCodec: 'H264' as const,
           // 🎨 美颜功能通过音视频设置按钮访问（访客也可以使用）
           // 访客权限：隐藏管理按钮
           showRemoveUserButton: false, // 访客不能踢人

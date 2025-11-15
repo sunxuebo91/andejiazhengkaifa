@@ -220,7 +220,7 @@ const JoinInterviewMobile: React.FC = () => {
             mode: ZegoUIKitPrebuilt.GroupCall, // 使用群组通话模式，和 PC 端一致
           },
           // 🔧 关键配置：跳过预加入页面，直接进入房间
-          showPreJoinView: false,
+          showPreJoinView: DeviceDetector.isIOS() || DeviceDetector.isWeChat(),
           turnOnMicrophoneWhenJoining: true,
           turnOnCameraWhenJoining: true,
           // 🌐 设置语言为中文
@@ -247,6 +247,7 @@ const JoinInterviewMobile: React.FC = () => {
           },
           // 视频配置 - 使用智能分辨率
           videoResolutionDefault: optimalResolution,
+	          videoCodec: 'H264' as const,
           maxUsers: 6, // 最多6人
           layout: 'Grid' as const, // 使用网格布局
           // 回调

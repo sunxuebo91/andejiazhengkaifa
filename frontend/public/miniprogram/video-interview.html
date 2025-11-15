@@ -591,33 +591,10 @@
       // 监听远程流更新
       zg.on('roomStreamUpdate', async (roomID, updateType, streamList) => {
         console.log('远程流更新:', updateType, streamList);
-        
+
         if (updateType === 'ADD') {
           for (let stream of streamList) {
-            try {
-              console.log('开始拉流:', stream.streamID);
-              const remoteStream = await zg.startPlayingStream(stream.streamID);
-              
-              const container = document.getElementById('remoteContainer');
-              container.innerHTML = '';
-              
-              const video = document.createElement('video');
-              video.id = 'remote_' + stream.streamID;
-              video.className = 'video-player';
-              video.autoplay = true;
-              video.playsinline = true;
-              video.srcObject = remoteStream;
-              container.appendChild(video);
-              
-              const label = document.createElement('div');
-              label.className = 'video-label';
-              label.textContent = stream.user.userName || '主持人';
-              container.appendChild(label);
-              
-              console.log('拉流成功:', stream.streamID);
-            } catch (error) {
-              console.error('拉流失败:', error);
-            }
+            await playRemoteStream(stream);
           }
         } else if (updateType === 'DELETE') {
           for (let stream of streamList) {
@@ -632,6 +609,115 @@
           }
         }
       });
+
+      // 播放远程流（包含 iOS 自动播放兼容处理）
+      async function playRemoteStream(stream) {
+        console.log('▶️ 播放远程流:', stream);
+
+        const container = document.getElementById('remoteContainer');
+        if (!container) {
+          console.error('❌ 未找到远程视频容器 remoteContainer');
+          return;
+        }
+
+        // 每次只显示一个远端视频
+        container.innerHTML = '';
+
+        // 展示名称：优先使用对方昵称，否则显示“主持人”
+        const displayName = (stream.user && stream.user.userName) || '主持人';
+
+        const video = document.createElement('video');
+        const videoId = 'remote_' + stream.streamID;
+        video.id = videoId;
+        video.className = 'video-player';
+        video.setAttribute('autoplay', 'true');
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        video.setAttribute('x5-playsinline', 'true');
+        video.setAttribute('x5-video-player-type', 'h5');
+        video.setAttribute('x5-video-player-fullscreen', 'false');
+
+        container.appendChild(video);
+
+        const label = document.createElement('div');
+        label.className = 'video-label';
+        label.textContent = displayName;
+        container.appendChild(label);
+
+        const playStream = async (retryCount = 0, maxRetries = 3) => {
+          try {
+            console.log(`🎬 尝试播放远程流 (第${retryCount + 1}次):`, stream.streamID);
+
+            const remoteStream = await zg.startPlayingStream(stream.streamID);
+            console.log('✅ SDK 返回远程流:', remoteStream);
+
+            // 手动设置 srcObject（iOS 关键步骤）
+            video.srcObject = remoteStream;
+
+            // 显式设置音频相关属性
+            video.muted = false;
+            video.volume = 1;
+            video.autoplay = true;
+            // @ts-ignore
+            video.playsInline = true;
+
+            try {
+              await video.play();
+              console.log('✅ 远程视频播放成功:', stream.streamID);
+            } catch (playError) {
+              console.warn('⚠️ video.play() 调用失败:', playError);
+              if (playError.name === 'NotAllowedError') {
+                console.warn('⚠️ 浏览器需要用户交互才能播放音视频');
+                showClickToPlayOverlay(video, container);
+              }
+            }
+          } catch (error) {
+            console.error('❌ 播放远程流失败:', error);
+            if (retryCount < maxRetries) {
+              console.log(`⏳ 准备重试播放远程流 (${retryCount + 1}/${maxRetries})...`);
+              setTimeout(() => playStream(retryCount + 1, maxRetries), 1000);
+            } else {
+              showClickToPlayOverlay(video, container);
+            }
+          }
+        };
+
+        // 立即尝试播放远端流
+        playStream();
+      }
+
+      // iOS / 微信环境下，点击解锁音视频播放
+      function showClickToPlayOverlay(video, container) {
+        // 避免重复创建
+        if (container.querySelector('.click-to-play')) {
+          return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'empty-video click-to-play';
+        overlay.textContent = '▶️ 点击播放对方视频';
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.right = '0';
+        overlay.style.bottom = '0';
+        overlay.style.background = 'rgba(0,0,0,0.4)';
+        overlay.style.cursor = 'pointer';
+
+        overlay.onclick = async () => {
+          overlay.textContent = '正在尝试播放...';
+          try {
+            await video.play();
+            overlay.remove();
+            console.log('✅ 用户点击后，远程视频播放成功');
+          } catch (err) {
+            console.error('❌ 用户点击后仍然无法播放:', err);
+            overlay.textContent = '点击重新播放';
+          }
+        };
+
+        container.appendChild(overlay);
+      }
       
       // 监听房间状态
       zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {

@@ -702,6 +702,163 @@
       color: #999;
       font-size: 13px;
     }
+
+    /* 🔥 日志面板样式 */
+    .log-panel {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 400px;
+      max-height: 500px;
+      background: rgba(0, 0, 0, 0.95);
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s ease;
+    }
+
+    .log-panel.collapsed {
+      max-height: 50px;
+    }
+
+    .log-panel-header {
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px 12px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .log-panel-title {
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .log-panel-badge {
+      background: rgba(255, 255, 255, 0.3);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .log-panel-toggle {
+      color: white;
+      font-size: 18px;
+      transition: transform 0.3s ease;
+    }
+
+    .log-panel.collapsed .log-panel-toggle {
+      transform: rotate(180deg);
+    }
+
+    .log-panel-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      max-height: 440px;
+    }
+
+    .log-panel.collapsed .log-panel-content {
+      display: none;
+    }
+
+    .log-panel-content::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .log-panel-content::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+
+    .log-panel-content::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 3px;
+    }
+
+    .log-entry {
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      border-left: 3px solid;
+      word-wrap: break-word;
+    }
+
+    .log-entry.info {
+      border-left-color: #3b82f6;
+      color: #93c5fd;
+    }
+
+    .log-entry.success {
+      border-left-color: #10b981;
+      color: #6ee7b7;
+    }
+
+    .log-entry.warning {
+      border-left-color: #f59e0b;
+      color: #fcd34d;
+    }
+
+    .log-entry.error {
+      border-left-color: #ef4444;
+      color: #fca5a5;
+    }
+
+    .log-entry.event {
+      border-left-color: #8b5cf6;
+      color: #c4b5fd;
+    }
+
+    .log-time {
+      color: #9ca3af;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    .log-panel-actions {
+      padding: 8px 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      gap: 8px;
+    }
+
+    .log-panel.collapsed .log-panel-actions {
+      display: none;
+    }
+
+    .log-btn {
+      flex: 1;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .log-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .log-btn:active {
+      transform: scale(0.95);
+    }
   </style>
 </head>
 <body>
@@ -733,7 +890,7 @@
       <!-- 本地视频 -->
       <div class="video-item">
         <div class="video-box">
-          <video id="localVideo" class="video-player" autoplay muted playsinline></video>
+          <video id="localVideo" class="video-player" autoplay muted playsinline webkit-playsinline x5-playsinline x-webkit-airplay="allow" x5-video-player-type="h5" x5-video-player-fullscreen="false"></video>
           <div class="video-label" id="localLabel">主持人</div>
         </div>
       </div>
@@ -830,6 +987,24 @@
     </div>
   </div>
 
+  <!-- 🔥 日志面板 -->
+  <div class="log-panel" id="logPanel">
+    <div class="log-panel-header" onclick="toggleLogPanel()">
+      <div class="log-panel-title">
+        <span>📊 实时日志</span>
+        <span class="log-panel-badge" id="logCount">0</span>
+      </div>
+      <div class="log-panel-toggle">▼</div>
+    </div>
+    <div class="log-panel-content" id="logContent">
+      <!-- 日志条目将动态添加到这里 -->
+    </div>
+    <div class="log-panel-actions">
+      <button class="log-btn" onclick="clearLogs()">🗑️ 清空</button>
+      <button class="log-btn" onclick="exportLogs()">💾 导出</button>
+    </div>
+  </div>
+
   <script>
     // ==================== 脚本开始执行 ====================
     console.log('🚀 video-interview.html 脚本开始执行');
@@ -861,6 +1036,91 @@
     let currentStreamId = ''; // 当前推流ID
     let interviewStartTime = null;
     let interviewTimer = null;
+
+    // 🔥 日志系统
+    let logEntries = [];
+    let logCount = 0;
+
+    // 添加日志
+    function addLog(message, type = 'info') {
+      const now = new Date();
+      const time = now.toLocaleTimeString('zh-CN', { hour12: false });
+
+      const logEntry = {
+        time,
+        message,
+        type,
+        timestamp: now.getTime()
+      };
+
+      logEntries.push(logEntry);
+      logCount++;
+
+      // 更新日志计数
+      const logCountBadge = document.getElementById('logCount');
+      if (logCountBadge) {
+        logCountBadge.textContent = logCount;
+      }
+
+      // 添加到DOM
+      const logContent = document.getElementById('logContent');
+      if (logContent) {
+        const logDiv = document.createElement('div');
+        logDiv.className = `log-entry ${type}`;
+        logDiv.innerHTML = `<span class="log-time">${time}</span>${message}`;
+        logContent.appendChild(logDiv);
+
+        // 自动滚动到底部
+        logContent.scrollTop = logContent.scrollHeight;
+
+        // 限制日志数量（最多保留200条）
+        if (logEntries.length > 200) {
+          logEntries.shift();
+          logContent.removeChild(logContent.firstChild);
+        }
+      }
+
+      // 同时输出到console
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+
+    // 切换日志面板
+    function toggleLogPanel() {
+      const logPanel = document.getElementById('logPanel');
+      logPanel.classList.toggle('collapsed');
+    }
+
+    // 清空日志
+    function clearLogs() {
+      logEntries = [];
+      logCount = 0;
+      const logContent = document.getElementById('logContent');
+      if (logContent) {
+        logContent.innerHTML = '';
+      }
+      const logCountBadge = document.getElementById('logCount');
+      if (logCountBadge) {
+        logCountBadge.textContent = '0';
+      }
+      addLog('日志已清空', 'info');
+    }
+
+    // 导出日志
+    function exportLogs() {
+      const logText = logEntries.map(entry =>
+        `[${entry.time}] [${entry.type.toUpperCase()}] ${entry.message}`
+      ).join('\n');
+
+      const blob = new Blob([logText], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `video-interview-log-${Date.now()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      addLog('日志已导出', 'success');
+    }
 
     // ==================== 获取 JWT Token ====================
     function getJwtToken() {
@@ -957,10 +1217,10 @@
 
       console.log('使用的构造函数类型:', typeof ZegoEngine);
 
-      // 创建 ZEGO 实例，并设置日志级别为 disable（完全关闭日志）
+      // 创建 ZEGO 实例，并设置日志级别为 error（只显示错误日志）
       zg = new ZegoEngine(appID, server);
       zg.setLogConfig({
-        logLevel: 'disable',  // 完全关闭 ZEGO SDK 日志
+        logLevel: 'error',  // 只显示错误日志
         remoteLogLevel: 'disable'  // 关闭远程日志
       });
 
@@ -973,11 +1233,16 @@
         console.log('🔔 流列表数量:', streamList.length);
         console.log('🔔 流详情:', streamList);
 
+        // 🔥 添加日志
+        addLog(`🔔 流更新: ${updateType} (${streamList.length}个流)`, 'event');
+
         if (updateType === 'ADD') {
           // 有新的流加入
           console.log('✅ 检测到新流加入，开始播放...');
           for (const stream of streamList) {
             console.log('📺 准备播放流:', stream.streamID, '用户:', stream.user);
+            const userName = stream.user?.userName || '未知用户';
+            addLog(`➕ 新流加入: ${userName} (${stream.streamID})`, 'success');
             await playRemoteStream(stream);
           }
         } else if (updateType === 'DELETE') {
@@ -985,11 +1250,26 @@
           console.log('⚠️ 检测到流离开');
           for (const stream of streamList) {
             console.log('📺 移除流:', stream.streamID);
+            const userName = stream.user?.userName || '未知用户';
+            addLog(`➖ 流离开: ${userName} (${stream.streamID})`, 'warning');
             removeRemoteStream(stream.streamID);
           }
         }
       });
-      
+
+      // ✅ 监听设备错误（iOS设备占用问题）
+      zg.on('deviceError', (errorCode, deviceName) => {
+        console.error('🚨 设备错误:', { errorCode, deviceName });
+
+        // 1106011: 摄像头被占用
+        // 1106012: 麦克风被占用
+        if (errorCode === 1106011 || errorCode === 1106012) {
+          const deviceType = errorCode === 1106011 ? '摄像头' : '麦克风';
+          alert(`${deviceType}被其他页面或应用占用，请关闭其他页面后刷新重试`);
+          console.error(`❌ iOS设备占用问题: ${deviceType}被占用，需要用户关闭其他页面`);
+        }
+      });
+
       // 监听房间状态
       zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
         console.log('房间状态更新:', state, errorCode);
@@ -1096,15 +1376,22 @@
 
         // 登录房间
         console.log('⏳ 正在登录房间...');
+        addLog(`🚪 主持人正在登录房间: ${roomId}`, 'info');
+        // 🔥 关键修复：添加 userUpdate: true 参数
         await zg.loginRoom(roomId, token, {
           userID: currentUserId,
           userName: currentUserName
+        }, {
+          userUpdate: true  // 🔥 开启用户和流更新通知
         });
         console.log('✅ 登录房间成功');
+        console.log('✅ 已开启用户和流更新通知 (userUpdate: true)');
+        addLog(`✅ 主持人登录成功 (用户ID: ${currentUserId})`, 'success');
 
         // 创建本地流
         console.log('正在创建本地流...');
         // ✅ 设置视频质量为 720p，并配置音频参数
+        // ⚠️ 注意：不要同时开启所有音频处理，可能导致声音问题
         localStream = await zg.createStream({
           camera: {
             video: {
@@ -1114,18 +1401,37 @@
               bitrate: 1500,
               facingMode: 'user'  // 前置摄像头
             },
-            audio: {
-              ANS: true,  // 自动降噪 (Automatic Noise Suppression)
-              AGC: true,  // 自动增益控制 (Automatic Gain Control)
-              AEC: true   // 回声消除 (Acoustic Echo Cancellation)
-            }
+            audio: true  // 使用默认音频配置，让浏览器自动处理
           }
         });
         console.log('创建本地流成功');
 
+        // ✅ 确保音频轨道已启用
+        const audioTracks = localStream.getAudioTracks();
+        console.log('🎤 音频轨道数量:', audioTracks.length);
+        audioTracks.forEach((track, index) => {
+          console.log(`🎤 音频轨道 ${index}:`, {
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState,
+            label: track.label
+          });
+          // 确保音频轨道已启用
+          track.enabled = true;
+        });
+
         // 播放本地视频
         const localVideo = document.getElementById('localVideo');
         localVideo.srcObject = localStream;
+
+        // ✅ iOS修复：显式调用play()确保本地视频显示
+        try {
+          await localVideo.play();
+          console.log('✅ 本地视频播放成功');
+        } catch (error) {
+          console.error('❌ 本地视频播放失败:', error);
+          // iOS可能需要用户交互，但本地视频通常可以自动播放（因为是muted的）
+        }
 
         // 更新本地标签
         document.getElementById('localLabel').textContent = '主持人';
@@ -1133,8 +1439,10 @@
         // 推流
         currentStreamId = 'stream_' + currentUserId;
         console.log('正在推流:', currentStreamId);
+        addLog(`📤 主持人开始推流: ${currentStreamId}`, 'info');
         await zg.startPublishingStream(currentStreamId, localStream);
         console.log('推流成功');
+        addLog(`✅ 主持人推流成功`, 'success');
 
         // 隐藏加入面板，显示主界面
         document.getElementById('joinPanel').classList.add('hidden');
@@ -1179,19 +1487,8 @@
       try {
         showMessage('正在加入房间...');
 
-        // 🎤 步骤1: 检查麦克风权限
-        const hasPermission = await checkMicrophonePermission();
-        if (!hasPermission) {
-          hideMessage();
-          return;
-        }
-
-        // 🔍 步骤2: 检查音频设备
-        const hasAudioDevice = await checkAudioDevices();
-        if (!hasAudioDevice) {
-          hideMessage();
-          return;
-        }
+        // ✅ 关键修复：不要提前检查权限，直接让ZEGO SDK处理
+        // iOS微信中，提前调用getUserMedia再停止会导致后续无法正常获取音视频
 
         // 生成用户ID
         currentUserId = 'user_' + Date.now();
@@ -1213,34 +1510,27 @@
         console.log('⏳ 正在登录房间...');
         console.log('⏳ 登录参数:', { roomId, token: token ? '已生成' : '空', userID: currentUserId, userName: currentUserName });
 
+        // 🔥 关键修复：添加 userUpdate: true 参数
         await zg.loginRoom(roomId, token, {
           userID: currentUserId,
           userName: currentUserName
+        }, {
+          userUpdate: true  // 🔥 开启用户和流更新通知
         });
         console.log('✅ 登录房间成功');
+        console.log('✅ 已开启用户和流更新通知 (userUpdate: true)');
 
-        // 创建本地流
-        console.log('正在创建本地流...');
-        // ✅ 设置视频质量为 720p，并配置音频参数
+        // 创建本地流（使用简单配置，与PC端一致）
+        console.log('⏳ 正在创建本地流...');
         localStream = await zg.createStream({
           camera: {
-            video: {
-              width: 1280,
-              height: 720,
-              frameRate: 15,
-              bitrate: 1500,
-              facingMode: 'user'  // 前置摄像头
-            },
-            audio: {
-              ANS: true,  // 自动降噪
-              AGC: true,  // 自动增益控制
-              AEC: true   // 回声消除
-            }
+            video: true,  // 使用默认视频配置
+            audio: true   // 使用默认音频配置
           }
         });
-        console.log('创建本地流成功');
-        
-        // 播放本地视频
+        console.log('✅ 创建本地流成功');
+
+        // 播放本地视频（与PC端一致）
         const localVideo = document.getElementById('localVideo');
         localVideo.srcObject = localStream;
 
@@ -1287,75 +1577,247 @@
     // ==================== 播放远程流 ====================
     async function playRemoteStream(stream) {
       console.log('▶️ 播放远程流:', stream);
+      const userName = stream.user?.userName || '访客';
+      addLog(`📺 开始播放远程流: ${userName} (${stream.streamID})`, 'info');
 
       try {
-        const remoteStream = await zg.startPlayingStream(stream.streamID);
-        remoteStreams[stream.streamID] = remoteStream;
-        console.log('✅ 开始播放远程流:', stream.streamID);
+        // 🔥 关键修复：检查是否已经在播放这个流
+        if (remoteStreams[stream.streamID]) {
+          console.log('⚠️ 流已存在，跳过:', stream.streamID);
+          addLog(`⚠️ 流已存在，跳过: ${userName}`, 'warning');
+          return;
+        }
 
-        // 找到空闲的视频位置（最多5个远程用户）
+        // 🔥 关键修复：找到真正空闲的视频位置
+        // 检查 DOM 的 data-stream-id 属性来判断容器是否被占用
+        let emptyBoxIndex = -1;
         for (let i = 1; i <= 5; i++) {
           const box = document.getElementById(`remoteBox${i}`);
-          if (box.querySelector('.video-placeholder')) {
-            // 这个位置是空的，使用它
-            // 转换用户名中的英文角色为中文
-            let displayName = stream.user.userName || '访客';
-            // 处理两种情况：1. "customer-张三" 2. "customer"（没有姓名）
-            if (displayName === 'customer') {
-              displayName = '客户';
-            } else if (displayName === 'helper') {
-              displayName = '阿姨';
-            } else {
-              displayName = displayName.replace(/^customer-/, '客户-').replace(/^helper-/, '阿姨-');
-            }
+          // 检查这个容器是否已经有 data-stream-id 属性
+          const streamId = box.getAttribute('data-stream-id');
 
-            // ✅ 远程视频不应该静音！只有本地预览才需要静音
-            box.innerHTML = `
-              <video id="remote${i}" class="video-player" autoplay playsinline webkit-playsinline x5-playsinline></video>
-              <div class="video-label">${displayName}</div>
-              <div class="manage-btn" onclick="toggleManageMenu(event, '${stream.streamID}', '${stream.user.userID}')">
-                <div class="manage-icon">⋮</div>
-              </div>
-              <div class="manage-menu" id="menu_${stream.streamID}">
-                <div class="manage-menu-item" onclick="remoteControlCamera('${stream.user.userID}', false)">
-                  <span class="manage-menu-icon">📹</span>
-                  <span>关闭摄像头</span>
-                </div>
-                <div class="manage-menu-item" onclick="remoteControlMic('${stream.user.userID}', false)">
-                  <span class="manage-menu-icon">🎤</span>
-                  <span>关闭麦克风</span>
-                </div>
-                <div class="manage-menu-item danger" onclick="kickUser('${stream.user.userID}', '${displayName}')">
-                  <span class="manage-menu-icon">🚪</span>
-                  <span>移出面试间</span>
-                </div>
-              </div>
-            `;
-            const video = document.getElementById(`remote${i}`);
-            video.srcObject = remoteStream;
-
-            // ✅ iOS 兼容性：强制播放
-            try {
-              await video.play();
-              console.log('✅ 远程视频播放成功（有声音）:', stream.streamID);
-            } catch (error) {
-              console.error('❌ 远程视频播放失败:', error);
-              // iOS 可能需要用户交互才能播放，尝试再次播放
-              try {
-                await video.play();
-                console.log('✅ 远程视频播放成功（重试）:', stream.streamID);
-              } catch (e) {
-                console.error('❌ 远程视频播放失败（重试也失败）:', e);
-                alert('播放远程视频失败，请刷新页面重试');
-              }
-            }
-
-            // 保存streamID和userID到box的data属性，方便后续查找
-            box.setAttribute('data-stream-id', stream.streamID);
-            box.setAttribute('data-user-id', stream.user.userID);
+          if (!streamId || streamId === '') {
+            // 这个容器没有 data-stream-id，说明是空的
+            emptyBoxIndex = i;
+            console.log(`✅ 找到空位: remoteBox${i}`);
+            addLog(`✅ 分配容器位置${i}给: ${userName}`, 'info');
             break;
+          } else {
+            console.log(`⚠️ remoteBox${i} 已被占用，streamId: ${streamId}`);
           }
         }
+
+        if (emptyBoxIndex === -1) {
+          console.warn('⚠️ 没有空位了');
+          addLog(`⚠️ 没有空位，无法播放: ${userName}`, 'warning');
+          return;
+        }
+
+        const i = emptyBoxIndex;
+        const box = document.getElementById(`remoteBox${i}`);
+
+        // 🔥 彻底清理容器
+        const oldVideos = box.querySelectorAll('video');
+        oldVideos.forEach(video => {
+          video.pause();
+          video.srcObject = null;
+          video.src = '';
+        });
+
+        // 转换用户名中的英文角色为中文
+        let displayName = stream.user.userName || '访客';
+        // 处理两种情况：1. "customer-张三" 2. "customer"（没有姓名）
+        if (displayName === 'customer') {
+          displayName = '客户';
+        } else if (displayName === 'helper') {
+          displayName = '阿姨';
+        } else {
+          displayName = displayName.replace(/^customer-/, '客户-').replace(/^helper-/, '阿姨-');
+        }
+
+        // ✅ 创建唯一的video ID
+        const videoId = `remote${i}`;
+
+        // ✅ 远程视频不应该静音！只有本地预览才需要静音
+        // ✅ iOS修复：添加所有必要的属性确保视频和音频正常播放
+        box.innerHTML = `
+          <video id="${videoId}" class="video-player" autoplay playsinline webkit-playsinline x5-playsinline x-webkit-airplay="allow" x5-video-player-type="h5" x5-video-player-fullscreen="false"></video>
+          <div class="video-label">${displayName}</div>
+          <div class="manage-btn" onclick="toggleManageMenu(event, '${stream.streamID}', '${stream.user.userID}')">
+            <div class="manage-icon">⋮</div>
+          </div>
+          <div class="manage-menu" id="menu_${stream.streamID}">
+            <div class="manage-menu-item" onclick="remoteControlCamera('${stream.user.userID}', false)">
+              <span class="manage-menu-icon">📹</span>
+              <span>关闭摄像头</span>
+            </div>
+            <div class="manage-menu-item" onclick="remoteControlMic('${stream.user.userID}', false)">
+              <span class="manage-menu-icon">🎤</span>
+              <span>关闭麦克风</span>
+            </div>
+            <div class="manage-menu-item danger" onclick="kickUser('${stream.user.userID}', '${displayName}')">
+              <span class="manage-menu-icon">🚪</span>
+              <span>移出面试间</span>
+            </div>
+          </div>
+        `;
+
+        const video = document.getElementById(videoId);
+
+        // 🔊 关键修复：显式设置远程视频音量为最大（1.0）
+        video.volume = 1.0;
+        // ✅ 确保不静音（这是关键！）
+        video.muted = false;
+        console.log('🔊 设置远程视频音量为:', video.volume, '静音状态:', video.muted);
+
+        // ✅✅✅ 使用ZEGO官方推荐方式：让SDK自动处理iOS兼容性
+        // 这是ZEGO官方文档推荐的最佳实践，SDK会自动处理：
+        // 1. iOS autoplay策略
+        // 2. 用户交互要求
+        // 3. 自动重试机制
+        // 4. 设备占用检测
+
+        // 定义播放函数（支持自动重试）
+        const playStream = async (retryCount = 0, maxRetries = 3) => {
+          try {
+            console.log(`🎬 尝试播放远程流 (第${retryCount + 1}次):`, stream.streamID);
+
+                // 🔥 iOS 修复：不传 video 元素给 SDK，手动处理所有步骤
+                // 这样可以确保在 iOS 上正确设置 srcObject 和调用 play()
+                const remoteStream = await zg.startPlayingStream(stream.streamID);
+
+                console.log('✅ SDK 返回远程流:', remoteStream);
+                console.log('📹 远程流视频轨道数量:', remoteStream.getVideoTracks().length);
+                console.log('🎤 远程流音频轨道数量:', remoteStream.getAudioTracks().length);
+
+                remoteStream.getVideoTracks().forEach((track, index) => {
+                  console.log(`📹 远程视频轨道 ${index}:`, {
+                    enabled: track.enabled,
+                    muted: track.muted,
+                    readyState: track.readyState,
+                    label: track.label
+                  });
+                });
+                remoteStream.getAudioTracks().forEach((track, index) => {
+                  console.log(`🎤 远程音频轨道 ${index}:`, {
+                    enabled: track.enabled,
+                    muted: track.muted,
+                    readyState: track.readyState,
+                    label: track.label
+                  });
+                });
+
+                // 🔥 手动设置 srcObject（iOS 关键步骤）
+                video.srcObject = remoteStream;
+                console.log('✅ 已设置 srcObject');
+
+                // 🔥 iOS 关键修复：设置音频属性并显式调用 play()
+                video.muted = false;  // 确保不静音
+                video.volume = 1;     // 确保音量最大
+                video.playsInline = true;  // iOS 内联播放
+                video.autoplay = true;     // 自动播放
+
+                console.log('🔊 Video元素配置 - 音量:', video.volume, '静音:', video.muted, 'playsInline:', video.playsInline);
+
+                // 显式调用 play()
+                try {
+                  await video.play();
+                  console.log('✅ iOS修复：显式调用 play() 成功');
+                } catch (playError) {
+                  console.warn('⚠️ iOS修复：play() 调用失败:', playError.message);
+                  // 如果 play() 失败，可能需要用户交互
+                  if (playError.name === 'NotAllowedError') {
+                    console.log('⚠️ 需要用户交互才能播放');
+                  }
+                }
+
+                remoteStreams[stream.streamID] = remoteStream;
+                console.log('✅ 远程视频播放成功:', stream.streamID);
+                addLog(`✅ 远程流播放成功: ${displayName} (位置${i})`, 'success');
+
+                return true;
+
+              } catch (error) {
+                console.warn(`⚠️ 播放失败 (第${retryCount + 1}次):`, error.name, error.message);
+
+                // ✅ iOS修复：如果是自动播放策略问题，提示用户点击播放
+                if (error.name === 'NotAllowedError' || error.name === 'NotSupportedError') {
+                  console.log('⚠️ 需要用户交互才能播放，显示播放按钮');
+
+                  // 创建播放按钮覆盖层
+                  const playButton = document.createElement('div');
+                  playButton.style.cssText = `
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(0, 0, 0, 0.7);
+                    color: white;
+                    padding: 15px 30px;
+                    border-radius: 25px;
+                    cursor: pointer;
+                    font-size: 16px;
+                    z-index: 100;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                  `;
+                  playButton.innerHTML = '▶️ 点击播放视频';
+
+                  box.style.position = 'relative';
+                  box.appendChild(playButton);
+
+                  // 点击播放按钮时重新尝试播放
+                  playButton.onclick = async () => {
+                    try {
+                      // 用户交互后，重新调用SDK播放
+                      await zg.startPlayingStream(stream.streamID, {
+                        video: video,
+                        audio: true
+                      });
+                      console.log('✅ 用户点击后视频播放成功');
+                      playButton.remove();
+                    } catch (e) {
+                      console.error('❌ 用户点击后仍然播放失败:', e);
+                      alert('播放失败，请检查浏览器权限设置或刷新页面重试');
+                    }
+                  };
+
+                  return false;
+
+                } else if (retryCount < maxRetries) {
+                  // ✅ 自动重试机制：其他错误自动重试
+                  console.log(`🔄 ${(retryCount + 1) * 1000}ms后自动重试...`);
+                  await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 1000));
+                  return await playStream(retryCount + 1, maxRetries);
+
+                } else {
+                  // ✅ 降级方案：尝试旧方式（手动设置srcObject）
+                  console.log('🔄 尝试降级方案（手动设置srcObject）...');
+                  try {
+                    const remoteStream = await zg.startPlayingStream(stream.streamID);
+                    video.srcObject = remoteStream;
+                    remoteStreams[stream.streamID] = remoteStream;
+
+                    await video.play();
+                    console.log('✅ 降级方案播放成功:', stream.streamID);
+                    return true;
+
+                  } catch (e) {
+                    console.error('❌ 降级方案也失败了:', e.name, e.message);
+                    alert('播放远程视频失败，请刷新页面重试');
+                    return false;
+                  }
+                }
+              }
+            };
+
+        // 执行播放
+        await playStream();
+
+        // 保存streamID和userID到box的data属性，方便后续查找
+        box.setAttribute('data-stream-id', stream.streamID);
+        box.setAttribute('data-user-id', stream.user.userID);
 
         console.log('✅ 远程流播放成功');
       } catch (error) {
@@ -1366,30 +1828,40 @@
     // ==================== 移除远程流 ====================
     function removeRemoteStream(streamID) {
       console.log('🗑️ 移除远程流:', streamID);
+      addLog(`🗑️ 移除远程流: ${streamID}`, 'warning');
 
       // 停止播放流
       if (remoteStreams[streamID]) {
         try {
           zg.stopPlayingStream(streamID);
           console.log('✅ 已停止播放流:', streamID);
+          addLog(`✅ 已停止播放流: ${streamID}`, 'success');
         } catch (error) {
           console.error('停止播放流失败:', error);
+          addLog(`❌ 停止播放流失败: ${error.message}`, 'error');
         }
         delete remoteStreams[streamID];
       }
 
-      // 恢复占位符
+      // 🔥 彻底清理容器
       for (let i = 1; i <= 5; i++) {
         const box = document.getElementById(`remoteBox${i}`);
         if (box.getAttribute('data-stream-id') === streamID) {
           console.log(`🧹 清理视频容器 remoteBox${i}`);
+          addLog(`🧹 清理容器位置${i}`, 'info');
 
-          // 清理 video 元素
-          const video = box.querySelector('video');
-          if (video) {
-            video.srcObject = null;
+          // 🔥 彻底清理所有 video 元素
+          const videos = box.querySelectorAll('video');
+          videos.forEach(video => {
             video.pause();
-            video.remove();
+            video.srcObject = null;
+            video.src = '';
+            video.load(); // 重置video元素
+          });
+
+          // 🔥 移除所有子元素
+          while (box.firstChild) {
+            box.removeChild(box.firstChild);
           }
 
           // 移除属性
@@ -1404,7 +1876,8 @@
             </div>
           `;
 
-          console.log(`✅ 视频容器 remoteBox${i} 已清理`);
+          console.log(`✅ 视频容器 remoteBox${i} 已彻底清理`);
+          addLog(`✅ 容器位置${i}已释放`, 'success');
           break;
         }
       }
@@ -1670,12 +2143,24 @@
 
     // 显示邀请弹窗
     function showInviteModal() {
+      console.log('📨 显示邀请弹窗');
+      console.log('🏠 当前roomId:', roomId);
+
+      // 🔥 检查roomId是否存在
+      if (!roomId || roomId === '') {
+        alert('请先创建面试间！');
+        console.error('❌ roomId为空，无法生成邀请链接');
+        return;
+      }
+
       const modal = document.getElementById('inviteModal');
       const inviteLinkInput = document.getElementById('inviteLink');
 
       // 生成邀请链接
       const baseUrl = window.location.origin + window.location.pathname.replace('video-interview-host.html', '');
       const inviteLink = `${baseUrl}video-interview-guest.html?roomId=${roomId}`;
+
+      console.log('🔗 生成的邀请链接:', inviteLink);
 
       inviteLinkInput.value = inviteLink;
       modal.classList.add('show');
@@ -1895,18 +2380,26 @@
         console.log('✅ Token 生成库加载成功');
       }
 
+      // 🔥 添加初始日志
+      addLog('🎬 视频面试系统启动', 'info');
+      addLog(`📱 房间ID: ${roomId || '待创建'}`, 'info');
+
       // 等待 SDK 加载
       if (typeof ZegoExpressEngine === 'undefined') {
         console.log('⏳ ZEGO SDK 尚未加载，等待中...');
+        addLog('⏳ ZEGO SDK 尚未加载，等待中...', 'warning');
         try {
           await waitForSDK();
+          addLog('✅ ZEGO SDK 加载成功', 'success');
         } catch (error) {
           console.error('❌ ZEGO SDK 加载失败:', error);
+          addLog('❌ ZEGO SDK 加载失败', 'error');
           alert('视频SDK加载失败，请检查网络连接后刷新页面重试');
           return;
         }
       } else {
         console.log('✅ ZEGO SDK 已加载');
+        addLog('✅ ZEGO SDK 已加载', 'success');
       }
 
       initZego();

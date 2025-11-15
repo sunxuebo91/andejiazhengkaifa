@@ -268,14 +268,14 @@ const VideoInterview: React.FC = () => {
     return `${baseUrl}/interview/join/${roomInfo.roomId}?name=${encodeURIComponent('视频面试')}`;
   };
 
-  // 生成移动端分享链接（统一使用 PC 端链接，自动适配移动端）
+  // 生成移动端分享链接（使用miniprogram目录下的H5页面）
   const generateMobileShareLink = () => {
     if (!roomInfo) {
       return '';
     }
     const baseUrl = window.location.origin;
-    // 统一使用 PC 端链接，ZegoUIKitPrebuilt 会自动适配移动端
-    return `${baseUrl}/interview/join/${roomInfo.roomId}?name=${encodeURIComponent('视频面试')}`;
+    // 🔥 移动端使用 miniprogram 目录下的 H5 页面，必须包含 roomId 参数
+    return `${baseUrl}/miniprogram/video-interview-guest.html?roomId=${roomInfo.roomId}`;
   };
 
 
@@ -389,7 +389,7 @@ const VideoInterview: React.FC = () => {
           },
           // 🌐 设置语言为中文
           language: 'zh-CN' as any,
-          showPreJoinView: false, // 跳过预加入页面，直接进入房间
+          showPreJoinView: true, // 显示预加入页面，让用户授权摄像头和麦克风
           turnOnMicrophoneWhenJoining: true,
           turnOnCameraWhenJoining: true,
           showMyCameraToggleButton: true,
@@ -406,6 +406,7 @@ const VideoInterview: React.FC = () => {
           showUserName: true, // 显示用户名
           // 视频配置
           videoResolutionDefault: ZegoUIKitPrebuilt.VideoResolution_720P,
+	          videoCodec: 'H264' as const,
           // 🎨 美颜功能通过音视频设置按钮访问
           // 🔥 HR端管理权限：踢人、禁言、关闭摄像头
           // 注意：在 GroupCall 模式下，这些按钮对所有人可见，但通常第一个加入的人被视为"房主"
@@ -1158,7 +1159,7 @@ const VideoInterview: React.FC = () => {
           <div style={{ marginBottom: 24 }}>
             <Title level={5}>📱 移动端链接（H5）</Title>
             <Paragraph type="secondary" style={{ fontSize: 12 }}>
-              适用于手机浏览器访问
+              适用于手机浏览器访问（推荐用于微信分享）
             </Paragraph>
             <Input.TextArea
               value={generateMobileShareLink()}
@@ -1187,10 +1188,10 @@ const VideoInterview: React.FC = () => {
               <br />
               • <strong>PC端链接</strong>：发送给使用电脑的用户
               <br />
-              • <strong>移动端链接</strong>：发送给使用手机浏览器的用户
+              • <strong>移动端链接</strong>：发送给使用手机浏览器的用户（包括微信）
               <br />
               <br />
-              <Text type="secondary">💡 提示：复制链接后可通过微信、短信等方式发送给面试者</Text>
+              <Text type="secondary">💡 提示：复制链接后可通过微信、短信等方式发送给面试者。访客点击链接后会自动跳转到面试间。</Text>
             </Paragraph>
           </div>
         </Modal>

@@ -9,6 +9,13 @@
         }
       ]
     }
-  ]
+  ],
+  "rewrites": [
+    {
+      "source": "/miniprogram/**",
+      "destination": "/miniprogram/$1"
+    }
+  ],
+  "cleanUrls": false
 }
 

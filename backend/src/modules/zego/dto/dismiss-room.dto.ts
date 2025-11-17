@@ -4,5 +4,9 @@ export class DismissRoomDto {
   @IsString()
   @IsNotEmpty()
   roomId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  hostUserId: string;
 }
 

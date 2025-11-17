@@ -7,6 +7,10 @@ export class RemoteControlDto {
 
   @IsString()
   @IsNotEmpty()
+  hostUserId: string;
+
+  @IsString()
+  @IsNotEmpty()
   targetUserId: string;
 
   @IsString()

@@ -5,6 +5,7 @@ import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { generateZegoToken } from '../../services/zego';
 import { apiService } from '../../services/api';
 import { setToken } from '../../services/auth';
+import './VideoInterviewMobile.css';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -26,9 +27,8 @@ const VideoInterview: React.FC = () => {
   // 📝 提词器相关状态
   const [teleprompterDrawerVisible, setTeleprompterDrawerVisible] = useState(false);
   const [teleprompterContent, setTeleprompterContent] = useState('');
-  const [teleprompterSpeed, setTeleprompterSpeed] = useState(50); // 滚动速度(像素/秒)
-  const [teleprompterHeight, setTeleprompterHeight] = useState('50vh'); // 显示高度
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(['ALL']); // 选中的参与者
+  const [teleprompterSpeed, setTeleprompterSpeed] = useState(10); // 滚动速度(像素/秒)
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]); // 选中的参与者
 
   // 🎨 美颜相关状态
   const [beautyDrawerVisible, setBeautyDrawerVisible] = useState(false);
@@ -39,10 +39,24 @@ const VideoInterview: React.FC = () => {
     sharpening: 30,   // 锐化 (0-100)
     rosiness: 40      // 红润 (0-100)
   });
-  const [participants, setParticipants] = useState<Array<{ userId: string; userName: string }>>([]); // 参与者列表
+  const [participants, setParticipants] = useState<Array<{ userId: string; userName: string; role?: string }>>([]); // 参与者列表
 
   // 🔧 定期清理检查定时器
   const cleanupIntervalRef = useRef<any>(null);
+
+  // 📱 移动端检测
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // 📱 从URL读取参数，支持小程序传入 roomId/userName/token
   useEffect(() => {
@@ -115,6 +129,11 @@ const VideoInterview: React.FC = () => {
       return;
     }
 
+    if (selectedParticipants.length === 0) {
+      message.warning('请选择要推送的阿姨');
+      return;
+    }
+
     if (!roomInfo) {
       message.error('请先加入房间');
       return;
@@ -126,7 +145,6 @@ const VideoInterview: React.FC = () => {
         content: teleprompterContent,
         targetUserIds: selectedParticipants,
         scrollSpeed: teleprompterSpeed,
-        displayHeight: teleprompterHeight,
       });
 
       if (response.success) {
@@ -141,7 +159,7 @@ const VideoInterview: React.FC = () => {
   };
 
   // 控制提词器播放状态
-  const controlTeleprompter = async (action: 'PLAY' | 'PAUSE' | 'STOP') => {
+  const controlTeleprompter = async (action: 'PLAY' | 'PAUSE' | 'STOP' | 'SHOW' | 'HIDE') => {
     if (!roomInfo) {
       message.error('请先加入房间');
       return;
@@ -161,6 +179,10 @@ const VideoInterview: React.FC = () => {
           message.info('提词器已暂停');
         } else if (action === 'STOP') {
           message.info('提词器已停止并隐藏');
+        } else if (action === 'SHOW') {
+          message.success('提词器已显示');
+        } else if (action === 'HIDE') {
+          message.info('提词器已关闭');
         }
       } else {
         throw new Error(response.message || '操作失败');
@@ -168,6 +190,43 @@ const VideoInterview: React.FC = () => {
     } catch (error: any) {
       console.error('控制提词器失败:', error);
       message.error(error.message || '操作失败，请重试');
+    }
+  };
+
+  // 一键推送并开启提词器
+  const quickStartTeleprompter = async () => {
+    if (!teleprompterContent.trim()) {
+      message.warning('请输入提词内容');
+      return;
+    }
+
+    if (selectedParticipants.length === 0) {
+      message.warning('请选择要推送的阿姨');
+      return;
+    }
+
+    if (!roomInfo) {
+      message.error('请先加入房间');
+      return;
+    }
+
+    try {
+      const response = await apiService.post('/api/zego/quick-start-teleprompter', {
+        roomId: roomInfo.roomId,
+        content: teleprompterContent,
+        targetUserIds: selectedParticipants,
+        scrollSpeed: teleprompterSpeed,
+        autoPlay: true,
+      });
+
+      if (response.success) {
+        message.success('🚀 提词器已启动！');
+      } else {
+        throw new Error(response.message || '启动失败');
+      }
+    } catch (error: any) {
+      console.error('快速启动提词器失败:', error);
+      message.error(error.message || '启动失败，请重试');
     }
   };
 
@@ -471,7 +530,15 @@ const VideoInterview: React.FC = () => {
             // 更新参与者列表
             setParticipants(prev => {
               const newUsers = users.filter(u => !prev.some(p => p.userId === u.userID));
-              return [...prev, ...newUsers.map(u => ({ userId: u.userID, userName: u.userName }))];
+              return [...prev, ...newUsers.map(u => {
+                // 从userId中提取角色信息 (guest_xxx 或 user_xxx)
+                const role = u.userID.startsWith('guest_') ? 'helper' : 'interviewer';
+                return {
+                  userId: u.userID,
+                  userName: u.userName,
+                  role
+                };
+              })];
             });
           },
           // 用户离开回调
@@ -819,49 +886,80 @@ const VideoInterview: React.FC = () => {
         {/* 📝 提词器控制抽屉 */}
         <Drawer
           title="📝 提词器控制"
-          placement="right"
-          width={450}
+          placement={isMobile ? "bottom" : "right"}
+          height={isMobile ? "70vh" : undefined}
+          width={isMobile ? undefined : 450}
           open={teleprompterDrawerVisible}
           onClose={() => setTeleprompterDrawerVisible(false)}
+          className={isMobile ? "mobile-teleprompter-drawer" : ""}
         >
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             {/* 提词内容输入 */}
             <div>
-              <div style={{ marginBottom: 8, fontWeight: 500 }}>提词内容:</div>
+              <div style={{
+                marginBottom: 6,
+                fontWeight: 600,
+                fontSize: isMobile ? '15px' : '14px'
+              }}>
+                提词内容:
+              </div>
               <Input.TextArea
                 value={teleprompterContent}
                 onChange={(e) => setTeleprompterContent(e.target.value)}
-                placeholder="请输入提词内容，支持多行文本..."
-                autoSize={{ minRows: 8, maxRows: 15 }}
-                style={{ fontSize: '14px' }}
+                placeholder="请输入提词内容..."
+                autoSize={{ minRows: isMobile ? 4 : 8, maxRows: 15 }}
+                style={{
+                  fontSize: isMobile ? '15px' : '14px',
+                  minHeight: isMobile ? '100px' : 'auto'
+                }}
               />
             </div>
 
             {/* 推送对象选择 */}
             <div>
-              <div style={{ marginBottom: 8, fontWeight: 500 }}>推送给:</div>
+              <div style={{
+                marginBottom: 6,
+                fontWeight: 600,
+                fontSize: isMobile ? '15px' : '14px'
+              }}>
+                推送给:
+              </div>
               <Select
                 mode="multiple"
                 style={{ width: '100%' }}
-                placeholder="选择推送对象"
+                size={isMobile ? "large" : "middle"}
+                placeholder="请选择阿姨"
                 value={selectedParticipants}
                 onChange={setSelectedParticipants}
                 options={[
-                  { label: '所有受邀者', value: 'ALL' },
-                  ...participants.map(p => ({
-                    label: `${p.userName} (${p.userId})`,
-                    value: p.userId,
-                  })),
+                  { label: '所有阿姨', value: 'ALL' },
+                  ...participants
+                    .filter(p => p.role === 'helper')
+                    .map(p => ({
+                      label: `${p.userName}`,
+                      value: p.userId,
+                    })),
                 ]}
               />
-              <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-                当前房间有 {participants.length} 位受邀者
+              <div style={{
+                marginTop: 8,
+                fontSize: isMobile ? '14px' : '12px',
+                color: '#999',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                💡 当前房间有 {participants.filter(p => p.role === 'helper').length} 位阿姨在线
               </div>
             </div>
 
             {/* 滚动速度调整 */}
             <div>
-              <div style={{ marginBottom: 8, fontWeight: 500 }}>
+              <div style={{
+                marginBottom: 8,
+                fontWeight: 600,
+                fontSize: isMobile ? '15px' : '14px'
+              }}>
                 滚动速度: {teleprompterSpeed} 像素/秒
               </div>
               <Slider
@@ -871,56 +969,89 @@ const VideoInterview: React.FC = () => {
                 onChange={setTeleprompterSpeed}
                 marks={{
                   10: '极慢',
-                  20: '慢',
+                  30: '慢',
                   50: '中',
-                  100: '快',
+                  70: '快',
+                  100: '极快',
                 }}
-              />
-            </div>
-
-            {/* 显示高度调整 */}
-            <div>
-              <div style={{ marginBottom: 8, fontWeight: 500 }}>显示高度:</div>
-              <Select
-                style={{ width: '100%' }}
-                value={teleprompterHeight}
-                onChange={setTeleprompterHeight}
-                options={[
-                  { label: '30% 屏幕高度', value: '30vh' },
-                  { label: '50% 屏幕高度', value: '50vh' },
-                  { label: '70% 屏幕高度', value: '70vh' },
-                ]}
               />
             </div>
 
             {/* 控制按钮 */}
             <div>
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                {/* 一键推送并开启 */}
                 <Button
                   type="primary"
                   block
                   size="large"
                   icon={<ShareAltOutlined />}
-                  onClick={pushTeleprompterContent}
+                  onClick={quickStartTeleprompter}
+                  style={{
+                    height: isMobile ? '48px' : '40px',
+                    fontSize: isMobile ? '16px' : '16px',
+                    fontWeight: 600,
+                    borderRadius: '12px',
+                    background: '#5DBFB3',
+                    borderColor: '#5DBFB3',
+                    boxShadow: '0 4px 12px rgba(93, 191, 179, 0.3)'
+                  }}
                 >
-                  📤 推送内容
+                  🚀 一键推送并开启
                 </Button>
 
-                <Space style={{ width: '100%' }}>
+                {/* 分步操作 */}
+                <Space style={{ width: '100%' }} size="middle">
+                  <Button
+                    block
+                    size="large"
+                    icon={<ShareAltOutlined />}
+                    onClick={pushTeleprompterContent}
+                    style={{
+                      flex: 1,
+                      height: isMobile ? '48px' : '40px',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    📤 推送
+                  </Button>
+                  <Button
+                    block
+                    size="large"
+                    onClick={() => controlTeleprompter('SHOW')}
+                    style={{
+                      flex: 1,
+                      height: isMobile ? '48px' : '40px',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    👁️ 显示
+                  </Button>
+                </Space>
+
+                <Space style={{ width: '100%' }} size="middle">
                   <Button
                     type="primary"
                     size="large"
                     onClick={() => controlTeleprompter('PLAY')}
-                    style={{ flex: 1 }}
+                    style={{
+                      flex: 1,
+                      height: isMobile ? '48px' : '40px',
+                      borderRadius: '8px'
+                    }}
                   >
-                    ▶️ 开始播放
+                    ▶️ 播放
                   </Button>
                   <Button
                     size="large"
                     onClick={() => controlTeleprompter('PAUSE')}
-                    style={{ flex: 1 }}
+                    style={{
+                      flex: 1,
+                      height: isMobile ? '48px' : '40px',
+                      borderRadius: '8px'
+                    }}
                   >
-                    ⏸️ 暂停播放
+                    ⏸️ 暂停
                   </Button>
                 </Space>
 
@@ -928,9 +1059,13 @@ const VideoInterview: React.FC = () => {
                   danger
                   block
                   size="large"
-                  onClick={() => controlTeleprompter('STOP')}
+                  onClick={() => controlTeleprompter('HIDE')}
+                  style={{
+                    height: isMobile ? '48px' : '40px',
+                    borderRadius: '8px'
+                  }}
                 >
-                  ⏹️ 停止并隐藏
+                  ❌ 关闭提词器
                 </Button>
               </Space>
             </div>
@@ -944,7 +1079,7 @@ const VideoInterview: React.FC = () => {
                 <br />
                 2. 选择推送对象（所有人或特定受邀者）
                 <br />
-                3. 调整滚动速度和显示高度
+                3. 调整滚动速度
                 <br />
                 4. 点击"推送内容"发送给受邀者
                 <br />

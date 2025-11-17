@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { message, Modal } from 'antd';
 import { ZegoExpressEngine } from 'zego-express-engine-webrtc';
+// 🎯 引入 AI 降噪模块
+import { AiDenoise } from 'zego-express-engine-webrtc/aidenoise';
 import { generateZegoToken } from '../../services/zego';
 import { apiService } from '../../services/api';
 import './H5VideoRoom.css';
@@ -42,13 +44,27 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
   const [duration, setDuration] = useState(0);
   const [signalStrength] = useState(3); // 0-3 (暂时固定值，后续可以动态更新)
 
+  // 🎯 新增：准备页面和加载状态
+  const [isReady, setIsReady] = useState(false); // 是否已准备好（点击了加入按钮）
+  const [isLoading, setIsLoading] = useState(false); // 是否正在加载
+  const [loadingProgress, setLoadingProgress] = useState(0); // 加载进度 0-100
+  const [loadingText, setLoadingText] = useState('准备中...'); // 加载提示文本
+
   // 定时器
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 初始化 ZEGO
   useEffect(() => {
+    // 🎯 只有点击"加入面试间"后才初始化
+    if (!isReady) {
+      return;
+    }
+
     const initZego = async () => {
       try {
+        setIsLoading(true);
+        setLoadingProgress(0);
+        setLoadingText('正在连接服务器...');
         console.log('🚀 初始化 ZEGO Express Engine...');
 
         // 获取 token
@@ -66,6 +82,13 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
         const { appId, token } = response.data;
         const server = 'wss://webliveroom-api.zego.im/ws';
 
+        setLoadingProgress(20);
+        setLoadingText('正在初始化引擎...');
+
+        // 🎯 在创建引擎前注册 AI 降噪模块
+        (ZegoExpressEngine as any).use(AiDenoise);
+        console.log('✅ AI 降噪模块已注册');
+
         // 创建引擎
         const zg = new (ZegoExpressEngine as any)(appId, server);
 
@@ -76,6 +99,9 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
         });
 
         zegoEngineRef.current = zg;
+
+        setLoadingProgress(40);
+        setLoadingText('正在登录房间...');
 
         // 监听远端流更新
         zg.on('roomStreamUpdate', async (roomID: string, updateType: string, streamList: any[]) => {
@@ -115,21 +141,27 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
         await zg.loginRoom(roomId, token, { userID: userId, userName: userName }, { userUpdate: true });
         console.log('✅ 登录房间成功');
 
-        // 创建本地流（移动端竖屏比例 9:16）
+        setLoadingProgress(60);
+        setLoadingText('正在打开摄像头...');
+
+        // 创建本地流（优化参数，提升加载速度）
         const localStream = await zg.createStream({
           camera: {
             audio: true,
             video: {
-              quality: 4,  // 视频质量 1-4，4为最高
+              quality: 3,  // 视频质量 1-4，使用3平衡质量和速度
               frameRate: 15,  // 帧率
-              width: 480,  // 宽度（竖屏）
-              height: 854  // 高度（竖屏 9:16 比例）
+              width: 360,  // 宽度（降低分辨率提升速度）
+              height: 640  // 高度（竖屏 9:16 比例）
             }
           }
         });
         localStreamRef.current = localStream;
 
-        // 渲染本地视频
+        setLoadingProgress(80);
+        setLoadingText('正在连接视频...');
+
+        // 🎯 立即渲染本地视频（提升用户体验）
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = localStream;
           localVideoRef.current.play();
@@ -139,6 +171,23 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
         const streamID = `${roomId}_${userId}_main`;
         await zg.startPublishingStream(streamID, localStream);
         console.log('✅ 推流成功');
+
+        setLoadingProgress(100);
+        setLoadingText('加载完成！');
+
+        // 🎯 异步启用 AI 降噪（不阻塞推流）
+        zg.enableAiDenoise(localStream, true)
+          .then(() => {
+            console.log('✅ AI 降噪已启用');
+          })
+          .catch((error: any) => {
+            console.warn('⚠️ AI 降噪启用失败:', error);
+          });
+
+        // 延迟隐藏加载界面
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 500);
 
         // 启动时长计时器
         durationTimerRef.current = setInterval(() => {
@@ -162,6 +211,8 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
           }
         }
 
+        setIsLoading(false);
+        setIsReady(false); // 重置状态，允许重新尝试
         message.error(`初始化失败: ${errorMessage}`);
         if (onLeave) {
           onLeave();
@@ -188,7 +239,7 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
         clearInterval(durationTimerRef.current);
       }
     };
-  }, [roomId, userId, userName]);
+  }, [roomId, userId, userName, isReady]); // 🎯 添加 isReady 依赖
 
   // 渲染远端视频
   useEffect(() => {
@@ -376,15 +427,64 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
 
   return (
     <div className="h5-video-room">
-      {/* 顶部状态栏 */}
-      <div className="top-bar">
-        <div className="room-id">房间: {roomId}</div>
-        {renderSignalStrength()}
-        <div className="duration">{formatDuration(duration)}</div>
-      </div>
+      {/* 🎯 准备页面 - 显示"加入面试间"按钮 */}
+      {!isReady && !isLoading && (
+        <div className="prepare-page">
+          <div className="prepare-content">
+            <div className="prepare-icon">🎥</div>
+            <h2 className="prepare-title">视频面试</h2>
+            <div className="prepare-info">
+              <p>房间号: <strong>{roomId}</strong></p>
+              <p>用户名: <strong>{userName}</strong></p>
+              <p>角色: <strong>{role === 'host' ? '主持人' : role === 'helper' ? '阿姨' : '访客'}</strong></p>
+            </div>
+            <button
+              className="join-button"
+              onClick={() => setIsReady(true)}
+            >
+              加入面试间
+            </button>
+            <div className="prepare-tips">
+              <p>💡 温馨提示：</p>
+              <ul>
+                <li>请确保网络连接稳定</li>
+                <li>请允许浏览器访问摄像头和麦克风</li>
+                <li>建议使用耳机以获得更好的音质</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* 视频区域 - 待实现 */}
-      <div className="video-container">
+      {/* 🎯 加载页面 - 显示加载进度 */}
+      {isLoading && (
+        <div className="loading-page">
+          <div className="loading-content">
+            <div className="loading-spinner"></div>
+            <h3 className="loading-title">{loadingText}</h3>
+            <div className="progress-bar">
+              <div
+                className="progress-fill"
+                style={{ width: `${loadingProgress}%` }}
+              ></div>
+            </div>
+            <div className="progress-text">{loadingProgress}%</div>
+          </div>
+        </div>
+      )}
+
+      {/* 🎯 视频房间 - 加载完成后显示 */}
+      {isReady && !isLoading && (
+        <>
+          {/* 顶部状态栏 */}
+          <div className="top-bar">
+            <div className="room-id">房间: {roomId}</div>
+            {renderSignalStrength()}
+            <div className="duration">{formatDuration(duration)}</div>
+          </div>
+
+          {/* 视频区域 - 待实现 */}
+          <div className="video-container">
         {/* 本地视频 */}
         <div className="video-item">
           <video ref={localVideoRef} autoPlay playsInline muted className="video-element" />
@@ -488,19 +588,21 @@ const H5VideoRoom: React.FC<H5VideoRoomProps> = ({
         </div>
       )}
 
-      {/* 提词器 - 待实现 */}
-      {isTeleprompterOpen && (
-        <div className="teleprompter-overlay">
-          <div className="teleprompter-panel">
-            <div className="teleprompter-header">
-              <span>📝 提词器</span>
-              <button onClick={() => setIsTeleprompterOpen(false)}>✕</button>
+          {/* 提词器 - 待实现 */}
+          {isTeleprompterOpen && (
+            <div className="teleprompter-overlay">
+              <div className="teleprompter-panel">
+                <div className="teleprompter-header">
+                  <span>📝 提词器</span>
+                  <button onClick={() => setIsTeleprompterOpen(false)}>✕</button>
+                </div>
+                <div className="teleprompter-content">
+                  <p>提词器内容...</p>
+                </div>
+              </div>
             </div>
-            <div className="teleprompter-content">
-              <p>提词器内容...</p>
-            </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

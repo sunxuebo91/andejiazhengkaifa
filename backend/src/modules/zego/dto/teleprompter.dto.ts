@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsNumber, IsEnum, IsOptional } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsEnum, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PushTeleprompterDto {
@@ -17,10 +17,6 @@ export class PushTeleprompterDto {
   @ApiProperty({ description: '滚动速度(像素/秒)', example: 50 })
   @IsNumber()
   scrollSpeed: number;
-
-  @ApiProperty({ description: '显示高度', example: '50vh' })
-  @IsString()
-  displayHeight: string;
 }
 
 export class ControlTeleprompterDto {
@@ -32,9 +28,9 @@ export class ControlTeleprompterDto {
   @IsArray()
   targetUserIds: string[];
 
-  @ApiProperty({ description: '控制动作', enum: ['PLAY', 'PAUSE', 'STOP'] })
-  @IsEnum(['PLAY', 'PAUSE', 'STOP'])
-  action: 'PLAY' | 'PAUSE' | 'STOP';
+  @ApiProperty({ description: '控制动作', enum: ['PLAY', 'PAUSE', 'STOP', 'SHOW', 'HIDE'] })
+  @IsEnum(['PLAY', 'PAUSE', 'STOP', 'SHOW', 'HIDE'])
+  action: 'PLAY' | 'PAUSE' | 'STOP' | 'SHOW' | 'HIDE';
 }
 
 export class GetTeleprompterDto {
@@ -50,5 +46,29 @@ export class GetTeleprompterDto {
   @IsOptional()
   @IsNumber()
   lastTimestamp?: number;
+}
+
+// 新增：一键推送并开启提词器DTO
+export class QuickStartTeleprompterDto {
+  @ApiProperty({ description: '房间ID' })
+  @IsString()
+  roomId: string;
+
+  @ApiProperty({ description: '提词内容' })
+  @IsString()
+  content: string;
+
+  @ApiProperty({ description: '目标用户ID列表', type: [String] })
+  @IsArray()
+  targetUserIds: string[];
+
+  @ApiProperty({ description: '滚动速度(像素/秒)', example: 50 })
+  @IsNumber()
+  scrollSpeed: number;
+
+  @ApiProperty({ description: '是否自动播放', default: true })
+  @IsBoolean()
+  @IsOptional()
+  autoPlay?: boolean;
 }
 

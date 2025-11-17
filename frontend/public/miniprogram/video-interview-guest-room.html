@@ -8,6 +8,11 @@
   <!-- 使用本地 ZEGO SDK -->
   <script src="./ZegoExpressWebRTC-standalone.js"></script>
 
+  <!-- 🎯 AI 降噪模块（独立打包版本已内置） -->
+  <script>
+    console.log('📦 ZEGO SDK 加载完成，AI 降噪模块已就绪');
+  </script>
+
   <!-- ZEGO Token 生成库（内嵌实现） -->
   <script>
     // Token 生成函数（内嵌实现，避免 CDN 加载问题）
@@ -144,6 +149,7 @@
       background: transparent;
       overflow-y: auto;
       overflow-x: hidden;
+      position: relative; /* 为提词器提供定位上下文 */
     }
 
     /* 隐藏滚动条 */
@@ -254,14 +260,14 @@
 
     /* 控制按钮 */
     .controls {
+      padding: 10px 6px;
+      margin: 10px;
+      background: rgba(255, 255, 255, 0.98);
+      border-radius: 12px;
       display: flex;
       justify-content: space-around;
-      padding: 16px;
-      padding-bottom: calc(16px + env(safe-area-inset-bottom));
-      background: rgba(255, 255, 255, 0.95);
-      border-radius: 20px 20px 0 0;
-      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-      flex-shrink: 0;
+      align-items: center;
+      box-shadow: 0 -2px 10px rgba(95, 179, 163, 0.15);
     }
 
     .control-item {
@@ -651,6 +657,58 @@
       cursor: not-allowed;
       box-shadow: none;
     }
+
+    /* ==================== 提词器样式 ==================== */
+    .teleprompter-container {
+      position: absolute !important;
+      /* 覆盖上面两个视频容器（第一行），考虑padding和gap */
+      top: 8px !important; /* 跳过padding */
+      left: 8px !important; /* 跳过padding */
+      right: 8px !important; /* 跳过padding */
+      /* 高度等于第一行的高度（不包含gap） */
+      height: calc((100% - 8px - 16px) / 2) !important; /* 减去上下padding(16px)和gap(8px) */
+      background: rgba(0, 0, 0, 0.92) !important;
+      color: #fff !important;
+      z-index: 100 !important; /* 覆盖视频容器 */
+      display: none !important;
+      flex-direction: column !important;
+      border-radius: 12px !important; /* 与视频容器一致的圆角 */
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+      border: 2px solid rgba(255, 255, 255, 0.1) !important;
+      transition: all 0.3s ease !important;
+      overflow: hidden !important;
+      pointer-events: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    .teleprompter-container.show {
+      display: flex !important;
+    }
+
+    .teleprompter-content {
+      padding: 30px 20px !important;
+      overflow-y: auto !important;
+      font-size: 22px !important;
+      line-height: 2.2 !important;
+      text-align: left !important;
+      white-space: pre-wrap !important;
+      word-wrap: break-word !important;
+      flex: 1 !important;
+      font-weight: 500 !important;
+      /* 隐藏滚动条 */
+      scrollbar-width: none !important; /* Firefox */
+      -ms-overflow-style: none !important; /* IE/Edge */
+    }
+
+    /* 隐藏滚动条 - Webkit浏览器 */
+    .teleprompter-content::-webkit-scrollbar {
+      display: none !important;
+    }
+
+    .teleprompter-content.scrolling {
+      /* 不使用CSS动画，改用JavaScript平滑滚动 */
+    }
   </style>
 </head>
 <body>
@@ -674,7 +732,7 @@
 
       <form id="joinForm" class="identity-form" action="javascript:void(0);" onsubmit="return false;">
         <div class="form-group">
-          <label>您的姓名（选填）</label>
+          <label id="nameLabel">您的姓名（选填）</label>
           <input type="text" id="nameInput" placeholder="请输入您的姓名" maxlength="20" />
         </div>
 
@@ -718,6 +776,11 @@
 
     <!-- 视频网格 - 6个位置 -->
     <div class="video-grid">
+      <!-- 提词器容器 - 覆盖上面两个视频容器 -->
+      <div id="teleprompterContainer" class="teleprompter-container">
+        <div id="teleprompterContent" class="teleprompter-content"></div>
+      </div>
+
       <!-- 位置1：本地视频 -->
       <div class="video-item">
         <div class="video-box" id="localBox">
@@ -992,6 +1055,10 @@
     let startTime = null;
     let remoteControlPolling = null; // 远程控制轮询定时器
     let lastRemoteControlTimestamp = 0; // 最后接收的远程控制消息时间戳
+    let isKickedOut = false; // 标记用户是否已被踢出
+    let hasLeftRoom = false; // 标记用户是否已主动离开房间
+    let roomStatusPolling = null; // 房间状态轮询定时器
+    let isRoomDismissed = false; // 标记房间是否已解散
 
     // 生成Token（访客模式：调用后端公开接口）
     async function generateToken(userID, roomID) {
@@ -1114,6 +1181,15 @@
         }
         localLabel.textContent = displayName;
 
+        // 🎯 注册 AI 降噪模块（如果 SDK 支持）
+        if (ZegoExpressEngine.use && typeof ZegoExpressEngine.use === 'function') {
+          try {
+            console.log('🎯 尝试注册 AI 降噪模块...');
+          } catch (e) {
+            console.log('ℹ️ AI 降噪模块可能已内置或不支持');
+          }
+        }
+
         // 创建ZegoExpressEngine实例
         zg = new ZegoExpressEngine(appID, server);
 
@@ -1143,6 +1219,39 @@
         });
 
         console.log('✅ 权限授权成功，本地流创建成功', localStream);
+
+        // 🎯 启用 AI 降噪（消除键盘声、鼠标点击、咳嗽等噪音）
+        if (zg.enableAiDenoise && typeof zg.enableAiDenoise === 'function') {
+          try {
+            await zg.enableAiDenoise(localStream, true);
+            console.log('✅ AI 降噪已启用 - 将自动消除键盘声、鼠标点击、咳嗽等噪音');
+          } catch (error) {
+            console.warn('⚠️ AI 降噪启用失败:', error);
+            // 降噪失败不影响正常通话，继续执行
+          }
+        } else {
+          console.log('ℹ️ 当前 SDK 版本不支持 AI 降噪功能');
+        }
+
+        // 🎨 启用基础美颜（自然效果，不夸张）
+        if (zg.setEffectsBeauty && typeof zg.setEffectsBeauty === 'function') {
+          try {
+            await zg.setEffectsBeauty(localStream, true, {
+              smoothIntensity: 35,   // 适度磨皮
+              whitenIntensity: 25,   // 适度美白
+              rosyIntensity: 20,     // 适度红润
+              sharpenIntensity: 30   // 适度锐化
+            });
+            console.log('✅ 基础美颜已启用 - 自然不夸张的美颜效果');
+            showLoading('智能美颜已开启，画面更清晰自然 ✨');
+            setTimeout(hideLoading, 2000);
+          } catch (error) {
+            console.warn('⚠️ 美颜启用失败:', error);
+            // 美颜失败不影响正常通话，继续执行
+          }
+        } else {
+          console.log('ℹ️ 当前 SDK 版本不支持美颜功能');
+        }
 
         // 设置本地视频
         const localVideo = document.getElementById('localVideo');
@@ -1190,6 +1299,9 @@
 
         // 启动远程控制消息轮询
         startRemoteControlPolling();
+
+        // 启动房间状态检查轮询
+        startRoomStatusPolling();
 
         hideLoading();
         startTimer();
@@ -1250,6 +1362,9 @@
       });
 
       console.log('✅ 登录房间成功, result:', result);
+
+      // 🔥 启动提词器轮询
+      startTeleprompterPolling();
 
       // 🔥 关键修复：第二次进入时，主动拉取并播放已存在的流
       // ZEGO的roomStreamUpdate事件在某些情况下不会自动触发已存在的流
@@ -1320,6 +1435,12 @@
     function startRemoteControlPolling() {
       // 每2秒轮询一次
       remoteControlPolling = setInterval(async () => {
+        // 如果用户已被踢出，停止轮询
+        if (isKickedOut) {
+          stopRemoteControlPolling();
+          return;
+        }
+
         try {
           const response = await fetch('/api/zego/get-remote-control', {
             method: 'POST',
@@ -1342,7 +1463,10 @@
             }
           }
         } catch (error) {
-          console.error('❌ 轮询远程控制消息失败:', error);
+          // 如果用户已被踢出，不显示错误提示
+          if (!isKickedOut) {
+            console.error('❌ 轮询远程控制消息失败:', error);
+          }
         }
       }, 2000);
 
@@ -1355,6 +1479,55 @@
         clearInterval(remoteControlPolling);
         remoteControlPolling = null;
         console.log('✅ 远程控制消息轮询已停止');
+      }
+    }
+
+    // ✅ 启动房间状态检查轮询
+    function startRoomStatusPolling() {
+      // 每3秒检查一次房间状态
+      roomStatusPolling = setInterval(async () => {
+        // 如果用户已被踢出或房间已解散，停止轮询
+        if (isKickedOut || isRoomDismissed) {
+          stopRoomStatusPolling();
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/zego/check-room', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ roomId: roomId })
+          });
+
+          const result = await response.json();
+          console.log('🔍 房间状态检查:', result);
+
+          if (result.success && result.data.isDismissed) {
+            console.log('⚠️ 房间已被解散');
+            isRoomDismissed = true;
+            stopRoomStatusPolling();
+            stopRemoteControlPolling();
+            stopTimer();
+
+            // 显示"面试已结束"提示
+            showInterviewEndedModal();
+          }
+        } catch (error) {
+          console.error('❌ 检查房间状态失败:', error);
+        }
+      }, 3000);
+
+      console.log('✅ 房间状态检查轮询已启动');
+    }
+
+    // 停止房间状态检查轮询
+    function stopRoomStatusPolling() {
+      if (roomStatusPolling) {
+        clearInterval(roomStatusPolling);
+        roomStatusPolling = null;
+        console.log('✅ 房间状态检查轮询已停止');
       }
     }
 
@@ -1647,43 +1820,130 @@
         }
       });
 
+      // 🔥 监听用户被踢出事件（可能的事件）
+      zg.on('roomUserUpdate', (roomID, updateType, userList) => {
+        console.log('═══════════════════════════════════════════════════════');
+        console.log('👥 房间用户更新事件触发！');
+        console.log('📍 roomID:', roomID);
+        console.log('📍 updateType:', updateType);
+        console.log('📍 userList:', userList);
+        console.log('═══════════════════════════════════════════════════════');
+      });
+
       // ✅ 监听房间状态变化（用于检测被踢出、房间解散和断线重连）
-      zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
-        console.log('🔔 房间状态变化:', { roomID, state, errorCode, extendedData });
+      zg.on('roomStateUpdate', async (roomID, state, errorCode, extendedData) => {
+        // 🔥 详细日志：记录所有参数
+        console.log('═══════════════════════════════════════════════════════');
+        console.log('🔔 房间状态变化事件触发！');
+        console.log('📍 roomID:', roomID);
+        console.log('📍 state:', state);
+        console.log('📍 errorCode:', errorCode, '(类型:', typeof errorCode, ')');
+        console.log('📍 extendedData:', extendedData);
+        console.log('📍 hasLeftRoom:', hasLeftRoom);
+        console.log('📍 isKickedOut:', isKickedOut);
+        console.log('═══════════════════════════════════════════════════════');
 
         // state: 'DISCONNECTED' 表示断开连接
-        // errorCode: 3 表示被服务端强制踢出（包括单独踢出和房间解散）
-        if (state === 'DISCONNECTED' && errorCode === 3) {
-          console.log('⚠️ 被服务端强制断开连接');
+        if (state === 'DISCONNECTED') {
+          console.log('⚠️ 检测到断开连接，errorCode=' + errorCode);
 
-          // 停止计时器和轮询
-          stopTimer();
-          stopRemoteControlPolling();
-
-          // 清理本地流
-          if (localStream) {
-            try {
-              zg.destroyStream(localStream);
-            } catch (error) {
-              console.error('清理本地流失败:', error);
-            }
+          // 🔥 关键修复：如果用户已经主动离开房间，不处理断开事件
+          if (hasLeftRoom) {
+            console.log('✅ 用户已主动离开，忽略断开事件');
+            return;
           }
 
-          // 显示提示并跳转
-          // 注意：无法区分是单独被踢出还是房间解散，统一提示"面试已结束"
-          alert('面试已结束，房间已解散');
-          window.location.href = `video-interview-guest.html?roomId=${roomId}&kicked=true`;
-        }
-        // ✅ 断线重连检测
-        else if (state === 'DISCONNECTED' && errorCode !== 3) {
-          console.log('🔄 网络断开，等待重连...');
-          showReconnectToast();
+          // 🔥 关键发现：ZEGO的KickoutUser API踢出用户时，errorCode是1002055
+          // errorCode 可能的值：
+          // - 0: 正常断开（主动退出）
+          // - 1002055: 被服务端强制踢出（KickoutUser API）
+          // - 其他值: 网络问题等
+
+          // ✅ 检查 errorCode 是否为被踢出的错误码
+          if (errorCode === 1002055) {
+            console.log('✅ 确认：被服务端强制踢出 (errorCode=1002055)');
+
+            // 检查 extendedData 中的踢出原因
+            if (extendedData && extendedData.custom_kickout_message) {
+              console.log('📝 踢出原因:', extendedData.custom_kickout_message);
+            }
+
+            // 标记为已被踢出
+            isKickedOut = true;
+
+            // 停止计时器和轮询
+            stopTimer();
+            stopRemoteControlPolling();
+            stopRoomStatusPolling();
+
+            // 清理本地流
+            if (localStream) {
+              try {
+                zg.destroyStream(localStream);
+              } catch (error) {
+                console.error('清理本地流失败:', error);
+              }
+            }
+
+            // ✅ 检查房间状态，区分是"被踢出"还是"房间解散"
+            try {
+              console.log('🔍 调用后端API检查房间状态...');
+              const response = await fetch('/api/zego/check-room', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ roomId: roomId })
+              });
+
+              const result = await response.json();
+              console.log('🔍 房间状态检查结果:', result);
+              console.log('🔍 详细数据:', {
+                isDismissed: result.data?.isDismissed,
+                isActive: result.data?.isActive,
+                exists: result.data?.exists,
+                canJoin: result.data?.canJoin
+              });
+
+              if (result.success) {
+                if (result.data.isDismissed) {
+                  // 房间已解散
+                  console.log('✅ 房间已解散，显示"面试已结束"弹窗');
+                  showInterviewEndedModal();
+                } else if (result.data.isActive) {
+                  // 房间还在，但用户被踢出了
+                  console.log('✅ 房间仍然活跃，用户被踢出，显示"被踢出"弹窗');
+                  showKickedOutModal();
+                } else {
+                  // 房间状态未知，默认显示被踢出弹窗
+                  console.log('⚠️ 房间状态未知，默认显示"被踢出"弹窗');
+                  showKickedOutModal();
+                }
+              } else {
+                // API调用失败，默认显示被踢出弹窗
+                console.error('❌ 检查房间状态失败:', result.message);
+                showKickedOutModal();
+              }
+            } catch (error) {
+              // 网络错误，默认显示被踢出弹窗
+              console.error('❌ 检查房间状态失败（网络错误）:', error);
+              showKickedOutModal();
+            }
+          } else {
+            // 其他 errorCode，可能是网络问题或正常断开
+            console.log('🔄 网络断开或其他原因，errorCode=' + errorCode + '，显示重连提示');
+            showReconnectToast();
+          }
         } else if (state === 'CONNECTING') {
           console.log('🔄 正在重新连接...');
-          showReconnectToast();
+          if (!isKickedOut) {
+            showReconnectToast();
+          }
         } else if (state === 'CONNECTED') {
           console.log('✅ 重新连接成功');
-          hideReconnectToast();
+          if (!isKickedOut) {
+            hideReconnectToast();
+          }
         }
       });
 
@@ -1702,6 +1962,98 @@
     function hideReconnectToast() {
       const toast = document.getElementById('reconnectToast');
       toast.classList.remove('show');
+    }
+
+    // ✅ 显示"面试已结束"弹窗
+    function showInterviewEndedModal() {
+      console.log('📢 显示面试已结束弹窗');
+
+      // 创建遮罩层
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+
+      // 创建弹窗
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      `;
+
+      modal.innerHTML = `
+        <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
+        <h2 style="margin: 0 0 15px 0; font-size: 24px; color: #333;">面试已结束</h2>
+        <p style="margin: 0 0 25px 0; font-size: 16px; color: #666;">房间已被主持人解散，感谢您的参与</p>
+        <button onclick="window.close(); setTimeout(() => window.location.href='video-interview-guest.html', 100);"
+                style="background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%); color: white; border: none; padding: 12px 40px;
+                       border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%;">
+          确定
+        </button>
+      `;
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+    }
+
+    // ✅ 显示"您已被请出房间"弹窗
+    function showKickedOutModal() {
+      console.log('📢 显示被踢出弹窗');
+
+      // 创建遮罩层
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+
+      // 创建弹窗
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      `;
+
+      modal.innerHTML = `
+        <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+        <h2 style="margin: 0 0 15px 0; font-size: 24px; color: #333;">您已被请出房间</h2>
+        <p style="margin: 0 0 25px 0; font-size: 16px; color: #666;">请联系主持人重新加入</p>
+        <button onclick="window.close(); setTimeout(() => window.location.href='video-interview-guest.html?kicked=true', 100);"
+                style="background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%); color: white; border: none; padding: 12px 40px;
+                       border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%;">
+          确定
+        </button>
+      `;
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
     }
 
     // ✅ 显示页面后台提示
@@ -1774,7 +2126,8 @@
     }
 
     // 翻转镜头（前置/后置切换）
-    // ✅ 使用即构官方推荐的方式二：stopCaptureVideo + startCaptureCamera + updatePublishingStream
+    // ✅ 使用即构官方推荐的方式：useFrontCamera
+    // 官方文档：https://doc-zh.zego.im/real-time-video-web/best-practice/mobile-front-and-rear-camera-switching
     async function flipCamera() {
       if (!localStream || !isCameraOn) {
         alert('请先打开摄像头');
@@ -1789,37 +2142,21 @@
         isFrontCamera = !isFrontCamera;
         console.log('🔄 切换到:', isFrontCamera ? '前置' : '后置');
 
-        // ✅ 步骤1：停止当前摄像头采集
-        console.log('⏸️ 停止视频采集...');
-        await zg.stopCaptureVideo();
+        // ✅ 使用官方推荐的 useFrontCamera 方法
+        // true = 前置摄像头，false = 后置摄像头
+        await zg.useFrontCamera(localStream, isFrontCamera);
 
-        // ✅ 步骤2：重新开始采集（指定前置或后置摄像头）
-        console.log('📹 重新开始采集...');
-        const videoConfig = {
-          width: 1280,
-          height: 720,
-          frameRate: 15,
-          bitrate: 1500,
-          facingMode: isFrontCamera ? 'user' : 'environment'
-        };
-        await zg.startCaptureCamera(videoConfig);
-
-        // ✅ 步骤3：更新推流
-        console.log('📤 更新推流...');
-        await zg.updatePublishingStream(localStream);
-        console.log('✅ 推流更新成功');
-
-        hideLoading();
         console.log('✅ 摄像头切换成功:', isFrontCamera ? '前置' : '后置');
+        hideLoading();
         alert('摄像头已切换到' + (isFrontCamera ? '前置' : '后置'));
 
       } catch (error) {
         console.error('❌ 切换摄像头失败:', error);
         hideLoading();
 
-        // 尝试切换回原来的方向
+        // 切换回原来的方向
         isFrontCamera = !isFrontCamera;
-        alert('切换摄像头失败，可能您的设备不支持前后摄像头切换');
+        alert('切换摄像头失败: ' + error.message);
       }
     }
 
@@ -1878,6 +2215,9 @@
       if (confirm('确定要离开面试吗？')) {
         try {
           console.log('🚪 开始离开房间...');
+
+          // 🔥 标记为主动离开，防止触发被踢出弹窗
+          hasLeftRoom = true;
 
           // 停止计时器和轮询
           stopTimer();
@@ -1952,11 +2292,9 @@
       document.getElementById('loading').style.display = 'none';
     }
 
-    // 页面加载完成后显示身份选择浮窗
-    window.addEventListener('load', () => {
-      console.log('📱 页面加载完成，环境信息:', {
-        userAgent: navigator.userAgent
-      });
+    // 🔥 阶段1：DOM 加载完成后立即显示浮窗
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('📱 DOM 加载完成，立即显示浮窗');
 
       // 🔥 关键修复：页面加载时强制清理残留状态
       // 这样可以确保重新进入时状态是干净的
@@ -2037,14 +2375,47 @@
       const identityOverlay = document.getElementById('identityOverlay');
       identityOverlay.style.display = 'flex';
 
-      // 显示房间号
-      document.getElementById('roomIdDisplay').textContent = roomId;
+      // 显示房间号（格式化为 AD-时间戳）
+      const displayRoomId = roomId ? roomId.replace(/^room_/, 'AD-').split('_')[0] : '-';
+      document.getElementById('roomIdDisplay').textContent = displayRoomId;
 
-      // 🔥 绑定表单提交事件
+      // 🔥 先禁用按钮，等待资源加载完成
+      const joinBtn = document.getElementById('joinBtn');
+      joinBtn.disabled = true;
+      joinBtn.textContent = '正在加载资源...';
+
+      console.log('✅ 身份选择浮窗已显示（按钮禁用，等待资源加载）');
+    });
+
+    // 🔥 阶段2：所有资源加载完成后启用按钮
+    window.addEventListener('load', () => {
+      console.log('📱 所有资源加载完成，启用按钮');
+
+      // 🔥 启用按钮并绑定事件
       const joinForm = document.getElementById('joinForm');
       const joinBtn = document.getElementById('joinBtn');
       const nameInput = document.getElementById('nameInput');
+      const nameLabel = document.getElementById('nameLabel');
+      const roleRadios = document.querySelectorAll('input[name="role"]');
 
+      // 启用按钮
+      joinBtn.disabled = false;
+      joinBtn.textContent = '进入面试间';
+
+      // 🔥 监听角色切换，动态更新姓名标签
+      roleRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+          if (e.target.value === 'helper') {
+            nameLabel.innerHTML = '您的姓名 <span style="color: red;">*</span>';
+            nameInput.placeholder = '请输入您的姓名（必填）';
+          } else {
+            nameLabel.textContent = '您的姓名（选填）';
+            nameInput.placeholder = '请输入您的姓名';
+          }
+        });
+      });
+
+      // 🔥 绑定表单提交事件
       joinForm.addEventListener('submit', async (e) => {
         e.preventDefault(); // 阻止表单默认提交
 
@@ -2052,7 +2423,14 @@
         const inputName = nameInput.value.trim();
         const selectedRole = document.querySelector('input[name="role"]:checked').value;
 
-        // 🔥 姓名非必填，如果没填就用默认值
+        // 🔥 如果选择阿姨角色，名字必填
+        if (selectedRole === 'helper' && !inputName) {
+          alert('请输入您的姓名');
+          nameInput.focus();
+          return;
+        }
+
+        // 🔥 姓名非必填（客户可以不填），如果没填就用默认值
         let finalUserName;
         if (inputName) {
           finalUserName = selectedRole + '-' + inputName; // 例如: "customer-张三"
@@ -2072,6 +2450,7 @@
         joinBtn.textContent = '正在进入面试间...';
 
         // 隐藏浮窗
+        const identityOverlay = document.getElementById('identityOverlay');
         identityOverlay.style.display = 'none';
 
         // 🔥 在用户点击"进入面试间"的交互上下文中初始化
@@ -2086,12 +2465,216 @@
         }
       });
 
-      console.log('✅ 身份选择浮窗已显示');
+      console.log('✅ 按钮已启用，事件已绑定');
     });
+
+    // ==================== 提词器功能 ====================
+    let teleprompterPollingTimer = null;
+
+    // 开始轮询提词器消息
+    function startTeleprompterPolling() {
+      if (teleprompterPollingTimer) {
+        clearInterval(teleprompterPollingTimer);
+      }
+
+      console.log('📝 开始轮询提词器消息...');
+
+      // 立即执行一次
+      pollTeleprompterMessages();
+
+      // 每2秒轮询一次
+      teleprompterPollingTimer = setInterval(() => {
+        pollTeleprompterMessages();
+      }, 2000);
+    }
+
+    // 停止轮询提词器消息
+    function stopTeleprompterPolling() {
+      if (teleprompterPollingTimer) {
+        clearInterval(teleprompterPollingTimer);
+        teleprompterPollingTimer = null;
+        console.log('📝 已停止轮询提词器消息');
+      }
+    }
+
+    // 轮询提词器消息
+    async function pollTeleprompterMessages() {
+      if (!roomId || !currentUserId) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/zego/get-teleprompter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            roomId: roomId,
+            userId: currentUserId
+          })
+        });
+
+        if (!response.ok) {
+          console.warn('获取提词器消息失败:', response.status);
+          return;
+        }
+
+        const result = await response.json();
+
+        if (result.success && result.data && result.data.length > 0) {
+          console.log('📝 收到提词器消息:', result.data);
+          // 处理所有未读消息
+          result.data.forEach(message => {
+            handleTeleprompterMessage(message);
+          });
+        }
+      } catch (error) {
+        console.error('轮询提词器消息失败:', error);
+      }
+    }
+
+    // 处理提词器消息
+    function handleTeleprompterMessage(message) {
+      console.log('📝 收到提词器消息:', message);
+
+      const { type, action, content, scrollSpeed } = message;
+
+      // 根据消息类型处理
+      if (type === 'CONTENT') {
+        // CONTENT类型消息：更新内容并显示
+        updateTeleprompterContent(content, scrollSpeed);
+      } else if (type === 'CONTROL') {
+        // CONTROL类型消息：控制播放状态
+        switch (action) {
+          case 'PLAY':
+            // 使用消息中的速度，如果没有则使用保存的速度
+            const speedToUse = scrollSpeed || teleprompterSavedScrollSpeed;
+            console.log('▶️ 播放提词器，速度:', speedToUse, '像素/秒');
+            startTeleprompterScroll(speedToUse);
+            break;
+          case 'PAUSE':
+            pauseTeleprompterScroll();
+            break;
+          case 'SHOW':
+            showTeleprompter();
+            break;
+          case 'HIDE':
+          case 'STOP':
+            hideTeleprompter();
+            break;
+        }
+      }
+    }
+
+    // 更新提词器内容
+    function updateTeleprompterContent(content, scrollSpeed) {
+      const container = document.getElementById('teleprompterContainer');
+      const contentDiv = document.getElementById('teleprompterContent');
+
+      if (!container || !contentDiv) return;
+
+      contentDiv.textContent = content;
+
+      // 保存滚动速度，供后续PLAY消息使用
+      if (scrollSpeed && scrollSpeed > 0) {
+        teleprompterSavedScrollSpeed = scrollSpeed;
+        console.log('💾 保存滚动速度:', scrollSpeed, '像素/秒');
+      }
+
+      container.classList.add('show');
+
+      console.log('📝 提词器内容已更新');
+    }
+
+    // 提词器滚动控制变量
+    let teleprompterScrollAnimationId = null;
+    let teleprompterScrollPosition = 0;
+    let teleprompterScrollSpeed = 50; // 像素/秒（默认值）
+    let teleprompterSavedScrollSpeed = 50; // 保存的滚动速度（从CONTENT消息中获取）
+
+    // 开始滚动提词器 - 使用requestAnimationFrame实现流畅滚动
+    function startTeleprompterScroll(scrollSpeed) {
+      const contentDiv = document.getElementById('teleprompterContent');
+      if (!contentDiv) return;
+
+      // 停止之前的滚动
+      pauseTeleprompterScroll();
+
+      // 设置滚动速度（像素/秒）
+      teleprompterScrollSpeed = scrollSpeed || 50;
+
+      // 获取当前滚动位置
+      teleprompterScrollPosition = contentDiv.scrollTop;
+
+      let lastTimestamp = performance.now();
+
+      // 滚动动画函数
+      function scroll(timestamp) {
+        const deltaTime = (timestamp - lastTimestamp) / 1000; // 转换为秒
+        lastTimestamp = timestamp;
+
+        // 计算新的滚动位置
+        teleprompterScrollPosition += teleprompterScrollSpeed * deltaTime;
+
+        // 设置滚动位置
+        contentDiv.scrollTop = teleprompterScrollPosition;
+
+        // 检查是否滚动到底部
+        const maxScroll = contentDiv.scrollHeight - contentDiv.clientHeight;
+        if (teleprompterScrollPosition >= maxScroll) {
+          // 循环滚动：回到顶部
+          teleprompterScrollPosition = 0;
+          contentDiv.scrollTop = 0;
+        }
+
+        // 继续动画
+        teleprompterScrollAnimationId = requestAnimationFrame(scroll);
+      }
+
+      // 开始动画
+      teleprompterScrollAnimationId = requestAnimationFrame(scroll);
+
+      console.log('▶️ 提词器开始滚动，速度:', teleprompterScrollSpeed, '像素/秒');
+    }
+
+    // 暂停滚动提词器
+    function pauseTeleprompterScroll() {
+      if (teleprompterScrollAnimationId) {
+        cancelAnimationFrame(teleprompterScrollAnimationId);
+        teleprompterScrollAnimationId = null;
+      }
+
+      console.log('⏸️ 提词器暂停滚动');
+    }
+
+    // 显示提词器
+    function showTeleprompter() {
+      const container = document.getElementById('teleprompterContainer');
+      if (!container) return;
+
+      container.classList.add('show');
+
+      console.log('👁️ 提词器已显示');
+    }
+
+    // 隐藏提词器
+    function hideTeleprompter() {
+      const container = document.getElementById('teleprompterContainer');
+      if (!container) return;
+
+      container.classList.remove('show');
+      pauseTeleprompterScroll();
+
+      console.log('❌ 提词器已隐藏');
+    }
 
     // 清理函数 - 统一的清理逻辑
     function cleanup() {
       console.log('🧹 开始清理资源...');
+
+      // 🔥 标记为主动离开，防止触发被踢出弹窗
+      hasLeftRoom = true;
 
       // 🔥 关键修复：标记用户已离开，用于重新进入时检测
       // 这样重新进入时可以知道需要完全重新初始化
@@ -2106,6 +2689,7 @@
         // 停止计时器和轮询
         if (typeof stopTimer === 'function') stopTimer();
         if (typeof stopRemoteControlPolling === 'function') stopRemoteControlPolling();
+        stopTeleprompterPolling();
 
         if (zg) {
           // 停止推流
@@ -2192,20 +2776,23 @@
       }
     }
 
-    // 页面关闭前清理
-    window.addEventListener('beforeunload', cleanup);
-
-    // 🔥 关键修复：监听页面可见性变化
-    // 当用户点击微信浏览器的X关闭时，会触发visibilitychange事件
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        console.log('⚠️ 页面被隐藏，立即清理资源');
-        cleanup();
-      }
+    // 🔥 修改：只在页面真正关闭时清理，不在后台时清理
+    // beforeunload: 页面即将卸载（刷新、关闭标签页、导航离开）
+    window.addEventListener('beforeunload', (e) => {
+      console.log('⚠️ 页面即将卸载（beforeunload）');
+      cleanup();
     });
 
-    // 🔥 监听页面暂停事件（iOS Safari/微信）
-    window.addEventListener('pagehide', cleanup);
+    // 🔥 修改：pagehide 事件在页面真正卸载时触发
+    // 这是最可靠的页面卸载事件，特别是在移动端
+    window.addEventListener('pagehide', (e) => {
+      console.log('⚠️ 页面卸载（pagehide）');
+      cleanup();
+    });
+
+    // ❌ 移除：不再在 visibilitychange 时清理资源
+    // 因为用户可能只是切换到其他应用，而不是真正关闭页面
+    // 保持连接可以让用户切换回来时继续面试
   </script>
 </body>
 </html>

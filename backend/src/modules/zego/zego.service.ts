@@ -20,8 +20,7 @@ interface TeleprompterMessage {
   type: 'CONTENT' | 'CONTROL';
   content?: string;
   scrollSpeed?: number;
-  displayHeight?: string;
-  action?: 'PLAY' | 'PAUSE' | 'STOP';
+  action?: 'PLAY' | 'PAUSE' | 'STOP' | 'SHOW' | 'HIDE';
   targetUserIds: string[];
   timestamp: number;
 }
@@ -43,6 +42,7 @@ export class ZegoService {
 
   // 房间状态管理
   private rooms: Map<string, RoomState> = new Map();
+  private dismissedRooms: Map<string, number> = new Map(); // 记录已解散的房间，value是解散时间戳
   private readonly ROOM_TIMEOUT = 10 * 60 * 1000; // 10分钟无人自动关闭
   private cleanupInterval: NodeJS.Timeout;
 
@@ -174,87 +174,105 @@ export class ZegoService {
 
   /**
    * 调用 ZEGO 服务端 API CloseRoom 强制关闭房间
+   * 官方文档: https://doc-zh.zego.im/real-time-video-server/api-reference/room/close
    */
   async callZegoCloseRoom(roomId: string): Promise<boolean> {
     try {
       const timestamp = Math.floor(Date.now() / 1000);
-      const nonce = Math.floor(Math.random() * 1000000);
+      const nonce = Math.floor(Math.random() * 100000000).toString(16).padStart(16, '0');
 
-      // 构建签名参数
-      const params = {
-        AppId: this.appId.toString(),
-        RoomId: roomId,
-        SignatureNonce: nonce.toString(),
-        SignatureVersion: '2.0',
-        Timestamp: timestamp.toString(),
-      };
+      // ✅ 正确的签名算法：Signature = md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+      // 只包含 4 个参数，不包含业务参数
+      const signString = `${this.appId}${nonce}${this.serverSecret}${timestamp}`;
+      const signature = crypto.createHash('md5').update(signString).digest('hex');
 
-      // 按字母顺序排序参数
-      const sortedKeys = Object.keys(params).sort();
-      const signString = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
+      this.logger.log(`🔐 CloseRoom 签名字符串: ${this.appId} + ${nonce} + [ServerSecret] + ${timestamp}`);
+      this.logger.log(`🔐 CloseRoom 签名结果: ${signature}`);
 
-      // 生成签名
-      const signature = crypto
-        .createHmac('sha256', this.serverSecret)
-        .update(signString)
-        .digest('hex');
+      // 构建 URL 参数（业务参数不参与签名）
+      const urlParams = [
+        `Action=CloseRoom`,
+        `AppId=${this.appId}`,
+        `SignatureNonce=${nonce}`,
+        `Timestamp=${timestamp}`,
+        `Signature=${signature}`,
+        `SignatureVersion=2.0`,
+        `RoomId=${encodeURIComponent(roomId)}`,
+      ];
 
-      // 调用 ZEGO API
-      const url = `https://rtc-api.zego.im/?Action=CloseRoom&${signString}&Signature=${signature}`;
+      const url = `https://rtc-api.zego.im/?${urlParams.join('&')}`;
 
-      this.logger.log(`📞 调用 ZEGO CloseRoom API: ${roomId}`);
+      this.logger.log(`📞 调用 ZEGO CloseRoom API: 房间=${roomId}`);
 
       const response = await axios.get(url, {
         timeout: 10000,
       });
 
-      this.logger.log(`📞 ZEGO API 响应:`, response.data);
+      this.logger.log(`📞 ZEGO CloseRoom API 响应:`, response.data);
 
       if (response.data.Code === 0) {
         this.logger.log(`✅ ZEGO 服务端已关闭房间: ${roomId}`);
         return true;
       } else {
-        this.logger.error(`❌ ZEGO API 返回错误: ${response.data.Message}`);
+        this.logger.error(`❌ ZEGO CloseRoom API 返回错误 Code=${response.data.Code}, Message=${response.data.Message}`);
         return false;
       }
     } catch (error) {
       this.logger.error(`❌ 调用 ZEGO CloseRoom API 失败:`, error.message);
+      if (error.response) {
+        this.logger.error(`❌ 响应数据:`, error.response.data);
+      }
       return false;
     }
   }
 
   /**
    * 调用 ZEGO KickoutUser API 踢出单个用户
+   *
+   * 官方文档：https://doc-zh.zego.im/real-time-video-server/api-reference/room/kick-out-user
+   * 签名机制：https://doc-zh.zego.im/real-time-video-server/api-reference/accessing-server-apis#signature-mechanism
+   *
+   * 关键点：
+   * 1. 签名算法：Signature = md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+   * 2. 签名只包含这4个参数，不包含 Action、RoomId、UserId 等业务参数
+   * 3. URL 中数组参数使用 UserId[]=xxx 格式
    */
   async callZegoKickoutUser(roomId: string, userId: string): Promise<boolean> {
     try {
       const timestamp = Math.floor(Date.now() / 1000);
-      const nonce = Math.floor(Math.random() * 1000000);
+      // 生成16位16进制随机字符串（8字节随机数的hex编码）
+      const nonce = crypto.randomBytes(8).toString('hex');
 
-      // 构建签名参数
-      const params = {
-        AppId: this.appId.toString(),
-        RoomId: roomId,
-        UserId: userId,  // 要踢出的用户ID
-        SignatureNonce: nonce.toString(),
-        SignatureVersion: '2.0',
-        Timestamp: timestamp.toString(),
-      };
+      // 签名算法：Signature = md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+      // 注意：签名只包含这4个参数，不包含其他业务参数
+      const signString = `${this.appId}${nonce}${this.serverSecret}${timestamp}`;
 
-      // 按字母顺序排序参数
-      const sortedKeys = Object.keys(params).sort();
-      const signString = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
+      this.logger.log(`🔐 签名字符串: ${signString}`);
 
-      // 生成签名
+      // 使用 MD5 生成签名
       const signature = crypto
-        .createHmac('sha256', this.serverSecret)
+        .createHash('md5')
         .update(signString)
         .digest('hex');
 
-      // 调用 ZEGO API
-      const url = `https://rtc-api.zego.im/?Action=KickoutUser&${signString}&Signature=${signature}`;
+      this.logger.log(`🔐 签名结果: ${signature}`);
+
+      // 构建 URL 参数
+      const urlParams = [
+        `Action=KickoutUser`,
+        `AppId=${this.appId}`,
+        `SignatureNonce=${nonce}`,
+        `Timestamp=${timestamp}`,
+        `Signature=${signature}`,
+        `SignatureVersion=2.0`,
+        `RoomId=${encodeURIComponent(roomId)}`,
+        `UserId[]=${encodeURIComponent(userId)}`,  // 数组参数使用 [] 格式
+      ];
+
+      const url = `https://rtc-api.zego.im/?${urlParams.join('&')}`;
 
       this.logger.log(`🚫 调用 ZEGO KickoutUser API: 房间=${roomId}, 用户=${userId}`);
+      this.logger.log(`🚫 请求 URL: ${url}`);
 
       const response = await axios.get(url, {
         timeout: 10000,
@@ -266,11 +284,15 @@ export class ZegoService {
         this.logger.log(`✅ ZEGO 服务端已踢出用户: ${userId} from ${roomId}`);
         return true;
       } else {
-        this.logger.error(`❌ ZEGO KickoutUser API 返回错误: ${response.data.Message}`);
+        this.logger.error(`❌ ZEGO KickoutUser API 返回错误: Code=${response.data.Code}, Message=${response.data.Message}`);
         return false;
       }
     } catch (error) {
       this.logger.error(`❌ 调用 ZEGO KickoutUser API 失败:`, error.message);
+      if (error.response) {
+        this.logger.error(`❌ ZEGO API 响应状态: ${error.response.status}`);
+        this.logger.error(`❌ ZEGO API 响应数据:`, error.response.data);
+      }
       return false;
     }
   }
@@ -338,16 +360,22 @@ export class ZegoService {
       return false;
     }
 
+    // ✅ 立即标记房间为已解散（在调用 ZEGO API 之前）
+    room.isDismissed = true;
+    room.participants.clear();
+    this.logger.log(`✅ 房间 ${roomId} 已被主持人 ${userId} 标记为已解散`);
+
+    // 记录到已解散房间列表（保留30秒，用于前端查询）
+    this.dismissedRooms.set(roomId, Date.now());
+    this.logger.log(`✅ 已将房间 ${roomId} 加入已解散列表，当前已解散房间数: ${this.dismissedRooms.size}`);
+
     // 调用 ZEGO 服务端 API 强制关闭房间（踢出所有用户）
     const zegoSuccess = await this.callZegoCloseRoom(roomId);
     if (!zegoSuccess) {
-      this.logger.warn(`⚠️ ZEGO API 调用失败，但继续标记房间为已解散`);
+      this.logger.warn(`⚠️ ZEGO API 调用失败，但房间已标记为已解散`);
+    } else {
+      this.logger.log(`✅ ZEGO 房间已关闭`);
     }
-
-    // 标记房间为已解散
-    room.isDismissed = true;
-    room.participants.clear();
-    this.logger.log(`✅ 房间 ${roomId} 已被主持人 ${userId} 解散`);
 
     // 清理提词器消息和远程控制消息
     this.clearTeleprompterMessages(roomId);
@@ -359,23 +387,49 @@ export class ZegoService {
       this.logger.log(`房间 ${roomId} 记录已删除`);
     }, 5000);
 
+    // 30秒后清理已解散房间记录
+    setTimeout(() => {
+      this.dismissedRooms.delete(roomId);
+      this.logger.log(`已解散房间记录已清理: ${roomId}`);
+    }, 30000);
+
     return true;
   }
 
   /**
    * 检查房间状态
    */
-  checkRoom(roomId: string): { exists: boolean; isDismissed: boolean; canJoin: boolean } {
+  checkRoom(roomId: string): { exists: boolean; isDismissed: boolean; canJoin: boolean; isActive: boolean } {
     const room = this.rooms.get(roomId);
 
-    if (!room) {
-      return { exists: false, isDismissed: false, canJoin: true };
+    // 检查是否在已解散房间列表中
+    const wasDismissed = this.dismissedRooms.has(roomId);
+
+    this.logger.log(`🔍 检查房间状态: ${roomId}`);
+    this.logger.log(`  - 房间存在: ${!!room}`);
+    this.logger.log(`  - 在已解散列表中: ${wasDismissed}`);
+    this.logger.log(`  - 当前已解散房间数: ${this.dismissedRooms.size}`);
+    if (room) {
+      this.logger.log(`  - 房间isDismissed: ${room.isDismissed}`);
     }
 
+    if (!room) {
+      // 房间不存在，但如果在已解散列表中，说明是被解散的
+      if (wasDismissed) {
+        this.logger.log(`✅ 返回: 房间已解散（从已解散列表）`);
+        return { exists: false, isDismissed: true, canJoin: false, isActive: false };
+      }
+      // 房间从未创建或已过期
+      this.logger.log(`✅ 返回: 房间不存在`);
+      return { exists: false, isDismissed: false, canJoin: true, isActive: false };
+    }
+
+    this.logger.log(`✅ 返回: 房间存在，isDismissed=${room.isDismissed}`);
     return {
       exists: true,
       isDismissed: room.isDismissed,
       canJoin: !room.isDismissed,
+      isActive: !room.isDismissed, // 房间活跃 = 房间存在且未解散
     };
   }
 
@@ -423,7 +477,6 @@ export class ZegoService {
     content: string,
     targetUserIds: string[],
     scrollSpeed: number,
-    displayHeight: string,
   ): boolean {
     const room = this.rooms.get(roomId);
     if (!room || room.isDismissed) {
@@ -435,7 +488,6 @@ export class ZegoService {
       type: 'CONTENT',
       content,
       scrollSpeed,
-      displayHeight,
       targetUserIds,
       timestamp: Date.now(),
     };
@@ -463,7 +515,7 @@ export class ZegoService {
   controlTeleprompter(
     roomId: string,
     targetUserIds: string[],
-    action: 'PLAY' | 'PAUSE' | 'STOP',
+    action: 'PLAY' | 'PAUSE' | 'STOP' | 'SHOW' | 'HIDE',
   ): boolean {
     const room = this.rooms.get(roomId);
     if (!room || room.isDismissed) {
@@ -486,6 +538,49 @@ export class ZegoService {
     this.teleprompterMessages.get(roomId)!.push(message);
     this.logger.log(`控制提词器 ${action} 在房间 ${roomId}, 目标用户: ${targetUserIds.join(', ')}`);
 
+    return true;
+  }
+
+  /**
+   * 一键推送并开启提词器
+   */
+  quickStartTeleprompter(
+    roomId: string,
+    content: string,
+    targetUserIds: string[],
+    scrollSpeed: number,
+    autoPlay: boolean = true,
+  ): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room || room.isDismissed) {
+      this.logger.warn(`无法快速启动提词器，房间不存在或已解散: ${roomId}`);
+      return false;
+    }
+
+    // 1. 推送内容
+    const success = this.pushTeleprompterContent(
+      roomId,
+      content,
+      targetUserIds,
+      scrollSpeed,
+    );
+
+    if (!success) {
+      return false;
+    }
+
+    // 2. 显示提词器
+    this.controlTeleprompter(roomId, targetUserIds, 'SHOW');
+
+    // 3. 自动播放（可选）
+    if (autoPlay) {
+      // 延迟500ms确保内容加载完成
+      setTimeout(() => {
+        this.controlTeleprompter(roomId, targetUserIds, 'PLAY');
+      }, 500);
+    }
+
+    this.logger.log(`快速启动提词器成功，房间 ${roomId}, 目标用户: ${targetUserIds.join(', ')}, 自动播放: ${autoPlay}`);
     return true;
   }
 
@@ -538,13 +633,14 @@ export class ZegoService {
 
     // 验证是否是主持人
     if (room.hostUserId !== hostUserId) {
-      this.logger.warn(`远程控制失败: 用户 ${hostUserId} 不是主持人`);
+      this.logger.warn(`远程控制失败: 用户 ${hostUserId} 不是主持人，房间主持人是 ${room.hostUserId}`);
       return false;
     }
 
     // 验证目标用户是否在房间中
     if (!room.participants.has(targetUserId)) {
       this.logger.warn(`远程控制失败: 目标用户 ${targetUserId} 不在房间中`);
+      this.logger.warn(`当前房间参与者列表: ${Array.from(room.participants).join(', ')}`);
       return false;
     }
 

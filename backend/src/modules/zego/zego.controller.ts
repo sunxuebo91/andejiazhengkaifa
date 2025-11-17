@@ -5,7 +5,7 @@ import { GenerateTokenDto } from './dto/generate-token.dto';
 import { GenerateGuestTokenDto } from './dto/generate-guest-token.dto';
 import { DismissRoomDto } from './dto/dismiss-room.dto';
 import { CheckRoomDto } from './dto/check-room.dto';
-import { PushTeleprompterDto, ControlTeleprompterDto, GetTeleprompterDto } from './dto/teleprompter.dto';
+import { PushTeleprompterDto, ControlTeleprompterDto, GetTeleprompterDto, QuickStartTeleprompterDto } from './dto/teleprompter.dto';
 import { KickUserDto } from './dto/kick-user.dto';
 import { RemoteControlDto } from './dto/remote-control.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -34,8 +34,8 @@ export class ZegoController {
       dto.expireTime,
     );
 
-    // 创建房间（主持人）- 使用 JWT 中的 userId 作为主持人ID
-    this.zegoService.createRoom(dto.roomId, req.user.userId);
+    // 创建房间（主持人）- 使用前端传递的 userId（user_xxx 格式）作为主持人ID
+    this.zegoService.createRoom(dto.roomId, dto.userId);
 
     return {
       success: true,
@@ -118,11 +118,13 @@ export class ZegoController {
   @Post('kick-user')
   @UseGuards(JwtAuthGuard)
   async kickUser(@Body() dto: KickUserDto, @Request() req) {
-    const hostUserId = req.user.userId;
+    // 使用前端传递的 ZEGO userId（user_xxx 格式）
+    const hostUserId = dto.hostUserId;
     console.log('踢出用户请求:', {
       roomId: dto.roomId,
       hostUserId: hostUserId,
       targetUserId: dto.userId,
+      jwtUserId: req.user.userId,
     });
 
     const success = await this.zegoService.kickUser(dto.roomId, hostUserId, dto.userId);
@@ -147,14 +149,14 @@ export class ZegoController {
   @Post('dismiss-room')
   @UseGuards(JwtAuthGuard)
   async dismissRoom(@Body() dto: DismissRoomDto, @Request() req) {
-    const userId = req.user.userId;
     console.log('解散房间请求:', {
       roomId: dto.roomId,
-      requestUserId: userId,
+      hostUserId: dto.hostUserId,
+      jwtUserId: req.user.userId,
       userInfo: req.user,
     });
 
-    const success = await this.zegoService.dismissRoom(dto.roomId, userId);
+    const success = await this.zegoService.dismissRoom(dto.roomId, dto.hostUserId);  // ✅ 使用 ZEGO userId
 
     if (!success) {
       throw new HttpException({
@@ -230,7 +232,6 @@ export class ZegoController {
       dto.content,
       dto.targetUserIds,
       dto.scrollSpeed,
-      dto.displayHeight,
     );
 
     if (!success) {
@@ -291,6 +292,34 @@ export class ZegoController {
   }
 
   /**
+   * 一键推送并开启提词器（需要登录，仅主持人）
+   */
+  @Post('quick-start-teleprompter')
+  @UseGuards(JwtAuthGuard)
+  quickStartTeleprompter(@Body() dto: QuickStartTeleprompterDto, @Request() req) {
+    const success = this.zegoService.quickStartTeleprompter(
+      dto.roomId,
+      dto.content,
+      dto.targetUserIds,
+      dto.scrollSpeed,
+      dto.autoPlay ?? true,
+    );
+
+    if (!success) {
+      throw new HttpException({
+        success: false,
+        message: '快速启动提词器失败，房间不存在或已解散',
+        error: 'QUICK_START_FAILED',
+      }, HttpStatus.BAD_REQUEST);
+    }
+
+    return {
+      success: true,
+      message: '提词器已启动',
+    };
+  }
+
+  /**
    * 远程控制用户设备（需要登录，仅主持人）
    */
   @Post('remote-control')
@@ -298,7 +327,7 @@ export class ZegoController {
   remoteControl(@Body() dto: RemoteControlDto, @Request() req) {
     const success = this.zegoService.remoteControl(
       dto.roomId,
-      req.user.userId,
+      dto.hostUserId,  // ✅ 使用前端传来的 ZEGO userId
       dto.targetUserId,
       dto.controlType,
       dto.enabled,

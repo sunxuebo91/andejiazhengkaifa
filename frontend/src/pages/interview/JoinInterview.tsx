@@ -4,6 +4,7 @@ import { Form, Input, Button, Card, message, Radio, Space } from 'antd';
 import { VideoCameraOutlined, UserOutlined } from '@ant-design/icons';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import axios from 'axios';
+import '../interview/VideoInterviewMobile.css';
 
 // 访客身份类型
 type GuestRole = 'customer' | 'helper';
@@ -30,12 +31,27 @@ const JoinInterview: React.FC = () => {
   const [teleprompterSpeed, setTeleprompterSpeed] = useState(50);
   const [teleprompterHeight, setTeleprompterHeight] = useState('50vh');
   const [isScrolling, setIsScrolling] = useState(false);
+  const [isRemoteControlled, setIsRemoteControlled] = useState(false); // 是否被远程控制
   const teleprompterRef = useRef<HTMLDivElement>(null);
   const scrollIntervalRef = useRef<any>(null);
   const roomCheckIntervalRef = useRef<any>(null);
   const teleprompterPollIntervalRef = useRef<any>(null);
   const lastTeleprompterTimestampRef = useRef<number>(0);
   // const cleanupIntervalRef = useRef<any>(null); // 🔧 定期清理检查定时器
+
+  // 📱 移动端检测
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // 从 URL 获取房间名称（可选）
   const roomName = searchParams.get('name') || '视频面试';
@@ -122,9 +138,12 @@ const JoinInterview: React.FC = () => {
             setTeleprompterSpeed(msg.scrollSpeed);
             setTeleprompterHeight(msg.displayHeight);
             setTeleprompterVisible(true);
+            setIsRemoteControlled(true); // 标记为远程控制
             console.log('收到提词内容:', msg.content);
           } else if (msg.type === 'CONTROL') {
             // 控制播放状态
+            setIsRemoteControlled(true); // 标记为远程控制
+
             if (msg.action === 'PLAY') {
               startScrolling();
               console.log('开始播放提词器');
@@ -134,7 +153,19 @@ const JoinInterview: React.FC = () => {
             } else if (msg.action === 'STOP') {
               stopScrolling();
               setTeleprompterVisible(false);
+              setIsRemoteControlled(false);
               console.log('停止提词器');
+            } else if (msg.action === 'SHOW') {
+              // 显示提词器但不自动播放
+              setTeleprompterVisible(true);
+              stopScrolling(); // 确保不自动滚动
+              console.log('显示提词器');
+            } else if (msg.action === 'HIDE') {
+              // 隐藏提词器
+              stopScrolling();
+              setTeleprompterVisible(false);
+              setIsRemoteControlled(false);
+              console.log('隐藏提词器');
             }
           }
 
@@ -665,15 +696,18 @@ const JoinInterview: React.FC = () => {
         {/* 📝 提词器显示组件 */}
         {teleprompterVisible && (
           <div
+            className={isMobile ? "mobile-teleprompter-overlay" : ""}
             style={{
               position: 'absolute',
-              top: '60px',
+              top: isMobile ? '60px' : '60px',
               left: '50%',
               transform: 'translateX(-50%)',
-              width: '80%',
+              width: isMobile ? 'calc(100% - 32px)' : '80%',
+              maxWidth: isMobile ? '600px' : '80%',
               height: teleprompterHeight,
-              backgroundColor: 'rgba(0, 0, 0, 0.85)',
-              borderRadius: '12px',
+              backgroundColor: 'rgba(0, 0, 0, 0.92)',
+              backdropFilter: 'blur(20px)',
+              borderRadius: isMobile ? '16px' : '12px',
               zIndex: 10000,
               overflow: 'hidden',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
@@ -683,60 +717,97 @@ const JoinInterview: React.FC = () => {
           >
             {/* 标题栏 */}
             <div
+              className="header"
               style={{
-                padding: '12px 20px',
+                padding: isMobile ? '16px 20px' : '12px 20px',
                 borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                flexShrink: 0,
               }}
             >
-              <span style={{ color: 'white', fontSize: '16px', fontWeight: 500 }}>
-                📝 提词器
-              </span>
+              <div className="title" style={{
+                color: 'white',
+                fontSize: isMobile ? '16px' : '16px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span>📝 提词器</span>
+                {isRemoteControlled && (
+                  <span className="badge" style={{
+                    fontSize: '12px',
+                    color: '#52c41a',
+                    background: 'rgba(82, 196, 26, 0.15)',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontWeight: 500
+                  }}>
+                    主持人控制中
+                  </span>
+                )}
+              </div>
               <Space>
-                <Button
-                  size="small"
-                  onClick={() => {
-                    if (isScrolling) {
+                {!isRemoteControlled && (
+                  <Button
+                    size={isMobile ? "middle" : "small"}
+                    onClick={() => {
+                      if (isScrolling) {
+                        stopScrolling();
+                      } else {
+                        startScrolling();
+                      }
+                    }}
+                    style={{
+                      borderRadius: isMobile ? '8px' : '4px',
+                      height: isMobile ? '36px' : 'auto'
+                    }}
+                  >
+                    {isScrolling ? '⏸️ 暂停' : '▶️ 播放'}
+                  </Button>
+                )}
+                {!isRemoteControlled && (
+                  <Button
+                    size={isMobile ? "middle" : "small"}
+                    danger
+                    onClick={() => {
                       stopScrolling();
-                    } else {
-                      startScrolling();
-                    }
-                  }}
-                >
-                  {isScrolling ? '⏸️ 暂停' : '▶️ 播放'}
-                </Button>
-                <Button
-                  size="small"
-                  danger
-                  onClick={() => {
-                    stopScrolling();
-                    setTeleprompterVisible(false);
-                  }}
-                >
-                  关闭
-                </Button>
+                      setTeleprompterVisible(false);
+                      setIsRemoteControlled(false);
+                    }}
+                    style={{
+                      borderRadius: isMobile ? '8px' : '4px',
+                      height: isMobile ? '36px' : 'auto'
+                    }}
+                  >
+                    关闭
+                  </Button>
+                )}
               </Space>
             </div>
 
             {/* 内容区域 */}
             <div
+              className="content"
               ref={teleprompterRef}
               style={{
                 flex: 1,
-                padding: '40px',
+                padding: isMobile ? '32px 24px' : '40px',
                 color: 'white',
-                fontSize: '24px',
+                fontSize: isMobile ? '24px' : '24px',
                 lineHeight: '2',
                 whiteSpace: 'pre-wrap',
                 overflowY: 'auto',
                 overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch',
+                scrollBehavior: 'smooth',
               }}
               onWheel={(e) => {
-                // 允许用户手动滚动
-                if (e.deltaY !== 0) {
+                // 允许用户手动滚动（仅非远程控制时）
+                if (!isRemoteControlled && e.deltaY !== 0) {
                   stopScrolling(); // 手动滚动时停止自动滚动
                 }
               }}

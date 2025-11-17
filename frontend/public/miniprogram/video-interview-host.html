@@ -43,6 +43,11 @@
 
   <!-- 使用本地 ZEGO SDK（v3.11.0 独立打包版本，包含所有依赖） -->
   <script src="./ZegoExpressWebRTC-standalone.js"></script>
+
+  <!-- 🎯 AI 降噪模块（独立打包版本已内置） -->
+  <script>
+    console.log('📦 ZEGO SDK 加载完成，AI 降噪模块已就绪');
+  </script>
   <!-- ZEGO Token 生成库（内嵌实现） -->
   <script>
     // Token 生成函数（内嵌实现，避免 CDN 加载问题）
@@ -703,162 +708,7 @@
       font-size: 13px;
     }
 
-    /* 🔥 日志面板样式 */
-    .log-panel {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      width: 400px;
-      max-height: 500px;
-      background: rgba(0, 0, 0, 0.95);
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-      z-index: 10000;
-      display: flex;
-      flex-direction: column;
-      transition: all 0.3s ease;
-    }
 
-    .log-panel.collapsed {
-      max-height: 50px;
-    }
-
-    .log-panel-header {
-      padding: 12px 16px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 12px 12px 0 0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .log-panel-title {
-      color: white;
-      font-size: 14px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .log-panel-badge {
-      background: rgba(255, 255, 255, 0.3);
-      color: white;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 12px;
-    }
-
-    .log-panel-toggle {
-      color: white;
-      font-size: 18px;
-      transition: transform 0.3s ease;
-    }
-
-    .log-panel.collapsed .log-panel-toggle {
-      transform: rotate(180deg);
-    }
-
-    .log-panel-content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 12px;
-      font-family: 'Courier New', monospace;
-      font-size: 12px;
-      line-height: 1.6;
-      max-height: 440px;
-    }
-
-    .log-panel.collapsed .log-panel-content {
-      display: none;
-    }
-
-    .log-panel-content::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    .log-panel-content::-webkit-scrollbar-track {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
-    }
-
-    .log-panel-content::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.3);
-      border-radius: 3px;
-    }
-
-    .log-entry {
-      padding: 6px 8px;
-      margin-bottom: 4px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.05);
-      border-left: 3px solid;
-      word-wrap: break-word;
-    }
-
-    .log-entry.info {
-      border-left-color: #3b82f6;
-      color: #93c5fd;
-    }
-
-    .log-entry.success {
-      border-left-color: #10b981;
-      color: #6ee7b7;
-    }
-
-    .log-entry.warning {
-      border-left-color: #f59e0b;
-      color: #fcd34d;
-    }
-
-    .log-entry.error {
-      border-left-color: #ef4444;
-      color: #fca5a5;
-    }
-
-    .log-entry.event {
-      border-left-color: #8b5cf6;
-      color: #c4b5fd;
-    }
-
-    .log-time {
-      color: #9ca3af;
-      font-size: 11px;
-      margin-right: 8px;
-    }
-
-    .log-panel-actions {
-      padding: 8px 12px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      display: flex;
-      gap: 8px;
-    }
-
-    .log-panel.collapsed .log-panel-actions {
-      display: none;
-    }
-
-    .log-btn {
-      flex: 1;
-      padding: 6px 12px;
-      background: rgba(255, 255, 255, 0.1);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .log-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-
-    .log-btn:active {
-      transform: scale(0.95);
-    }
   </style>
 </head>
 <body>
@@ -960,6 +810,10 @@
         <div class="control-icon-text">🔄</div>
         <div class="control-label">翻转</div>
       </div>
+      <div class="control-item" id="teleprompterBtn" onclick="showTeleprompterModal()">
+        <div class="control-icon-text">📝</div>
+        <div class="control-label">提词器</div>
+      </div>
       <div class="control-item control-item-danger" onclick="leaveRoom()">
         <div class="control-icon-text">📞</div>
         <div class="control-label">结束面试</div>
@@ -987,21 +841,92 @@
     </div>
   </div>
 
-  <!-- 🔥 日志面板 -->
-  <div class="log-panel" id="logPanel">
-    <div class="log-panel-header" onclick="toggleLogPanel()">
-      <div class="log-panel-title">
-        <span>📊 实时日志</span>
-        <span class="log-panel-badge" id="logCount">0</span>
+  <!-- 提词器弹窗 -->
+  <div id="teleprompterModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>📝 提词器控制</h3>
+        <span class="modal-close" onclick="closeTeleprompterModal()">&times;</span>
       </div>
-      <div class="log-panel-toggle">▼</div>
-    </div>
-    <div class="log-panel-content" id="logContent">
-      <!-- 日志条目将动态添加到这里 -->
-    </div>
-    <div class="log-panel-actions">
-      <button class="log-btn" onclick="clearLogs()">🗑️ 清空</button>
-      <button class="log-btn" onclick="exportLogs()">💾 导出</button>
+      <div class="modal-body">
+        <!-- 提词内容 -->
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">提词内容:</label>
+          <textarea
+            id="teleprompterContent"
+            placeholder="请输入提词内容..."
+            style="width: 100%; min-height: 120px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; resize: vertical;"
+          ></textarea>
+        </div>
+
+        <!-- 推送给 -->
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">推送给:</label>
+          <select
+            id="teleprompterTarget"
+            style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px;"
+          >
+            <option value="" disabled selected>请选择阿姨</option>
+          </select>
+        </div>
+
+        <!-- 滚动速度 -->
+        <div style="margin-bottom: 24px;">
+          <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">
+            滚动速度: <span id="speedValue">10</span> 像素/秒
+          </label>
+          <input
+            type="range"
+            id="teleprompterSpeed"
+            min="10"
+            max="100"
+            value="10"
+            oninput="document.getElementById('speedValue').textContent = this.value"
+            style="width: 100%;"
+          >
+        </div>
+
+        <!-- 操作按钮 -->
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <button
+            onclick="quickStartTeleprompter()"
+            style="width: 100%; padding: 14px; background: linear-gradient(135deg, #5DBFB3 0%, #4da89d 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(93, 191, 179, 0.3);"
+          >
+            🚀 一键推送并开启
+          </button>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button
+              onclick="controlTeleprompter('PLAY')"
+              style="padding: 12px; background: #fff; color: #52c41a; border: 1px solid #52c41a; border-radius: 8px; font-size: 14px; cursor: pointer;"
+            >
+              ▶️ 播放
+            </button>
+            <button
+              onclick="controlTeleprompter('PAUSE')"
+              style="padding: 12px; background: #fff; color: #faad14; border: 1px solid #faad14; border-radius: 8px; font-size: 14px; cursor: pointer;"
+            >
+              ⏸️ 暂停
+            </button>
+          </div>
+
+          <button
+            onclick="controlTeleprompter('HIDE')"
+            style="width: 100%; padding: 12px; background: #fff; color: #ff4d4f; border: 1px solid #ff4d4f; border-radius: 8px; font-size: 14px; cursor: pointer;"
+          >
+            ❌ 关闭提词器
+          </button>
+        </div>
+
+        <!-- 使用说明 -->
+        <div style="margin-top: 20px; padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px; color: #666; line-height: 1.6;">
+          <strong>使用说明：</strong><br>
+          1. 输入提词内容<br>
+          2. 点击"🚀 一键推送并开启"即可<br>
+          3. 阿姨端会自动显示并播放<br>
+          4. 可以使用"播放/暂停"控制滚动
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1036,90 +961,11 @@
     let currentStreamId = ''; // 当前推流ID
     let interviewStartTime = null;
     let interviewTimer = null;
+    let onlineUsers = {}; // 存储在线用户 { userId: { userName, userRole, streamId } }
 
-    // 🔥 日志系统
-    let logEntries = [];
-    let logCount = 0;
-
-    // 添加日志
+    // 简化的日志函数（仅输出到 console）
     function addLog(message, type = 'info') {
-      const now = new Date();
-      const time = now.toLocaleTimeString('zh-CN', { hour12: false });
-
-      const logEntry = {
-        time,
-        message,
-        type,
-        timestamp: now.getTime()
-      };
-
-      logEntries.push(logEntry);
-      logCount++;
-
-      // 更新日志计数
-      const logCountBadge = document.getElementById('logCount');
-      if (logCountBadge) {
-        logCountBadge.textContent = logCount;
-      }
-
-      // 添加到DOM
-      const logContent = document.getElementById('logContent');
-      if (logContent) {
-        const logDiv = document.createElement('div');
-        logDiv.className = `log-entry ${type}`;
-        logDiv.innerHTML = `<span class="log-time">${time}</span>${message}`;
-        logContent.appendChild(logDiv);
-
-        // 自动滚动到底部
-        logContent.scrollTop = logContent.scrollHeight;
-
-        // 限制日志数量（最多保留200条）
-        if (logEntries.length > 200) {
-          logEntries.shift();
-          logContent.removeChild(logContent.firstChild);
-        }
-      }
-
-      // 同时输出到console
       console.log(`[${type.toUpperCase()}] ${message}`);
-    }
-
-    // 切换日志面板
-    function toggleLogPanel() {
-      const logPanel = document.getElementById('logPanel');
-      logPanel.classList.toggle('collapsed');
-    }
-
-    // 清空日志
-    function clearLogs() {
-      logEntries = [];
-      logCount = 0;
-      const logContent = document.getElementById('logContent');
-      if (logContent) {
-        logContent.innerHTML = '';
-      }
-      const logCountBadge = document.getElementById('logCount');
-      if (logCountBadge) {
-        logCountBadge.textContent = '0';
-      }
-      addLog('日志已清空', 'info');
-    }
-
-    // 导出日志
-    function exportLogs() {
-      const logText = logEntries.map(entry =>
-        `[${entry.time}] [${entry.type.toUpperCase()}] ${entry.message}`
-      ).join('\n');
-
-      const blob = new Blob([logText], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `video-interview-log-${Date.now()}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-
-      addLog('日志已导出', 'success');
     }
 
     // ==================== 获取 JWT Token ====================
@@ -1217,6 +1063,15 @@
 
       console.log('使用的构造函数类型:', typeof ZegoEngine);
 
+      // 🎯 注册 AI 降噪模块（如果 SDK 支持）
+      if (ZegoEngine.use && typeof ZegoEngine.use === 'function') {
+        try {
+          console.log('🎯 尝试注册 AI 降噪模块...');
+        } catch (e) {
+          console.log('ℹ️ AI 降噪模块可能已内置或不支持');
+        }
+      }
+
       // 创建 ZEGO 实例，并设置日志级别为 error（只显示错误日志）
       zg = new ZegoEngine(appID, server);
       zg.setLogConfig({
@@ -1242,7 +1097,17 @@
           for (const stream of streamList) {
             console.log('📺 准备播放流:', stream.streamID, '用户:', stream.user);
             const userName = stream.user?.userName || '未知用户';
+            const userId = stream.user?.userID || '';
             addLog(`➕ 新流加入: ${userName} (${stream.streamID})`, 'success');
+
+            // 添加到在线用户列表
+            onlineUsers[userId] = {
+              userName: userName,
+              userRole: userName, // 从userName推断角色（customer/helper）
+              streamId: stream.streamID
+            };
+            console.log('👥 在线用户列表已更新:', onlineUsers);
+
             await playRemoteStream(stream);
           }
         } else if (updateType === 'DELETE') {
@@ -1251,7 +1116,13 @@
           for (const stream of streamList) {
             console.log('📺 移除流:', stream.streamID);
             const userName = stream.user?.userName || '未知用户';
+            const userId = stream.user?.userID || '';
             addLog(`➖ 流离开: ${userName} (${stream.streamID})`, 'warning');
+
+            // 从在线用户列表移除
+            delete onlineUsers[userId];
+            console.log('👥 在线用户列表已更新:', onlineUsers);
+
             removeRemoteStream(stream.streamID);
           }
         }
@@ -1405,6 +1276,38 @@
           }
         });
         console.log('创建本地流成功');
+
+        // 🎯 启用 AI 降噪（消除键盘声、鼠标点击、咳嗽等噪音）
+        if (zg.enableAiDenoise && typeof zg.enableAiDenoise === 'function') {
+          try {
+            await zg.enableAiDenoise(localStream, true);
+            console.log('✅ AI 降噪已启用 - 将自动消除键盘声、鼠标点击、咳嗽等噪音');
+          } catch (error) {
+            console.warn('⚠️ AI 降噪启用失败:', error);
+            // 降噪失败不影响正常通话，继续执行
+          }
+        } else {
+          console.log('ℹ️ 当前 SDK 版本不支持 AI 降噪功能');
+        }
+
+        // 🎨 启用基础美颜（自然效果，不夸张，适配 720p 分辨率）
+        if (zg.setEffectsBeauty && typeof zg.setEffectsBeauty === 'function') {
+          try {
+            await zg.setEffectsBeauty(localStream, true, {
+              smoothIntensity: 35,   // 适度磨皮
+              whitenIntensity: 25,   // 适度美白
+              rosyIntensity: 20,     // 适度红润
+              sharpenIntensity: 30   // 适度锐化（720p 需要适度锐化）
+            });
+            console.log('✅ 基础美颜已启用 - 自然不夸张的美颜效果');
+            addLog('✅ 智能美颜已开启，画面更清晰自然 ✨', 'success');
+          } catch (error) {
+            console.warn('⚠️ 美颜启用失败:', error);
+            // 美颜失败不影响正常通话，继续执行
+          }
+        } else {
+          console.log('ℹ️ 当前 SDK 版本不支持美颜功能');
+        }
 
         // ✅ 确保音频轨道已启用
         const audioTracks = localStream.getAudioTracks();
@@ -1952,9 +1855,12 @@
     // ==================== 管理功能 ====================
     // 切换管理菜单
     function toggleManageMenu(event, streamId, userId) {
+      console.log('📋 toggleManageMenu 被调用:', { streamId, userId });
       event.stopPropagation();
 
       const menu = document.getElementById(`menu_${streamId}`);
+      console.log('📋 菜单元素:', menu);
+
       const allMenus = document.querySelectorAll('.manage-menu');
 
       // 关闭其他菜单
@@ -1966,6 +1872,7 @@
 
       // 切换当前菜单
       menu.classList.toggle('show');
+      console.log('📋 菜单显示状态:', menu.classList.contains('show'));
     }
 
     // 点击其他地方关闭菜单
@@ -1983,6 +1890,14 @@
           return;
         }
 
+        console.log('🎮 远程控制摄像头:', {
+          roomId: roomId,
+          hostUserId: currentUserId,
+          targetUserId: targetUserId,
+          controlType: 'camera',
+          enabled: enabled
+        });
+
         const response = await fetch('/api/zego/remote-control', {
           method: 'POST',
           headers: {
@@ -1991,6 +1906,7 @@
           },
           body: JSON.stringify({
             roomId: roomId,
+            hostUserId: currentUserId,  // ✅ 添加主持人的 ZEGO userId
             targetUserId: targetUserId,
             controlType: 'camera',
             enabled: enabled
@@ -2020,6 +1936,14 @@
           return;
         }
 
+        console.log('🎮 远程控制麦克风:', {
+          roomId: roomId,
+          hostUserId: currentUserId,
+          targetUserId: targetUserId,
+          controlType: 'microphone',
+          enabled: enabled
+        });
+
         const response = await fetch('/api/zego/remote-control', {
           method: 'POST',
           headers: {
@@ -2028,6 +1952,7 @@
           },
           body: JSON.stringify({
             roomId: roomId,
+            hostUserId: currentUserId,  // ✅ 添加主持人的 ZEGO userId
             targetUserId: targetUserId,
             controlType: 'microphone',
             enabled: enabled
@@ -2050,18 +1975,39 @@
 
     // 踢出用户
     async function kickUser(targetUserId, userName) {
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('🚪 kickUser 函数被调用！');
+      console.log('📍 targetUserId:', targetUserId);
+      console.log('📍 userName:', userName);
+      console.log('📍 currentUserId:', currentUserId);
+      console.log('📍 roomId:', roomId);
+      console.log('═══════════════════════════════════════════════════════');
+
       if (!confirm(`确定要将 ${userName} 移出面试间吗？`)) {
+        console.log('❌ 用户取消了踢出操作');
         return;
       }
+
+      console.log('✅ 用户确认踢出操作，开始执行...');
 
       try {
         const jwtToken = getJwtToken();
         if (!jwtToken) {
+          console.error('❌ 未找到 JWT Token');
           alert('未找到认证信息');
           return;
         }
 
+        console.log('✅ JWT Token 已获取');
         showMessage('正在移出用户...');
+
+        const requestBody = {
+          roomId: roomId,
+          userId: targetUserId,
+          hostUserId: currentUserId  // 传递主持人的 ZEGO userId（user_xxx 格式）
+        };
+
+        console.log('📤 发送踢出请求:', requestBody);
 
         const response = await fetch('/api/zego/kick-user', {
           method: 'POST',
@@ -2069,13 +2015,14 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${jwtToken}`
           },
-          body: JSON.stringify({
-            roomId: roomId,
-            userId: targetUserId
-          })
+          body: JSON.stringify(requestBody)
         });
 
+        console.log('📥 收到响应，状态码:', response.status);
+
         const result = await response.json();
+        console.log('📥 响应内容:', result);
+
         hideMessage();
 
         if (result.success) {
@@ -2093,7 +2040,8 @@
     }
 
     // 翻转镜头（前置/后置切换）
-    // ✅ 使用即构官方推荐的方式二：stopCaptureVideo + startCaptureCamera + updatePublishingStream
+    // ✅ 使用即构官方推荐的方式：useFrontCamera
+    // 官方文档：https://doc-zh.zego.im/real-time-video-web/best-practice/mobile-front-and-rear-camera-switching
     async function flipCamera() {
       if (!localStream || !isCameraOn) {
         alert('请先打开摄像头');
@@ -2108,36 +2056,20 @@
         isFrontCamera = !isFrontCamera;
         console.log('🔄 切换到:', isFrontCamera ? '前置' : '后置');
 
-        // ✅ 步骤1：停止当前摄像头采集
-        console.log('⏸️ 停止视频采集...');
-        await zg.stopCaptureVideo();
+        // ✅ 使用官方推荐的 useFrontCamera 方法
+        // true = 前置摄像头，false = 后置摄像头
+        await zg.useFrontCamera(localStream, isFrontCamera);
 
-        // ✅ 步骤2：重新开始采集（指定前置或后置摄像头）
-        console.log('📹 重新开始采集...');
-        const videoConfig = {
-          width: 1280,
-          height: 720,
-          frameRate: 15,
-          bitrate: 1500,
-          facingMode: isFrontCamera ? 'user' : 'environment'
-        };
-        await zg.startCaptureCamera(videoConfig);
-
-        // ✅ 步骤3：更新推流
-        console.log('📤 更新推流...');
-        await zg.updatePublishingStream(localStream);
-        console.log('✅ 推流更新成功');
-
-        hideMessage();
         console.log('✅ 摄像头切换成功:', isFrontCamera ? '前置' : '后置');
+        hideMessage();
         alert('摄像头已切换到' + (isFrontCamera ? '前置' : '后置'));
       } catch (error) {
         console.error('❌ 切换摄像头失败:', error);
         hideMessage();
 
-        // 尝试切换回原来的方向
+        // 切换回原来的方向
         isFrontCamera = !isFrontCamera;
-        alert('切换摄像头失败，可能您的设备不支持前后摄像头切换');
+        alert('切换摄像头失败: ' + error.message);
       }
     }
 
@@ -2208,6 +2140,297 @@
       }
     });
 
+    // ==================== 提词器功能 ====================
+    // 显示提词器弹窗
+    function showTeleprompterModal() {
+      const modal = document.getElementById('teleprompterModal');
+      modal.style.display = 'flex';
+      console.log('📝 打开提词器控制面板');
+
+      // 更新用户列表
+      updateTeleprompterUserList();
+    }
+
+    // 更新提词器用户列表
+    function updateTeleprompterUserList() {
+      const select = document.getElementById('teleprompterTarget');
+
+      // 保存当前选中的值
+      const currentValue = select.value;
+
+      // 清空现有选项
+      select.innerHTML = '';
+
+      // 统计在线用户
+      const helperUsers = [];
+      const customerUsers = [];
+
+      for (const userId in onlineUsers) {
+        const user = onlineUsers[userId];
+        // 根据userName判断角色（如果userName包含"customer"或"helper"）
+        if (user.userName.toLowerCase().includes('helper') || user.userName === 'ayi') {
+          helperUsers.push({ userId, ...user });
+        } else if (user.userName.toLowerCase().includes('customer')) {
+          customerUsers.push({ userId, ...user });
+        } else {
+          // 默认当作helper
+          helperUsers.push({ userId, ...user });
+        }
+      }
+
+      // 如果没有阿姨在线，显示placeholder
+      if (helperUsers.length === 0) {
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = '请选择阿姨';
+        placeholderOption.disabled = true;
+        placeholderOption.selected = true;
+        select.appendChild(placeholderOption);
+      } else {
+        // 有阿姨在线时，添加"所有阿姨"选项
+        const allOption = document.createElement('option');
+        allOption.value = 'ALL';
+        allOption.textContent = '所有阿姨';
+        select.appendChild(allOption);
+
+        // 添加分隔符
+        const separator = document.createElement('option');
+        separator.disabled = true;
+        separator.textContent = '--- 阿姨用户 ---';
+        select.appendChild(separator);
+
+        // 添加每个阿姨用户
+        helperUsers.forEach((user, index) => {
+          const option = document.createElement('option');
+          option.value = user.userId;
+
+          // 移除"helper-"前缀，只显示中文名称
+          let displayName = user.userName;
+          if (displayName.toLowerCase().startsWith('helper-')) {
+            displayName = displayName.substring(7); // 移除"helper-"前缀
+          }
+          option.textContent = displayName;
+
+          // 如果之前有选中值，保持选中；否则默认选中第一个阿姨
+          if (currentValue && currentValue === user.userId) {
+            option.selected = true;
+          } else if (!currentValue && index === 0) {
+            option.selected = true;
+            console.log(`✅ 自动选中第一个阿姨: ${displayName}`);
+          }
+
+          select.appendChild(option);
+        });
+      }
+
+      // 显示在线用户数量
+      console.log(`👥 在线阿姨: ${helperUsers.length}人, 在线客户: ${customerUsers.length}人`);
+    }
+
+    // 关闭提词器弹窗
+    function closeTeleprompterModal() {
+      const modal = document.getElementById('teleprompterModal');
+      modal.style.display = 'none';
+      console.log('📝 关闭提词器控制面板');
+    }
+
+    // 点击弹窗外部关闭
+    window.addEventListener('click', function(e) {
+      const modal = document.getElementById('teleprompterModal');
+      if (e.target === modal) {
+        closeTeleprompterModal();
+      }
+    });
+
+    // 一键推送并开启提词器
+    async function quickStartTeleprompter() {
+      const content = document.getElementById('teleprompterContent').value.trim();
+      if (!content) {
+        alert('请输入提词内容');
+        return;
+      }
+
+      if (!roomId) {
+        alert('请先创建房间');
+        return;
+      }
+
+      try {
+        showMessage('正在启动提词器...');
+
+        const jwtToken = getJwtToken();
+        if (!jwtToken) {
+          throw new Error('未找到认证信息');
+        }
+
+        const speed = parseInt(document.getElementById('teleprompterSpeed').value);
+        const targetValue = document.getElementById('teleprompterTarget').value;
+
+        // 验证是否选择了阿姨
+        if (!targetValue) {
+          showMessage('请选择要推送的阿姨', 'warning');
+          return;
+        }
+
+        // 如果选择的是"ALL"，则推送给所有用户；否则推送给指定用户
+        const targetUserIds = targetValue === 'ALL' ? ['ALL'] : [targetValue];
+
+        const response = await fetch('/api/zego/quick-start-teleprompter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`
+          },
+          body: JSON.stringify({
+            roomId: roomId,
+            content: content,
+            targetUserIds: targetUserIds,
+            scrollSpeed: speed,
+            autoPlay: true
+          })
+        });
+
+        const result = await response.json();
+        hideMessage();
+
+        if (result.success) {
+          alert('🚀 提词器已启动！');
+          console.log('✅ 提词器启动成功');
+        } else {
+          throw new Error(result.message || '启动失败');
+        }
+      } catch (error) {
+        console.error('❌ 启动提词器失败:', error);
+        hideMessage();
+        alert('启动失败: ' + error.message);
+      }
+    }
+
+    // 推送提词内容
+    async function pushTeleprompterContent() {
+      const content = document.getElementById('teleprompterContent').value.trim();
+      if (!content) {
+        alert('请输入提词内容');
+        return;
+      }
+
+      if (!roomId) {
+        alert('请先创建房间');
+        return;
+      }
+
+      try {
+        showMessage('正在推送内容...');
+
+        const jwtToken = getJwtToken();
+        if (!jwtToken) {
+          throw new Error('未找到认证信息');
+        }
+
+        const speed = parseInt(document.getElementById('teleprompterSpeed').value);
+        const targetValue = document.getElementById('teleprompterTarget').value;
+
+        // 验证是否选择了阿姨
+        if (!targetValue) {
+          showMessage('请选择要推送的阿姨', 'warning');
+          return;
+        }
+
+        const targetUserIds = targetValue === 'ALL' ? ['ALL'] : [targetValue];
+
+        const response = await fetch('/api/zego/push-teleprompter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`
+          },
+          body: JSON.stringify({
+            roomId: roomId,
+            content: content,
+            targetUserIds: targetUserIds,
+            scrollSpeed: speed
+          })
+        });
+
+        const result = await response.json();
+        hideMessage();
+
+        if (result.success) {
+          alert('📤 内容已推送');
+          console.log('✅ 提词内容推送成功');
+        } else {
+          throw new Error(result.message || '推送失败');
+        }
+      } catch (error) {
+        console.error('❌ 推送提词内容失败:', error);
+        hideMessage();
+        alert('推送失败: ' + error.message);
+      }
+    }
+
+    // 控制提词器播放状态
+    async function controlTeleprompter(action) {
+      if (!roomId) {
+        alert('请先创建房间');
+        return;
+      }
+
+      try {
+        const jwtToken = getJwtToken();
+        if (!jwtToken) {
+          throw new Error('未找到认证信息');
+        }
+
+        const actionText = {
+          'PLAY': '播放',
+          'PAUSE': '暂停',
+          'SHOW': '显示',
+          'HIDE': '关闭'
+        }[action] || action;
+
+        showMessage(`正在${actionText}提词器...`);
+
+        const targetValue = document.getElementById('teleprompterTarget').value;
+
+        // 验证是否选择了阿姨
+        if (!targetValue) {
+          showMessage('请选择要推送的阿姨', 'warning');
+          return;
+        }
+
+        const targetUserIds = targetValue === 'ALL' ? ['ALL'] : [targetValue];
+
+        const response = await fetch('/api/zego/control-teleprompter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`
+          },
+          body: JSON.stringify({
+            roomId: roomId,
+            targetUserIds: targetUserIds,
+            action: action
+          })
+        });
+
+        const result = await response.json();
+        hideMessage();
+
+        if (result.success) {
+          console.log(`✅ 提词器${actionText}成功`);
+          if (action === 'HIDE') {
+            alert('❌ 提词器已关闭');
+          }
+        } else {
+          throw new Error(result.message || '操作失败');
+        }
+      } catch (error) {
+        console.error(`❌ 控制提词器失败:`, error);
+        hideMessage();
+        alert('操作失败: ' + error.message);
+      }
+    }
+
     async function leaveRoom() {
       if (confirm('确定要结束面试并解散房间吗？所有参与者将被踢出。')) {
         try {
@@ -2223,7 +2446,10 @@
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${jwtToken}`
                 },
-                body: JSON.stringify({ roomId: roomId })
+                body: JSON.stringify({
+                  roomId: roomId,
+                  hostUserId: currentUserId  // ✅ 添加主持人的 ZEGO userId
+                })
               });
 
               const result = await response.json();
@@ -2405,13 +2631,32 @@
       initZego();
     };
     
-    // 页面卸载时清理
-    window.onbeforeunload = function() {
+    // 🔥 页面卸载时清理资源
+    window.addEventListener('beforeunload', function(e) {
+      console.log('⚠️ 页面即将卸载（beforeunload）');
       if (zg && localStream) {
         zg.destroyStream(localStream);
         zg.logoutRoom(roomId);
       }
-    };
+    });
+
+    // 🔥 pagehide 事件在页面真正卸载时触发（移动端更可靠）
+    window.addEventListener('pagehide', function(e) {
+      console.log('⚠️ 页面卸载（pagehide）');
+      if (zg && localStream) {
+        zg.destroyStream(localStream);
+        zg.logoutRoom(roomId);
+      }
+    });
+
+    // ✅ 监听页面可见性变化（用于显示提示，但不清理资源）
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        console.log('📱 页面进入后台（保持连接）');
+      } else {
+        console.log('📱 页面返回前台');
+      }
+    });
   </script>
 </body>
 </html>

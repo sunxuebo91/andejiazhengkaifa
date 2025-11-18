@@ -34,6 +34,45 @@ const getActiveDuration = (createdAt: string): string => {
   return formatDuration(seconds);
 };
 
+/**
+ * 格式化参与者列表
+ */
+const formatParticipants = (participants: InterviewRoom['participants']): string => {
+  if (!participants || participants.length === 0) {
+    return '无';
+  }
+
+  return participants.map(p => {
+    // 解析用户名，格式可能是：
+    // 1. "customer-大青蛙" -> "客户：大青蛙"
+    // 2. "helper-王玉芬" -> "阿姨：王玉芬"
+    // 3. "customer" -> "客户：无"
+    // 4. "孙学博" (主持人) -> "主持人：孙学博"
+
+    if (p.role === 'host') {
+      return `主持人：${p.userName}`;
+    }
+
+    // 访客：从userName中提取角色和姓名
+    const parts = p.userName.split('-');
+    if (parts.length >= 2) {
+      const roleText = parts[0] === 'customer' ? '客户' : parts[0] === 'helper' ? '阿姨' : parts[0];
+      const name = parts.slice(1).join('-') || '无';
+      return `${roleText}：${name}`;
+    }
+
+    // 如果没有"-"分隔符，使用identity字段判断角色
+    if (p.identity === 'customer') {
+      return `客户：${p.userName || '无'}`;
+    } else if (p.identity === 'helper') {
+      return `阿姨：${p.userName || '无'}`;
+    }
+
+    // 兜底：直接显示用户名
+    return p.userName;
+  }).join('、');
+};
+
 const RoomCard: React.FC<RoomCardProps> = ({ room, onRejoin, onEnd, onViewDetail }) => {
   const handleEnd = () => {
     Modal.confirm({
@@ -74,8 +113,8 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onRejoin, onEnd, onViewDetail
             {dayjs(room.endedAt).format('YYYY-MM-DD HH:mm:ss')}
           </Descriptions.Item>
         )}
-        <Descriptions.Item label="参与者">
-          {room.participants.length} 人
+        <Descriptions.Item label="参与者" span={2}>
+          {formatParticipants(room.participants)}
         </Descriptions.Item>
       </Descriptions>
 

@@ -85,8 +85,9 @@ const InterviewRoomList: React.FC = () => {
         return;
       }
 
-      // 跳转到面试间页面
-      navigate(`/interview/room/${room.roomId}`);
+      // 🎯 跳转到视频面试页面，并传递 roomId 参数
+      // VideoInterview 组件会从 URL 读取 roomId 并自动加入房间
+      navigate(`/interview/video?roomId=${room.roomId}`);
     } catch (error: any) {
       message.error(error.message || '检查房间状态失败');
     }

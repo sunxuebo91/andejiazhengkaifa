@@ -70,13 +70,15 @@ const VideoInterview: React.FC = () => {
       const token = params.get('token');
       const isGuest = params.get('isGuest');
       const skipLogin = params.get('skipLogin');
+      const autoJoin = params.get('autoJoin'); // 🎯 新增：是否自动加入
 
       console.log('📱 VideoInterview - 接收URL参数:', {
         token: token ? '✅ 已接收' : '❌ 未接收',
         roomId: rid,
         userName: uname,
         isGuest,
-        skipLogin
+        skipLogin,
+        autoJoin
       });
 
       // 处理Token（HR模式）
@@ -109,6 +111,16 @@ const VideoInterview: React.FC = () => {
           localStorage.setItem('userName', decodedName);
           console.log('💾 保存用户名:', decodedName);
         }
+      }
+
+      // 🎯 如果有 roomId 且不在会议中，自动加入房间
+      if (rid && !inMeeting) {
+        console.log('🎯 检测到 roomId，准备自动加入房间...');
+        // 延迟一下，确保表单值已设置
+        setTimeout(() => {
+          form.submit();
+          console.log('✅ 已自动提交表单，加入房间');
+        }, 500);
       }
     } catch (error) {
       console.error('❌ 处理URL参数失败:', error);

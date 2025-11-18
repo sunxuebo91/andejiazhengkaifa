@@ -764,8 +764,8 @@
           </div>
         </div>
 
-        <button type="submit" id="joinBtn" class="join-btn">
-          进入面试间
+        <button type="submit" id="joinBtn" class="join-btn" disabled>
+          正在加载资源...
         </button>
       </form>
     </div>
@@ -2418,12 +2418,10 @@
         const displayRoomId = roomId ? roomId.replace(/^room_/, 'AD-').split('_')[0] : '-';
         document.getElementById('roomIdDisplay').textContent = displayRoomId;
 
-        // 🔥 先禁用按钮，等待资源加载完成
-        const joinBtn = document.getElementById('joinBtn');
-        joinBtn.disabled = true;
-        joinBtn.textContent = '正在加载资源...';
+        // 🔥 按钮默认已在 HTML 中设置为禁用状态（disabled），文字为"正在加载资源..."
+        // 等待 window.load 事件后会自动启用
 
-        console.log('✅ 身份选择浮窗已显示（按钮禁用，等待资源加载）');
+        console.log('✅ 身份选择浮窗已显示（按钮默认禁用，等待资源加载）');
       }
     });
 

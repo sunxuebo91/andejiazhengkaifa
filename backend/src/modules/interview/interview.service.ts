@@ -30,8 +30,7 @@ export class InterviewService {
       // 如果房间已结束，重新激活它
       if (existingRoom.status === 'ended') {
         existingRoom.status = 'active';
-        existingRoom.startTime = new Date();
-        existingRoom.endTime = undefined;
+        existingRoom.endedAt = undefined;
         await existingRoom.save();
         this.logger.log(`面试间已重新激活: ${dto.roomId}`);
       }
@@ -222,11 +221,12 @@ export class InterviewService {
       return room;
     }
 
-    // 添加参与者
+    // 添加参与者（访客统一使用'guest'角色，identity字段记录具体身份）
     room.participants.push({
       userId,
       userName,
-      role,
+      role: 'guest', // 访客统一使用'guest'角色
+      identity: role, // 将customer/helper保存到identity字段
       joinedAt: new Date(),
     });
 

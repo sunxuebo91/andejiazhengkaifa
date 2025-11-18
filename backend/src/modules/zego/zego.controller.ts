@@ -67,7 +67,7 @@ export class ZegoController {
    * 用于访客（客户/阿姨）通过邀请链接加入视频面试
    */
   @Post('generate-guest-token')
-  generateGuestToken(@Body() dto: GenerateGuestTokenDto) {
+  async generateGuestToken(@Body() dto: GenerateGuestTokenDto) {
     console.log('🔍 生成访客Token请求:', {
       userId: dto.userId,
       userIdLength: dto.userId?.length,
@@ -224,7 +224,7 @@ export class ZegoController {
    * 支持 sendBeacon 发送的请求（Content-Type: text/plain）
    */
   @Post('leave-room')
-  leaveRoom(@Body() body: any, @Req() req: ExpressRequest) {
+  async leaveRoom(@Body() body: any, @Req() req: ExpressRequest) {
     try {
       let roomId: string;
       let userId: string;

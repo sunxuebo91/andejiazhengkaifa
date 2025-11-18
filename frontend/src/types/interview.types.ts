@@ -15,6 +15,8 @@ export interface InterviewRoom {
   hostName: string;
   hostZegoUserId: string;
   status: 'active' | 'ended';
+  source?: 'pc' | 'miniprogram';
+  hostUrl?: string; // 主持人重新进入的URL（带token）
   createdAt: string;
   endedAt?: string;
   duration?: number;

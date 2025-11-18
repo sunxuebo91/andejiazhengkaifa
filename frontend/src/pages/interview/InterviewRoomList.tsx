@@ -85,11 +85,16 @@ const InterviewRoomList: React.FC = () => {
         return;
       }
 
-      // 🎯 跳转到小程序H5页面（新标签页打开）
-      // 🔴 原PC端跳转已注释：navigate(`/interview/video?roomId=${room.roomId}`);
-      const token = localStorage.getItem('token');
-      // 注意：H5页面使用 'room' 参数，不是 'roomId'
-      window.open(`/miniprogram/video-interview-host.html?token=${token}&room=${room.roomId}`, '_blank');
+      // 🎯 使用保存的hostUrl（带token的完整URL）
+      if (room.hostUrl) {
+        console.log('✅ 使用保存的主持人URL:', room.hostUrl);
+        window.open(room.hostUrl, '_blank');
+      } else {
+        // 兼容旧数据：如果没有hostUrl，使用旧方式
+        console.warn('⚠️ 该面试间没有保存hostUrl，使用兼容方式');
+        const token = localStorage.getItem('token');
+        window.open(`/miniprogram/video-interview-host.html?token=${token}&room=${room.roomId}`, '_blank');
+      }
     } catch (error: any) {
       message.error(error.message || '检查房间状态失败');
     }

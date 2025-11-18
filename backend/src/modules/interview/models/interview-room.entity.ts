@@ -49,6 +49,9 @@ export class InterviewRoom extends Document {
   @Prop({ enum: ['pc', 'miniprogram'], default: 'pc' })
   source?: 'pc' | 'miniprogram'; // 创建来源：PC端或小程序H5
 
+  @Prop()
+  hostUrl?: string; // 主持人重新进入的URL（带token）
+
   @Prop({ required: true })
   createdAt: Date; // 创建时间
 

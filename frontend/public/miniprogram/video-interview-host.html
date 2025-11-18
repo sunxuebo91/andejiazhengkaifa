@@ -1245,6 +1245,11 @@
         if (jwtToken && !isRejoin) {
           try {
             console.log('💾 正在创建面试间数据库记录...');
+
+            // 🎯 生成主持人重新进入的URL（带token）
+            const hostUrl = `${window.location.origin}/miniprogram/video-interview-host.html?token=${jwtToken}&room=${roomId}`;
+            console.log('🔗 主持人重新进入URL:', hostUrl);
+
             const apiUrl = window.location.origin + '/api/interview/rooms';
             const response = await fetch(apiUrl, {
               method: 'POST',
@@ -1257,7 +1262,8 @@
                 roomName: `${currentUserName}的面试间`,
                 hostName: currentUserName,
                 hostZegoUserId: currentUserId,
-                source: 'miniprogram' // 标记来源为小程序H5
+                source: 'miniprogram', // 标记来源为小程序H5
+                hostUrl: hostUrl // 保存主持人重新进入的URL
               })
             });
 

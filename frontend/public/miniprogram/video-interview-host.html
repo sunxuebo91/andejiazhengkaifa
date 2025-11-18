@@ -1233,32 +1233,37 @@
         console.log('✅ Token:', token ? 'Token 已生成' : '使用空 Token');
 
         // 🎯 步骤4: 创建面试间数据库记录
-        try {
-          console.log('💾 正在创建面试间数据库记录...');
-          const apiUrl = window.location.origin + '/api/interview/rooms';
-          const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${jwtToken}`
-            },
-            body: JSON.stringify({
-              roomId: roomId,
-              roomName: `${currentUserName}的面试间`,
-              hostName: currentUserName,
-              hostZegoUserId: currentUserId
-            })
-          });
+        const jwtToken = getJwtToken();
+        if (jwtToken) {
+          try {
+            console.log('💾 正在创建面试间数据库记录...');
+            const apiUrl = window.location.origin + '/api/interview/rooms';
+            const response = await fetch(apiUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${jwtToken}`
+              },
+              body: JSON.stringify({
+                roomId: roomId,
+                roomName: `${currentUserName}的面试间`,
+                hostName: currentUserName,
+                hostZegoUserId: currentUserId
+              })
+            });
 
-          const result = await response.json();
-          if (result.success) {
-            console.log('✅ 面试间数据库记录已创建');
-            addLog('✅ 面试间记录已保存', 'success');
-          } else {
-            console.warn('⚠️ 创建面试间记录失败:', result.message);
+            const result = await response.json();
+            if (result.success) {
+              console.log('✅ 面试间数据库记录已创建');
+              addLog('✅ 面试间记录已保存', 'success');
+            } else {
+              console.warn('⚠️ 创建面试间记录失败:', result.message);
+            }
+          } catch (error) {
+            console.warn('⚠️ 创建面试间记录失败，但继续创建房间:', error);
           }
-        } catch (error) {
-          console.warn('⚠️ 创建面试间记录失败，但继续创建房间:', error);
+        } else {
+          console.warn('⚠️ 未找到JWT Token，无法创建面试间记录');
         }
 
         // 登录房间

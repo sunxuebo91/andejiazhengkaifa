@@ -1214,7 +1214,41 @@
           return;
         }
 
-        // 🎯 如果URL中已有roomId，则使用它（重新加入房间）
+        // 🎯 步骤1: 获取当前用户信息
+        const jwtToken = getJwtToken();
+        if (jwtToken) {
+          try {
+            console.log('📱 正在获取当前用户信息...');
+            const userResponse = await fetch(window.location.origin + '/api/auth/me', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${jwtToken}`
+              }
+            });
+
+            if (userResponse.ok) {
+              const userResult = await userResponse.json();
+              if (userResult.success && userResult.data) {
+                currentUserName = userResult.data.name || userResult.data.username || 'HR';
+                console.log('✅ 获取到用户姓名:', currentUserName);
+              } else {
+                console.warn('⚠️ 获取用户信息失败，使用默认名称');
+                currentUserName = 'HR';
+              }
+            } else {
+              console.warn('⚠️ 用户信息API调用失败，使用默认名称');
+              currentUserName = 'HR';
+            }
+          } catch (error) {
+            console.warn('⚠️ 获取用户信息异常，使用默认名称:', error);
+            currentUserName = 'HR';
+          }
+        } else {
+          console.warn('⚠️ 未找到JWT Token，使用默认名称');
+          currentUserName = 'HR';
+        }
+
+        // 🎯 步骤2: 如果URL中已有roomId，则使用它（重新加入房间）
         // 否则生成新的房间号（创建新房间）
         if (!roomId) {
           const timestamp = Date.now();
@@ -1224,7 +1258,6 @@
           console.log('🔄 重新加入已存在的房间:', roomId);
         }
         currentUserId = 'user_' + Date.now();
-        currentUserName = 'HR';
 
         console.log('✅ 房间信息:', { roomId: roomId, userId: currentUserId, userName: currentUserName });
 

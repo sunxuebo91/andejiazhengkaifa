@@ -225,9 +225,26 @@ const BasicLayout = () => {
         path: '/',
         routes: getAuthorizedMenus,
       }}
-      menuItemRender={(item, dom) => (
-        <Link to={item.path || '/'}>{dom}</Link>
-      )}
+      menuItemRender={(item, dom) => {
+        // 🎯 小程序视频面试在新标签页打开
+        if (item.path === '/interview/miniprogram') {
+          return (
+            <a
+              href={item.path}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(item.path, '_blank');
+              }}
+            >
+              {dom}
+            </a>
+          );
+        }
+        // 其他菜单项正常跳转
+        return <Link to={item.path || '/'}>{dom}</Link>;
+      }}
       menuProps={{
         style: { background: '#fff' }
       }}

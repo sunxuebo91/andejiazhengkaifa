@@ -16,6 +16,18 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  paramsSerializer: {
+    serialize: (params) => {
+      // 使用 URLSearchParams 正确序列化参数
+      const searchParams = new URLSearchParams();
+      Object.keys(params).forEach(key => {
+        if (params[key] !== undefined && params[key] !== null) {
+          searchParams.append(key, String(params[key]));
+        }
+      });
+      return searchParams.toString();
+    }
+  }
 });
 
 // 请求拦截器

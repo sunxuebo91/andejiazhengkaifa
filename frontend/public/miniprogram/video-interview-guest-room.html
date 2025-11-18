@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>视频面试 - 访客</title>
 
-  <!-- 使用本地 ZEGO SDK -->
-  <script src="./ZegoExpressWebRTC-standalone.js"></script>
-
   <!-- ZEGO Token 生成库（内嵌实现） -->
   <script>
     // Token 生成函数（内嵌实现，避免 CDN 加载问题）
@@ -2877,6 +2874,10 @@
     // 因为用户可能只是切换到其他应用，而不是真正关闭页面
     // 保持连接可以让用户切换回来时继续面试
   </script>
+
+  <!-- 🎯 将 ZEGO SDK 移到页面底部，避免阻塞页面渲染 -->
+  <!-- 这样用户可以立即看到半透明背景和表单，提升体验 -->
+  <script src="./ZegoExpressWebRTC-standalone.js"></script>
 </body>
 </html>
 

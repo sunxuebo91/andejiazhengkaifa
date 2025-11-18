@@ -1274,7 +1274,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const isRejoin = urlParams.get('room'); // 如果URL中有room参数，说明是重新加入
 
-        const jwtToken = getJwtToken();
+        // jwtToken 已在步骤1中声明，这里直接使用
         if (jwtToken && !isRejoin) {
           try {
             console.log('💾 正在创建面试间数据库记录...');

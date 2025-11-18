@@ -87,7 +87,11 @@ const InterviewRoomList: React.FC = () => {
 
       // 🎯 使用当前最新的token重新进入
       // 不使用保存的hostUrl，因为其中的token可能已过期
-      const token = localStorage.getItem('token');
+      // 尝试多个可能的token键名
+      const token = localStorage.getItem('auth_token') ||
+                    localStorage.getItem('token') ||
+                    localStorage.getItem('access_token');
+
       if (!token) {
         message.error('未找到登录凭证，请重新登录');
         return;

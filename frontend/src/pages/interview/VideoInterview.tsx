@@ -265,6 +265,24 @@ const VideoInterview: React.FC = () => {
 
       console.log('请求参数:', { userId, roomId, userName });
 
+      // 🎯 先创建面试间记录
+      try {
+        await apiService.post('/api/interview/rooms', {
+          roomId,
+          roomName: `${userName}的面试间`,
+          hostName: userName,
+          hostZegoUserId: userId,
+        });
+        console.log('✅ 面试间记录已创建');
+      } catch (error: any) {
+        // 如果是重复创建（房间已存在），忽略错误继续
+        if (error.message?.includes('已存在')) {
+          console.log('ℹ️ 面试间已存在，继续加入');
+        } else {
+          console.warn('⚠️ 创建面试间记录失败，但继续加入房间:', error);
+        }
+      }
+
       // 从后端获取配置和 Token
       const response = await generateZegoToken({
         userId,
@@ -701,6 +719,14 @@ const VideoInterview: React.FC = () => {
           }
 
           console.log('🔧 正在解散房间:', roomInfo.roomId);
+
+          // 🎯 先结束面试间记录
+          try {
+            await apiService.post(`/api/interview/rooms/${roomInfo.roomId}/end`);
+            console.log('✅ 面试间记录已结束');
+          } catch (error) {
+            console.warn('⚠️ 结束面试间记录失败:', error);
+          }
 
           // 调用后端 API 解散房间 (使用 apiService 自动处理认证)
           const response = await apiService.post('/api/zego/dismiss-room', {

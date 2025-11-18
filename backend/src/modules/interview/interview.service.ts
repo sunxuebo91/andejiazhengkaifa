@@ -23,6 +23,21 @@ export class InterviewService {
   async createRoom(userId: string, dto: CreateRoomDto): Promise<InterviewRoom> {
     this.logger.log(`创建面试间: ${dto.roomId}, 主持人: ${userId}`);
 
+    // 🎯 检查房间是否已存在
+    const existingRoom = await this.interviewRoomModel.findOne({ roomId: dto.roomId });
+    if (existingRoom) {
+      this.logger.log(`面试间已存在: ${dto.roomId}，返回现有房间`);
+      // 如果房间已结束，重新激活它
+      if (existingRoom.status === 'ended') {
+        existingRoom.status = 'active';
+        existingRoom.startTime = new Date();
+        existingRoom.endTime = undefined;
+        await existingRoom.save();
+        this.logger.log(`面试间已重新激活: ${dto.roomId}`);
+      }
+      return existingRoom;
+    }
+
     const room = new this.interviewRoomModel({
       roomId: dto.roomId,
       roomName: dto.roomName,

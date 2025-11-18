@@ -109,15 +109,32 @@ export class ZegoController {
 
     // 🎯 更新面试间参与者信息
     try {
-      await this.interviewService.addParticipant(
+      const result = await this.interviewService.addParticipant(
         dto.roomId,
         dto.userId,
         dto.userName,
         dto.role,
       );
-      console.log('✅ 面试间参与者信息已更新');
+      if (result) {
+        console.log('✅ 面试间参与者信息已更新:', {
+          roomId: dto.roomId,
+          userId: dto.userId,
+          userName: dto.userName,
+          role: dto.role,
+        });
+      } else {
+        console.error('❌ 面试间参与者信息更新失败: addParticipant返回null');
+      }
     } catch (error) {
-      console.warn('⚠️ 更新面试间参与者信息失败:', error);
+      console.error('❌ 更新面试间参与者信息异常:', error);
+      console.error('❌ 错误详情:', {
+        roomId: dto.roomId,
+        userId: dto.userId,
+        userName: dto.userName,
+        role: dto.role,
+        errorMessage: error.message,
+        errorStack: error.stack,
+      });
     }
 
     return {

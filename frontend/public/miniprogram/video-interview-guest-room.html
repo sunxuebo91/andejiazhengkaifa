@@ -1002,8 +1002,18 @@
     // 使用 sessionStorage 标记是否从选择身份页面跳转过来
     const fromGuestPage = sessionStorage.getItem('fromGuestPage');
 
-    if (!fromGuestPage) {
-      // 不是从选择身份页面跳转过来的（可能是微信分享的链接）
+    // 🎯 新增：检查 localStorage 中是否有该房间的用户信息（用于重新进入）
+    const savedUserInfoKey = `guest_user_info_${roomId}`;
+    const savedUserInfo = localStorage.getItem(savedUserInfoKey);
+
+    console.log('🔍 检查访问来源:', {
+      fromGuestPage: !!fromGuestPage,
+      savedUserInfo: !!savedUserInfo,
+      savedUserInfoContent: savedUserInfo
+    });
+
+    if (!fromGuestPage && !savedUserInfo) {
+      // 既不是从选择身份页面跳转过来，也没有保存的用户信息（可能是微信分享的链接）
       console.log('⚠️ 检测到非正常流程访问，重定向到选择身份页面');
       // 重定向到选择身份页面
       window.location.href = `video-interview-guest.html?roomId=${roomId}`;
@@ -1011,9 +1021,24 @@
       throw new Error('Redirecting to guest page');
     }
 
+    // 🎯 如果有保存的用户信息，使用它（重新进入场景）
+    if (savedUserInfo && !fromGuestPage) {
+      try {
+        const userInfo = JSON.parse(savedUserInfo);
+        userName = userInfo.userName;
+        userRole = userInfo.userRole;
+        console.log('✅ 使用保存的用户信息重新进入:', { userName, userRole });
+      } catch (e) {
+        console.error('❌ 解析保存的用户信息失败:', e);
+        // 解析失败，重定向到选择身份页面
+        window.location.href = `video-interview-guest.html?roomId=${roomId}`;
+        throw new Error('Invalid saved user info');
+      }
+    }
+
     // 🔥 不要立即删除标记！保留它直到用户成功进入房间
     // 这样可以防止在初始化过程中页面刷新导致的重定向循环
-    console.log('✅ fromGuestPage 标记验证通过，保留标记直到成功进入房间');
+    console.log('✅ 访问验证通过，保留标记直到成功进入房间');
 
     // 角色转换（英文 -> 中文显示）
     const roleDisplayMap = {
@@ -2227,11 +2252,14 @@
 
           console.log('✅ 已离开房间');
 
-          // ✅ 主动离开：跳转到选择身份页面，用户可以重新进入
-          window.location.href = `video-interview-guest.html?roomId=${roomId}`;
+          // 🎯 主动离开：显示提示，用户可以刷新页面重新进入
+          alert('您已离开面试间。\n\n如需重新进入，请刷新页面。');
+
+          // 🎯 不删除 localStorage 中的用户信息，这样刷新后可以直接重新进入
+          console.log('✅ 保留用户信息，刷新页面可重新进入');
         } catch (error) {
           console.error('❌ 离开房间失败:', error.message);
-          window.location.href = `video-interview-guest.html?roomId=${roomId}`;
+          alert('离开房间失败，请刷新页面重试');
         }
       }
     }
@@ -2344,25 +2372,57 @@
 
       console.log('✅ 状态清理完成，准备显示身份选择浮窗');
 
-      // 🔥 显示身份选择浮窗（所有平台统一）
-      const identityOverlay = document.getElementById('identityOverlay');
-      identityOverlay.style.display = 'flex';
+      // 🎯 检查是否有保存的用户信息（重新进入场景）
+      const savedUserInfoKey = `guest_user_info_${roomId}`;
+      const savedUserInfo = localStorage.getItem(savedUserInfoKey);
+      const hasUserInfo = userName && userRole; // 从前面的代码中获取
 
-      // 显示房间号（格式化为 AD-时间戳）
-      const displayRoomId = roomId ? roomId.replace(/^room_/, 'AD-').split('_')[0] : '-';
-      document.getElementById('roomIdDisplay').textContent = displayRoomId;
+      if (hasUserInfo && savedUserInfo) {
+        // 🎯 有保存的用户信息，直接隐藏身份选择浮窗，准备自动加入
+        console.log('🔄 检测到保存的用户信息，准备自动加入房间');
+        const identityOverlay = document.getElementById('identityOverlay');
+        identityOverlay.style.display = 'none';
+        console.log('✅ 已隐藏身份选择浮窗');
+      } else {
+        // 🔥 显示身份选择浮窗（所有平台统一）
+        const identityOverlay = document.getElementById('identityOverlay');
+        identityOverlay.style.display = 'flex';
 
-      // 🔥 先禁用按钮，等待资源加载完成
-      const joinBtn = document.getElementById('joinBtn');
-      joinBtn.disabled = true;
-      joinBtn.textContent = '正在加载资源...';
+        // 显示房间号（格式化为 AD-时间戳）
+        const displayRoomId = roomId ? roomId.replace(/^room_/, 'AD-').split('_')[0] : '-';
+        document.getElementById('roomIdDisplay').textContent = displayRoomId;
 
-      console.log('✅ 身份选择浮窗已显示（按钮禁用，等待资源加载）');
+        // 🔥 先禁用按钮，等待资源加载完成
+        const joinBtn = document.getElementById('joinBtn');
+        joinBtn.disabled = true;
+        joinBtn.textContent = '正在加载资源...';
+
+        console.log('✅ 身份选择浮窗已显示（按钮禁用，等待资源加载）');
+      }
     });
 
     // 🔥 阶段2：所有资源加载完成后启用按钮
-    window.addEventListener('load', () => {
+    window.addEventListener('load', async () => {
       console.log('📱 所有资源加载完成，启用按钮');
+
+      // 🎯 检查是否有保存的用户信息（重新进入场景）
+      const savedUserInfoKey = `guest_user_info_${roomId}`;
+      const savedUserInfo = localStorage.getItem(savedUserInfoKey);
+      const hasUserInfo = userName && userRole; // 从前面的代码中获取
+
+      if (hasUserInfo && savedUserInfo) {
+        // 🎯 有保存的用户信息，自动加入房间
+        console.log('🔄 自动加入房间，用户信息:', { userName, userRole });
+        try {
+          await init();
+          console.log('✅ 自动加入房间成功');
+        } catch (error) {
+          console.error('❌ 自动加入房间失败:', error);
+          alert('自动加入房间失败，请重新进入');
+          window.location.href = `video-interview-guest.html?roomId=${roomId}`;
+        }
+        return; // 不再执行后续的按钮绑定逻辑
+      }
 
       // 🔥 启用按钮并绑定事件
       const joinForm = document.getElementById('joinForm');
@@ -2417,6 +2477,12 @@
         userRole = selectedRole;
 
         console.log('✅ 用户信息:', { userName, userRole });
+
+        // 🎯 保存用户信息到 localStorage（用于重新进入）
+        const savedUserInfoKey = `guest_user_info_${roomId}`;
+        const userInfo = { userName, userRole };
+        localStorage.setItem(savedUserInfoKey, JSON.stringify(userInfo));
+        console.log('✅ 用户信息已保存到 localStorage');
 
         // 禁用按钮，防止重复点击
         joinBtn.disabled = true;

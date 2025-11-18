@@ -648,9 +648,31 @@
     }
 
     .join-btn:disabled {
-      background: #ccc;
+      background: linear-gradient(135deg, #b0b0b0 0%, #909090 100%);
       cursor: not-allowed;
       box-shadow: none;
+      opacity: 0.7;
+      position: relative;
+    }
+
+    /* 加载动画 */
+    .join-btn:disabled::after {
+      content: '';
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      border: 2px solid #fff;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: translateY(-50%) rotate(0deg); }
+      100% { transform: translateY(-50%) rotate(360deg); }
     }
 
     /* ==================== 提词器样式 ==================== */

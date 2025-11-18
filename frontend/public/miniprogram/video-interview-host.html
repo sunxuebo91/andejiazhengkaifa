@@ -2669,6 +2669,16 @@
       }
 
       initZego();
+
+      // 🎯 如果URL中有roomId参数，自动加入房间
+      if (roomId) {
+        console.log('🔄 检测到URL中的房间ID，准备自动加入房间:', roomId);
+        addLog('🔄 检测到已存在的面试间，正在自动加入...', 'info');
+        // 等待一下让SDK完全初始化
+        setTimeout(() => {
+          createRoom(); // 调用创建房间函数（实际上会加入已存在的房间）
+        }, 1000);
+      }
     };
     
     // 🔥 页面卸载时清理资源

@@ -37,6 +37,7 @@ const JoinInterview: React.FC = () => {
   const roomCheckIntervalRef = useRef<any>(null);
   const teleprompterPollIntervalRef = useRef<any>(null);
   const lastTeleprompterTimestampRef = useRef<number>(0);
+  const autoJoinAttemptedRef = useRef(false); // 🎯 防止重复自动加入
   // const cleanupIntervalRef = useRef<any>(null); // 🔧 定期清理检查定时器
 
   // 📱 移动端检测
@@ -55,6 +56,60 @@ const JoinInterview: React.FC = () => {
 
   // 从 URL 获取房间名称（可选）
   const roomName = searchParams.get('name') || '视频面试';
+
+  // 🎯 检查是否有缓存的访客信息，如果有则自动加入
+  useEffect(() => {
+    if (!roomId || inMeeting || autoJoinAttemptedRef.current) return;
+
+    // 尝试从 localStorage 获取之前的访客信息
+    const tryAutoJoin = () => {
+      // 遍历可能的角色和常见姓名
+      const roles: GuestRole[] = ['customer', 'helper'];
+
+      for (const role of roles) {
+        // 尝试查找该角色的缓存
+        const storagePattern = `guest_id_${roomId}_`;
+        const keys = Object.keys(localStorage).filter(key =>
+          key.startsWith(storagePattern) && key.includes(`_${role}`)
+        );
+
+        if (keys.length > 0) {
+          // 找到缓存，提取姓名
+          const key = keys[0];
+          const timeKey = key.replace('guest_id_', 'guest_id_time_');
+          const guestId = localStorage.getItem(key);
+          const storedTime = localStorage.getItem(timeKey);
+
+          // 检查是否过期（1小时）
+          if (guestId && storedTime) {
+            const elapsed = Date.now() - parseInt(storedTime);
+            if (elapsed < 3600000) {
+              // 提取姓名（格式：guest_id_roomId_userName_role）
+              const parts = key.split('_');
+              const userName = parts.slice(3, -1).join('_'); // 姓名可能包含下划线
+
+              console.log('🎯 检测到缓存的访客信息，准备自动加入:', { userName, role, guestId });
+
+              // 设置表单值
+              form.setFieldsValue({ userName, role });
+
+              // 延迟自动提交，确保表单已渲染
+              setTimeout(() => {
+                console.log('✅ 自动提交表单，重新加入房间');
+                form.submit();
+              }, 500);
+
+              autoJoinAttemptedRef.current = true;
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
+    tryAutoJoin();
+  }, [roomId, inMeeting, form]);
 
   // 📝 提词器控制函数
 

@@ -48,6 +48,8 @@ const JoinInterviewMobile: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [guestInfo, setGuestInfo] = useState<GuestInfo | null>(null);
   const [zegoToken, setZegoToken] = useState<string>('');
+  const [form] = Form.useForm();
+  const autoJoinAttemptedRef = useRef(false); // 🎯 防止重复自动加入
 
   // 📱 设备信息
   // const [deviceInfo, setDeviceInfo] = useState<any>(null);
@@ -62,6 +64,60 @@ const JoinInterviewMobile: React.FC = () => {
     // 检测网络质量
     checkNetworkQuality();
   }, []);
+
+  // 🎯 检查是否有缓存的访客信息，如果有则自动加入
+  useEffect(() => {
+    if (!roomId || inMeeting || autoJoinAttemptedRef.current) return;
+
+    // 尝试从 localStorage 获取之前的访客信息
+    const tryAutoJoin = () => {
+      // 遍历可能的角色
+      const roles = ['customer', 'helper'];
+
+      for (const role of roles) {
+        // 尝试查找该角色的缓存
+        const storagePattern = `guest_id_${roomId}_`;
+        const keys = Object.keys(localStorage).filter(key =>
+          key.startsWith(storagePattern) && key.includes(`_${role}`)
+        );
+
+        if (keys.length > 0) {
+          // 找到缓存，提取姓名
+          const key = keys[0];
+          const timeKey = key.replace('guest_id_', 'guest_id_time_');
+          const guestId = localStorage.getItem(key);
+          const storedTime = localStorage.getItem(timeKey);
+
+          // 检查是否过期（1小时）
+          if (guestId && storedTime) {
+            const elapsed = Date.now() - parseInt(storedTime);
+            if (elapsed < 3600000) {
+              // 提取姓名（格式：guest_id_roomId_userName_role）
+              const parts = key.split('_');
+              const userName = parts.slice(3, -1).join('_'); // 姓名可能包含下划线
+
+              console.log('📱 检测到缓存的访客信息，准备自动加入:', { userName, role, guestId });
+
+              // 设置表单值
+              form.setFieldsValue({ userName, role });
+
+              // 延迟自动提交，确保表单已渲染
+              setTimeout(() => {
+                console.log('✅ 自动提交表单，重新加入房间');
+                form.submit();
+              }, 500);
+
+              autoJoinAttemptedRef.current = true;
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
+    tryAutoJoin();
+  }, [roomId, inMeeting, form]);
 
   // 检测网络质量
   const checkNetworkQuality = async () => {
@@ -339,7 +395,7 @@ const JoinInterviewMobile: React.FC = () => {
         <h2>🎥 加入视频面试</h2>
         <p className="room-id">房间号：{roomId}</p>
 
-        <Form onFinish={joinMeeting} layout="vertical">
+        <Form form={form} onFinish={joinMeeting} layout="vertical">
           <Form.Item
             label="您的姓名（选填）"
             name="userName"

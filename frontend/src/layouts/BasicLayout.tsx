@@ -121,11 +121,16 @@ const BasicLayout = () => {
     }
 
     // 视频面试菜单 - 所有用户可见
-    baseMenus.push({
+    const interviewMenu: MenuRoute = {
       path: '/interview',
       name: '视频面试',
       icon: <VideoCameraOutlined />,
       routes: [
+        {
+          path: '/interview/rooms',
+          name: '面试间列表',
+          icon: <UnorderedListOutlined />,
+        },
         {
           path: '/interview/video',
           name: 'PC端面试',
@@ -142,7 +147,8 @@ const BasicLayout = () => {
           icon: <SettingOutlined />,
         },
       ],
-    });
+    };
+    baseMenus.push(interviewMenu);
 
     // 用户管理菜单 - 仅管理员可见
     if (hasRole('admin')) {

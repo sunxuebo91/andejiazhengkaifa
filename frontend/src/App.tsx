@@ -38,6 +38,7 @@ const JoinInterviewMobile = React.lazy(() => import('./pages/interview/JoinInter
 const H5Login = React.lazy(() => import('./pages/interview/H5Login'));
 const MiniProgramConfig = React.lazy(() => import('./pages/interview/MiniProgramConfig'));
 const MiniProgramHost = React.lazy(() => import('./pages/interview/MiniProgramHost'));
+const InterviewRoomList = React.lazy(() => import('./pages/interview/InterviewRoomList'));
 // const MiniProgramEntry = React.lazy(() => import('./pages/interview/MiniProgramEntry'));
 // const VideoInterviewMiniprogram = React.lazy(() => import('./pages/interview/VideoInterviewMiniprogram'));
 
@@ -242,6 +243,11 @@ export default function App({ children }: AppProps) {
                     element={<AuthorizedRoute element={<TestSortableUpload />} />}
                   />
 
+                  {/* 面试间管理 - 所有登录用户可访问 */}
+                  <Route
+                    path="interview/rooms"
+                    element={<AuthorizedRoute element={<InterviewRoomList />} />}
+                  />
 
                   {/* 404页面 */}
                   <Route path="*" element={<NotFound />} />

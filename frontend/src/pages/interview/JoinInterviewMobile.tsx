@@ -173,7 +173,7 @@ const JoinInterviewMobile: React.FC = () => {
       );
       console.log('生成 Kit Token 成功');
 
-      // 保存信息并进入房间（先设置状态，让容器渲染）
+      // 保存信息并进入房间
       setGuestInfo({ userName: displayName, role: values.role, guestId });
       setZegoToken(kitToken);
       setInMeeting(true);
@@ -219,8 +219,8 @@ const JoinInterviewMobile: React.FC = () => {
           scenario: {
             mode: ZegoUIKitPrebuilt.GroupCall, // 使用群组通话模式，和 PC 端一致
           },
-          // 🔧 关键配置：跳过预加入页面，直接进入房间
-          showPreJoinView: DeviceDetector.isIOS() || DeviceDetector.isWeChat(),
+          // 🎯 关键配置：显示预加入页面（半透明背景，用户可以填写信息）
+          showPreJoinView: true,
           turnOnMicrophoneWhenJoining: true,
           turnOnCameraWhenJoining: true,
           // 🌐 设置语言为中文
@@ -336,15 +336,19 @@ const JoinInterviewMobile: React.FC = () => {
   return (
     <div className="join-form-mobile">
       <div className="join-form-container">
-        <h2>加入视频面试</h2>
+        <h2>🎥 加入视频面试</h2>
         <p className="room-id">房间号：{roomId}</p>
 
         <Form onFinish={joinMeeting} layout="vertical">
           <Form.Item
-            label="您的姓名"
+            label="您的姓名（选填）"
             name="userName"
           >
-            <Input placeholder="请输入您的姓名（选填）" size="large" />
+            <Input
+              placeholder="请输入您的姓名"
+              size="large"
+              disabled={loading}
+            />
           </Form.Item>
 
           <Form.Item
@@ -352,9 +356,13 @@ const JoinInterviewMobile: React.FC = () => {
             name="role"
             rules={[{ required: true, message: '请选择您的身份' }]}
           >
-            <Select placeholder="请选择您的身份" size="large">
-              <Option value="customer">客户</Option>
-              <Option value="helper">阿姨</Option>
+            <Select
+              placeholder="请选择您的身份"
+              size="large"
+              disabled={loading}
+            >
+              <Option value="customer">👤 我是客户</Option>
+              <Option value="helper">👩‍🔧 我是阿姨</Option>
             </Select>
           </Form.Item>
 
@@ -364,21 +372,29 @@ const JoinInterviewMobile: React.FC = () => {
               htmlType="submit"
               size="large"
               loading={loading}
+              disabled={loading}
               block
+              style={{
+                height: '48px',
+                fontSize: '16px',
+                fontWeight: 500,
+              }}
             >
-              加入面试
+              {loading ? '加载中...' : '进入面试间'}
             </Button>
           </Form.Item>
         </Form>
 
-        <div className="tips">
-          <p>💡 温馨提示：</p>
-          <ul>
-            <li>请确保网络连接稳定</li>
-            <li>请允许浏览器访问摄像头和麦克风</li>
-            <li>建议使用耳机以获得更好的通话质量</li>
-          </ul>
-        </div>
+        {!loading && (
+          <div className="tips">
+            <p>💡 温馨提示：</p>
+            <ul>
+              <li>请确保网络连接稳定</li>
+              <li>请允许浏览器访问摄像头和麦克风</li>
+              <li>建议使用耳机以获得更好的通话质量</li>
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

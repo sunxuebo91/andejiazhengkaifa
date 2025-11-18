@@ -44,10 +44,6 @@
   <!-- 使用本地 ZEGO SDK（v3.11.0 独立打包版本，包含所有依赖） -->
   <script src="./ZegoExpressWebRTC-standalone.js"></script>
 
-  <!-- 🎯 AI 降噪模块（独立打包版本已内置） -->
-  <script>
-    console.log('📦 ZEGO SDK 加载完成，AI 降噪模块已就绪');
-  </script>
   <!-- ZEGO Token 生成库（内嵌实现） -->
   <script>
     // Token 生成函数（内嵌实现，避免 CDN 加载问题）
@@ -1063,15 +1059,6 @@
 
       console.log('使用的构造函数类型:', typeof ZegoEngine);
 
-      // 🎯 注册 AI 降噪模块（如果 SDK 支持）
-      if (ZegoEngine.use && typeof ZegoEngine.use === 'function') {
-        try {
-          console.log('🎯 尝试注册 AI 降噪模块...');
-        } catch (e) {
-          console.log('ℹ️ AI 降噪模块可能已内置或不支持');
-        }
-      }
-
       // 创建 ZEGO 实例，并设置日志级别为 error（只显示错误日志）
       zg = new ZegoEngine(appID, server);
       zg.setLogConfig({
@@ -1276,19 +1263,6 @@
           }
         });
         console.log('创建本地流成功');
-
-        // 🎯 启用 AI 降噪（消除键盘声、鼠标点击、咳嗽等噪音）
-        if (zg.enableAiDenoise && typeof zg.enableAiDenoise === 'function') {
-          try {
-            await zg.enableAiDenoise(localStream, true);
-            console.log('✅ AI 降噪已启用 - 将自动消除键盘声、鼠标点击、咳嗽等噪音');
-          } catch (error) {
-            console.warn('⚠️ AI 降噪启用失败:', error);
-            // 降噪失败不影响正常通话，继续执行
-          }
-        } else {
-          console.log('ℹ️ 当前 SDK 版本不支持 AI 降噪功能');
-        }
 
         // 🎨 启用基础美颜（自然效果，不夸张，适配 720p 分辨率）
         if (zg.setEffectsBeauty && typeof zg.setEffectsBeauty === 'function') {

@@ -32,8 +32,9 @@ const SignContractPage = React.lazy(() => import('./pages/esign/SignContractPage
 const PaymentGuide = React.lazy(() => import('./pages/PaymentGuide'));
 const Payment = React.lazy(() => import('./pages/Payment'));
 const TestSortableUpload = React.lazy(() => import('./pages/TestSortableUpload'));
-const VideoInterview = React.lazy(() => import('./pages/interview/VideoInterview'));
-const JoinInterview = React.lazy(() => import('./pages/interview/JoinInterview'));
+// 🔴 PC端视频面试组件（已注释，使用小程序H5代替）
+// const VideoInterview = React.lazy(() => import('./pages/interview/VideoInterview'));
+// const JoinInterview = React.lazy(() => import('./pages/interview/JoinInterview'));
 const JoinInterviewMobile = React.lazy(() => import('./pages/interview/JoinInterviewMobile'));
 const H5Login = React.lazy(() => import('./pages/interview/H5Login'));
 const MiniProgramConfig = React.lazy(() => import('./pages/interview/MiniProgramConfig'));
@@ -87,11 +88,13 @@ export default function App({ children }: AppProps) {
                 {/* 公开访问页面 - 不需要登录 */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
-                <Route path="/interview/join/:roomId" element={<JoinInterview />} />
+                {/* 🔴 PC端视频面试路由（已注释，使用小程序H5代替） */}
+                {/* <Route path="/interview/join/:roomId" element={<JoinInterview />} /> */}
+                {/* <Route path="/interview/video" element={<VideoInterview />} /> */}
+
+                {/* ✅ 移动端和小程序H5路由（保留） */}
                 <Route path="/interview/join-mobile/:roomId" element={<JoinInterviewMobile />} />
-                {/* 移动端视频面试登录页 */}
                 <Route path="/interview/h5-login" element={<H5Login />} />
-                <Route path="/interview/video" element={<VideoInterview />} />
                 <Route path="/interview/miniprogram" element={<MiniProgramHost />} />
                 <Route path="/interview/miniprogram-config" element={<MiniProgramConfig />} />
 

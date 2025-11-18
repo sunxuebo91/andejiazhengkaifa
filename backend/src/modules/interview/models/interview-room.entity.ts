@@ -46,6 +46,9 @@ export class InterviewRoom extends Document {
   @Prop({ required: true, enum: ['active', 'ended'], default: 'active', index: true })
   status: 'active' | 'ended'; // 状态
 
+  @Prop({ enum: ['pc', 'miniprogram'], default: 'pc' })
+  source?: 'pc' | 'miniprogram'; // 创建来源：PC端或小程序H5
+
   @Prop({ required: true })
   createdAt: Date; // 创建时间
 

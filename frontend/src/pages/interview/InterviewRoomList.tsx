@@ -85,9 +85,11 @@ const InterviewRoomList: React.FC = () => {
         return;
       }
 
-      // 🎯 跳转到视频面试页面，并传递 roomId 参数
-      // VideoInterview 组件会从 URL 读取 roomId 并自动加入房间
-      navigate(`/interview/video?roomId=${room.roomId}`);
+      // 🎯 跳转到小程序H5页面（新标签页打开）
+      // 🔴 原PC端跳转已注释：navigate(`/interview/video?roomId=${room.roomId}`);
+      const token = localStorage.getItem('token');
+      // 注意：H5页面使用 'room' 参数，不是 'roomId'
+      window.open(`/miniprogram/video-interview-host.html?token=${token}&room=${room.roomId}`, '_blank');
     } catch (error: any) {
       message.error(error.message || '检查房间状态失败');
     }

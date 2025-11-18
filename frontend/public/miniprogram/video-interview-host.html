@@ -1214,10 +1214,15 @@
           return;
         }
 
-        // 生成房间号
-        const timestamp = Date.now();
-        const randomStr = Math.random().toString(36).substring(2, 8);
-        roomId = `room_${timestamp}_${randomStr}`;
+        // 🎯 如果URL中已有roomId，则使用它（重新加入房间）
+        // 否则生成新的房间号（创建新房间）
+        if (!roomId) {
+          const timestamp = Date.now();
+          const randomStr = Math.random().toString(36).substring(2, 8);
+          roomId = `room_${timestamp}_${randomStr}`;
+        } else {
+          console.log('🔄 重新加入已存在的房间:', roomId);
+        }
         currentUserId = 'user_' + Date.now();
         currentUserName = 'HR';
 
@@ -1232,9 +1237,12 @@
         const token = await generateToken(currentUserId, roomId, currentUserName);
         console.log('✅ Token:', token ? 'Token 已生成' : '使用空 Token');
 
-        // 🎯 步骤4: 创建面试间数据库记录
+        // 🎯 步骤4: 创建面试间数据库记录（仅在创建新房间时）
+        const urlParams = new URLSearchParams(window.location.search);
+        const isRejoin = urlParams.get('room'); // 如果URL中有room参数，说明是重新加入
+
         const jwtToken = getJwtToken();
-        if (jwtToken) {
+        if (jwtToken && !isRejoin) {
           try {
             console.log('💾 正在创建面试间数据库记录...');
             const apiUrl = window.location.origin + '/api/interview/rooms';
@@ -1248,7 +1256,8 @@
                 roomId: roomId,
                 roomName: `${currentUserName}的面试间`,
                 hostName: currentUserName,
-                hostZegoUserId: currentUserId
+                hostZegoUserId: currentUserId,
+                source: 'miniprogram' // 标记来源为小程序H5
               })
             });
 
@@ -1262,6 +1271,9 @@
           } catch (error) {
             console.warn('⚠️ 创建面试间记录失败，但继续创建房间:', error);
           }
+        } else if (isRejoin) {
+          console.log('🔄 重新加入房间，跳过数据库记录创建');
+          addLog('🔄 重新加入已存在的面试间', 'info');
         } else {
           console.warn('⚠️ 未找到JWT Token，无法创建面试间记录');
         }

@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, DesktopOutlined, QrcodeOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps } from 'antd';
 import { useMemo } from 'react';
@@ -131,11 +131,12 @@ const BasicLayout = () => {
           name: '面试间列表',
           icon: <UnorderedListOutlined />,
         },
-        {
-          path: '/interview/video',
-          name: 'PC端面试',
-          icon: <DesktopOutlined />,
-        },
+        // 🔴 PC端面试菜单（已注释，使用小程序H5代替）
+        // {
+        //   path: '/interview/video',
+        //   name: 'PC端面试',
+        //   icon: <DesktopOutlined />,
+        // },
         {
           path: '/interview/miniprogram',
           name: '小程序视频面试',

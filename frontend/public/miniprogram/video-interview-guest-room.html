@@ -1003,26 +1003,31 @@
     const fromGuestPage = sessionStorage.getItem('fromGuestPage');
 
     // 🎯 关键：检查 localStorage 中是否有该房间的用户信息（用于重新进入）
-    // 使用 sessionStorage 中的 userId 作为唯一标识
-    const sessionKey = `zego_user_${roomId}`;
-    const storedUserId = sessionStorage.getItem(sessionKey);
-    const savedUserInfoKey = `guest_user_info_${roomId}_${storedUserId}`;
+    // 使用 roomId 作为键名，值中包含 userId、userName、userRole
+    const savedUserInfoKey = `guest_user_info_${roomId}`;
     const savedUserInfo = localStorage.getItem(savedUserInfoKey);
 
     console.log('🔍 检查访问来源:', {
       fromGuestPage: !!fromGuestPage,
-      storedUserId: storedUserId,
       savedUserInfo: !!savedUserInfo,
       savedUserInfoContent: savedUserInfo
     });
 
     // 🎯 如果有保存的用户信息，说明是第二次进入，直接使用保存的信息
-    if (savedUserInfo && storedUserId) {
+    if (savedUserInfo) {
       try {
         const userInfo = JSON.parse(savedUserInfo);
         userName = userInfo.userName;
         userRole = userInfo.userRole;
-        console.log('✅ 检测到第二次进入，使用保存的用户信息:', { userName, userRole, userId: storedUserId });
+
+        // 🎯 恢复 userId 到 sessionStorage（这样 loginRoom 时会使用同一个 userId）
+        const sessionKey = `zego_user_${roomId}`;
+        if (userInfo.userId) {
+          sessionStorage.setItem(sessionKey, userInfo.userId);
+          console.log('✅ 检测到第二次进入，恢复用户信息:', { userName, userRole, userId: userInfo.userId });
+        } else {
+          console.log('✅ 检测到第二次进入，使用保存的用户信息:', { userName, userRole });
+        }
         // 🎯 标记为已登记，后续会自动加入房间
       } catch (e) {
         console.error('❌ 解析保存的用户信息失败:', e);
@@ -2420,12 +2425,8 @@
           console.error('❌ 自动加入房间失败:', error);
           alert('自动加入房间失败，请重新进入');
           // 清除保存的用户信息，让用户重新填写
-          const sessionKey = `zego_user_${roomId}`;
-          const storedUserId = sessionStorage.getItem(sessionKey);
-          if (storedUserId) {
-            const savedUserInfoKey = `guest_user_info_${roomId}_${storedUserId}`;
-            localStorage.removeItem(savedUserInfoKey);
-          }
+          const savedUserInfoKey = `guest_user_info_${roomId}`;
+          localStorage.removeItem(savedUserInfoKey);
           window.location.href = `video-interview-guest.html?roomId=${roomId}`;
         }
         return; // 不再执行后续的按钮绑定逻辑
@@ -2499,11 +2500,11 @@
         }
 
         // 🎯 保存用户信息到 localStorage（用于重新进入）
-        // 使用 roomId + userId 作为键名，确保同一个用户在同一个房间的信息被保存
-        const savedUserInfoKey = `guest_user_info_${roomId}_${storedUserId}`;
-        const userInfo = { userName, userRole };
+        // 使用 roomId 作为键名，值中包含 userId、userName、userRole
+        const savedUserInfoKey = `guest_user_info_${roomId}`;
+        const userInfo = { userId: storedUserId, userName, userRole };
         localStorage.setItem(savedUserInfoKey, JSON.stringify(userInfo));
-        console.log('✅ 用户信息已保存到 localStorage:', savedUserInfoKey);
+        console.log('✅ 用户信息已保存到 localStorage:', savedUserInfoKey, userInfo);
 
         // 禁用按钮，防止重复点击
         joinBtn.disabled = true;

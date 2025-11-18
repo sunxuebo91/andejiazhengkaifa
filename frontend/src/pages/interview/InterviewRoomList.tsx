@@ -4,7 +4,6 @@ import { ReloadOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { InterviewRoom } from '../../types/interview.types';
 import { interviewService } from '../../services/interview.service';
-import { getToken } from '../../services/auth';
 import RoomCard from './components/RoomCard';
 import './InterviewRoomList.css';
 

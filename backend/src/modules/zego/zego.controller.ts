@@ -9,10 +9,14 @@ import { PushTeleprompterDto, ControlTeleprompterDto, GetTeleprompterDto, QuickS
 import { KickUserDto } from './dto/kick-user.dto';
 import { RemoteControlDto } from './dto/remote-control.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { InterviewService } from '../interview/interview.service';
 
 @Controller('zego')
 export class ZegoController {
-  constructor(private readonly zegoService: ZegoService) {}
+  constructor(
+    private readonly zegoService: ZegoService,
+    private readonly interviewService: InterviewService,
+  ) {}
 
   /**
    * 生成 ZEGO Kit Token（需要登录）
@@ -101,6 +105,19 @@ export class ZegoController {
         message: '无法加入房间，房间可能已被解散',
         error: 'CANNOT_JOIN_ROOM',
       }, HttpStatus.FORBIDDEN);
+    }
+
+    // 🎯 更新面试间参与者信息
+    try {
+      await this.interviewService.addParticipant(
+        dto.roomId,
+        dto.userId,
+        dto.userName,
+        dto.role,
+      );
+      console.log('✅ 面试间参与者信息已更新');
+    } catch (error) {
+      console.warn('⚠️ 更新面试间参与者信息失败:', error);
     }
 
     return {
@@ -207,6 +224,14 @@ export class ZegoController {
 
       console.log('🔧 用户离开房间:', { roomId, userId });
       this.zegoService.leaveRoom(roomId, userId);
+
+      // 🎯 更新面试间参与者信息（移除参与者）
+      try {
+        await this.interviewService.removeParticipant(roomId, userId);
+        console.log('✅ 面试间参与者已移除');
+      } catch (error) {
+        console.warn('⚠️ 移除面试间参与者失败:', error);
+      }
 
       return {
         success: true,

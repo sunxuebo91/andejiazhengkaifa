@@ -1,9 +1,10 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ZegoController } from './zego.controller';
 import { ZegoService } from './zego.service';
+import { InterviewModule } from '../interview/interview.module';
 
 @Module({
-  imports: [],
+  imports: [forwardRef(() => InterviewModule)],
   controllers: [ZegoController],
   providers: [ZegoService],
   exports: [ZegoService],

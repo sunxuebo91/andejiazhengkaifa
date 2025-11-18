@@ -193,4 +193,68 @@ export class InterviewService {
       duration: room.duration,
     };
   }
+
+  /**
+   * 添加参与者（访客加入时调用）
+   */
+  async addParticipant(
+    roomId: string,
+    userId: string,
+    userName: string,
+    role: 'customer' | 'helper',
+  ) {
+    this.logger.log(`添加参与者到面试间: ${roomId}, 用户: ${userName}, 角色: ${role}`);
+
+    const room = await this.interviewRoomModel.findOne({ roomId });
+
+    if (!room) {
+      this.logger.warn(`面试间不存在: ${roomId}`);
+      return null;
+    }
+
+    // 检查参与者是否已存在
+    const existingParticipant = room.participants.find(
+      (p) => p.userId === userId,
+    );
+
+    if (existingParticipant) {
+      this.logger.log(`参与者已存在: ${userId}`);
+      return room;
+    }
+
+    // 添加参与者
+    room.participants.push({
+      userId,
+      userName,
+      role,
+      joinedAt: new Date(),
+    });
+
+    await room.save();
+    this.logger.log(`✅ 参与者已添加: ${userName} (${role})`);
+
+    return room;
+  }
+
+  /**
+   * 移除参与者（访客离开时调用）
+   */
+  async removeParticipant(roomId: string, userId: string) {
+    this.logger.log(`移除参与者: ${roomId}, 用户: ${userId}`);
+
+    const room = await this.interviewRoomModel.findOne({ roomId });
+
+    if (!room) {
+      this.logger.warn(`面试间不存在: ${roomId}`);
+      return null;
+    }
+
+    // 移除参与者
+    room.participants = room.participants.filter((p) => p.userId !== userId);
+
+    await room.save();
+    this.logger.log(`✅ 参与者已移除: ${userId}`);
+
+    return room;
+  }
 }

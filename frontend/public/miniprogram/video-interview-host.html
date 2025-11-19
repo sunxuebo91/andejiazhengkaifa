@@ -5,36 +5,60 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>视频面试 - HR主持人</title>
 
+  <!-- 🔥 页面访问日志记录器（最先加载） -->
+  <script src="page-access-logger.js"></script>
+
   <!-- 微信环境检测和自动跳转 -->
   <script>
+    // 🎯 全局环境检测变量（供后续使用）
+    var IS_IN_MINIPROGRAM = false;
+    var IS_WECHAT = false;
+
     (function() {
       // 检测是否在微信中
       function isWechat() {
         return /MicroMessenger/i.test(navigator.userAgent);
       }
 
-      // 检测是否在小程序 WebView 中
+      // 检测是否在小程序 WebView 中（微信官方推荐方法）
       function isInMiniProgram() {
-        return window.__wxjs_environment === 'miniprogram';
+        // 方法1：通过 window.__wxjs_environment 判断（最可靠）
+        if (window.__wxjs_environment === 'miniprogram') {
+          return true;
+        }
+
+        // 方法2：通过 userAgent 判断（微信 7.0.0+ 支持）
+        if (/miniProgram/i.test(navigator.userAgent)) {
+          return true;
+        }
+
+        return false;
       }
+
+      // 设置全局变量
+      IS_WECHAT = isWechat();
+      IS_IN_MINIPROGRAM = isInMiniProgram();
 
       // 获取房间号参数
       const urlParams = new URLSearchParams(window.location.search);
       const roomId = urlParams.get('room') || '';
 
       console.log('🔍 环境检测:');
-      console.log('  - 是否在微信中:', isWechat());
-      console.log('  - 是否在小程序 WebView 中:', isInMiniProgram());
+      console.log('  - 是否在微信中:', IS_WECHAT);
+      console.log('  - 是否在小程序 WebView 中:', IS_IN_MINIPROGRAM);
+      console.log('  - UserAgent:', navigator.userAgent);
+      console.log('  - __wxjs_environment:', window.__wxjs_environment);
       console.log('  - 房间号:', roomId);
 
       // 注意：这个 H5 页面现在只用于浏览器访问
       // 微信中的跳转使用加密 URL Scheme（由云函数生成）
 
-      if (isInMiniProgram()) {
+      if (IS_IN_MINIPROGRAM) {
         console.log('✅ 已在小程序 WebView 中，正常加载 H5 页面');
-      } else if (!isWechat()) {
+        console.log('💡 邀请功能将被隐藏（小程序环境使用分享功能）');
+      } else if (!IS_WECHAT) {
         console.log('🌐 浏览器环境，正常加载 H5 页面');
-      } else if (isWechat() && !isInMiniProgram()) {
+      } else if (IS_WECHAT && !IS_IN_MINIPROGRAM) {
         console.log('⚠️ 微信浏览器环境，但不在小程序中');
         console.log('💡 提示：请使用小程序分享的加密链接打开');
       }
@@ -365,6 +389,28 @@
 
     .invite-placeholder:active {
       transform: scale(0.98);
+    }
+
+    /* 🎯 小程序环境下隐藏邀请按钮和邀请弹窗 */
+    body.miniprogram-env .invite-placeholder {
+      display: none !important;
+    }
+
+    body.miniprogram-env #inviteModal {
+      display: none !important;
+    }
+
+    /* 小程序环境下显示普通占位符 */
+    body.miniprogram-env .video-placeholder.empty-slot {
+      display: flex !important;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      cursor: default;
+    }
+
+    body.miniprogram-env .video-placeholder.empty-slot .placeholder-text {
+      color: #666;
+      font-size: 14px;
     }
 
     .placeholder-icon {
@@ -1414,6 +1460,9 @@
 
         hideMessage();
         console.log('✅ 面试间创建成功');
+
+        // 🔥 通知小程序页面（用于分享）
+        notifyMiniProgram(roomId);
       } catch (error) {
         console.error('❌ 创建面试间失败:', error);
         hideMessage();
@@ -2144,6 +2193,40 @@
         return;
       }
 
+      // 🎯 小程序环境下，发送 triggerShare 消息给小程序
+      if (IS_IN_MINIPROGRAM) {
+        console.log('💡 小程序环境，发送 triggerShare 消息给小程序');
+
+        // 生成访客H5链接
+        const baseUrl = window.location.origin + window.location.pathname.replace('video-interview-host.html', '');
+        const inviteLink = `${baseUrl}video-interview-guest.html?roomId=${roomId}`;
+
+        console.log('📤 准备发送 triggerShare 消息');
+        console.log('📤 roomId:', roomId);
+        console.log('📤 inviteLink:', inviteLink);
+
+        // 发送消息给小程序
+        if (typeof wx !== 'undefined' && wx.miniProgram) {
+          wx.miniProgram.postMessage({
+            data: {
+              type: 'triggerShare',
+              roomId: roomId,
+              inviteLink: inviteLink,
+              shareTitle: '邀请你参加视频面试',
+              shareDesc: `面试间号：${roomId.replace(/^room_/, 'AD-').split('_')[0]}`
+            }
+          });
+          console.log('✅ 已发送 triggerShare 消息给小程序');
+
+          // 提示用户点击右上角分享
+          alert('请点击右上角"..."按钮，选择"转发"分享给访客');
+        } else {
+          console.warn('⚠️ 未找到 wx.miniProgram，无法发送消息');
+        }
+        return;
+      }
+
+      // 非小程序环境，显示邀请弹窗
       const modal = document.getElementById('inviteModal');
       const inviteLinkInput = document.getElementById('inviteLink');
 
@@ -2198,6 +2281,27 @@
         closeInviteModal();
       }
     });
+
+    // ==================== 通知小程序 ====================
+    // 🔥 发送 roomCreated 消息给小程序
+    function notifyMiniProgram(roomId) {
+      console.log('📤 准备发送 roomCreated 消息给小程序');
+      console.log('📤 roomId:', roomId);
+
+      // 检查是否在小程序环境
+      if (typeof wx !== 'undefined' && wx.miniProgram) {
+        wx.miniProgram.postMessage({
+          data: {
+            type: 'roomCreated',
+            roomId: roomId
+          }
+        });
+
+        console.log('✅ 已发送 roomCreated 消息给小程序');
+      } else {
+        console.log('⚠️ 不在小程序环境，跳过发送消息');
+      }
+    }
 
     // ==================== 提词器功能 ====================
     // 显示提词器弹窗
@@ -2673,6 +2777,14 @@
     window.onload = async function() {
       console.log('页面加载完成');
       console.log('房间号:', roomId);
+
+      // 🎯 根据环境添加 body class（用于控制邀请按钮显示）
+      if (IS_IN_MINIPROGRAM) {
+        document.body.classList.add('miniprogram-env');
+        console.log('✅ 已添加小程序环境标识，邀请按钮将被隐藏');
+      } else {
+        console.log('✅ 浏览器环境，邀请按钮正常显示');
+      }
 
       // 检查 SDK 加载状态
       console.log('检查 ZEGO SDK 加载状态...');

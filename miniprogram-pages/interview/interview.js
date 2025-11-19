@@ -107,6 +107,18 @@ Page({
       console.log('📥 处理消息:', lastMessage);
       
       switch (lastMessage.type) {
+        case 'roomCreated':
+          // 🔥 房间创建成功
+          console.log('✅ 面试间创建成功:', lastMessage.roomId);
+          console.log('📤 访客H5链接: https://crm.andejiazheng.com/miniprogram/video-interview-guest.html?roomId=' + lastMessage.roomId);
+          break;
+
+        case 'triggerShare':
+          // 🔥 触发分享
+          console.log('📤 触发分享:', lastMessage);
+          console.log('📤 访客链接:', lastMessage.inviteLink);
+          break;
+
         case 'joined':
           // 用户成功加入视频通话
           console.log('✅ 用户已加入视频面试');
@@ -116,7 +128,7 @@ Page({
             duration: 1500
           });
           break;
-          
+
         case 'leave':
           // 用户离开视频通话，返回上一页
           console.log('👋 用户离开视频面试');
@@ -125,7 +137,7 @@ Page({
             icon: 'success',
             duration: 1000
           });
-          
+
           // 延迟返回，让用户看到提示
           setTimeout(() => {
             wx.navigateBack({
@@ -133,7 +145,7 @@ Page({
             });
           }, 1000);
           break;
-          
+
         case 'error':
           // 发生错误
           console.error('❌ 视频面试错误:', lastMessage.message);
@@ -143,7 +155,7 @@ Page({
             duration: 2000
           });
           break;
-          
+
         default:
           console.log('📥 未知消息类型:', lastMessage.type);
       }

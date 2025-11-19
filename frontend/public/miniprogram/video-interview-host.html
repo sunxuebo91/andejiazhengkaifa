@@ -1462,11 +1462,15 @@
         console.log('✅ 面试间创建成功');
 
         // 🔥 通知小程序页面（用于分享）
-        notifyMiniProgram(roomId);
+        try {
+          notifyMiniProgram(roomId);
+        } catch (notifyError) {
+          console.warn('⚠️ 通知小程序失败:', notifyError);
+        }
       } catch (error) {
         console.error('❌ 创建面试间失败:', error);
         hideMessage();
-        alert('创建面试间失败: ' + error.message);
+        alert('创建面试间失败: ' + (error.message || error.toString() || '未知错误'));
       }
     }
 
@@ -2195,33 +2199,38 @@
 
       // 🎯 小程序环境下，发送 triggerShare 消息给小程序
       if (IS_IN_MINIPROGRAM) {
-        console.log('💡 小程序环境，发送 triggerShare 消息给小程序');
+        try {
+          console.log('💡 小程序环境，发送 triggerShare 消息给小程序');
 
-        // 生成访客H5链接
-        const baseUrl = window.location.origin + window.location.pathname.replace('video-interview-host.html', '');
-        const inviteLink = `${baseUrl}video-interview-guest.html?roomId=${roomId}`;
+          // 生成访客H5链接
+          const baseUrl = window.location.origin + window.location.pathname.replace('video-interview-host.html', '');
+          const inviteLink = `${baseUrl}video-interview-guest.html?roomId=${roomId}`;
 
-        console.log('📤 准备发送 triggerShare 消息');
-        console.log('📤 roomId:', roomId);
-        console.log('📤 inviteLink:', inviteLink);
+          console.log('📤 准备发送 triggerShare 消息');
+          console.log('📤 roomId:', roomId);
+          console.log('📤 inviteLink:', inviteLink);
 
-        // 发送消息给小程序
-        if (typeof wx !== 'undefined' && wx.miniProgram) {
-          wx.miniProgram.postMessage({
-            data: {
-              type: 'triggerShare',
-              roomId: roomId,
-              inviteLink: inviteLink,
-              shareTitle: '邀请你参加视频面试',
-              shareDesc: `面试间号：${roomId.replace(/^room_/, 'AD-').split('_')[0]}`
-            }
-          });
-          console.log('✅ 已发送 triggerShare 消息给小程序');
+          // 发送消息给小程序
+          if (typeof wx !== 'undefined' && wx.miniProgram) {
+            wx.miniProgram.postMessage({
+              data: {
+                type: 'triggerShare',
+                roomId: roomId,
+                inviteLink: inviteLink,
+                shareTitle: '邀请你参加视频面试',
+                shareDesc: `面试间号：${roomId.replace(/^room_/, 'AD-').split('_')[0]}`
+              }
+            });
+            console.log('✅ 已发送 triggerShare 消息给小程序');
 
-          // 提示用户点击右上角分享
-          alert('请点击右上角"..."按钮，选择"转发"分享给访客');
-        } else {
-          console.warn('⚠️ 未找到 wx.miniProgram，无法发送消息');
+            // 提示用户点击右上角分享
+            alert('请点击右上角"..."按钮，选择"转发"分享给访客');
+          } else {
+            console.warn('⚠️ 未找到 wx.miniProgram，无法发送消息');
+          }
+        } catch (error) {
+          console.error('⚠️ 发送 triggerShare 消息失败:', error);
+          // 不影响主流程
         }
         return;
       }
@@ -2285,21 +2294,26 @@
     // ==================== 通知小程序 ====================
     // 🔥 发送 roomCreated 消息给小程序
     function notifyMiniProgram(roomId) {
-      console.log('📤 准备发送 roomCreated 消息给小程序');
-      console.log('📤 roomId:', roomId);
+      try {
+        console.log('📤 准备发送 roomCreated 消息给小程序');
+        console.log('📤 roomId:', roomId);
 
-      // 检查是否在小程序环境
-      if (typeof wx !== 'undefined' && wx.miniProgram) {
-        wx.miniProgram.postMessage({
-          data: {
-            type: 'roomCreated',
-            roomId: roomId
-          }
-        });
+        // 检查是否在小程序环境
+        if (typeof wx !== 'undefined' && wx.miniProgram) {
+          wx.miniProgram.postMessage({
+            data: {
+              type: 'roomCreated',
+              roomId: roomId
+            }
+          });
 
-        console.log('✅ 已发送 roomCreated 消息给小程序');
-      } else {
-        console.log('⚠️ 不在小程序环境，跳过发送消息');
+          console.log('✅ 已发送 roomCreated 消息给小程序');
+        } else {
+          console.log('⚠️ 不在小程序环境，跳过发送消息');
+        }
+      } catch (error) {
+        console.error('⚠️ 发送消息给小程序失败:', error);
+        // 不抛出错误，避免影响主流程
       }
     }
 

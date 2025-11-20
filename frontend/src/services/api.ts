@@ -59,14 +59,22 @@ api.interceptors.response.use(
   (response) => {
     // 检查业务逻辑是否成功
     if (response.data && response.data.success === false) {
-      // 🔧 修复：对于批量添加用户API的部分失败情况，不抛出错误
-      // 这样前端可以处理部分成功的情况，与git 2.2.4版本保持一致
-      if (response.config?.url?.includes('/esign/add-users-batch')) {
-        // 批量添加用户API：即使部分失败，也要返回详细的结果数据
+      // 🔧 修复：对于批量操作API的部分失败情况，不抛出错误
+      // 这样前端可以处理部分成功的情况
+      const batchOperationUrls = [
+        '/esign/add-users-batch',
+        '/customers/public-pool/claim',
+        '/customers/public-pool/assign',
+        '/customers/batch-release-to-pool',
+        '/customers/batch-assign',
+      ];
+
+      if (batchOperationUrls.some(url => response.config?.url?.includes(url))) {
+        // 批量操作API：即使部分失败，也要返回详细的结果数据
         // 让前端根据具体的成功/失败状态进行处理
         return response.data;
       }
-      
+
       // 如果业务逻辑失败，抛出错误
       const error = new Error(response.data.message || '请求失败');
       // 附加响应数据到错误对象上

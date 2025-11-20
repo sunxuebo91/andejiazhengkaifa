@@ -58,9 +58,9 @@ export class CustomersService {
       createdBy: userId,
       expectedStartDate: createCustomerDto.expectedStartDate ? new Date(createCustomerDto.expectedStartDate) : undefined,
       expectedDeliveryDate: createCustomerDto.expectedDeliveryDate ? new Date(createCustomerDto.expectedDeliveryDate) : undefined,
-      // 分配信息
-      assignedTo: hasAssignedTo ? dtoAny.assignedTo : userId,
-      assignedBy: userId,
+      // 分配信息（确保转换为 ObjectId）
+      assignedTo: new Types.ObjectId(hasAssignedTo ? dtoAny.assignedTo : userId),
+      assignedBy: new Types.ObjectId(userId),
       assignedAt: now,
       assignmentReason: hasAssignedTo ? (dtoAny.assignmentReason || '创建时指定负责人') : '创建默认分配给创建人',
     };

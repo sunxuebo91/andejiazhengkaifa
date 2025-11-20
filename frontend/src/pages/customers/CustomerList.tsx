@@ -179,7 +179,7 @@ const CustomerList: React.FC = () => {
           <p>确定要将客户 <strong>{customer.name}</strong> 释放到公海吗？</p>
           <Input.TextArea
             id="releaseReason"
-            placeholder="请输入释放原因（必填）"
+            placeholder="请输入释放原因（选填）"
             rows={3}
             style={{ marginTop: 10 }}
           />
@@ -187,12 +187,7 @@ const CustomerList: React.FC = () => {
       ),
       onOk: async () => {
         const reasonInput = document.getElementById('releaseReason') as HTMLTextAreaElement;
-        const reason = reasonInput?.value?.trim();
-
-        if (!reason) {
-          message.error('请输入释放原因');
-          return Promise.reject();
-        }
+        const reason = reasonInput?.value?.trim() || '未填写原因';
 
         try {
           await customerService.releaseToPool(customer._id, reason);
@@ -220,7 +215,7 @@ const CustomerList: React.FC = () => {
           <p>确定要将选中的 <strong>{selectedRowKeys.length}</strong> 个客户释放到公海吗？</p>
           <Input.TextArea
             id="batchReleaseReason"
-            placeholder="请输入释放原因（必填）"
+            placeholder="请输入释放原因（选填）"
             rows={3}
             style={{ marginTop: 10 }}
           />
@@ -228,12 +223,7 @@ const CustomerList: React.FC = () => {
       ),
       onOk: async () => {
         const reasonInput = document.getElementById('batchReleaseReason') as HTMLTextAreaElement;
-        const reason = reasonInput?.value?.trim();
-
-        if (!reason) {
-          message.error('请输入释放原因');
-          return Promise.reject();
-        }
+        const reason = reasonInput?.value?.trim() || '未填写原因';
 
         try {
           const result = await customerService.batchReleaseToPool(selectedRowKeys as string[], reason);

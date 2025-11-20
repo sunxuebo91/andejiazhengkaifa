@@ -31,10 +31,10 @@ export class AssignFromPoolDto {
 
 // 释放到公海 DTO
 export class ReleaseToPoolDto {
-  @ApiProperty({ description: '释放原因' })
+  @ApiProperty({ description: '释放原因', required: false })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  reason: string;
+  reason?: string;
 }
 
 // 批量释放到公海 DTO
@@ -45,10 +45,10 @@ export class BatchReleaseToPoolDto {
   @IsNotEmpty()
   customerIds: string[];
 
-  @ApiProperty({ description: '释放原因' })
+  @ApiProperty({ description: '释放原因', required: false })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  reason: string;
+  reason?: string;
 }
 
 // 公海查询 DTO

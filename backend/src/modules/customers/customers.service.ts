@@ -1064,7 +1064,7 @@ export class CustomersService {
   }
 
   // 释放客户到公海
-  async releaseToPool(customerId: string, reason: string, userId: string): Promise<Customer> {
+  async releaseToPool(customerId: string, reason: string | undefined, userId: string): Promise<Customer> {
     const customer = await this.customerModel.findById(customerId).exec();
     if (!customer) {
       throw new NotFoundException('客户不存在');
@@ -1085,6 +1085,7 @@ export class CustomersService {
 
     const now = new Date();
     const oldAssignedTo = (customer as any).assignedTo;
+    const releaseReason = reason || '未填写原因';
 
     // 更新客户状态
     const updated = await this.customerModel.findByIdAndUpdate(
@@ -1092,7 +1093,7 @@ export class CustomersService {
       {
         inPublicPool: true,
         publicPoolEntryTime: now,
-        publicPoolEntryReason: reason,
+        publicPoolEntryReason: releaseReason,
         assignedTo: null,
       },
       { new: true }
@@ -1104,7 +1105,7 @@ export class CustomersService {
       action: 'release',
       operatorId: new Types.ObjectId(userId),
       fromUserId: oldAssignedTo ? new Types.ObjectId(oldAssignedTo) : undefined,
-      reason,
+      reason: releaseReason,
       operatedAt: now,
     });
 
@@ -1113,7 +1114,7 @@ export class CustomersService {
     await this.customerFollowUpModel.create({
       customerId: new Types.ObjectId(customerId),
       type: 'other' as any,
-      content: `系统：${operatorUser?.name}将客户释放到公海。原因：${reason}`,
+      content: `系统：${operatorUser?.name}将客户释放到公海。原因：${releaseReason}`,
       createdBy: new Types.ObjectId(userId),
     });
 
@@ -1121,7 +1122,7 @@ export class CustomersService {
   }
 
   // 批量释放到公海
-  async batchReleaseToPool(customerIds: string[], reason: string, userId: string): Promise<{
+  async batchReleaseToPool(customerIds: string[], reason: string | undefined, userId: string): Promise<{
     success: number;
     failed: number;
     errors: Array<{ customerId: string; error: string }>;
@@ -1135,6 +1136,7 @@ export class CustomersService {
     let failedCount = 0;
     const errors: Array<{ customerId: string; error: string }> = [];
     const now = new Date();
+    const releaseReason = reason || '未填写原因';
 
     for (const customerId of customerIds) {
       try {
@@ -1169,7 +1171,7 @@ export class CustomersService {
           {
             inPublicPool: true,
             publicPoolEntryTime: now,
-            publicPoolEntryReason: reason,
+            publicPoolEntryReason: releaseReason,
             assignedTo: null,
           },
           { new: true }
@@ -1181,7 +1183,7 @@ export class CustomersService {
           action: 'release',
           operatorId: new Types.ObjectId(userId),
           fromUserId: oldAssignedTo ? new Types.ObjectId(oldAssignedTo) : undefined,
-          reason,
+          reason: releaseReason,
           operatedAt: now,
         });
 
@@ -1189,7 +1191,7 @@ export class CustomersService {
         await this.customerFollowUpModel.create({
           customerId: new Types.ObjectId(customerId),
           type: 'other' as any,
-          content: `系统：${user.name}将客户释放到公海。原因：${reason}`,
+          content: `系统：${user.name}将客户释放到公海。原因：${releaseReason}`,
           createdBy: new Types.ObjectId(userId),
         });
 

@@ -8,7 +8,7 @@ export class Customer {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true, unique: true })
+  @Prop({ unique: true, sparse: true })
   phone: string;
 
   @Prop()
@@ -35,6 +35,7 @@ export class Customer {
   contractStatus: string;
 
   @Prop({
+    required: true,
     enum: ['O类', 'A类', 'B类', 'C类', 'D类', '流失']
   })
   leadLevel: string;

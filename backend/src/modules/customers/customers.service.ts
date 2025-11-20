@@ -107,7 +107,12 @@ export class CustomersService {
     // 其他筛选条件（包含 assignedTo 等）
     Object.keys(filters).forEach((key) => {
       if (filters[key]) {
-        searchConditions[key] = filters[key];
+        // 如果是 assignedTo，需要转换为 ObjectId
+        if (key === 'assignedTo') {
+          searchConditions[key] = new Types.ObjectId(filters[key]);
+        } else {
+          searchConditions[key] = filters[key];
+        }
       }
     });
 

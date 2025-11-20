@@ -28,6 +28,7 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { CreateCustomerFollowUpDto } from './dto/create-customer-follow-up.dto';
 import { AssignCustomerDto } from './dto/assign-customer.dto';
+import { BatchAssignCustomerDto } from './dto/batch-assign-customer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -203,6 +204,31 @@ export class CustomersController {
       return this.createResponse(true, '可分配用户获取成功', users);
     } catch (error) {
       return this.createResponse(false, '可分配用户获取失败', null, error.message);
+    }
+  }
+
+  // 批量分配客户 - 必须在 :id 路由之前
+  @Post('batch-assign')
+  @ApiOperation({ summary: '批量分配客户（仅管理员和经理）' })
+  @ApiBody({ type: BatchAssignCustomerDto })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'manager')
+  async batchAssignCustomers(
+    @Body() dto: BatchAssignCustomerDto,
+    @Request() req,
+  ): Promise<ApiResponse> {
+    try {
+      const result = await this.customersService.batchAssignCustomers(
+        dto.customerIds,
+        dto.assignedTo,
+        dto.assignmentReason,
+        req.user.userId
+      );
+
+      const message = `批量分配完成：成功 ${result.success} 个，失败 ${result.failed} 个`;
+      return this.createResponse(true, message, result);
+    } catch (error) {
+      return this.createResponse(false, error.message || '批量分配失败', null, error.message);
     }
   }
 

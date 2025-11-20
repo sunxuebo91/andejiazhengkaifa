@@ -27,6 +27,7 @@ import {
 } from '../../types/customer.types';
 import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
 import AssignCustomerModal from '../../components/AssignCustomerModal';
+import BatchAssignCustomerModal from '../../components/BatchAssignCustomerModal';
 import Authorized from '../../components/Authorized';
 
 const { Search } = Input;
@@ -49,6 +50,10 @@ const CustomerList: React.FC = () => {
   const [assignModal, setAssignModal] = useState<{ visible: boolean; customerId: string | null; customerName: string }>(
     { visible: false, customerId: null, customerName: '' }
   );
+
+  // 批量选择和批量分配状态
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchAssignModalVisible, setBatchAssignModalVisible] = useState(false);
 
   // 导入相关状态
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -472,6 +477,21 @@ const CustomerList: React.FC = () => {
           </Row>
         </div>
 
+        {/* 批量操作区域 */}
+        {selectedRowKeys.length > 0 && (
+          <div style={{ marginBottom: 16, padding: '12px 16px', background: '#e6f7ff', borderRadius: 4 }}>
+            <Space>
+              <span>已选择 {selectedRowKeys.length} 个客户</span>
+              <Authorized roles={['admin', 'manager']}>
+                <Button type="primary" onClick={() => setBatchAssignModalVisible(true)}>
+                  批量分配
+                </Button>
+              </Authorized>
+              <Button onClick={() => setSelectedRowKeys([])}>取消选择</Button>
+            </Space>
+          </div>
+        )}
+
         {/* 客户列表表格 */}
         <Table
           columns={columns}
@@ -479,6 +499,15 @@ const CustomerList: React.FC = () => {
           rowKey="_id"
           loading={loading}
           scroll={{ x: 1320 }}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (keys) => setSelectedRowKeys(keys),
+            selections: [
+              Table.SELECTION_ALL,
+              Table.SELECTION_INVERT,
+              Table.SELECTION_NONE,
+            ],
+          }}
           pagination={{
             current: currentPage,
             pageSize: pageSize,
@@ -511,6 +540,18 @@ const CustomerList: React.FC = () => {
         onCancel={() => setAssignModal({ visible: false, customerId: null, customerName: '' })}
         onSuccess={() => {
           setAssignModal({ visible: false, customerId: null, customerName: '' });
+          loadCustomers(currentPage, pageSize);
+        }}
+      />
+
+      {/* 批量分配弹窗 */}
+      <BatchAssignCustomerModal
+        visible={batchAssignModalVisible}
+        customerIds={selectedRowKeys as string[]}
+        onCancel={() => setBatchAssignModalVisible(false)}
+        onSuccess={() => {
+          setBatchAssignModalVisible(false);
+          setSelectedRowKeys([]);
           loadCustomers(currentPage, pageSize);
         }}
       />

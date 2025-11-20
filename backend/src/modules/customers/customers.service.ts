@@ -419,6 +419,114 @@ export class CustomersService {
     return updated;
   }
 
+  // 批量分配客户
+  async batchAssignCustomers(
+    customerIds: string[],
+    assignedTo: string,
+    assignmentReason: string | undefined,
+    adminUserId: string
+  ): Promise<{ success: number; failed: number; errors: Array<{ customerId: string; error: string }> }> {
+    // 验证管理员/经理权限
+    const adminUser = await this.userModel.findById(adminUserId).select('role name username active').lean();
+    if (!adminUser || !['admin', 'manager'].includes((adminUser as any).role)) {
+      throw new ForbiddenException('只有管理员或经理可以批量分配客户');
+    }
+
+    // 验证目标用户
+    const targetUser = await this.userModel.findById(assignedTo).select('name username role active').lean();
+    if (!targetUser) {
+      throw new NotFoundException('指定的负责人不存在');
+    }
+    if ((targetUser as any).active === false) {
+      throw new ConflictException('指定的负责人未激活');
+    }
+    if (!['employee', 'manager'].includes((targetUser as any).role)) {
+      throw new ConflictException('指定的负责人角色不允许被分配');
+    }
+
+    const now = new Date();
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: Array<{ customerId: string; error: string }> = [];
+
+    // 批量处理每个客户
+    for (const customerId of customerIds) {
+      try {
+        // 验证客户
+        const customer = await this.customerModel.findById(customerId).exec();
+        if (!customer) {
+          errors.push({ customerId, error: '客户不存在' });
+          failedCount++;
+          continue;
+        }
+
+        const oldAssignedTo = (customer as any).assignedTo ? new Types.ObjectId((customer as any).assignedTo) : undefined;
+
+        // 如果负责人未变化，跳过
+        if (oldAssignedTo && oldAssignedTo.toString() === assignedTo) {
+          successCount++;
+          continue;
+        }
+
+        // 更新客户分配信息
+        const updated = await this.customerModel.findByIdAndUpdate(
+          customerId,
+          {
+            assignedTo: new Types.ObjectId(assignedTo),
+            assignedBy: new Types.ObjectId(adminUserId),
+            assignedAt: now,
+            assignmentReason: assignmentReason || '',
+          },
+          { new: true }
+        ).exec();
+
+        if (!updated) {
+          errors.push({ customerId, error: '更新客户信息失败' });
+          failedCount++;
+          continue;
+        }
+
+        // 记录分配审计日志
+        await this.assignmentLogModel.create({
+          customerId: new Types.ObjectId(customerId),
+          oldAssignedTo,
+          newAssignedTo: new Types.ObjectId(assignedTo),
+          assignedBy: new Types.ObjectId(adminUserId),
+          assignedAt: now,
+          reason: assignmentReason,
+        } as any);
+
+        // 写入系统跟进记录
+        const oldUser = oldAssignedTo ? await this.userModel.findById(oldAssignedTo).select('name username').lean() : null;
+        const newUser = await this.userModel.findById(assignedTo).select('name username').lean();
+        const content = `系统：负责人由${oldUser ? oldUser.name : '未分配'}变更为${newUser ? newUser.name : '未知'}。原因：${assignmentReason || '未填写'}`;
+
+        await this.customerFollowUpModel.create({
+          customerId: new Types.ObjectId(customerId),
+          type: 'other' as any,
+          content,
+          createdBy: new Types.ObjectId(adminUserId),
+        } as any);
+
+        successCount++;
+      } catch (error) {
+        errors.push({ customerId, error: error.message || '分配失败' });
+        failedCount++;
+      }
+    }
+
+    // 批量分配完成后发送一次通知
+    if (successCount > 0) {
+      await this.sendBatchAssignmentNotification(successCount, targetUser as any, assignmentReason);
+    }
+
+    return {
+      success: successCount,
+      failed: failedCount,
+      errors,
+    };
+  }
+
   // 获取可分配的用户列表
   async getAssignableUsers(): Promise<Array<Pick<User, any>>> {
     const users = await this.userModel
@@ -492,6 +600,30 @@ export class CustomersService {
       console.log(`微信通知发送成功：${targetUser.name} (${customer.name})`);
     } catch (error) {
       console.error(`发送微信通知失败：${error.message}`, error);
+      // 不抛出错误，避免影响主业务流程
+    }
+  }
+
+  // 发送批量分配通知
+  private async sendBatchAssignmentNotification(count: number, targetUser: any, assignmentReason?: string): Promise<void> {
+    try {
+      // 检查用户是否绑定了微信
+      if (!targetUser.wechatOpenId) {
+        console.log(`用户 ${targetUser.name} 未绑定微信，跳过批量分配通知发送`);
+        return;
+      }
+
+      // 构建客户列表页面URL
+      const listUrl = `${process.env.FRONTEND_URL || 'https://crm.andejiazheng.com'}/customers`;
+
+      // 这里可以发送一个汇总通知，告知用户有多少个客户被分配给他
+      // 由于现有的通知模板是针对单个客户的，这里暂时记录日志
+      // 后续可以添加专门的批量分配通知模板
+      console.log(`批量分配通知：${targetUser.name} 被分配了 ${count} 个客户，原因：${assignmentReason || '未填写'}`);
+
+      // TODO: 实现批量分配的微信通知模板
+    } catch (error) {
+      console.error(`发送批量分配通知失败：${error.message}`, error);
       // 不抛出错误，避免影响主业务流程
     }
   }

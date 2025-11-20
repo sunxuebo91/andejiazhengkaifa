@@ -50,6 +50,20 @@ export const customerService = {
     return response.data;
   },
 
+  // 批量分配客户
+  async batchAssignCustomers(customerIds: string[], assignedTo: string, assignmentReason?: string): Promise<{
+    success: number;
+    failed: number;
+    errors: Array<{ customerId: string; error: string }>;
+  }> {
+    const response = await apiService.post('/api/customers/batch-assign', {
+      customerIds,
+      assignedTo,
+      assignmentReason,
+    });
+    return response.data;
+  },
+
   // 可分配的用户列表
   async getAssignableUsers(): Promise<Array<{ _id: string; name: string; username: string; role: string; department?: string }>> {
     const response = await apiService.get('/api/customers/assignable-users');

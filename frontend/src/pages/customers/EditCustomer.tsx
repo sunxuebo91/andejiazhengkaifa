@@ -431,13 +431,40 @@ const EditCustomer: React.FC = () => {
           {/* 备注信息区域 */}
           <Divider orientation="left">备注信息</Divider>
           <Row gutter={24} justify="center">
+            <Col span={12}>
+              <Form.Item
+                label="成交金额"
+                name="dealAmount"
+                rules={[
+                  {
+                    type: 'number',
+                    min: 0,
+                    max: 10000000,
+                    message: '成交金额必须在0-10000000之间',
+                  },
+                ]}
+              >
+                <InputNumber
+                  placeholder="请输入成交金额（可选）"
+                  style={{ width: '100%' }}
+                  min={0}
+                  precision={2}
+                  prefix="¥"
+                  formatter={(value: any) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(value: any) => {
+                    const parsed = parseFloat(value!.replace(/¥\s?|(,*)/g, ''));
+                    return isNaN(parsed) ? 0 : parsed;
+                  }}
+                />
+              </Form.Item>
+            </Col>
             <Col span={24}>
               <Form.Item
                 label="备注 (可选)"
                 name="remarks"
               >
-                <TextArea 
-                  placeholder="请输入备注信息..." 
+                <TextArea
+                  placeholder="请输入备注信息..."
                   rows={4}
                   showCount
                   maxLength={1000}

@@ -71,6 +71,29 @@ export interface EfficiencyMetrics {
   quickMatchingRate: number;           // 快速匹配率（7天内匹配的比例）
 }
 
+// 销售个人漏斗数据
+export interface SalesFunnelItem {
+  userId: string;                      // 销售人员ID
+  userName: string;                    // 销售人员姓名
+  mainLeadSource: string;              // 主要线索渠道
+  totalLeads: number;                  // 线索总量
+  oLevel: number;                      // O类数量
+  aLevel: number;                      // A类数量
+  bLevel: number;                      // B类数量
+  cLevel: number;                      // C类数量
+  dLevel: number;                      // D类数量
+  conversionRate: number;              // 成交率（O类/线索总量）%
+  totalDealAmount: number;             // 成交金额总额
+  averageDealAmount: number;           // 客单价（成交金额/O类量）
+}
+
+export interface SalesFunnelMetrics {
+  salesFunnelList: SalesFunnelItem[];  // 销售漏斗列表
+  totalLeads: number;                  // 总线索量
+  totalDealAmount: number;             // 总成交金额
+  averageConversionRate: number;       // 平均成交率
+}
+
 export interface DashboardStatsDto {
   customerBusiness: CustomerBusinessMetrics;
   leadQuality: LeadQualityMetrics;
@@ -78,5 +101,6 @@ export interface DashboardStatsDto {
   resumes: ResumeMetrics;
   financial: FinancialMetrics;
   efficiency: EfficiencyMetrics;
+  salesFunnel: SalesFunnelMetrics;     // 销售漏斗
   updateTime: Date;
-} 
+}

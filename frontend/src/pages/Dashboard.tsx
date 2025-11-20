@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Row, Col, Statistic, Spin, App, Progress, Typography, Alert, DatePicker, Select, Space, Button } from 'antd';
+import { Card, Row, Col, Statistic, Spin, App, Progress, Typography, Alert, DatePicker, Select, Space, Button, Table, Tag } from 'antd';
 import {
   UserOutlined,
   FileAddOutlined,
@@ -20,7 +20,9 @@ import {
   SwapOutlined,
   SmileOutlined,
   ThunderboltOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  FunnelPlotOutlined,
+  TrophyOutlined
 } from '@ant-design/icons';
 import dashboardService from '../services/dashboardService';
 import type { DashboardStats } from '../types/dashboard.types';
@@ -619,8 +621,8 @@ const Dashboard: React.FC = () => {
                 title="换人率"
                 value={stats?.efficiency.workerChangeRate || 0}
                 precision={2}
-                valueStyle={{ 
-                  color: (stats?.efficiency.workerChangeRate || 0) > 10 ? '#ff4d4f' : '#52c41a' 
+                valueStyle={{
+                  color: (stats?.efficiency.workerChangeRate || 0) > 10 ? '#ff4d4f' : '#52c41a'
                 }}
                 prefix={<SwapOutlined />}
                 suffix="%"
@@ -675,6 +677,136 @@ const Dashboard: React.FC = () => {
             </Card>
           </Col>
         </Row>
+      </Card>
+
+      {/* 第六行：销售个人漏斗 */}
+      <Card
+        title={<Title level={4}><FunnelPlotOutlined /> 销售个人漏斗</Title>}
+        style={{ marginBottom: 24 }}
+        extra={
+          <Space>
+            <Statistic
+              title="总线索量"
+              value={stats?.salesFunnel.totalLeads || 0}
+              valueStyle={{ fontSize: 16 }}
+            />
+            <Statistic
+              title="总成交金额"
+              value={stats?.salesFunnel.totalDealAmount || 0}
+              precision={2}
+              prefix="¥"
+              valueStyle={{ fontSize: 16, color: '#52c41a' }}
+            />
+            <Statistic
+              title="平均成交率"
+              value={stats?.salesFunnel.averageConversionRate || 0}
+              precision={2}
+              suffix="%"
+              valueStyle={{ fontSize: 16, color: '#1890ff' }}
+            />
+          </Space>
+        }
+      >
+        <Table
+          dataSource={stats?.salesFunnel.salesFunnelList || []}
+          rowKey="userId"
+          pagination={{ pageSize: 10 }}
+          scroll={{ x: 1200 }}
+          columns={[
+            {
+              title: '排名',
+              key: 'rank',
+              width: 60,
+              align: 'center',
+              render: (_, __, index) => {
+                if (index === 0) return <TrophyOutlined style={{ color: '#faad14', fontSize: 18 }} />;
+                if (index === 1) return <TrophyOutlined style={{ color: '#d9d9d9', fontSize: 18 }} />;
+                if (index === 2) return <TrophyOutlined style={{ color: '#cd7f32', fontSize: 18 }} />;
+                return index + 1;
+              }
+            },
+            {
+              title: '姓名',
+              dataIndex: 'userName',
+              key: 'userName',
+              width: 100,
+              fixed: 'left',
+              render: (text) => <Text strong>{text}</Text>
+            },
+            {
+              title: '主要渠道',
+              dataIndex: 'mainLeadSource',
+              key: 'mainLeadSource',
+              width: 120,
+              render: (text) => <Tag color="blue">{text}</Tag>
+            },
+            {
+              title: '线索量',
+              dataIndex: 'totalLeads',
+              key: 'totalLeads',
+              width: 80,
+              align: 'center',
+              sorter: (a, b) => a.totalLeads - b.totalLeads,
+              render: (value) => <Text strong>{value}</Text>
+            },
+            {
+              title: 'OABCD分布',
+              key: 'levelDistribution',
+              width: 250,
+              render: (_, record) => (
+                <Space size="small">
+                  <Tag color="purple">O: {record.oLevel}</Tag>
+                  <Tag color="green">A: {record.aLevel}</Tag>
+                  <Tag color="blue">B: {record.bLevel}</Tag>
+                  <Tag color="orange">C: {record.cLevel}</Tag>
+                  <Tag color="red">D: {record.dLevel}</Tag>
+                </Space>
+              )
+            },
+            {
+              title: '成交率',
+              dataIndex: 'conversionRate',
+              key: 'conversionRate',
+              width: 100,
+              align: 'center',
+              sorter: (a, b) => a.conversionRate - b.conversionRate,
+              render: (value) => (
+                <Text style={{
+                  color: value >= 20 ? '#52c41a' : value >= 10 ? '#faad14' : '#ff4d4f',
+                  fontWeight: 'bold'
+                }}>
+                  {value}%
+                </Text>
+              )
+            },
+            {
+              title: '成交金额',
+              dataIndex: 'totalDealAmount',
+              key: 'totalDealAmount',
+              width: 120,
+              align: 'right',
+              sorter: (a, b) => a.totalDealAmount - b.totalDealAmount,
+              render: (value) => (
+                <Text style={{ color: '#52c41a', fontWeight: 'bold' }}>
+                  ¥{value.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                </Text>
+              )
+            },
+            {
+              title: '客单价',
+              dataIndex: 'averageDealAmount',
+              key: 'averageDealAmount',
+              width: 120,
+              align: 'right',
+              sorter: (a, b) => a.averageDealAmount - b.averageDealAmount,
+              render: (value) => (
+                <Text>
+                  ¥{value.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                </Text>
+              )
+            }
+          ]}
+        />
       </Card>
 
       {/* 更新时间显示 */}

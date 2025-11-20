@@ -23,6 +23,7 @@ export interface Customer {
   educationRequirement?: string;
   expectedDeliveryDate?: string;
   remarks?: string;
+  dealAmount?: number;
   createdBy: string;
   createdByUser?: { name: string; username: string } | null;
   lastUpdatedBy?: string;

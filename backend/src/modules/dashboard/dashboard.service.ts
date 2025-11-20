@@ -14,7 +14,9 @@ import {
   EfficiencyMetrics,
   LeadSourceDistribution,
   LeadLevelDistribution,
-  LeadSourceLevelDetail
+  LeadSourceLevelDetail,
+  SalesFunnelMetrics,
+  SalesFunnelItem
 } from './dto/dashboard-stats.dto';
 import dayjs from 'dayjs';
 
@@ -36,13 +38,14 @@ export class DashboardService {
     
     try {
       // 并行计算各个模块的指标
-      const [customerBusiness, leadQuality, contracts, resumes, financial, efficiency] = await Promise.all([
+      const [customerBusiness, leadQuality, contracts, resumes, financial, efficiency, salesFunnel] = await Promise.all([
         this.getCustomerBusinessMetrics(startDate, endDate),
         this.getLeadQualityMetrics(startDate, endDate),
         this.getContractMetrics(startDate, endDate),
         this.getResumeMetrics(startDate, endDate),
         this.getFinancialMetrics(startDate, endDate),
         this.getEfficiencyMetrics(startDate, endDate),
+        this.getSalesFunnelMetrics(startDate, endDate),
       ]);
 
       const result: DashboardStatsDto = {
@@ -52,6 +55,7 @@ export class DashboardService {
         resumes,
         financial,
         efficiency,
+        salesFunnel,
         updateTime: new Date(),
       };
 
@@ -525,4 +529,145 @@ export class DashboardService {
 
     return { rangeStart, rangeEnd };
   }
-} 
+
+  /**
+   * 获取销售个人漏斗数据
+   */
+  async getSalesFunnelMetrics(startDate?: string, endDate?: string): Promise<SalesFunnelMetrics> {
+    this.logger.log('开始计算销售漏斗数据...');
+
+    try {
+      // 聚合查询：按销售人员统计
+      const salesAggregation = await this.customerModel.aggregate([
+        {
+          $match: {
+            assignedTo: { $exists: true, $ne: null }
+          }
+        },
+        {
+          $group: {
+            _id: '$assignedTo',
+            totalLeads: { $sum: 1 },
+            oLevel: {
+              $sum: { $cond: [{ $eq: ['$leadLevel', 'O类'] }, 1, 0] }
+            },
+            aLevel: {
+              $sum: { $cond: [{ $eq: ['$leadLevel', 'A类'] }, 1, 0] }
+            },
+            bLevel: {
+              $sum: { $cond: [{ $eq: ['$leadLevel', 'B类'] }, 1, 0] }
+            },
+            cLevel: {
+              $sum: { $cond: [{ $eq: ['$leadLevel', 'C类'] }, 1, 0] }
+            },
+            dLevel: {
+              $sum: { $cond: [{ $eq: ['$leadLevel', 'D类'] }, 1, 0] }
+            },
+            totalDealAmount: {
+              $sum: { $ifNull: ['$dealAmount', 0] }
+            },
+            leadSources: { $push: '$leadSource' }
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'userInfo'
+          }
+        },
+        {
+          $unwind: {
+            path: '$userInfo',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $project: {
+            userId: '$_id',
+            userName: { $ifNull: ['$userInfo.name', '未知'] },
+            totalLeads: 1,
+            oLevel: 1,
+            aLevel: 1,
+            bLevel: 1,
+            cLevel: 1,
+            dLevel: 1,
+            totalDealAmount: 1,
+            leadSources: 1
+          }
+        },
+        {
+          $sort: { totalLeads: -1 }
+        }
+      ]).exec();
+
+      // 处理数据
+      const salesFunnelList: SalesFunnelItem[] = salesAggregation.map(item => {
+        // 计算主要线索渠道（出现次数最多的）
+        const sourceCount: { [key: string]: number } = {};
+        item.leadSources.forEach((source: string) => {
+          sourceCount[source] = (sourceCount[source] || 0) + 1;
+        });
+        const mainLeadSource = Object.keys(sourceCount).reduce((a, b) =>
+          sourceCount[a] > sourceCount[b] ? a : b, '其他'
+        );
+
+        // 计算成交率
+        const conversionRate = item.totalLeads > 0
+          ? parseFloat(((item.oLevel / item.totalLeads) * 100).toFixed(2))
+          : 0;
+
+        // 计算客单价
+        const averageDealAmount = item.oLevel > 0
+          ? parseFloat((item.totalDealAmount / item.oLevel).toFixed(2))
+          : 0;
+
+        return {
+          userId: item.userId.toString(),
+          userName: item.userName,
+          mainLeadSource,
+          totalLeads: item.totalLeads,
+          oLevel: item.oLevel,
+          aLevel: item.aLevel,
+          bLevel: item.bLevel,
+          cLevel: item.cLevel,
+          dLevel: item.dLevel,
+          conversionRate,
+          totalDealAmount: item.totalDealAmount,
+          averageDealAmount
+        };
+      });
+
+      // 计算总计
+      const totalLeads = salesFunnelList.reduce((sum, item) => sum + item.totalLeads, 0);
+      const totalDealAmount = salesFunnelList.reduce((sum, item) => sum + item.totalDealAmount, 0);
+      const totalOLevel = salesFunnelList.reduce((sum, item) => sum + item.oLevel, 0);
+      const averageConversionRate = totalLeads > 0
+        ? parseFloat(((totalOLevel / totalLeads) * 100).toFixed(2))
+        : 0;
+
+      this.logger.log('销售漏斗数据计算完成', {
+        salesCount: salesFunnelList.length,
+        totalLeads,
+        totalDealAmount,
+        averageConversionRate
+      });
+
+      return {
+        salesFunnelList,
+        totalLeads,
+        totalDealAmount,
+        averageConversionRate
+      };
+    } catch (error) {
+      this.logger.error('计算销售漏斗数据失败', error);
+      return {
+        salesFunnelList: [],
+        totalLeads: 0,
+        totalDealAmount: 0,
+        averageConversionRate: 0
+      };
+    }
+  }
+}

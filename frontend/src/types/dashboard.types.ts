@@ -71,6 +71,28 @@ export interface EfficiencyMetrics {
   quickMatchingRate: number;           // 快速匹配率（7天内匹配的比例）
 }
 
+export interface SalesFunnelItem {
+  userId: string;
+  userName: string;
+  mainLeadSource: string;
+  totalLeads: number;
+  oLevel: number;
+  aLevel: number;
+  bLevel: number;
+  cLevel: number;
+  dLevel: number;
+  conversionRate: number;
+  totalDealAmount: number;
+  averageDealAmount: number;
+}
+
+export interface SalesFunnelMetrics {
+  salesFunnelList: SalesFunnelItem[];
+  totalLeads: number;
+  totalDealAmount: number;
+  averageConversionRate: number;
+}
+
 export interface DashboardStats {
   customerBusiness: CustomerBusinessMetrics;
   leadQuality: LeadQualityMetrics;
@@ -78,5 +100,6 @@ export interface DashboardStats {
   resumes: ResumeMetrics;
   financial: FinancialMetrics;
   efficiency: EfficiencyMetrics;
+  salesFunnel: SalesFunnelMetrics;
   updateTime: Date;
-} 
+}

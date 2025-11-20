@@ -112,6 +112,13 @@ export class CreateCustomerDto {
   @IsString()
   remarks?: string;
 
+  @IsOptional()
+  @IsNumber({}, { message: '成交金额必须是数字' })
+  @Min(0, { message: '成交金额不能为负数' })
+  @Max(10000000, { message: '成交金额不能超过1000万元' })
+  @Transform(({ value }) => value ? parseFloat(value) : undefined)
+  dealAmount?: number;
+
   // 客户分配相关字段（管理员可选）
   @IsOptional()
   @IsString()

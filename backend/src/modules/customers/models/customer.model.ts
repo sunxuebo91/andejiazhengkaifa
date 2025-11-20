@@ -79,6 +79,9 @@ export class Customer {
   @Prop()
   remarks: string;
 
+  @Prop()
+  dealAmount: number; // 成交金额
+
   @Prop({ required: true })
   createdBy: string;
 

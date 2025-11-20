@@ -482,7 +482,7 @@ const CustomerList: React.FC = () => {
           <div style={{ marginBottom: 16, padding: '12px 16px', background: '#e6f7ff', borderRadius: 4 }}>
             <Space>
               <span>已选择 {selectedRowKeys.length} 个客户</span>
-              <Authorized roles={['admin', 'manager']}>
+              <Authorized role={['admin', 'manager']}>
                 <Button type="primary" onClick={() => setBatchAssignModalVisible(true)}>
                   批量分配
                 </Button>

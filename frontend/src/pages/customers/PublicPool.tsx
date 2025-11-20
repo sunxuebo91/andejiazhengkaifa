@@ -59,7 +59,13 @@ const PublicPool: React.FC = () => {
       setCustomers(response.customers);
       setTotal(response.total);
     } catch (error: any) {
-      message.error(error.message || '加载公海客户失败');
+      console.error('加载公海客户失败:', error);
+      if (error.message?.includes('Unauthorized') || error.response?.status === 401) {
+        message.error('登录已过期，请重新登录');
+        setTimeout(() => navigate('/login'), 1500);
+      } else {
+        message.error(error.message || '加载公海客户失败');
+      }
     } finally {
       setLoading(false);
     }
@@ -71,6 +77,10 @@ const PublicPool: React.FC = () => {
       setMyCustomerCount(data);
     } catch (error: any) {
       console.error('获取客户数量失败:', error);
+      // 如果是认证错误，不显示错误消息，因为loadCustomers会处理
+      if (!error.message?.includes('Unauthorized') && error.response?.status !== 401) {
+        message.warning('无法获取客户数量统计');
+      }
     }
   };
 

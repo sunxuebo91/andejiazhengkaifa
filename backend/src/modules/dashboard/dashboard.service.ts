@@ -580,13 +580,18 @@ export class DashboardService {
         {
           $unwind: {
             path: '$userInfo',
-            preserveNullAndEmptyArrays: true
+            preserveNullAndEmptyArrays: false
+          }
+        },
+        {
+          $match: {
+            'userInfo.name': { $exists: true, $nin: [null, '', '未知'] }
           }
         },
         {
           $project: {
             userId: '$_id',
-            userName: { $ifNull: ['$userInfo.name', '未知'] },
+            userName: '$userInfo.name',
             totalLeads: 1,
             oLevel: 1,
             aLevel: 1,

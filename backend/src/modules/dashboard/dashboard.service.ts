@@ -133,11 +133,11 @@ export class DashboardService {
       leadSourceDistribution[item._id] = item.count;
     });
 
-    // 计算ABCD分类总量统计
+    // 计算OABCD分类总量统计
     const leadLevelAggregation = await this.customerModel.aggregate([
       {
         $match: {
-          leadLevel: { $in: ['A类', 'B类', 'C类', 'D类'] }
+          leadLevel: { $in: ['O类', 'A类', 'B类', 'C类', 'D类'] }
         }
       },
       {
@@ -149,6 +149,7 @@ export class DashboardService {
     ]).exec();
 
     const leadLevelDistribution: LeadLevelDistribution = {
+      oLevel: 0,
       aLevel: 0,
       bLevel: 0,
       cLevel: 0,
@@ -161,6 +162,9 @@ export class DashboardService {
       leadLevelDistribution.total += count;
 
       switch (item._id) {
+        case 'O类':
+          leadLevelDistribution.oLevel = count;
+          break;
         case 'A类':
           leadLevelDistribution.aLevel = count;
           break;
@@ -176,11 +180,11 @@ export class DashboardService {
       }
     });
 
-    // 计算每个线索渠道的ABCD分类
+    // 计算每个线索渠道的OABCD分类
     const leadSourceLevelAggregation = await this.customerModel.aggregate([
       {
         $match: {
-          leadLevel: { $in: ['A类', 'B类', 'C类', 'D类'] }
+          leadLevel: { $in: ['O类', 'A类', 'B类', 'C类', 'D类'] }
         }
       },
       {
@@ -203,6 +207,7 @@ export class DashboardService {
 
       if (!leadSourceLevelDetail[source]) {
         leadSourceLevelDetail[source] = {
+          oLevel: 0,
           aLevel: 0,
           bLevel: 0,
           cLevel: 0,
@@ -214,6 +219,9 @@ export class DashboardService {
       leadSourceLevelDetail[source].total += count;
 
       switch (level) {
+        case 'O类':
+          leadSourceLevelDetail[source].oLevel = count;
+          break;
         case 'A类':
           leadSourceLevelDetail[source].aLevel = count;
           break;

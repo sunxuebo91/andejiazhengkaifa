@@ -344,6 +344,7 @@ const CustomerList: React.FC = () => {
   // 线索等级颜色
   const getLeadLevelColor = (level: string) => {
     const colors: Record<string, string> = {
+      'O类': 'purple',
       'A类': 'red',
       'B类': 'orange',
       'C类': 'blue',

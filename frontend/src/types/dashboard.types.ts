@@ -11,6 +11,7 @@ export interface LeadSourceDistribution {
 }
 
 export interface LeadLevelDistribution {
+  oLevel: number;                  // O类线索数量
   aLevel: number;                  // A类线索数量
   bLevel: number;                  // B类线索数量
   cLevel: number;                  // C类线索数量
@@ -20,6 +21,7 @@ export interface LeadLevelDistribution {
 
 export interface LeadSourceLevelDetail {
   [leadSource: string]: {          // 线索来源
+    oLevel: number;                // O类数量
     aLevel: number;                // A类数量
     bLevel: number;                // B类数量
     cLevel: number;                // C类数量

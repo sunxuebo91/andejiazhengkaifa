@@ -144,17 +144,25 @@ const Dashboard: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [timeRange]);
 
-  // 渲染ABCD分类总量统计
+  // 渲染OABCD分类总量统计
   const renderLeadLevelDistribution = () => {
     if (!stats?.leadQuality.leadLevelDistribution) return null;
 
-    const { aLevel, bLevel, cLevel, dLevel, total } = stats.leadQuality.leadLevelDistribution;
+    const { oLevel, aLevel, bLevel, cLevel, dLevel, total } = stats.leadQuality.leadLevelDistribution;
 
     return (
       <div style={{ marginTop: 16 }}>
-        <Text strong style={{ marginBottom: 8, display: 'block' }}>ABCD分类总量</Text>
+        <Text strong style={{ marginBottom: 8, display: 'block' }}>OABCD分类总量</Text>
         <Row gutter={[8, 8]}>
-          <Col span={6}>
+          <Col span={4}>
+            <Statistic
+              title="O类"
+              value={oLevel}
+              valueStyle={{ color: '#722ed1', fontSize: 18 }}
+              suffix="个"
+            />
+          </Col>
+          <Col span={5}>
             <Statistic
               title="A类"
               value={aLevel}
@@ -162,7 +170,7 @@ const Dashboard: React.FC = () => {
               suffix="个"
             />
           </Col>
-          <Col span={6}>
+          <Col span={5}>
             <Statistic
               title="B类"
               value={bLevel}
@@ -170,7 +178,7 @@ const Dashboard: React.FC = () => {
               suffix="个"
             />
           </Col>
-          <Col span={6}>
+          <Col span={5}>
             <Statistic
               title="C类"
               value={cLevel}
@@ -178,7 +186,7 @@ const Dashboard: React.FC = () => {
               suffix="个"
             />
           </Col>
-          <Col span={6}>
+          <Col span={5}>
             <Statistic
               title="D类"
               value={dLevel}
@@ -228,7 +236,7 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  // 渲染每个线索渠道的ABCD分类
+  // 渲染每个线索渠道的OABCD分类
   const renderLeadSourceLevelDetail = () => {
     if (!stats?.leadQuality.leadSourceLevelDetail) return null;
 
@@ -237,8 +245,9 @@ const Dashboard: React.FC = () => {
 
     return (
       <div style={{ marginTop: 16 }}>
-        <Text strong style={{ marginBottom: 8, display: 'block' }}>每个线索渠道的ABCD分类</Text>
+        <Text strong style={{ marginBottom: 8, display: 'block' }}>每个线索渠道的OABCD分类</Text>
         {sources.map(([source, detail]) => {
+          const oPercent = detail.total > 0 ? ((detail.oLevel / detail.total) * 100).toFixed(1) : '0';
           const aPercent = detail.total > 0 ? ((detail.aLevel / detail.total) * 100).toFixed(1) : '0';
           const bPercent = detail.total > 0 ? ((detail.bLevel / detail.total) * 100).toFixed(1) : '0';
           const cPercent = detail.total > 0 ? ((detail.cLevel / detail.total) * 100).toFixed(1) : '0';
@@ -251,25 +260,31 @@ const Dashboard: React.FC = () => {
                 <Text type="secondary" style={{ marginLeft: 8 }}>（总计: {detail.total}）</Text>
               </div>
               <Row gutter={8}>
-                <Col span={6}>
+                <Col span={4}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Text style={{ color: '#722ed1', fontSize: 16, fontWeight: 'bold' }}>{detail.oLevel}</Text>
+                    <div><Text type="secondary" style={{ fontSize: 12 }}>O类 ({oPercent}%)</Text></div>
+                  </div>
+                </Col>
+                <Col span={5}>
                   <div style={{ textAlign: 'center' }}>
                     <Text style={{ color: '#52c41a', fontSize: 16, fontWeight: 'bold' }}>{detail.aLevel}</Text>
                     <div><Text type="secondary" style={{ fontSize: 12 }}>A类 ({aPercent}%)</Text></div>
                   </div>
                 </Col>
-                <Col span={6}>
+                <Col span={5}>
                   <div style={{ textAlign: 'center' }}>
                     <Text style={{ color: '#1890ff', fontSize: 16, fontWeight: 'bold' }}>{detail.bLevel}</Text>
                     <div><Text type="secondary" style={{ fontSize: 12 }}>B类 ({bPercent}%)</Text></div>
                   </div>
                 </Col>
-                <Col span={6}>
+                <Col span={5}>
                   <div style={{ textAlign: 'center' }}>
                     <Text style={{ color: '#faad14', fontSize: 16, fontWeight: 'bold' }}>{detail.cLevel}</Text>
                     <div><Text type="secondary" style={{ fontSize: 12 }}>C类 ({cPercent}%)</Text></div>
                   </div>
                 </Col>
-                <Col span={6}>
+                <Col span={5}>
                   <div style={{ textAlign: 'center' }}>
                     <Text style={{ color: '#ff4d4f', fontSize: 16, fontWeight: 'bold' }}>{detail.dLevel}</Text>
                     <div><Text type="secondary" style={{ fontSize: 12 }}>D类 ({dPercent}%)</Text></div>

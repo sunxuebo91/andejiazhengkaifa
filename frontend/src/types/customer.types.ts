@@ -111,7 +111,7 @@ export const SERVICE_CATEGORIES = [
 
 export const CONTRACT_STATUSES = ['已签约', '匹配中', '流失客户', '已退款', '退款中', '待定'] as const;
 
-export const LEAD_LEVELS = ['A类', 'B类', 'C类', 'D类', '流失'] as const;
+export const LEAD_LEVELS = ['O类', 'A类', 'B类', 'C类', 'D类', '流失'] as const;
 
 export const REST_SCHEDULES = ['单休', '双休', '无休', '调休', '待定'] as const;
 

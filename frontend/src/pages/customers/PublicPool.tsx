@@ -215,6 +215,7 @@ const PublicPool: React.FC = () => {
           'B类': 'orange',
           'C类': 'blue',
           'D类': 'default',
+          '流失': 'default',
         };
         return <Tag color={colorMap[level] || 'default'}>{level}</Tag>;
       },

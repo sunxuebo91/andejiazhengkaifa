@@ -35,7 +35,7 @@ export class Customer {
   contractStatus: string;
 
   @Prop({
-    enum: ['A类', 'B类', 'C类', 'D类']
+    enum: ['A类', 'B类', 'C类', 'D类', '流失']
   })
   leadLevel: string;
 

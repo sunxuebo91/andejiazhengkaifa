@@ -1095,6 +1095,7 @@ export class CustomersService {
         publicPoolEntryTime: now,
         publicPoolEntryReason: releaseReason,
         assignedTo: null,
+        leadLevel: '流失', // 进入公海时自动设置为"流失"
       },
       { new: true }
     ).exec();
@@ -1173,6 +1174,7 @@ export class CustomersService {
             publicPoolEntryTime: now,
             publicPoolEntryReason: releaseReason,
             assignedTo: null,
+            leadLevel: '流失', // 进入公海时自动设置为"流失"
           },
           { new: true }
         ).exec();

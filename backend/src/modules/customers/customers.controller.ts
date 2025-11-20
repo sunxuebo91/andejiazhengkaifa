@@ -233,6 +233,18 @@ export class CustomersController {
     }
   }
 
+  // 获取用户当前持有的客户数量 - 必须在 :id 路由之前
+  @Get('my-customer-count')
+  @ApiOperation({ summary: '获取当前用户持有的客户数量' })
+  async getMyCustomerCount(@Request() req): Promise<ApiResponse> {
+    try {
+      const count = await this.customersService.getUserCustomerCount(req.user.userId);
+      return this.createResponse(true, '客户数量获取成功', { count, limit: 50 });
+    } catch (error) {
+      return this.createResponse(false, '客户数量获取失败', null, error.message);
+    }
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<ApiResponse> {
     try {
@@ -915,18 +927,6 @@ export class CustomersController {
       return this.createResponse(true, '公海历史记录获取成功', logs);
     } catch (error) {
       return this.createResponse(false, '公海历史记录获取失败', null, error.message);
-    }
-  }
-
-  // 获取用户当前持有的客户数量
-  @Get('my-customer-count')
-  @ApiOperation({ summary: '获取当前用户持有的客户数量' })
-  async getMyCustomerCount(@Request() req): Promise<ApiResponse> {
-    try {
-      const count = await this.customersService.getUserCustomerCount(req.user.userId);
-      return this.createResponse(true, '客户数量获取成功', { count, limit: 50 });
-    } catch (error) {
-      return this.createResponse(false, '客户数量获取失败', null, error.message);
     }
   }
 

@@ -708,21 +708,25 @@ const Dashboard: React.FC = () => {
         }
       >
         <Table
-          dataSource={stats?.salesFunnel.salesFunnelList || []}
+          dataSource={(stats?.salesFunnel.salesFunnelList || []).map((item, index) => ({
+            ...item,
+            originalRank: index + 1
+          }))}
           rowKey="userId"
           pagination={{ pageSize: 10 }}
           scroll={{ x: 1200 }}
           columns={[
             {
               title: '排名',
+              dataIndex: 'originalRank',
               key: 'rank',
               width: 60,
               align: 'center',
-              render: (_, __, index) => {
-                if (index === 0) return <TrophyOutlined style={{ color: '#faad14', fontSize: 18 }} />;
-                if (index === 1) return <TrophyOutlined style={{ color: '#d9d9d9', fontSize: 18 }} />;
-                if (index === 2) return <TrophyOutlined style={{ color: '#cd7f32', fontSize: 18 }} />;
-                return index + 1;
+              render: (rank: number) => {
+                if (rank === 1) return <TrophyOutlined style={{ color: '#faad14', fontSize: 18 }} />;
+                if (rank === 2) return <TrophyOutlined style={{ color: '#d9d9d9', fontSize: 18 }} />;
+                if (rank === 3) return <TrophyOutlined style={{ color: '#cd7f32', fontSize: 18 }} />;
+                return rank;
               }
             },
             {

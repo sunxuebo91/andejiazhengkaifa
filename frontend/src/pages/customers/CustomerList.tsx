@@ -71,6 +71,7 @@ const CustomerList: React.FC = () => {
     serviceCategory: string | undefined;
     contractStatus: string | undefined;
     leadLevel: string | undefined;
+    assignedTo: string | undefined;
     startDate: string;
     endDate: string;
   }>({
@@ -79,9 +80,13 @@ const CustomerList: React.FC = () => {
     serviceCategory: undefined,
     contractStatus: undefined,
     leadLevel: undefined,
+    assignedTo: undefined,
     startDate: '',
     endDate: ''
   });
+
+  // 用户列表（用于线索归属人筛选）
+  const [users, setUsers] = useState<Array<{ _id: string; name: string; username: string; role: string; department?: string }>>([]);
 
   // 获取客户列表
   const loadCustomers = async (page = 1, size = 10) => {
@@ -110,7 +115,18 @@ const CustomerList: React.FC = () => {
   // 页面加载时获取数据
   useEffect(() => {
     loadCustomers();
+    loadUsers();
   }, []);
+
+  // 获取用户列表
+  const loadUsers = async () => {
+    try {
+      const userList = await customerService.getAssignableUsers();
+      setUsers(userList);
+    } catch (error: any) {
+      console.error('获取用户列表失败:', error);
+    }
+  };
 
   // 处理搜索
   const handleSearch = () => {
@@ -126,6 +142,7 @@ const CustomerList: React.FC = () => {
       serviceCategory: undefined,
       contractStatus: undefined,
       leadLevel: undefined,
+      assignedTo: undefined,
       startDate: '',
       endDate: ''
     });
@@ -397,7 +414,7 @@ const CustomerList: React.FC = () => {
             </Col>
             <Col span={3}>
               <Select
-                placeholder="请选择线索来源"
+                placeholder="线索来源"
                 allowClear
                 style={{ width: '100%' }}
                 value={searchFilters.leadSource}
@@ -410,7 +427,7 @@ const CustomerList: React.FC = () => {
             </Col>
             <Col span={3}>
               <Select
-                placeholder="请选择服务类别"
+                placeholder="服务类别"
                 allowClear
                 style={{ width: '100%' }}
                 value={searchFilters.serviceCategory}
@@ -423,7 +440,7 @@ const CustomerList: React.FC = () => {
             </Col>
             <Col span={3}>
               <Select
-                placeholder="请选择客户状态"
+                placeholder="客户状态"
                 allowClear
                 style={{ width: '100%' }}
                 value={searchFilters.contractStatus}
@@ -436,7 +453,7 @@ const CustomerList: React.FC = () => {
             </Col>
             <Col span={3}>
               <Select
-                placeholder="请选择线索等级"
+                placeholder="线索等级"
                 allowClear
                 style={{ width: '100%' }}
                 value={searchFilters.leadLevel}
@@ -444,6 +461,26 @@ const CustomerList: React.FC = () => {
               >
                 {LEAD_LEVELS.map(level => (
                   <Option key={level} value={level}>{level}</Option>
+                ))}
+              </Select>
+            </Col>
+            <Col span={3}>
+              <Select
+                placeholder="线索归属人"
+                allowClear
+                style={{ width: '100%' }}
+                value={searchFilters.assignedTo}
+                onChange={(value) => setSearchFilters({ ...searchFilters, assignedTo: value })}
+                showSearch
+                optionFilterProp="children"
+                filterOption={(input, option) =>
+                  (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
+                }
+              >
+                {users.map(user => (
+                  <Option key={user._id} value={user._id}>
+                    {user.name} ({user.username})
+                  </Option>
                 ))}
               </Select>
             </Col>
@@ -457,7 +494,9 @@ const CustomerList: React.FC = () => {
                 </Button>
               </Space>
             </Col>
-            <Col span={3}>
+          </Row>
+          <Row gutter={[12, 8]} align="middle" style={{ marginTop: '8px' }}>
+            <Col span={24}>
               <Space>
                 <Button
                   type="primary"

@@ -472,10 +472,13 @@ const CustomerList: React.FC = () => {
                 value={searchFilters.assignedTo}
                 onChange={(value) => setSearchFilters({ ...searchFilters, assignedTo: value })}
                 showSearch
-                optionFilterProp="children"
-                filterOption={(input, option) =>
-                  (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
-                }
+                filterOption={(input, option) => {
+                  const label = option?.label || option?.children;
+                  if (typeof label === 'string') {
+                    return label.toLowerCase().includes(input.toLowerCase());
+                  }
+                  return false;
+                }}
               >
                 {users.map(user => (
                   <Option key={user._id} value={user._id}>

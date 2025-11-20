@@ -431,7 +431,7 @@ const EditCustomer: React.FC = () => {
           {/* 备注信息区域 */}
           <Divider orientation="left">备注信息</Divider>
           <Row gutter={24} justify="center">
-            <Col span={12}>
+            <Col span={24}>
               <Form.Item
                 label="成交金额"
                 name="dealAmount"

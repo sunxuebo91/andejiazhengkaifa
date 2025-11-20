@@ -466,19 +466,21 @@ const CustomerDetail: React.FC = () => {
           </Col>
 
           {/* 成交金额 */}
-          {customer.dealAmount !== undefined && customer.dealAmount !== null && (
-            <Col span={24}>
-              <Card type="inner" title="成交信息" style={{ marginBottom: '16px' }}>
-                <Descriptions column={2} bordered>
-                  <Descriptions.Item label="成交金额">
+          <Col span={24}>
+            <Card type="inner" title="成交信息" style={{ marginBottom: '16px' }}>
+              <Descriptions column={2} bordered>
+                <Descriptions.Item label="成交金额">
+                  {customer.dealAmount !== undefined && customer.dealAmount !== null ? (
                     <span style={{ color: '#52c41a', fontSize: '16px', fontWeight: 'bold' }}>
                       ¥{customer.dealAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                  </Descriptions.Item>
-                </Descriptions>
-              </Card>
-            </Col>
-          )}
+                  ) : (
+                    <span style={{ color: '#999' }}>未填写</span>
+                  )}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </Col>
 
           {/* 备注信息 */}
           {customer.remarks && (

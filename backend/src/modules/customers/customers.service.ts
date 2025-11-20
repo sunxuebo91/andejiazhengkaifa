@@ -38,10 +38,12 @@ export class CustomersService {
 
   // 创建客户（支持创建时指定负责人，未指定则默认分配给创建人）
   async create(createCustomerDto: CreateCustomerDto, userId: string): Promise<Customer> {
-    // 检查手机号是否已存在
-    const existingCustomer = await this.customerModel.findOne({ phone: createCustomerDto.phone });
-    if (existingCustomer) {
-      throw new ConflictException('该手机号已存在客户记录');
+    // 检查手机号是否已存在（只有当手机号不为空时才检查）
+    if (createCustomerDto.phone && createCustomerDto.phone.trim()) {
+      const existingCustomer = await this.customerModel.findOne({ phone: createCustomerDto.phone });
+      if (existingCustomer) {
+        throw new ConflictException('该手机号已存在客户记录');
+      }
     }
 
     const customerId = this.generateCustomerId();
@@ -250,8 +252,8 @@ export class CustomersService {
 
   // 更新客户信息
   async update(id: string, updateCustomerDto: UpdateCustomerDto, userId?: string): Promise<Customer> {
-    // 如果更新手机号，检查是否与其他客户冲突
-    if (updateCustomerDto.phone) {
+    // 如果更新手机号，检查是否与其他客户冲突（只有当手机号不为空时才检查）
+    if (updateCustomerDto.phone && updateCustomerDto.phone.trim()) {
       const existingCustomer = await this.customerModel.findOne({
         phone: updateCustomerDto.phone,
         _id: { $ne: id }

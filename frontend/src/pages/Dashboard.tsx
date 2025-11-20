@@ -453,78 +453,84 @@ const Dashboard: React.FC = () => {
         </Row>
       </Card>
 
-      {/* 第三行：线索质量 & 合同指标 */}
-      <Row gutter={24} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-          <Card title={<Title level={4}>📊 线索质量分析</Title>}>
-            <Statistic
-              title="A类线索占比"
-              value={stats?.leadQuality.aLevelLeadsRatio || 0}
-              precision={2}
-              valueStyle={{ color: '#52c41a' }}
-              prefix={<RiseOutlined />}
-              suffix="%"
-            />
-            {renderLeadLevelDistribution()}
-            {renderLeadSourceDistribution()}
-            {renderLeadSourceLevelDetail()}
-          </Card>
-        </Col>
-        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-          <Card title={<Title level={4}>📋 合同签约指标</Title>}>
-            <Row gutter={[16, 16]}>
-              <Col span={8}>
-                <Statistic
-                  title="合同总量"
-                  value={stats?.contracts.totalContracts || 0}
-                  valueStyle={{ color: '#1890ff' }}
-                  prefix={<ContainerOutlined />}
-                  suffix="份"
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title="本月新签"
-                  value={stats?.contracts.newThisMonthContracts || 0}
-                  valueStyle={{ color: '#52c41a' }}
-                  prefix={<FileAddOutlined />}
-                  suffix="份"
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title="签约中合同"
-                  value={stats?.contracts.signingContracts || 0}
-                  valueStyle={{ color: '#faad14' }}
-                  prefix={<ShoppingCartOutlined />}
-                  suffix="份"
-                />
-              </Col>
-              <Col span={12}>
-                <Statistic
-                  title="换人合同数"
-                  value={stats?.contracts.changeWorkerContracts || 0}
-                  valueStyle={{ color: '#ff7a45' }}
-                  prefix={<RiseOutlined />}
-                  suffix="份"
-                />
-              </Col>
-              <Col span={12}>
-                <Statistic
-                  title="签约转化率"
-                  value={stats?.contracts.signConversionRate || 0}
-                  precision={2}
-                  valueStyle={{ color: '#13c2c2' }}
-                  prefix={<DollarOutlined />}
-                  suffix="%"
-                />
-              </Col>
-            </Row>
-          </Card>
-        </Col>
-      </Row>
+      {/* 第三行：线索质量分析 */}
+      <Card title={<Title level={4}>📊 线索质量分析</Title>} style={{ marginBottom: 24 }}>
+        <Statistic
+          title="A类线索占比"
+          value={stats?.leadQuality.aLevelLeadsRatio || 0}
+          precision={2}
+          valueStyle={{ color: '#52c41a' }}
+          prefix={<RiseOutlined />}
+          suffix="%"
+        />
+        {renderLeadLevelDistribution()}
+        {renderLeadSourceDistribution()}
+        {renderLeadSourceLevelDetail()}
+      </Card>
 
-      {/* 第四行：财务营收指标 */}
+      {/* 第四行：合同签约指标 */}
+      <Card title={<Title level={4}>📋 合同签约指标</Title>} style={{ marginBottom: 24 }}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+            <Card variant="outlined">
+              <Statistic
+                title="合同总量"
+                value={stats?.contracts.totalContracts || 0}
+                valueStyle={{ color: '#1890ff' }}
+                prefix={<ContainerOutlined />}
+                suffix="份"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+            <Card variant="outlined">
+              <Statistic
+                title="本月新签"
+                value={stats?.contracts.newThisMonthContracts || 0}
+                valueStyle={{ color: '#52c41a' }}
+                prefix={<FileAddOutlined />}
+                suffix="份"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+            <Card variant="outlined">
+              <Statistic
+                title="签约中合同"
+                value={stats?.contracts.signingContracts || 0}
+                valueStyle={{ color: '#faad14' }}
+                prefix={<ShoppingCartOutlined />}
+                suffix="份"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+            <Card variant="outlined">
+              <Statistic
+                title="换人合同数"
+                value={stats?.contracts.changeWorkerContracts || 0}
+                valueStyle={{ color: '#ff7a45' }}
+                prefix={<RiseOutlined />}
+                suffix="份"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+            <Card variant="outlined">
+              <Statistic
+                title="签约转化率"
+                value={stats?.contracts.signConversionRate || 0}
+                precision={2}
+                valueStyle={{ color: '#13c2c2' }}
+                prefix={<DollarOutlined />}
+                suffix="%"
+              />
+            </Card>
+          </Col>
+        </Row>
+      </Card>
+
+      {/* 第五行：财务营收指标 */}
       <Card title={<Title level={4}>💰 财务营收指标</Title>} style={{ marginBottom: 24 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} md={6} lg={6} xl={6}>
@@ -600,7 +606,7 @@ const Dashboard: React.FC = () => {
         </Row>
       </Card>
 
-      {/* 第五行：运营效率指标 */}
+      {/* 第六行：运营效率指标 */}
       <Card title={<Title level={4}>⚡ 运营效率指标</Title>} style={{ marginBottom: 24 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} md={6} lg={6} xl={6}>
@@ -679,7 +685,7 @@ const Dashboard: React.FC = () => {
         </Row>
       </Card>
 
-      {/* 第六行：销售个人漏斗 */}
+      {/* 第七行：销售个人漏斗 */}
       <Card
         title={<Title level={4}><FunnelPlotOutlined /> 销售个人漏斗</Title>}
         style={{ marginBottom: 24 }}

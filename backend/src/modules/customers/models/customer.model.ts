@@ -98,6 +98,25 @@ export class Customer {
   @Prop()
   assignmentReason: string; // 分配原因/备注
 
+  // 公海相关字段
+  @Prop({ default: false })
+  inPublicPool: boolean; // 是否在公海中
+
+  @Prop()
+  publicPoolEntryTime: Date; // 进入公海的时间
+
+  @Prop()
+  publicPoolEntryReason: string; // 进入公海的原因
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  lastFollowUpBy: Types.ObjectId; // 最后跟进人
+
+  @Prop()
+  lastFollowUpTime: Date; // 最后跟进时间
+
+  @Prop({ default: 0 })
+  claimCount: number; // 被领取次数（用于统计）
+
   @Prop({ default: Date.now })
   createdAt: Date;
 
@@ -114,3 +133,6 @@ export const CustomerSchema = SchemaFactory.createForClass(Customer);
 // 索引：按负责人和更新时间常用查询
 CustomerSchema.index({ assignedTo: 1, updatedAt: -1 });
 CustomerSchema.index({ assignedBy: 1, assignedAt: -1 });
+// 公海相关索引
+CustomerSchema.index({ inPublicPool: 1, publicPoolEntryTime: -1 });
+CustomerSchema.index({ lastFollowUpTime: 1 });

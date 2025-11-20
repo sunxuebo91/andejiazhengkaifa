@@ -6,6 +6,7 @@ import { Customer, CustomerSchema } from './models/customer.model';
 import { CustomerFollowUp, CustomerFollowUpSchema } from './models/customer-follow-up.entity';
 import { User, UserSchema } from '../users/models/user.entity';
 import { CustomerAssignmentLog, CustomerAssignmentLogSchema } from './models/customer-assignment-log.model';
+import { PublicPoolLog, PublicPoolLogSchema } from './models/public-pool-log.model';
 import { WeChatModule } from '../wechat/wechat.module';
 import { WeixinModule } from '../weixin/weixin.module';
 import { UsersModule } from '../users/users.module';
@@ -15,6 +16,7 @@ import { UsersModule } from '../users/users.module';
     MongooseModule.forFeature([
       { name: Customer.name, schema: CustomerSchema },
       { name: CustomerAssignmentLog.name, schema: CustomerAssignmentLogSchema },
+      { name: PublicPoolLog.name, schema: PublicPoolLogSchema },
       { name: CustomerFollowUp.name, schema: CustomerFollowUpSchema },
       { name: User.name, schema: UserSchema }
     ]),

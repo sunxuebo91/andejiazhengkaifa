@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>调试控制台</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: monospace;
+      background: #000;
+      color: #0f0;
+    }
+    #logs {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .error { color: #f00; }
+    .warn { color: #ff0; }
+    .info { color: #0ff; }
+  </style>
+</head>
+<body>
+  <h2>🔍 H5 调试控制台</h2>
+  <div id="logs"></div>
+
+  <script>
+    const logsDiv = document.getElementById('logs');
+    
+    function addLog(message, type = 'info') {
+      const time = new Date().toLocaleTimeString();
+      const log = document.createElement('div');
+      log.className = type;
+      log.textContent = `[${time}] ${message}`;
+      logsDiv.appendChild(log);
+      logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
+
+    // 拦截 console
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      addLog(args.join(' '), 'info');
+    };
+
+    console.error = function(...args) {
+      originalError.apply(console, args);
+      addLog(args.join(' '), 'error');
+    };
+
+    console.warn = function(...args) {
+      originalWarn.apply(console, args);
+      addLog(args.join(' '), 'warn');
+    };
+
+    // 拦截未捕获的错误
+    window.addEventListener('error', (e) => {
+      addLog(`❌ 未捕获错误: ${e.message} at ${e.filename}:${e.lineno}`, 'error');
+    });
+
+    window.addEventListener('unhandledrejection', (e) => {
+      addLog(`❌ 未处理的 Promise 拒绝: ${e.reason}`, 'error');
+    });
+
+    // 获取 URL 参数
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const targetUrl = urlParams.get('url');
+
+    addLog('🔍 调试控制台已启动');
+    addLog(`Token: ${token ? '✅ 已提供' : '❌ 未提供'}`);
+    addLog(`目标URL: ${targetUrl || '未指定'}`);
+
+    if (targetUrl) {
+      addLog(`⏳ 3秒后将跳转到目标页面...`);
+      setTimeout(() => {
+        let url = targetUrl;
+        if (token) {
+          url += (url.includes('?') ? '&' : '?') + `token=${encodeURIComponent(token)}`;
+        }
+        addLog(`🔗 跳转到: ${url}`);
+        window.location.href = url;
+      }, 3000);
+    } else {
+      addLog('⚠️ 未指定目标URL，请在URL参数中添加 ?url=目标页面地址');
+    }
+  </script>
+</body>
+</html>
+

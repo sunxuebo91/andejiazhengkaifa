@@ -15,7 +15,7 @@ import {
   Modal,
   UploadProps
 } from 'antd';
-import { SearchOutlined, PlusOutlined, MessageOutlined, UploadOutlined, InboxOutlined } from '@ant-design/icons';
+import { SearchOutlined, PlusOutlined, MessageOutlined, UploadOutlined, InboxOutlined, ExportOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
 import { apiService } from '../../services/api';
 import {
@@ -168,6 +168,89 @@ const CustomerList: React.FC = () => {
     });
     // 刷新当前页面数据
     loadCustomers(currentPage, pageSize);
+  };
+
+  // 处理释放到公海
+  const handleReleaseToPool = (customer: Customer) => {
+    Modal.confirm({
+      title: '释放到公海',
+      content: (
+        <div>
+          <p>确定要将客户 <strong>{customer.name}</strong> 释放到公海吗？</p>
+          <Input.TextArea
+            id="releaseReason"
+            placeholder="请输入释放原因（必填）"
+            rows={3}
+            style={{ marginTop: 10 }}
+          />
+        </div>
+      ),
+      onOk: async () => {
+        const reasonInput = document.getElementById('releaseReason') as HTMLTextAreaElement;
+        const reason = reasonInput?.value?.trim();
+
+        if (!reason) {
+          message.error('请输入释放原因');
+          return Promise.reject();
+        }
+
+        try {
+          await customerService.releaseToPool(customer._id, reason);
+          message.success('客户已释放到公海');
+          loadCustomers(currentPage, pageSize);
+        } catch (error: any) {
+          message.error(error.message || '释放失败');
+          return Promise.reject();
+        }
+      },
+    });
+  };
+
+  // 批量释放到公海
+  const handleBatchReleaseToPool = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请选择要释放的客户');
+      return;
+    }
+
+    Modal.confirm({
+      title: '批量释放到公海',
+      content: (
+        <div>
+          <p>确定要将选中的 <strong>{selectedRowKeys.length}</strong> 个客户释放到公海吗？</p>
+          <Input.TextArea
+            id="batchReleaseReason"
+            placeholder="请输入释放原因（必填）"
+            rows={3}
+            style={{ marginTop: 10 }}
+          />
+        </div>
+      ),
+      onOk: async () => {
+        const reasonInput = document.getElementById('batchReleaseReason') as HTMLTextAreaElement;
+        const reason = reasonInput?.value?.trim();
+
+        if (!reason) {
+          message.error('请输入释放原因');
+          return Promise.reject();
+        }
+
+        try {
+          const result = await customerService.batchReleaseToPool(selectedRowKeys as string[], reason);
+          if (result.success > 0) {
+            message.success(`成功释放 ${result.success} 个客户到公海`);
+            setSelectedRowKeys([]);
+            loadCustomers(currentPage, pageSize);
+          }
+          if (result.failed > 0) {
+            message.warning(`${result.failed} 个客户释放失败`);
+          }
+        } catch (error: any) {
+          message.error(error.message || '批量释放失败');
+          return Promise.reject();
+        }
+      },
+    });
   };
 
   // 处理Excel导入
@@ -361,7 +444,7 @@ const CustomerList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 260,
+      width: 320,
       fixed: 'right' as const,
       render: (_: any, record: Customer) => (
         <Space size="small">
@@ -390,6 +473,17 @@ const CustomerList: React.FC = () => {
               分配
             </Button>
           </Authorized>
+          {/* 释放到公海按钮（仅非公海客户显示） */}
+          {!record.inPublicPool && (
+            <Button
+              size="small"
+              icon={<ExportOutlined />}
+              onClick={() => handleReleaseToPool(record)}
+              danger
+            >
+              释放
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -529,6 +623,9 @@ const CustomerList: React.FC = () => {
                   批量分配
                 </Button>
               </Authorized>
+              <Button danger icon={<ExportOutlined />} onClick={handleBatchReleaseToPool}>
+                批量释放到公海
+              </Button>
               <Button onClick={() => setSelectedRowKeys([])}>取消选择</Button>
             </Space>
           </div>

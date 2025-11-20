@@ -16,6 +16,7 @@ const CustomerList = React.lazy(() => import('./pages/customers/CustomerList'));
 const CreateCustomer = React.lazy(() => import('./pages/customers/CreateCustomer'));
 const CustomerDetail = React.lazy(() => import('./pages/customers/CustomerDetail'));
 const EditCustomer = React.lazy(() => import('./pages/customers/EditCustomer'));
+const PublicPool = React.lazy(() => import('./pages/customers/PublicPool'));
 const ContractList = React.lazy(() => import('./pages/contracts/ContractList'));
 const ContractDetail = React.lazy(() => import('./pages/contracts/ContractDetail'));
 const UserList = React.lazy(() => import('./pages/users/UserList'));
@@ -134,21 +135,25 @@ export default function App({ children }: AppProps) {
                   
                   {/* 客户管理模块 - 需要customer相关权限 */}
                   <Route path="customers">
-                    <Route 
-                      path="list" 
-                      element={<AuthorizedRoute element={<CustomerList />} />} 
+                    <Route
+                      path="list"
+                      element={<AuthorizedRoute element={<CustomerList />} />}
                     />
-                    <Route 
-                      path="create" 
-                      element={<AuthorizedRoute element={<CreateCustomer />} />} 
+                    <Route
+                      path="public-pool"
+                      element={<AuthorizedRoute element={<PublicPool />} />}
                     />
-                    <Route 
-                      path=":id" 
-                      element={<AuthorizedRoute element={<CustomerDetail />} />} 
+                    <Route
+                      path="create"
+                      element={<AuthorizedRoute element={<CreateCustomer />} />}
                     />
-                    <Route 
-                      path="edit/:id" 
-                      element={<AuthorizedRoute element={<EditCustomer />} />} 
+                    <Route
+                      path=":id"
+                      element={<AuthorizedRoute element={<CustomerDetail />} />}
+                    />
+                    <Route
+                      path="edit/:id"
+                      element={<AuthorizedRoute element={<EditCustomer />} />}
                     />
                     {/* 重定向 /customers 到 /customers/list */}
                     <Route index element={<Navigate to="list" replace />} />

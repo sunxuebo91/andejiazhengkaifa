@@ -29,6 +29,7 @@ import { CustomerQueryDto } from './dto/customer-query.dto';
 import { CreateCustomerFollowUpDto } from './dto/create-customer-follow-up.dto';
 import { AssignCustomerDto } from './dto/assign-customer.dto';
 import { BatchAssignCustomerDto } from './dto/batch-assign-customer.dto';
+import { ClaimCustomersDto, AssignFromPoolDto, ReleaseToPoolDto, BatchReleaseToPoolDto, PublicPoolQueryDto } from './dto/public-pool.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -802,6 +803,130 @@ export class CustomersController {
         null,
         error.message
       );
+    }
+  }
+
+  // ==================== 公海相关接口 ====================
+
+  // 获取公海客户列表
+  @Get('public-pool')
+  @ApiOperation({ summary: '获取公海客户列表' })
+  async getPublicPoolCustomers(@Query() query: PublicPoolQueryDto): Promise<ApiResponse> {
+    try {
+      const result = await this.customersService.getPublicPoolCustomers(query);
+      return this.createResponse(true, '公海客户列表获取成功', result);
+    } catch (error) {
+      return this.createResponse(false, '公海客户列表获取失败', null, error.message);
+    }
+  }
+
+  // 员工领取客户
+  @Post('public-pool/claim')
+  @ApiOperation({ summary: '员工从公海领取客户' })
+  @ApiBody({ type: ClaimCustomersDto })
+  async claimCustomers(@Body() dto: ClaimCustomersDto, @Request() req): Promise<ApiResponse> {
+    try {
+      const result = await this.customersService.claimCustomers(dto.customerIds, req.user.userId);
+      const message = `领取完成：成功 ${result.success} 个，失败 ${result.failed} 个`;
+      return this.createResponse(true, message, result);
+    } catch (error) {
+      return this.createResponse(false, error.message || '领取失败', null, error.message);
+    }
+  }
+
+  // 管理员从公海分配客户
+  @Post('public-pool/assign')
+  @ApiOperation({ summary: '管理员从公海分配客户（仅管理员和经理）' })
+  @ApiBody({ type: AssignFromPoolDto })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'manager')
+  async assignFromPool(@Body() dto: AssignFromPoolDto, @Request() req): Promise<ApiResponse> {
+    try {
+      const result = await this.customersService.assignFromPool(
+        dto.customerIds,
+        dto.assignedTo,
+        dto.reason,
+        req.user.userId
+      );
+      const message = `分配完成：成功 ${result.success} 个，失败 ${result.failed} 个`;
+      return this.createResponse(true, message, result);
+    } catch (error) {
+      return this.createResponse(false, error.message || '分配失败', null, error.message);
+    }
+  }
+
+  // 释放客户到公海
+  @Post(':id/release-to-pool')
+  @ApiOperation({ summary: '释放客户到公海' })
+  @ApiParam({ name: 'id', description: '客户ID' })
+  @ApiBody({ type: ReleaseToPoolDto })
+  async releaseToPool(
+    @Param('id') id: string,
+    @Body() dto: ReleaseToPoolDto,
+    @Request() req
+  ): Promise<ApiResponse> {
+    try {
+      const customer = await this.customersService.releaseToPool(id, dto.reason, req.user.userId);
+      return this.createResponse(true, '客户已释放到公海', customer);
+    } catch (error) {
+      return this.createResponse(false, error.message || '释放失败', null, error.message);
+    }
+  }
+
+  // 批量释放到公海
+  @Post('batch-release-to-pool')
+  @ApiOperation({ summary: '批量释放客户到公海' })
+  @ApiBody({ type: BatchReleaseToPoolDto })
+  async batchReleaseToPool(@Body() dto: BatchReleaseToPoolDto, @Request() req): Promise<ApiResponse> {
+    try {
+      const result = await this.customersService.batchReleaseToPool(
+        dto.customerIds,
+        dto.reason,
+        req.user.userId
+      );
+      const message = `释放完成：成功 ${result.success} 个，失败 ${result.failed} 个`;
+      return this.createResponse(true, message, result);
+    } catch (error) {
+      return this.createResponse(false, error.message || '批量释放失败', null, error.message);
+    }
+  }
+
+  // 获取公海统计数据
+  @Get('public-pool/statistics')
+  @ApiOperation({ summary: '获取公海统计数据（管理员和经理）' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'manager')
+  async getPublicPoolStatistics(): Promise<ApiResponse> {
+    try {
+      const statistics = await this.customersService.getPublicPoolStatistics();
+      return this.createResponse(true, '公海统计数据获取成功', statistics);
+    } catch (error) {
+      return this.createResponse(false, '公海统计数据获取失败', null, error.message);
+    }
+  }
+
+  // 获取客户的公海历史记录
+  @Get(':id/public-pool-logs')
+  @ApiOperation({ summary: '获取客户的公海历史记录' })
+  @ApiParam({ name: 'id', description: '客户ID' })
+  async getPublicPoolLogs(@Param('id') id: string): Promise<ApiResponse> {
+    try {
+      const logs = await this.customersService.getPublicPoolLogs(id);
+      return this.createResponse(true, '公海历史记录获取成功', logs);
+    } catch (error) {
+      return this.createResponse(false, '公海历史记录获取失败', null, error.message);
+    }
+  }
+
+  // 获取用户当前持有的客户数量
+  @Get('my-customer-count')
+  @ApiOperation({ summary: '获取当前用户持有的客户数量' })
+  async getMyCustomerCount(@Request() req): Promise<ApiResponse> {
+    try {
+      const count = await this.customersService.getUserCustomerCount(req.user.userId);
+      return this.createResponse(true, '客户数量获取成功', { count, limit: 50 });
+    } catch (error) {
+      return this.createResponse(false, '客户数量获取失败', null, error.message);
     }
   }
 

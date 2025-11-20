@@ -10,6 +10,8 @@ import { CreateCustomerFollowUpDto } from './dto/create-customer-follow-up.dto';
 import { User } from '../users/models/user.entity';
 import { WeChatService } from '../wechat/wechat.service';
 import { CustomerAssignmentLog } from './models/customer-assignment-log.model';
+import { PublicPoolLog } from './models/public-pool-log.model';
+import { PublicPoolQueryDto } from './dto/public-pool.dto';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 
@@ -23,6 +25,7 @@ export class CustomersService {
     @InjectModel(User.name) private userModel: Model<User>,
     @InjectModel(CustomerFollowUp.name) private customerFollowUpModel: Model<CustomerFollowUp>,
     @InjectModel(CustomerAssignmentLog.name) private assignmentLogModel: Model<CustomerAssignmentLog>,
+    @InjectModel(PublicPoolLog.name) private publicPoolLogModel: Model<PublicPoolLog>,
     private wechatService: WeChatService,
   ) {}
 
@@ -794,5 +797,458 @@ export class CustomersService {
     }
 
     return dto as CreateCustomerDto;
+  }
+
+  // ==================== 公海相关方法 ====================
+
+  // 获取公海客户列表
+  async getPublicPoolCustomers(query: PublicPoolQueryDto): Promise<{
+    customers: Customer[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const { page = 1, limit = 10, search, leadSource, serviceCategory, leadLevel, minBudget, maxBudget } = query;
+
+    const searchConditions: any = { inPublicPool: true };
+
+    // 搜索条件
+    if (search) {
+      searchConditions.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    // 筛选条件
+    if (leadSource) {
+      searchConditions.leadSource = leadSource;
+    }
+    if (serviceCategory) {
+      searchConditions.serviceCategory = serviceCategory;
+    }
+    if (leadLevel) {
+      searchConditions.leadLevel = leadLevel;
+    }
+    if (minBudget !== undefined || maxBudget !== undefined) {
+      searchConditions.salaryBudget = {};
+      if (minBudget !== undefined) {
+        searchConditions.salaryBudget.$gte = minBudget;
+      }
+      if (maxBudget !== undefined) {
+        searchConditions.salaryBudget.$lte = maxBudget;
+      }
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [customers, total] = await Promise.all([
+      this.customerModel
+        .find(searchConditions)
+        .sort({ publicPoolEntryTime: -1 }) // 最新进入的排在前面
+        .skip(skip)
+        .limit(limit)
+        .populate('lastFollowUpBy', 'name username')
+        .lean()
+        .exec(),
+      this.customerModel.countDocuments(searchConditions).exec(),
+    ]);
+
+    return {
+      customers: customers as any,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // 员工领取客户
+  async claimCustomers(customerIds: string[], userId: string): Promise<{
+    success: number;
+    failed: number;
+    errors: Array<{ customerId: string; error: string }>;
+  }> {
+    const user = await this.userModel.findById(userId).select('name username role').lean();
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    // 检查用户当前持有的客户数量
+    const currentCustomerCount = await this.customerModel.countDocuments({
+      assignedTo: new Types.ObjectId(userId),
+      inPublicPool: false,
+    });
+
+    const maxCustomersPerEmployee = 50; // 可以后续配置化
+    const availableSlots = maxCustomersPerEmployee - currentCustomerCount;
+
+    if (availableSlots <= 0) {
+      throw new BadRequestException(`您已达到客户持有上限（${maxCustomersPerEmployee}个），无法继续领取`);
+    }
+
+    if (customerIds.length > availableSlots) {
+      throw new BadRequestException(`您最多还可以领取 ${availableSlots} 个客户`);
+    }
+
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: Array<{ customerId: string; error: string }> = [];
+    const now = new Date();
+
+    for (const customerId of customerIds) {
+      try {
+        // 查找客户并检查是否在公海中
+        const customer = await this.customerModel.findById(customerId).exec();
+        if (!customer) {
+          errors.push({ customerId, error: '客户不存在' });
+          failedCount++;
+          continue;
+        }
+
+        if (!(customer as any).inPublicPool) {
+          errors.push({ customerId, error: '客户不在公海中' });
+          failedCount++;
+          continue;
+        }
+
+        // 更新客户信息
+        await this.customerModel.findByIdAndUpdate(
+          customerId,
+          {
+            inPublicPool: false,
+            assignedTo: new Types.ObjectId(userId),
+            assignedBy: new Types.ObjectId(userId),
+            assignedAt: now,
+            assignmentReason: '从公海领取',
+            $inc: { claimCount: 1 },
+          },
+          { new: true }
+        ).exec();
+
+        // 记录公海日志
+        await this.publicPoolLogModel.create({
+          customerId: new Types.ObjectId(customerId),
+          action: 'claim',
+          operatorId: new Types.ObjectId(userId),
+          toUserId: new Types.ObjectId(userId),
+          reason: '员工从公海领取',
+          operatedAt: now,
+        });
+
+        // 创建系统跟进记录
+        await this.customerFollowUpModel.create({
+          customerId: new Types.ObjectId(customerId),
+          type: 'other' as any,
+          content: `系统：${user.name}从公海领取了该客户`,
+          createdBy: new Types.ObjectId(userId),
+        });
+
+        successCount++;
+      } catch (error) {
+        errors.push({ customerId, error: error.message || '领取失败' });
+        failedCount++;
+      }
+    }
+
+    return { success: successCount, failed: failedCount, errors };
+  }
+
+  // 管理员从公海分配客户
+  async assignFromPool(customerIds: string[], assignedTo: string, reason: string | undefined, adminUserId: string): Promise<{
+    success: number;
+    failed: number;
+    errors: Array<{ customerId: string; error: string }>;
+  }> {
+    // 验证管理员权限
+    const adminUser = await this.userModel.findById(adminUserId).select('role name username').lean();
+    if (!adminUser || !['admin', 'manager'].includes((adminUser as any).role)) {
+      throw new ForbiddenException('只有管理员或经理可以从公海分配客户');
+    }
+
+    // 验证目标用户
+    const targetUser = await this.userModel.findById(assignedTo).select('name username role active').lean();
+    if (!targetUser) {
+      throw new NotFoundException('指定的负责人不存在');
+    }
+    if (!(targetUser as any).active) {
+      throw new ConflictException('指定的负责人未激活');
+    }
+
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: Array<{ customerId: string; error: string }> = [];
+    const now = new Date();
+
+    for (const customerId of customerIds) {
+      try {
+        const customer = await this.customerModel.findById(customerId).exec();
+        if (!customer) {
+          errors.push({ customerId, error: '客户不存在' });
+          failedCount++;
+          continue;
+        }
+
+        if (!(customer as any).inPublicPool) {
+          errors.push({ customerId, error: '客户不在公海中' });
+          failedCount++;
+          continue;
+        }
+
+        // 更新客户信息
+        await this.customerModel.findByIdAndUpdate(
+          customerId,
+          {
+            inPublicPool: false,
+            assignedTo: new Types.ObjectId(assignedTo),
+            assignedBy: new Types.ObjectId(adminUserId),
+            assignedAt: now,
+            assignmentReason: reason || '从公海分配',
+            $inc: { claimCount: 1 },
+          },
+          { new: true }
+        ).exec();
+
+        // 记录公海日志
+        await this.publicPoolLogModel.create({
+          customerId: new Types.ObjectId(customerId),
+          action: 'assign',
+          operatorId: new Types.ObjectId(adminUserId),
+          toUserId: new Types.ObjectId(assignedTo),
+          reason: reason || '管理员从公海分配',
+          operatedAt: now,
+        });
+
+        // 创建系统跟进记录
+        await this.customerFollowUpModel.create({
+          customerId: new Types.ObjectId(customerId),
+          type: 'other' as any,
+          content: `系统：${adminUser.name}从公海将客户分配给${targetUser.name}。原因：${reason || '未填写'}`,
+          createdBy: new Types.ObjectId(adminUserId),
+        });
+
+        successCount++;
+      } catch (error) {
+        errors.push({ customerId, error: error.message || '分配失败' });
+        failedCount++;
+      }
+    }
+
+    // 发送通知
+    if (successCount > 0) {
+      await this.sendAssignmentNotification(null, targetUser as any, `从公海分配了${successCount}个客户`);
+    }
+
+    return { success: successCount, failed: failedCount, errors };
+  }
+
+  // 释放客户到公海
+  async releaseToPool(customerId: string, reason: string, userId: string): Promise<Customer> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException('客户不存在');
+    }
+
+    if ((customer as any).inPublicPool) {
+      throw new ConflictException('客户已在公海中');
+    }
+
+    // 检查是否是负责人或管理员
+    const user = await this.userModel.findById(userId).select('role').lean();
+    const isOwner = (customer as any).assignedTo?.toString() === userId;
+    const isAdmin = user && ['admin', 'manager'].includes((user as any).role);
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('只有客户负责人或管理员可以释放客户到公海');
+    }
+
+    const now = new Date();
+    const oldAssignedTo = (customer as any).assignedTo;
+
+    // 更新客户状态
+    const updated = await this.customerModel.findByIdAndUpdate(
+      customerId,
+      {
+        inPublicPool: true,
+        publicPoolEntryTime: now,
+        publicPoolEntryReason: reason,
+        assignedTo: null,
+      },
+      { new: true }
+    ).exec();
+
+    // 记录公海日志
+    await this.publicPoolLogModel.create({
+      customerId: new Types.ObjectId(customerId),
+      action: 'release',
+      operatorId: new Types.ObjectId(userId),
+      fromUserId: oldAssignedTo ? new Types.ObjectId(oldAssignedTo) : undefined,
+      reason,
+      operatedAt: now,
+    });
+
+    // 创建系统跟进记录
+    const operatorUser = await this.userModel.findById(userId).select('name').lean();
+    await this.customerFollowUpModel.create({
+      customerId: new Types.ObjectId(customerId),
+      type: 'other' as any,
+      content: `系统：${operatorUser?.name}将客户释放到公海。原因：${reason}`,
+      createdBy: new Types.ObjectId(userId),
+    });
+
+    return updated;
+  }
+
+  // 批量释放到公海
+  async batchReleaseToPool(customerIds: string[], reason: string, userId: string): Promise<{
+    success: number;
+    failed: number;
+    errors: Array<{ customerId: string; error: string }>;
+  }> {
+    const user = await this.userModel.findById(userId).select('role name').lean();
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: Array<{ customerId: string; error: string }> = [];
+    const now = new Date();
+
+    for (const customerId of customerIds) {
+      try {
+        const customer = await this.customerModel.findById(customerId).exec();
+        if (!customer) {
+          errors.push({ customerId, error: '客户不存在' });
+          failedCount++;
+          continue;
+        }
+
+        if ((customer as any).inPublicPool) {
+          errors.push({ customerId, error: '客户已在公海中' });
+          failedCount++;
+          continue;
+        }
+
+        // 检查权限
+        const isOwner = (customer as any).assignedTo?.toString() === userId;
+        const isAdmin = ['admin', 'manager'].includes((user as any).role);
+
+        if (!isOwner && !isAdmin) {
+          errors.push({ customerId, error: '无权释放此客户' });
+          failedCount++;
+          continue;
+        }
+
+        const oldAssignedTo = (customer as any).assignedTo;
+
+        // 更新客户状态
+        await this.customerModel.findByIdAndUpdate(
+          customerId,
+          {
+            inPublicPool: true,
+            publicPoolEntryTime: now,
+            publicPoolEntryReason: reason,
+            assignedTo: null,
+          },
+          { new: true }
+        ).exec();
+
+        // 记录公海日志
+        await this.publicPoolLogModel.create({
+          customerId: new Types.ObjectId(customerId),
+          action: 'release',
+          operatorId: new Types.ObjectId(userId),
+          fromUserId: oldAssignedTo ? new Types.ObjectId(oldAssignedTo) : undefined,
+          reason,
+          operatedAt: now,
+        });
+
+        // 创建系统跟进记录
+        await this.customerFollowUpModel.create({
+          customerId: new Types.ObjectId(customerId),
+          type: 'other' as any,
+          content: `系统：${user.name}将客户释放到公海。原因：${reason}`,
+          createdBy: new Types.ObjectId(userId),
+        });
+
+        successCount++;
+      } catch (error) {
+        errors.push({ customerId, error: error.message || '释放失败' });
+        failedCount++;
+      }
+    }
+
+    return { success: successCount, failed: failedCount, errors };
+  }
+
+  // 获取公海统计数据
+  async getPublicPoolStatistics(): Promise<any> {
+    const total = await this.customerModel.countDocuments({ inPublicPool: true });
+
+    // 今日进入公海的客户数
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEntered = await this.customerModel.countDocuments({
+      inPublicPool: true,
+      publicPoolEntryTime: { $gte: todayStart },
+    });
+
+    // 今日从公海领取的客户数
+    const todayClaimed = await this.publicPoolLogModel.countDocuments({
+      action: { $in: ['claim', 'assign'] },
+      operatedAt: { $gte: todayStart },
+    });
+
+    // 按线索来源统计
+    const byLeadSource = await this.customerModel.aggregate([
+      { $match: { inPublicPool: true } },
+      { $group: { _id: '$leadSource', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    // 按线索等级统计
+    const byLeadLevel = await this.customerModel.aggregate([
+      { $match: { inPublicPool: true } },
+      { $group: { _id: '$leadLevel', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    return {
+      total,
+      todayEntered,
+      todayClaimed,
+      byLeadSource: byLeadSource.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      byLeadLevel: byLeadLevel.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+    };
+  }
+
+  // 获取客户的公海历史记录
+  async getPublicPoolLogs(customerId: string): Promise<any[]> {
+    const logs = await this.publicPoolLogModel
+      .find({ customerId: new Types.ObjectId(customerId) })
+      .populate('operatorId', 'name username')
+      .populate('fromUserId', 'name username')
+      .populate('toUserId', 'name username')
+      .sort({ operatedAt: -1 })
+      .lean()
+      .exec();
+
+    return logs;
+  }
+
+  // 获取用户当前持有的客户数量
+  async getUserCustomerCount(userId: string): Promise<number> {
+    return await this.customerModel.countDocuments({
+      assignedTo: new Types.ObjectId(userId),
+      inPublicPool: false,
+    });
   }
 }

@@ -35,6 +35,13 @@ export interface Customer {
   assignedByUser?: { name: string; username: string } | null;
   assignedAt?: string;
   assignmentReason?: string;
+  // 公海相关字段
+  inPublicPool?: boolean;
+  publicPoolEntryTime?: string;
+  publicPoolEntryReason?: string;
+  lastFollowUpBy?: string;
+  lastFollowUpTime?: string;
+  claimCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,4 +117,27 @@ export const REST_SCHEDULES = ['单休', '双休', '无休', '调休', '待定']
 
 export const EDUCATION_REQUIREMENTS = [
   '无学历', '小学', '初中', '中专', '职高', '高中', '大专', '本科', '研究生及以上'
-] as const; 
+] as const;
+
+// 公海相关类型
+export interface PublicPoolLog {
+  _id: string;
+  customerId: string;
+  action: 'enter' | 'claim' | 'assign' | 'release';
+  operatorId: string;
+  fromUserId?: string;
+  toUserId?: string;
+  reason?: string;
+  operatedAt: string;
+  operatorUser?: { name: string; username: string };
+  fromUser?: { name: string; username: string };
+  toUser?: { name: string; username: string };
+}
+
+export interface PublicPoolStatistics {
+  total: number;
+  todayEntered: number;
+  todayClaimed: number;
+  byLeadSource: Record<string, number>;
+  byLeadLevel: Record<string, number>;
+}

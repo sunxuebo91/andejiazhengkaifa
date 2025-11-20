@@ -4,15 +4,17 @@ import { Model } from 'mongoose';
 import { Customer } from '../customers/models/customer.model';
 import { Contract } from '../contracts/models/contract.model';
 import { Resume } from '../resume/models/resume.entity';
-import { 
-  DashboardStatsDto, 
-  CustomerBusinessMetrics, 
+import {
+  DashboardStatsDto,
+  CustomerBusinessMetrics,
   LeadQualityMetrics,
   ContractMetrics,
   ResumeMetrics,
   FinancialMetrics,
   EfficiencyMetrics,
-  LeadSourceDistribution 
+  LeadSourceDistribution,
+  LeadLevelDistribution,
+  LeadSourceLevelDetail
 } from './dto/dashboard-stats.dto';
 import dayjs from 'dayjs';
 
@@ -120,7 +122,7 @@ export class DashboardService {
     // 解析时间范围
     const { rangeStart, rangeEnd } = this.parseDateRange(startDate, endDate);
 
-    // 获取时间范围内的线索来源分布
+    // 获取时间范围内的线索来源分布（总量，包括未评级）
     const leadSourceAggregation = await this.customerModel.aggregate([
       { $match: { createdAt: { $gte: rangeStart, $lte: rangeEnd } } },
       { $group: { _id: '$leadSource', count: { $sum: 1 } } }
@@ -131,24 +133,111 @@ export class DashboardService {
       leadSourceDistribution[item._id] = item.count;
     });
 
-    // 计算A类线索占比（所有有线索等级的客户中，A类的占比）
-    const [totalLeads, aLevelCustomers] = await Promise.all([
-      // 统计所有有线索等级的客户（A/B/C/D类）
-      this.customerModel.countDocuments({
-        leadLevel: { $in: ['A类', 'B类', 'C类', 'D类'] }
-      }).exec(),
-      // 统计A类线索
-      this.customerModel.countDocuments({
-        leadLevel: 'A类'
-      }).exec(),
-    ]);
+    // 计算ABCD分类总量统计
+    const leadLevelAggregation = await this.customerModel.aggregate([
+      {
+        $match: {
+          leadLevel: { $in: ['A类', 'B类', 'C类', 'D类'] }
+        }
+      },
+      {
+        $group: {
+          _id: '$leadLevel',
+          count: { $sum: 1 }
+        }
+      }
+    ]).exec();
 
-    const aLevelLeadsRatio = totalLeads > 0 ?
-      Math.round((aLevelCustomers / totalLeads) * 100 * 100) / 100 : 0;
+    const leadLevelDistribution: LeadLevelDistribution = {
+      aLevel: 0,
+      bLevel: 0,
+      cLevel: 0,
+      dLevel: 0,
+      total: 0
+    };
+
+    leadLevelAggregation.forEach(item => {
+      const count = item.count;
+      leadLevelDistribution.total += count;
+
+      switch (item._id) {
+        case 'A类':
+          leadLevelDistribution.aLevel = count;
+          break;
+        case 'B类':
+          leadLevelDistribution.bLevel = count;
+          break;
+        case 'C类':
+          leadLevelDistribution.cLevel = count;
+          break;
+        case 'D类':
+          leadLevelDistribution.dLevel = count;
+          break;
+      }
+    });
+
+    // 计算每个线索渠道的ABCD分类
+    const leadSourceLevelAggregation = await this.customerModel.aggregate([
+      {
+        $match: {
+          leadLevel: { $in: ['A类', 'B类', 'C类', 'D类'] }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            leadSource: '$leadSource',
+            leadLevel: '$leadLevel'
+          },
+          count: { $sum: 1 }
+        }
+      }
+    ]).exec();
+
+    const leadSourceLevelDetail: LeadSourceLevelDetail = {};
+
+    leadSourceLevelAggregation.forEach(item => {
+      const source = item._id.leadSource || '未设置';
+      const level = item._id.leadLevel;
+      const count = item.count;
+
+      if (!leadSourceLevelDetail[source]) {
+        leadSourceLevelDetail[source] = {
+          aLevel: 0,
+          bLevel: 0,
+          cLevel: 0,
+          dLevel: 0,
+          total: 0
+        };
+      }
+
+      leadSourceLevelDetail[source].total += count;
+
+      switch (level) {
+        case 'A类':
+          leadSourceLevelDetail[source].aLevel = count;
+          break;
+        case 'B类':
+          leadSourceLevelDetail[source].bLevel = count;
+          break;
+        case 'C类':
+          leadSourceLevelDetail[source].cLevel = count;
+          break;
+        case 'D类':
+          leadSourceLevelDetail[source].dLevel = count;
+          break;
+      }
+    });
+
+    // 计算A类线索占比（所有有线索等级的客户中，A类的占比）
+    const aLevelLeadsRatio = leadLevelDistribution.total > 0 ?
+      Math.round((leadLevelDistribution.aLevel / leadLevelDistribution.total) * 100 * 100) / 100 : 0;
 
     return {
       aLevelLeadsRatio,
       leadSourceDistribution,
+      leadLevelDistribution,
+      leadSourceLevelDetail,
     };
   }
 

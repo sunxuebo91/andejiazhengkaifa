@@ -7,12 +7,32 @@ export interface CustomerBusinessMetrics {
 }
 
 export interface LeadSourceDistribution {
-  [key: string]: number;           // 线索来源分布
+  [key: string]: number;           // 线索来源分布（总量，包括未评级）
+}
+
+export interface LeadLevelDistribution {
+  aLevel: number;                  // A类线索数量
+  bLevel: number;                  // B类线索数量
+  cLevel: number;                  // C类线索数量
+  dLevel: number;                  // D类线索数量
+  total: number;                   // 总计
+}
+
+export interface LeadSourceLevelDetail {
+  [leadSource: string]: {          // 线索来源
+    aLevel: number;                // A类数量
+    bLevel: number;                // B类数量
+    cLevel: number;                // C类数量
+    dLevel: number;                // D类数量
+    total: number;                 // 该来源总计
+  };
 }
 
 export interface LeadQualityMetrics {
   aLevelLeadsRatio: number;        // A类线索占比
-  leadSourceDistribution: LeadSourceDistribution;
+  leadSourceDistribution: LeadSourceDistribution;  // 线索来源分布（总量）
+  leadLevelDistribution: LeadLevelDistribution;    // ABCD分类总量统计
+  leadSourceLevelDetail: LeadSourceLevelDetail;    // 每个线索渠道的ABCD分类
 }
 
 export interface ContractMetrics {

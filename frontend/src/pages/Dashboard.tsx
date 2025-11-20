@@ -144,15 +144,65 @@ const Dashboard: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [timeRange]);
 
+  // 渲染ABCD分类总量统计
+  const renderLeadLevelDistribution = () => {
+    if (!stats?.leadQuality.leadLevelDistribution) return null;
+
+    const { aLevel, bLevel, cLevel, dLevel, total } = stats.leadQuality.leadLevelDistribution;
+
+    return (
+      <div style={{ marginTop: 16 }}>
+        <Text strong style={{ marginBottom: 8, display: 'block' }}>ABCD分类总量</Text>
+        <Row gutter={[8, 8]}>
+          <Col span={6}>
+            <Statistic
+              title="A类"
+              value={aLevel}
+              valueStyle={{ color: '#52c41a', fontSize: 18 }}
+              suffix="个"
+            />
+          </Col>
+          <Col span={6}>
+            <Statistic
+              title="B类"
+              value={bLevel}
+              valueStyle={{ color: '#1890ff', fontSize: 18 }}
+              suffix="个"
+            />
+          </Col>
+          <Col span={6}>
+            <Statistic
+              title="C类"
+              value={cLevel}
+              valueStyle={{ color: '#faad14', fontSize: 18 }}
+              suffix="个"
+            />
+          </Col>
+          <Col span={6}>
+            <Statistic
+              title="D类"
+              value={dLevel}
+              valueStyle={{ color: '#ff4d4f', fontSize: 18 }}
+              suffix="个"
+            />
+          </Col>
+        </Row>
+        <div style={{ marginTop: 8, textAlign: 'center' }}>
+          <Text type="secondary">总计: {total} 个</Text>
+        </div>
+      </div>
+    );
+  };
+
   // 渲染线索来源分布
   const renderLeadSourceDistribution = () => {
     if (!stats?.leadQuality.leadSourceDistribution) return null;
-    
+
     const sources = Object.entries(stats.leadQuality.leadSourceDistribution)
       .sort(([,a], [,b]) => b - a);
-    
+
     const totalLeads = sources.reduce((sum, [,count]) => sum + count, 0);
-    
+
     return (
       <div style={{ marginTop: 16 }}>
         <Text strong style={{ marginBottom: 8, display: 'block' }}>线索来源分布</Text>
@@ -165,12 +215,67 @@ const Dashboard: React.FC = () => {
                 <Text>{source}</Text>
                 <Text strong>{count}个 ({percentage}%)</Text>
               </div>
-              <Progress 
-                percent={parseFloat(percentage)} 
-                showInfo={false} 
+              <Progress
+                percent={parseFloat(percentage)}
+                showInfo={false}
                 strokeColor={colors[index % colors.length]}
                 size="small"
               />
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // 渲染每个线索渠道的ABCD分类
+  const renderLeadSourceLevelDetail = () => {
+    if (!stats?.leadQuality.leadSourceLevelDetail) return null;
+
+    const sources = Object.entries(stats.leadQuality.leadSourceLevelDetail)
+      .sort(([,a], [,b]) => b.total - a.total);
+
+    return (
+      <div style={{ marginTop: 16 }}>
+        <Text strong style={{ marginBottom: 8, display: 'block' }}>每个线索渠道的ABCD分类</Text>
+        {sources.map(([source, detail]) => {
+          const aPercent = detail.total > 0 ? ((detail.aLevel / detail.total) * 100).toFixed(1) : '0';
+          const bPercent = detail.total > 0 ? ((detail.bLevel / detail.total) * 100).toFixed(1) : '0';
+          const cPercent = detail.total > 0 ? ((detail.cLevel / detail.total) * 100).toFixed(1) : '0';
+          const dPercent = detail.total > 0 ? ((detail.dLevel / detail.total) * 100).toFixed(1) : '0';
+
+          return (
+            <div key={source} style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 4 }}>
+              <div style={{ marginBottom: 8 }}>
+                <Text strong>{source}</Text>
+                <Text type="secondary" style={{ marginLeft: 8 }}>（总计: {detail.total}）</Text>
+              </div>
+              <Row gutter={8}>
+                <Col span={6}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Text style={{ color: '#52c41a', fontSize: 16, fontWeight: 'bold' }}>{detail.aLevel}</Text>
+                    <div><Text type="secondary" style={{ fontSize: 12 }}>A类 ({aPercent}%)</Text></div>
+                  </div>
+                </Col>
+                <Col span={6}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Text style={{ color: '#1890ff', fontSize: 16, fontWeight: 'bold' }}>{detail.bLevel}</Text>
+                    <div><Text type="secondary" style={{ fontSize: 12 }}>B类 ({bPercent}%)</Text></div>
+                  </div>
+                </Col>
+                <Col span={6}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Text style={{ color: '#faad14', fontSize: 16, fontWeight: 'bold' }}>{detail.cLevel}</Text>
+                    <div><Text type="secondary" style={{ fontSize: 12 }}>C类 ({cPercent}%)</Text></div>
+                  </div>
+                </Col>
+                <Col span={6}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Text style={{ color: '#ff4d4f', fontSize: 16, fontWeight: 'bold' }}>{detail.dLevel}</Text>
+                    <div><Text type="secondary" style={{ fontSize: 12 }}>D类 ({dPercent}%)</Text></div>
+                  </div>
+                </Col>
+              </Row>
             </div>
           );
         })}
@@ -343,7 +448,9 @@ const Dashboard: React.FC = () => {
               prefix={<RiseOutlined />}
               suffix="%"
             />
+            {renderLeadLevelDistribution()}
             {renderLeadSourceDistribution()}
+            {renderLeadSourceLevelDetail()}
           </Card>
         </Col>
         <Col xs={24} sm={24} md={12} lg={12} xl={12}>

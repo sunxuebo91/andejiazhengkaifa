@@ -530,7 +530,7 @@ export class CustomersService {
   // 获取可分配的用户列表
   async getAssignableUsers(): Promise<Array<Pick<User, any>>> {
     const users = await this.userModel
-      .find({ active: true, role: { $in: ['employee', 'manager'] } })
+      .find({ active: true, role: { $in: ['admin', 'employee', 'manager'] } })
       .select('_id name username role department')
       .sort({ name: 1 })
       .lean();

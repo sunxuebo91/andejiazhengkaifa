@@ -16,10 +16,10 @@ export class CreateCustomerDto {
   @IsNotEmpty({ message: '客户姓名不能为空' })
   name: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: '客户电话不能为空' })
   @IsPhoneNumber('CN', { message: '请输入有效的中国手机号码' })
-  phone: string;
+  phone?: string;
 
   @IsOptional()
   @IsString()
@@ -45,11 +45,11 @@ export class CreateCustomerDto {
   })
   serviceCategory?: string;
 
-  @IsOptional()
+  @IsNotEmpty({ message: '线索等级不能为空' })
   @IsEnum(['O类', 'A类', 'B类', 'C类', 'D类'], {
     message: '线索等级必须是：O类、A类、B类、C类、D类之一'
   })
-  leadLevel?: string;
+  leadLevel: string;
 
   @IsOptional()
   @IsNumber({}, { message: '薪资预算必须是数字' })

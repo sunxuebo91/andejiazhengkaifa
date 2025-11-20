@@ -124,11 +124,10 @@ const CreateCustomer: React.FC = () => {
                 label="客户电话"
                 name="phone"
                 rules={[
-                  { required: true, message: '请输入客户电话' },
                   { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号码' },
                 ]}
               >
-                <Input placeholder="请输入客户电话" style={{ width: '100%' }} />
+                <Input placeholder="请输入客户电话（可选）" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
 
@@ -225,8 +224,11 @@ const CreateCustomer: React.FC = () => {
               <Form.Item
                 label="线索等级"
                 name="leadLevel"
+                rules={[
+                  { required: true, message: '请选择线索等级' },
+                ]}
               >
-                <Select placeholder="请选择线索等级（可选）" style={{ width: '100%' }}>
+                <Select placeholder="请选择线索等级" style={{ width: '100%' }}>
                   {LEAD_LEVELS.map(level => (
                     <Option key={level} value={level}>{level}</Option>
                   ))}

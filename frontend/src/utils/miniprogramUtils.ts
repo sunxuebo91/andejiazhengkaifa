@@ -24,9 +24,8 @@ export const validateCustomerForm = (data: Partial<CreateCustomerData>): Validat
     errors.push({ field: 'name', message: '客户姓名不能为空' });
   }
 
-  if (!data.phone?.trim()) {
-    errors.push({ field: 'phone', message: '客户电话不能为空' });
-  } else if (!isValidPhoneNumber(data.phone)) {
+  // 手机号改为可选，但如果填写了需要验证格式
+  if (data.phone?.trim() && !isValidPhoneNumber(data.phone)) {
     errors.push({ field: 'phone', message: '请输入有效的手机号码' });
   }
 
@@ -36,6 +35,11 @@ export const validateCustomerForm = (data: Partial<CreateCustomerData>): Validat
 
   if (!data.contractStatus) {
     errors.push({ field: 'contractStatus', message: '请选择客户状态' });
+  }
+
+  // 线索等级改为必填
+  if (!data.leadLevel) {
+    errors.push({ field: 'leadLevel', message: '请选择线索等级' });
   }
 
   // 可选字段验证

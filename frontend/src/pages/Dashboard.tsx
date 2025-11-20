@@ -439,7 +439,7 @@ const Dashboard: React.FC = () => {
       {/* 第三行：线索质量 & 合同指标 */}
       <Row gutter={24} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-          <Card title={<Title level={4}>📊 线索质量分析</Title>} style={{ height: '100%' }}>
+          <Card title={<Title level={4}>📊 线索质量分析</Title>}>
             <Statistic
               title="A类线索占比"
               value={stats?.leadQuality.aLevelLeadsRatio || 0}
@@ -454,7 +454,7 @@ const Dashboard: React.FC = () => {
           </Card>
         </Col>
         <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-          <Card title={<Title level={4}>📋 合同签约指标</Title>} style={{ height: '100%' }}>
+          <Card title={<Title level={4}>📋 合同签约指标</Title>}>
             <Row gutter={[16, 16]}>
               <Col span={8}>
                 <Statistic

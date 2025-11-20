@@ -131,19 +131,20 @@ export class DashboardService {
       leadSourceDistribution[item._id] = item.count;
     });
 
-    // 计算时间范围内A类线索占比
-    const [totalCustomers, aLevelCustomers] = await Promise.all([
+    // 计算A类线索占比（所有有线索等级的客户中，A类的占比）
+    const [totalLeads, aLevelCustomers] = await Promise.all([
+      // 统计所有有线索等级的客户（A/B/C/D类）
       this.customerModel.countDocuments({
-        createdAt: { $gte: rangeStart, $lte: rangeEnd }
+        leadLevel: { $in: ['A类', 'B类', 'C类', 'D类'] }
       }).exec(),
-      this.customerModel.countDocuments({ 
-        leadLevel: 'A类',
-        createdAt: { $gte: rangeStart, $lte: rangeEnd }
+      // 统计A类线索
+      this.customerModel.countDocuments({
+        leadLevel: 'A类'
       }).exec(),
     ]);
 
-    const aLevelLeadsRatio = totalCustomers > 0 ? 
-      Math.round((aLevelCustomers / totalCustomers) * 100 * 100) / 100 : 0;
+    const aLevelLeadsRatio = totalLeads > 0 ?
+      Math.round((aLevelCustomers / totalLeads) * 100 * 100) / 100 : 0;
 
     return {
       aLevelLeadsRatio,

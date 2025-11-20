@@ -226,7 +226,7 @@ const Dashboard: React.FC = () => {
           <Col xs={24} sm={12} md={6} lg={6} xl={6}>
             <Card variant="outlined">
               <Statistic
-                title="今日新增简历"
+                title="本月新增简历"
                 value={stats?.resumes.newTodayResumes || 0}
                 valueStyle={{ color: '#52c41a' }}
                 prefix={<FileAddOutlined />}
@@ -287,7 +287,7 @@ const Dashboard: React.FC = () => {
           <Col xs={24} sm={12} md={6} lg={6} xl={6}>
             <Card variant="outlined">
               <Statistic
-                title="今日新增客户"
+                title="本月新增客户"
                 value={stats?.customerBusiness.newTodayCustomers || 0}
                 valueStyle={{ color: '#52c41a' }}
                 prefix={<UserOutlined />}

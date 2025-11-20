@@ -1,6 +1,6 @@
 export interface CustomerBusinessMetrics {
   totalCustomers: number;           // 客户总量
-  newTodayCustomers: number;       // 今日新增客户
+  newTodayCustomers: number;       // 本月新增客户（字段名保持不变，但含义是本月新增）
   pendingMatchCustomers: number;   // 待匹配客户（匹配中状态）
   signedCustomers: number;         // 已签约客户
   lostCustomers: number;           // 流失客户
@@ -25,7 +25,7 @@ export interface ContractMetrics {
 
 export interface ResumeMetrics {
   totalResumes: number;            // 简历总量
-  newTodayResumes: number;         // 今日新增简历
+  newTodayResumes: number;         // 本月新增简历（字段名保持不变，但含义是本月新增）
   acceptingResumes: number;        // 想接单阿姨
   notAcceptingResumes: number;     // 不接单阿姨
   onServiceResumes: number;        // 已上户阿姨

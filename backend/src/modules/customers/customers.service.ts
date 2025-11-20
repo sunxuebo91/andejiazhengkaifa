@@ -922,6 +922,7 @@ export class CustomersService {
             assignedBy: new Types.ObjectId(userId),
             assignedAt: now,
             assignmentReason: '从公海领取',
+            leadLevel: null, // 清除"流失"标签，让用户重新评估
             $inc: { claimCount: 1 },
           },
           { new: true }
@@ -1015,6 +1016,7 @@ export class CustomersService {
             assignedBy: new Types.ObjectId(adminUserId),
             assignedAt: now,
             assignmentReason: reason || '从公海分配',
+            leadLevel: null, // 清除"流失"标签，让用户重新评估
             $inc: { claimCount: 1 },
           },
           { new: true }

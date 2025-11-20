@@ -598,7 +598,7 @@ export class DashboardService {
           }
         },
         {
-          $sort: { totalLeads: -1 }
+          $sort: { totalDealAmount: -1, totalLeads: -1 }
         }
       ]).exec();
 

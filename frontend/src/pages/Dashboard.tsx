@@ -714,25 +714,22 @@ const Dashboard: React.FC = () => {
         }
       >
         <Table
-          dataSource={(stats?.salesFunnel.salesFunnelList || []).map((item, index) => ({
-            ...item,
-            originalRank: index + 1
-          }))}
+          dataSource={stats?.salesFunnel.salesFunnelList || []}
           rowKey="userId"
           pagination={{ pageSize: 10 }}
           scroll={{ x: 1200 }}
+          showSorterTooltip={{ title: '点击排序' }}
           columns={[
             {
               title: '排名',
-              dataIndex: 'originalRank',
               key: 'rank',
               width: 60,
               align: 'center',
-              render: (rank: number) => {
-                if (rank === 1) return <TrophyOutlined style={{ color: '#faad14', fontSize: 18 }} />;
-                if (rank === 2) return <TrophyOutlined style={{ color: '#d9d9d9', fontSize: 18 }} />;
-                if (rank === 3) return <TrophyOutlined style={{ color: '#cd7f32', fontSize: 18 }} />;
-                return rank;
+              render: (_, __, index) => {
+                if (index === 0) return <TrophyOutlined style={{ color: '#faad14', fontSize: 18 }} />;
+                if (index === 1) return <TrophyOutlined style={{ color: '#d9d9d9', fontSize: 18 }} />;
+                if (index === 2) return <TrophyOutlined style={{ color: '#cd7f32', fontSize: 18 }} />;
+                return index + 1;
               }
             },
             {
@@ -796,6 +793,7 @@ const Dashboard: React.FC = () => {
               width: 120,
               align: 'right',
               sorter: (a, b) => a.totalDealAmount - b.totalDealAmount,
+              defaultSortOrder: 'descend',
               render: (value) => (
                 <Text style={{ color: '#52c41a', fontWeight: 'bold' }}>
                   ¥{value.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}

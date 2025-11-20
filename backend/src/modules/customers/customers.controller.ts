@@ -279,11 +279,18 @@ export class CustomersController {
   @ApiBody({ type: ClaimCustomersDto })
   async claimCustomers(@Body() dto: ClaimCustomersDto, @Request() req): Promise<ApiResponse> {
     try {
+      console.log('🎯 [领取客户] 开始处理:', { customerIds: dto.customerIds, userId: req.user.userId });
       const result = await this.customersService.claimCustomers(dto.customerIds, req.user.userId);
+      console.log('✅ [领取客户] 处理完成:', result);
       const message = `领取完成：成功 ${result.success} 个，失败 ${result.failed} 个`;
-      return this.createResponse(true, message, result);
+      const response = this.createResponse(true, message, result);
+      console.log('📤 [领取客户] 返回响应:', response);
+      return response;
     } catch (error) {
-      return this.createResponse(false, error.message || '领取失败', null, error.message);
+      console.error('❌ [领取客户] 处理失败:', error.message, error.stack);
+      const response = this.createResponse(false, error.message || '领取失败', null, error.message);
+      console.log('📤 [领取客户] 返回错误响应:', response);
+      return response;
     }
   }
 

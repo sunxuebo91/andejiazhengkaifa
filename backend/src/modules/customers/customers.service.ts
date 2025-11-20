@@ -930,8 +930,8 @@ export class CustomersService {
         // 记录分配历史
         await this.assignmentLogModel.create({
           customerId: new Types.ObjectId(customerId),
-          fromUserId: null, // 从公海领取，没有原负责人
-          toUserId: new Types.ObjectId(userId),
+          oldAssignedTo: null, // 从公海领取，没有原负责人
+          newAssignedTo: new Types.ObjectId(userId),
           assignedBy: new Types.ObjectId(userId),
           reason: '从公海领取',
           assignedAt: now,
@@ -1023,8 +1023,8 @@ export class CustomersService {
         // 记录分配历史
         await this.assignmentLogModel.create({
           customerId: new Types.ObjectId(customerId),
-          fromUserId: null, // 从公海分配，没有原负责人
-          toUserId: new Types.ObjectId(assignedTo),
+          oldAssignedTo: null, // 从公海分配，没有原负责人
+          newAssignedTo: new Types.ObjectId(assignedTo),
           assignedBy: new Types.ObjectId(adminUserId),
           reason: reason || '从公海分配',
           assignedAt: now,

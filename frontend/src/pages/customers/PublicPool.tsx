@@ -191,6 +191,13 @@ const PublicPool: React.FC = () => {
       dataIndex: 'phone',
       key: 'phone',
       width: 120,
+      render: (phone: string) => {
+        // 公海中的电话号码脱敏：中间4位用*号隐藏
+        if (phone && phone.length === 11) {
+          return `${phone.substring(0, 3)}****${phone.substring(7)}`;
+        }
+        return phone;
+      },
     },
     {
       title: '线索来源',

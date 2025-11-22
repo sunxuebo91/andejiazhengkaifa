@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, Button, Space, Descriptions, Modal } from 'antd';
+import { Card, Button, Space, Descriptions, Modal, message } from 'antd';
+import { LinkOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { InterviewRoom } from '../../../types/interview.types';
 import RoomStatusBadge from './RoomStatusBadge';
@@ -84,6 +85,56 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onRejoin, onEnd, onViewDetail
     });
   };
 
+  /**
+   * 复制访客邀请链接
+   */
+  const handleCopyInviteLink = () => {
+    const inviteLink = `https://crm.andejiazheng.com/miniprogram/video-interview-guest-room.html?roomId=${room.roomId}`;
+
+    // 使用 Clipboard API 复制
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(inviteLink)
+        .then(() => {
+          message.success('邀请链接已复制到剪贴板');
+        })
+        .catch(() => {
+          // 降级方案
+          fallbackCopyTextToClipboard(inviteLink);
+        });
+    } else {
+      // 降级方案
+      fallbackCopyTextToClipboard(inviteLink);
+    }
+  };
+
+  /**
+   * 降级复制方案（兼容旧浏览器）
+   */
+  const fallbackCopyTextToClipboard = (text: string) => {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.top = '0';
+    textArea.style.left = '0';
+    textArea.style.opacity = '0';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        message.success('邀请链接已复制到剪贴板');
+      } else {
+        message.error('复制失败，请手动复制');
+      }
+    } catch (err) {
+      message.error('复制失败，请手动复制');
+    }
+
+    document.body.removeChild(textArea);
+  };
+
   return (
     <Card
       title={
@@ -124,6 +175,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onRejoin, onEnd, onViewDetail
             <>
               <Button type="primary" onClick={() => onRejoin(room)}>
                 重新进入
+              </Button>
+              <Button
+                icon={<LinkOutlined />}
+                onClick={handleCopyInviteLink}
+              >
+                复制邀请链接
               </Button>
               <Button danger onClick={handleEnd}>
                 结束面试

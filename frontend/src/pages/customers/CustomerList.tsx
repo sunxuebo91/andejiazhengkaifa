@@ -13,9 +13,11 @@ import {
   Col,
   Upload,
   Modal,
-  UploadProps
+  UploadProps,
+  DatePicker
 } from 'antd';
 import { SearchOutlined, PlusOutlined, MessageOutlined, UploadOutlined, InboxOutlined, ExportOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { customerService } from '../../services/customerService';
 import { apiService } from '../../services/api';
 import {
@@ -32,6 +34,7 @@ import Authorized from '../../components/Authorized';
 
 const { Search } = Input;
 const { Option } = Select;
+const { RangePicker } = DatePicker;
 
 const CustomerList: React.FC = () => {
   const navigate = useNavigate();
@@ -74,6 +77,10 @@ const CustomerList: React.FC = () => {
     assignedTo: string | undefined;
     startDate: string;
     endDate: string;
+    createdStartDate: string;
+    createdEndDate: string;
+    assignedStartDate: string;
+    assignedEndDate: string;
   }>({
     search: '',
     leadSource: undefined,
@@ -82,7 +89,11 @@ const CustomerList: React.FC = () => {
     leadLevel: undefined,
     assignedTo: undefined,
     startDate: '',
-    endDate: ''
+    endDate: '',
+    createdStartDate: '',
+    createdEndDate: '',
+    assignedStartDate: '',
+    assignedEndDate: ''
   });
 
   // 用户列表（用于线索归属人筛选）
@@ -144,7 +155,11 @@ const CustomerList: React.FC = () => {
       leadLevel: undefined,
       assignedTo: undefined,
       startDate: '',
-      endDate: ''
+      endDate: '',
+      createdStartDate: '',
+      createdEndDate: '',
+      assignedStartDate: '',
+      assignedEndDate: ''
     });
     setCurrentPage(1);
     loadCustomers(1, pageSize);
@@ -298,10 +313,22 @@ const CustomerList: React.FC = () => {
 
   // 下载Excel导入模板
   const downloadExcelTemplate = () => {
-    const columns = ['姓名', '电话', '线索来源', '微信号', '需求品类', '客户状态', '薪资预算', '地址', '备注'];
+    const columns = [
+      '姓名', '电话', '线索来源', '客户状态', '线索等级', '微信号', '身份证号',
+      '需求品类', '薪资预算', '期望上户日期', '预产期', '家庭面积', '家庭人口',
+      '休息制度', '地址', '年龄要求', '性别要求', '籍贯要求', '学历要求', '成交金额', '备注'
+    ];
     const data = [
-      ['张三', '13800138000', '美团', 'wx123', '月嫂', '待定', '8000', '北京市朝阳区', '备注信息'],
-      ['李四', '13900139000', '抖音', '', '住家育儿嫂', '匹配中', '9000', '上海市浦东新区', '']
+      [
+        '张三', '13800138000', '美团', '待定', 'O类', 'wx123', '110101199001011234',
+        '月嫂', '8000', '2024-12-01', '2024-11-15', '120', '3',
+        '单休', '北京市朝阳区', '35-45岁', '不限', '不限', '初中及以上', '15000', '需要有经验'
+      ],
+      [
+        '李四', '13900139000', '抖音', '匹配中', 'A类', '', '',
+        '住家育儿嫂', '9000', '2024-12-15', '', '150', '4',
+        '双休', '上海市浦东新区', '30-40岁', '女', '江浙沪', '高中及以上', '', '要求普通话标准'
+      ]
     ];
 
     // 创建CSV内容（添加BOM以支持中文）
@@ -419,13 +446,14 @@ const CustomerList: React.FC = () => {
       ),
     },
     {
-      title: '薪资预算',
-      dataIndex: 'salaryBudget',
-      key: 'salaryBudget',
-      width: 100,
-      render: (budget: number) => budget ? `¥${budget.toLocaleString()}` : '-',
+      title: '当前跟进人',
+      dataIndex: 'assignedToUser',
+      key: 'assignedToUser',
+      width: 120,
+      render: (assignedToUser: { name: string; username: string } | null) => (
+        assignedToUser ? assignedToUser.name : '-'
+      ),
     },
-
     {
       title: '更新时间',
       dataIndex: 'updatedAt',
@@ -585,7 +613,41 @@ const CustomerList: React.FC = () => {
             </Col>
           </Row>
           <Row gutter={[12, 8]} align="middle" style={{ marginTop: '8px' }}>
-            <Col span={24}>
+            <Col span={5}>
+              <RangePicker
+                placeholder={['线索创建开始日期', '线索创建结束日期']}
+                style={{ width: '100%' }}
+                value={[
+                  searchFilters.createdStartDate ? dayjs(searchFilters.createdStartDate) : null,
+                  searchFilters.createdEndDate ? dayjs(searchFilters.createdEndDate) : null
+                ]}
+                onChange={(dates) => {
+                  setSearchFilters({
+                    ...searchFilters,
+                    createdStartDate: dates?.[0] ? dates[0].format('YYYY-MM-DD') : '',
+                    createdEndDate: dates?.[1] ? dates[1].format('YYYY-MM-DD') : ''
+                  });
+                }}
+              />
+            </Col>
+            <Col span={5}>
+              <RangePicker
+                placeholder={['线索分配开始日期', '线索分配结束日期']}
+                style={{ width: '100%' }}
+                value={[
+                  searchFilters.assignedStartDate ? dayjs(searchFilters.assignedStartDate) : null,
+                  searchFilters.assignedEndDate ? dayjs(searchFilters.assignedEndDate) : null
+                ]}
+                onChange={(dates) => {
+                  setSearchFilters({
+                    ...searchFilters,
+                    assignedStartDate: dates?.[0] ? dates[0].format('YYYY-MM-DD') : '',
+                    assignedEndDate: dates?.[1] ? dates[1].format('YYYY-MM-DD') : ''
+                  });
+                }}
+              />
+            </Col>
+            <Col span={14}>
               <Space>
                 <Button
                   type="primary"
@@ -629,7 +691,7 @@ const CustomerList: React.FC = () => {
           dataSource={customers}
           rowKey="_id"
           loading={loading}
-          scroll={{ x: 1320 }}
+          scroll={{ x: 1440 }}
           rowSelection={{
             selectedRowKeys,
             onChange: (keys) => setSelectedRowKeys(keys),
@@ -704,14 +766,19 @@ const CustomerList: React.FC = () => {
       >
         <div style={{ marginBottom: 16 }}>
           <p style={{ marginBottom: 8 }}>
-            <strong>导入说明：</strong>
+            <strong>📋 导入说明：</strong>
           </p>
-          <ul style={{ paddingLeft: 20, marginBottom: 16 }}>
-            <li>支持 .xlsx 和 .xls 格式的Excel文件</li>
-            <li>必填字段：姓名、电话、线索来源</li>
-            <li>可选字段：微信号、需求品类、客户状态、薪资预算、地址、备注等</li>
-            <li>线索来源可选值：美团、抖音、快手、小红书、转介绍、杭州同馨、握个手平台、线索购买、其他</li>
-            <li>手机号重复的客户将导入失败</li>
+          <ul style={{ paddingLeft: 20, marginBottom: 16, fontSize: '13px' }}>
+            <li><strong>必填字段</strong>：姓名、电话、线索来源</li>
+            <li><strong>可选字段</strong>：客户状态、线索等级、微信号、身份证号、需求品类、薪资预算、期望上户日期、预产期、家庭面积、家庭人口、休息制度、地址、年龄要求、性别要求、籍贯要求、学历要求、成交金额、备注</li>
+            <li><strong>线索来源</strong>：美团、抖音、快手、小红书、转介绍、杭州同馨、握个手平台、线索购买、莲心、美家、天机鹿、孕妈联盟、高阁、星星、其他</li>
+            <li><strong>客户状态</strong>：已签约、匹配中、流失客户、已退款、退款中、待定（默认：待定）</li>
+            <li><strong>线索等级</strong>：O类、A类、B类、C类、D类、流失（默认：O类）</li>
+            <li><strong>需求品类</strong>：月嫂、住家育儿嫂、保洁、住家保姆、养宠、小时工、白班育儿、白班保姆、住家护老</li>
+            <li><strong>休息制度</strong>：单休、双休、无休、调休、待定</li>
+            <li><strong>学历要求</strong>：无学历、小学、初中、中专、职高、高中、大专、本科、研究生及以上</li>
+            <li>⚠️ 手机号重复的客户将导入失败</li>
+            <li>💡 建议先下载模板，按照模板格式填写数据</li>
           </ul>
         </div>
 

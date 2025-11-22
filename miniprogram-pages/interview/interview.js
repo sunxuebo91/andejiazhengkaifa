@@ -42,6 +42,9 @@ Page({
       h5Url += `&userName=${encodeURIComponent(userName)}`;
     }
 
+    // 🔥 添加时间戳防止缓存
+    h5Url += `&_t=${Date.now()}`;
+
     console.log('📱 [小程序] H5 URL:', h5Url);
 
     // 保存数据

@@ -77,7 +77,20 @@ export class CustomersService {
     limit: number;
     totalPages: number;
   }> {
-    const { search, caregiverName, caregiverPhone, page = 1, limit = 10, sortBy = 'updatedAt', sortOrder = 'desc', ...filters } = query as any;
+    const {
+      search,
+      caregiverName,
+      caregiverPhone,
+      page = 1,
+      limit = 10,
+      sortBy = 'updatedAt',
+      sortOrder = 'desc',
+      createdStartDate,
+      createdEndDate,
+      assignedStartDate,
+      assignedEndDate,
+      ...filters
+    } = query as any;
 
     const searchConditions: any = {};
 
@@ -107,6 +120,34 @@ export class CustomersService {
     }
     if (caregiverPhone) {
       searchConditions.caregiverPhone = { $regex: caregiverPhone, $options: 'i' };
+    }
+
+    // 线索创建时间范围筛选
+    if (createdStartDate || createdEndDate) {
+      searchConditions.createdAt = {};
+      if (createdStartDate) {
+        searchConditions.createdAt.$gte = new Date(createdStartDate);
+      }
+      if (createdEndDate) {
+        // 设置为当天的23:59:59
+        const endDate = new Date(createdEndDate);
+        endDate.setHours(23, 59, 59, 999);
+        searchConditions.createdAt.$lte = endDate;
+      }
+    }
+
+    // 线索分配时间范围筛选
+    if (assignedStartDate || assignedEndDate) {
+      searchConditions.assignedAt = {};
+      if (assignedStartDate) {
+        searchConditions.assignedAt.$gte = new Date(assignedStartDate);
+      }
+      if (assignedEndDate) {
+        // 设置为当天的23:59:59
+        const endDate = new Date(assignedEndDate);
+        endDate.setHours(23, 59, 59, 999);
+        searchConditions.assignedAt.$lte = endDate;
+      }
     }
 
     // 其他筛选条件（包含 assignedTo 等）
@@ -160,6 +201,7 @@ export class CustomersService {
       .sort({ updatedAt: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit)
+      .populate('assignedTo', 'name username')
       .lean();
 
     const [customers, total] = await Promise.all([
@@ -174,8 +216,17 @@ export class CustomersService {
       return bTime - aTime;
     });
 
+    // 🔥 转换 assignedTo 为 assignedToUser 格式
+    const customersWithUser = sortedCustomers.map((customer: any) => ({
+      ...customer,
+      assignedToUser: customer.assignedTo ? {
+        name: customer.assignedTo.name,
+        username: customer.assignedTo.username
+      } : null
+    }));
+
     return {
-      customers: sortedCustomers,
+      customers: customersWithUser,
       total,
       page,
       limit,
@@ -751,6 +802,7 @@ export class CustomersService {
       phone: rowData['电话']?.toString().trim(),
       leadSource: rowData['线索来源']?.toString().trim(),
       contractStatus: rowData['客户状态']?.toString().trim() || '待定',
+      leadLevel: rowData['线索等级']?.toString().trim() || 'O类', // 默认O类
     };
 
     // 可选字段
@@ -766,16 +818,16 @@ export class CustomersService {
       dto.serviceCategory = rowData['需求品类']?.toString().trim();
     }
 
-    if (rowData['线索等级']) {
-      dto.leadLevel = rowData['线索等级']?.toString().trim();
-    }
-
     if (rowData['薪资预算']) {
       dto.salaryBudget = Number(rowData['薪资预算']) || undefined;
     }
 
     if (rowData['期望上户日期']) {
       dto.expectedStartDate = rowData['期望上户日期']?.toString().trim();
+    }
+
+    if (rowData['预产期']) {
+      dto.expectedDeliveryDate = rowData['预产期']?.toString().trim();
     }
 
     if (rowData['家庭面积']) {
@@ -792,6 +844,26 @@ export class CustomersService {
 
     if (rowData['地址']) {
       dto.address = rowData['地址']?.toString().trim();
+    }
+
+    if (rowData['年龄要求']) {
+      dto.ageRequirement = rowData['年龄要求']?.toString().trim();
+    }
+
+    if (rowData['性别要求']) {
+      dto.genderRequirement = rowData['性别要求']?.toString().trim();
+    }
+
+    if (rowData['籍贯要求']) {
+      dto.originRequirement = rowData['籍贯要求']?.toString().trim();
+    }
+
+    if (rowData['学历要求']) {
+      dto.educationRequirement = rowData['学历要求']?.toString().trim();
+    }
+
+    if (rowData['成交金额']) {
+      dto.dealAmount = Number(rowData['成交金额']) || undefined;
     }
 
     if (rowData['备注']) {

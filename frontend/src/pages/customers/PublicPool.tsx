@@ -228,13 +228,6 @@ const PublicPool: React.FC = () => {
       },
     },
     {
-      title: '薪资预算',
-      dataIndex: 'salaryBudget',
-      key: 'salaryBudget',
-      width: 100,
-      render: (budget: number) => budget ? `¥${budget}` : '-',
-    },
-    {
       title: '进入公海时间',
       dataIndex: 'publicPoolEntryTime',
       key: 'publicPoolEntryTime',

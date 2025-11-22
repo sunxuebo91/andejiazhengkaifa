@@ -1218,6 +1218,87 @@
 
 
 
+    // ==================== 检查并加入房间 ====================
+    async function checkAndJoinRoom(roomId) {
+      console.log('🔍 检查房间状态:', roomId);
+
+      const jwtToken = getJwtToken();
+      if (!jwtToken) {
+        console.warn('⚠️ 未找到JWT Token，无法检查房间状态');
+        addLog('⚠️ 未登录，请手动创建面试间', 'warning');
+        // 显示创建面试间按钮
+        const joinPanel = document.getElementById('joinPanel');
+        if (joinPanel) {
+          joinPanel.style.display = 'flex';
+        }
+        return;
+      }
+
+      try {
+        // 调用后端检查房间状态
+        const response = await fetch(`/api/interview/rooms/${roomId}/status`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`
+          }
+        });
+
+        const result = await response.json();
+        console.log('📋 房间状态检查结果:', result);
+
+        if (result.success && result.data) {
+          const { dbStatus, zegoCanJoin } = result.data;
+
+          // 🔥 关键判断：只有房间状态为 active 才自动加入
+          if (dbStatus === 'active') {
+            console.log('✅ 房间状态为 active，自动加入房间');
+            addLog('✅ 检测到活跃的面试间，正在自动加入...', 'success');
+
+            // 隐藏过渡页面
+            const joinPanel = document.getElementById('joinPanel');
+            if (joinPanel) {
+              joinPanel.style.display = 'none';
+            }
+
+            // 等待一下让SDK完全初始化
+            setTimeout(() => {
+              createRoom(); // 调用创建房间函数（实际上会加入已存在的房间）
+            }, 1000);
+          } else {
+            // 房间已结束，不自动加入
+            console.log('⚠️ 房间状态为', dbStatus, '，不自动加入');
+            addLog(`⚠️ 面试间已结束，请创建新的面试间`, 'warning');
+
+            // 显示创建面试间按钮
+            const joinPanel = document.getElementById('joinPanel');
+            if (joinPanel) {
+              joinPanel.style.display = 'flex';
+            }
+          }
+        } else {
+          // 房间不存在或检查失败
+          console.warn('⚠️ 房间不存在或检查失败:', result.message);
+          addLog('⚠️ 面试间不存在，请创建新的面试间', 'warning');
+
+          // 显示创建面试间按钮
+          const joinPanel = document.getElementById('joinPanel');
+          if (joinPanel) {
+            joinPanel.style.display = 'flex';
+          }
+        }
+      } catch (error) {
+        console.error('❌ 检查房间状态失败:', error);
+        addLog('❌ 检查房间状态失败，请手动创建面试间', 'error');
+
+        // 显示创建面试间按钮
+        const joinPanel = document.getElementById('joinPanel');
+        if (joinPanel) {
+          joinPanel.style.display = 'flex';
+        }
+      }
+    }
+
     // ==================== 创建面试间 ====================
     async function createRoom() {
       console.log('➕ 创建面试间');
@@ -2683,9 +2764,10 @@
             // 在小程序中，返回上一页
             wx.miniProgram.navigateBack();
           } else {
-            // 如果不在小程序中，显示提示并刷新页面
+            // 🔥 关键修复：清除 URL 参数，防止页面重新加载时自动创建新房间
             alert('面试已结束，房间已解散');
-            location.reload();
+            // 清除 URL 参数后刷新页面
+            window.location.href = window.location.pathname;
           }
         } catch (error) {
           console.error('❌ 结束面试失败:', error);
@@ -2818,22 +2900,13 @@
 
       initZego();
 
-      // 🎯 如果URL中有roomId参数，自动加入房间
+      // 🎯 如果URL中有roomId参数，先检查房间状态再决定是否自动加入
       if (roomId) {
-        console.log('🔄 检测到URL中的房间ID，准备自动加入房间:', roomId);
-        addLog('🔄 检测到已存在的面试间，正在自动加入...', 'info');
+        console.log('🔄 检测到URL中的房间ID:', roomId);
+        addLog('🔍 正在检查面试间状态...', 'info');
 
-        // 🎯 立即隐藏过渡页面（重新加入时不需要显示"创建面试间"按钮）
-        const joinPanel = document.getElementById('joinPanel');
-        if (joinPanel) {
-          joinPanel.style.display = 'none';
-          console.log('✅ 已隐藏过渡页面');
-        }
-
-        // 等待一下让SDK完全初始化
-        setTimeout(() => {
-          createRoom(); // 调用创建房间函数（实际上会加入已存在的房间）
-        }, 1000);
+        // 🔥 关键修复：先检查房间状态，再决定是否自动加入
+        checkAndJoinRoom(roomId);
       }
     };
     

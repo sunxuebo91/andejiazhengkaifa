@@ -23,20 +23,10 @@ export class InterviewService {
   async createRoom(userId: string, dto: CreateRoomDto): Promise<InterviewRoom> {
     this.logger.log(`创建面试间: ${dto.roomId}, 主持人: ${userId}`);
 
-    // 🎯 检查房间是否已存在
-    const existingRoom = await this.interviewRoomModel.findOne({ roomId: dto.roomId });
-    if (existingRoom) {
-      this.logger.log(`面试间已存在: ${dto.roomId}，返回现有房间`);
-      // 如果房间已结束，重新激活它
-      if (existingRoom.status === 'ended') {
-        existingRoom.status = 'active';
-        existingRoom.endedAt = undefined;
-        await existingRoom.save();
-        this.logger.log(`面试间已重新激活: ${dto.roomId}`);
-      }
-      return existingRoom;
-    }
+    // 🔥 第一步：自动关闭该用户所有活跃的面试间
+    await this.autoCloseUserActiveRooms(userId, dto.hostZegoUserId);
 
+    // 🔥 第二步：创建新的面试间
     const room = new this.interviewRoomModel({
       roomId: dto.roomId,
       roomName: dto.roomName,
@@ -57,7 +47,70 @@ export class InterviewService {
 
     const savedRoom = await room.save();
     this.logger.log(`面试间创建成功: ${savedRoom.roomId}`);
+
+    // 🔥 第三步：在 ZegoService 内存中注册房间（用于定时清理任务）
+    try {
+      this.zegoService.createRoom(dto.roomId, dto.hostZegoUserId);
+      this.logger.log(`✅ 房间已在 ZegoService 中注册: ${dto.roomId}`);
+    } catch (error) {
+      this.logger.warn(`⚠️ 注册房间到 ZegoService 失败: ${dto.roomId}`, error);
+    }
+
     return savedRoom;
+  }
+
+  /**
+   * 自动关闭用户所有活跃的面试间（私有方法）
+   */
+  private async autoCloseUserActiveRooms(userId: string, newHostZegoUserId: string): Promise<void> {
+    this.logger.log(`🔍 检查用户 ${userId} 是否有活跃的面试间`);
+
+    // 1. 查询该用户所有活跃的面试间
+    const activeRooms = await this.interviewRoomModel.find({
+      hostUserId: new Types.ObjectId(userId),
+      status: 'active',
+    }).exec();
+
+    if (activeRooms.length === 0) {
+      this.logger.log(`✅ 用户没有活跃的面试间，可以直接创建新面试间`);
+      return;
+    }
+
+    this.logger.log(`🔄 发现 ${activeRooms.length} 个活跃面试间，准备自动关闭`);
+
+    // 2. 遍历关闭所有活跃面试间
+    for (const room of activeRooms) {
+      try {
+        this.logger.log(`🔄 正在关闭旧面试间: ${room.roomId}, 旧主持人: ${room.hostZegoUserId}`);
+
+        // 更新数据库状态
+        const endedAt = new Date();
+        const duration = Math.floor((endedAt.getTime() - room.createdAt.getTime()) / 1000);
+
+        room.status = 'ended';
+        room.endedAt = endedAt;
+        room.duration = duration;
+        await room.save();
+
+        this.logger.log(`✅ 数据库状态已更新: ${room.roomId}`);
+
+        // 解散 ZEGO 房间 - 使用旧面试间自己的 hostZegoUserId
+        try {
+          await this.zegoService.dismissRoom(room.roomId, room.hostZegoUserId);
+          this.logger.log(`✅ ZEGO 房间已解散: ${room.roomId}`);
+        } catch (error) {
+          this.logger.warn(`⚠️ 解散 ZEGO 房间失败: ${room.roomId}`, error);
+          // ZEGO 解散失败不影响数据库更新，继续处理
+        }
+
+        this.logger.log(`✅ 已自动关闭旧面试间: ${room.roomId}, 持续时长: ${duration}秒`);
+      } catch (error) {
+        this.logger.error(`❌ 关闭面试间失败: ${room.roomId}`, error);
+        // 某个面试间关闭失败，继续处理下一个
+      }
+    }
+
+    this.logger.log(`✅ 所有旧面试间已关闭，准备创建新面试间`);
   }
 
   /**
@@ -160,6 +213,38 @@ export class InterviewService {
     }
 
     return updatedRoom;
+  }
+
+  /**
+   * 自动结束面试间（由 ZegoService 定时任务调用）
+   * 用于处理3分钟无人自动关闭的情况
+   */
+  async autoEndRoom(roomId: string): Promise<void> {
+    this.logger.log(`🤖 自动结束面试间: ${roomId}`);
+
+    const room = await this.interviewRoomModel.findOne({ roomId }).exec();
+
+    if (!room) {
+      this.logger.warn(`面试间不存在: ${roomId}`);
+      return;
+    }
+
+    // 如果已经结束，跳过
+    if (room.status === 'ended') {
+      this.logger.log(`面试间已结束，跳过: ${roomId}`);
+      return;
+    }
+
+    // 更新状态
+    const endedAt = new Date();
+    const duration = Math.floor((endedAt.getTime() - room.createdAt.getTime()) / 1000);
+
+    room.status = 'ended';
+    room.endedAt = endedAt;
+    room.duration = duration;
+
+    await room.save();
+    this.logger.log(`✅ 面试间已自动结束: ${roomId}, 持续时长: ${duration}秒`);
   }
 
   /**

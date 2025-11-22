@@ -23,7 +23,7 @@ export class CustomerQueryDto {
   caregiverPhone?: string; // 阿姨手机号
 
   @IsOptional()
-  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '其他'])
+  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '其他'])
   leadSource?: string;
 
   @IsOptional()
@@ -43,6 +43,23 @@ export class CustomerQueryDto {
   @IsMongoId()
   assignedTo?: string;
 
+  // 线索创建时间范围
+  @IsOptional()
+  @IsString()
+  createdStartDate?: string;
+
+  @IsOptional()
+  @IsString()
+  createdEndDate?: string;
+
+  // 线索分配时间范围
+  @IsOptional()
+  @IsString()
+  assignedStartDate?: string;
+
+  @IsOptional()
+  @IsString()
+  assignedEndDate?: string;
 
   @IsOptional()
   @IsNumber()

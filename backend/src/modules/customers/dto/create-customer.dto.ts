@@ -46,8 +46,8 @@ export class CreateCustomerDto {
   serviceCategory?: string;
 
   @IsNotEmpty({ message: '线索等级不能为空' })
-  @IsEnum(['O类', 'A类', 'B类', 'C类', 'D类'], {
-    message: '线索等级必须是：O类、A类、B类、C类、D类之一'
+  @IsEnum(['O类', 'A类', 'B类', 'C类', 'D类', '流失'], {
+    message: '线索等级必须是：O类、A类、B类、C类、D类、流失之一'
   })
   leadLevel: string;
 

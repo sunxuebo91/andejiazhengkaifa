@@ -163,5 +163,93 @@ export class InterviewController {
       );
     }
   }
+
+  /**
+   * 🔥 简化版：创建面试间（仅需 roomId 和 inviteLink）
+   * 用于小程序 H5 页面快速创建
+   */
+  @Post('create-room')
+  async createRoomSimple(@Body() body: { roomId: string; inviteLink: string }, @Request() req) {
+    try {
+      const userId = req.user.userId;
+      const userName = req.user.username || req.user.name || '主持人';
+
+      // 从 roomId 生成 ZEGO 用户ID
+      const zegoUserId = `user_${Date.now()}`;
+
+      // 调用标准创建接口
+      const room = await this.interviewService.createRoom(userId, {
+        roomId: body.roomId,
+        roomName: `${userName}的面试间`,
+        hostName: userName,
+        hostZegoUserId: zegoUserId,
+        source: 'miniprogram',
+        hostUrl: body.inviteLink,
+      });
+
+      return {
+        success: true,
+        message: '保存成功',
+        data: {
+          roomId: room.roomId,
+          inviteLink: body.inviteLink,
+        },
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message || '保存失败',
+          error: error.name,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * 🔥 获取最新的活跃面试间
+   */
+  @Get('latest-room')
+  async getLatestRoom(@Request() req) {
+    try {
+      const userId = req.user.userId;
+
+      // 查询最新的活跃面试间
+      const result = await this.interviewService.findByHostUserId(userId, {
+        status: 'active',
+        page: 1,
+        pageSize: 1,
+      });
+
+      if (result.list.length === 0) {
+        return {
+          success: false,
+          message: '没有活跃的面试间',
+          data: null,
+        };
+      }
+
+      const room = result.list[0];
+      return {
+        success: true,
+        data: {
+          roomId: room.roomId,
+          inviteLink: room.hostUrl || `${process.env.FRONTEND_URL}/miniprogram/video-interview-guest.html?roomId=${room.roomId}`,
+          roomName: room.roomName,
+          createdAt: room.createdAt,
+        },
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message || '获取失败',
+          error: error.name,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
 }
 

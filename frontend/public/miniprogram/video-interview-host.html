@@ -367,47 +367,65 @@
       color: #666;
     }
 
-    /* 空位占位符样式 - 优化版 */
+    /* 空位占位符样式 - 镶嵌效果版 */
     .empty-slot {
       background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
       border: 1px solid #333;
     }
 
     .empty-slot .placeholder-icon {
-      /* 创建主题色渐变圆形容器 */
-      width: 70px;  /* 原100px缩小30% = 70px */
-      height: 70px;
+      /* 🔥 镶嵌效果：圆形凹陷容器 */
+      width: 80px;
+      height: 80px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 16px;
+      position: relative;
 
-      /* 主题色渐变背景 */
-      background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%);
+      /* 🔥 深色背景，与容器融为一体 */
+      background: linear-gradient(145deg, #151515, #1f1f1f);
 
-      /* 柔和阴影效果 */
+      /* 🔥 内阴影：营造"凹陷"效果 */
       box-shadow:
-        0 4px 12px rgba(95, 179, 163, 0.3),
-        0 2px 6px rgba(0, 0, 0, 0.2),
-        inset 0 1px 2px rgba(255, 255, 255, 0.2);
+        inset 5px 5px 10px rgba(0, 0, 0, 0.8),      /* 左上深色阴影（凹陷） */
+        inset -5px -5px 10px rgba(255, 255, 255, 0.03), /* 右下浅色高光（深度） */
+        inset 0 0 20px rgba(0, 0, 0, 0.4),          /* 整体内阴影 */
+        0 1px 2px rgba(0, 0, 0, 0.3);               /* 轻微外阴影增加层次 */
 
-      /* 图标样式 */
-      font-size: 32px;  /* 缩小图标尺寸 */
-      color: #ffffff;
-      opacity: 1;
+      /* 🔥 Logo图标（不使用emoji，改用背景图） */
+      font-size: 0; /* 隐藏emoji */
 
       /* 添加微妙的过渡效果 */
       transition: all 0.3s ease;
     }
 
-    /* 悬停效果（可选） */
+    /* 🔥 Logo背景图 */
+    .empty-slot .placeholder-icon::before {
+      content: '';
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      background-image: url('./assets/logo-dove.svg');
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+      opacity: 0.4; /* 半透明，像"刻"在里面 */
+      filter: brightness(1.2) contrast(1.1); /* 轻微提亮 */
+    }
+
+    /* 悬停效果：轻微"浮起" */
     .empty-slot .placeholder-icon:hover {
-      transform: scale(1.05);
       box-shadow:
-        0 6px 16px rgba(95, 179, 163, 0.4),
-        0 3px 8px rgba(0, 0, 0, 0.25),
-        inset 0 1px 2px rgba(255, 255, 255, 0.3);
+        inset 3px 3px 8px rgba(0, 0, 0, 0.7),
+        inset -3px -3px 8px rgba(255, 255, 255, 0.04),
+        inset 0 0 15px rgba(0, 0, 0, 0.3),
+        0 2px 4px rgba(0, 0, 0, 0.4);
+    }
+
+    .empty-slot .placeholder-icon:hover::before {
+      opacity: 0.5; /* 悬停时logo稍微亮一点 */
     }
 
     .empty-slot .placeholder-text {

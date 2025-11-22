@@ -1054,7 +1054,7 @@
   <div id="inviteModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>邀请其他人加入面试</h3>
+        <h3>邀请用户</h3>
         <span class="modal-close" onclick="closeInviteModal()">&times;</span>
       </div>
       <div class="modal-body">
@@ -2400,7 +2400,7 @@
             console.log('✅ 已发送 triggerShare 消息给小程序');
 
             // 提示用户点击右上角分享
-            alert('请点击右上角"..."按钮，选择"转发"分享给访客');
+            alert('请点击右上角"..."按钮，选择"转发"分享给客户/阿姨');
           } else {
             console.warn('⚠️ 未找到 wx.miniProgram，无法发送消息');
           }
@@ -2506,11 +2506,11 @@
         <div style="display: flex; gap: 12px; margin-top: 25px;">
           <button id="cancelLeaveBtn" style="flex: 1; background: #f5f5f5; color: #666; border: none; padding: 12px 24px;
                          border-radius: 8px; font-size: 16px; cursor: pointer;">
-            退出房间
+            取消
           </button>
           <button id="confirmLeaveBtn" style="flex: 1; background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%); color: white; border: none; padding: 12px 24px;
                          border-radius: 8px; font-size: 16px; cursor: pointer;">
-            确定离开
+            离开面试
           </button>
         </div>
       `;

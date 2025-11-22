@@ -1216,43 +1216,7 @@
       return true;
     }
 
-    // ==================== 检查麦克风权限 ====================
-    async function checkMicrophonePermission() {
-      try {
-        console.log('🎤 检查麦克风权限...');
-        // 请求麦克风权限（会触发浏览器权限提示）
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // 立即停止，只是为了触发权限请求
-        stream.getTracks().forEach(track => track.stop());
-        console.log('✅ 麦克风权限已授予');
-        return true;
-      } catch (error) {
-        console.error('❌ 麦克风权限被拒绝:', error);
-        alert('请允许使用麦克风，否则无法进行语音通话');
-        return false;
-      }
-    }
 
-    // ==================== 检查音频设备 ====================
-    async function checkAudioDevices() {
-      try {
-        console.log('🔍 检测音频设备...');
-        const devices = await zg.enumDevices();
-        const microphones = devices.microphones;
-
-        if (microphones.length === 0) {
-          console.error('❌ 未检测到麦克风设备');
-          alert('未检测到麦克风，请检查设备连接');
-          return false;
-        }
-
-        console.log('✅ 可用的麦克风:', microphones);
-        return true;
-      } catch (error) {
-        console.error('❌ 检测音频设备失败:', error);
-        return false;
-      }
-    }
 
     // ==================== 创建面试间 ====================
     async function createRoom() {
@@ -1273,19 +1237,8 @@
       try {
         showMessage('正在创建面试间...');
 
-        // 🎤 步骤1: 检查麦克风权限
-        const hasPermission = await checkMicrophonePermission();
-        if (!hasPermission) {
-          hideMessage();
-          return;
-        }
-
-        // 🔍 步骤2: 检查音频设备
-        const hasAudioDevice = await checkAudioDevices();
-        if (!hasAudioDevice) {
-          hideMessage();
-          return;
-        }
+        // ✅ 优化：不再提前检查权限，直接让 ZEGO SDK 的 createStream 一次性请求摄像头和麦克风权限
+        // 这样用户只需要授权一次，体验更好
 
         // 🎯 步骤1: 获取当前用户信息
         const jwtToken = getJwtToken();
@@ -1404,10 +1357,13 @@
         console.log('✅ 已开启用户和流更新通知 (userUpdate: true)');
         addLog(`✅ 主持人登录成功 (用户ID: ${currentUserId})`, 'success');
 
-        // 创建本地流
-        console.log('正在创建本地流...');
+        // 🎥 创建本地流（一次性请求摄像头和麦克风权限）
+        console.log('📞 正在请求摄像头和麦克风权限...');
+        showMessage('正在请求摄像头和麦克风权限...');
+
         // ✅ 设置视频质量为 720p，并配置音频参数
         // ⚠️ 注意：不要同时开启所有音频处理，可能导致声音问题
+        // 🔥 这里会触发浏览器的权限请求弹窗，用户只需授权一次即可
         localStream = await zg.createStream({
           camera: {
             video: {
@@ -1420,7 +1376,7 @@
             audio: true  // 使用默认音频配置，让浏览器自动处理
           }
         });
-        console.log('创建本地流成功');
+        console.log('✅ 权限授权成功，本地流创建成功');
 
         // 🎨 启用基础美颜（自然效果，不夸张，适配 720p 分辨率）
         if (zg.setEffectsBeauty && typeof zg.setEffectsBeauty === 'function') {

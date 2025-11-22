@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Input, Form, Space, message, Modal, Typography, Spin, Select, Slider, Drawer } from 'antd';
-import { VideoCameraOutlined, ShareAltOutlined, CopyOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
+import { VideoCameraOutlined, ShareAltOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { generateZegoToken } from '../../services/zego';
 import { apiService } from '../../services/api';
@@ -273,26 +273,32 @@ const VideoInterview: React.FC = () => {
       console.log('当前用户:', currentUser);
       const userId = currentUser.id;
       const userName = values.userName || currentUser.name;
-      const roomId = values.roomId;
+      let roomId = values.roomId;
 
       console.log('请求参数:', { userId, roomId, userName });
 
-      // 🎯 先创建面试间记录
+      // 🎯 第一步：检查是否有活跃的面试间
       try {
-        await apiService.post('/api/interview/rooms', {
-          roomId,
-          roomName: `${userName}的面试间`,
-          hostName: userName,
-          hostZegoUserId: userId,
-        });
-        console.log('✅ 面试间记录已创建');
-      } catch (error: any) {
-        // 如果是重复创建（房间已存在），忽略错误继续
-        if (error.message?.includes('已存在')) {
-          console.log('ℹ️ 面试间已存在，继续加入');
+        const activeRoomResponse = await apiService.get('/api/interview/active-room');
+        if (activeRoomResponse.success && activeRoomResponse.data) {
+          // 找到活跃面试间，直接进入
+          const activeRoom = activeRoomResponse.data;
+          console.log('✅ 找到活跃面试间，直接进入:', activeRoom.roomId);
+          roomId = activeRoom.roomId; // 使用活跃面试间的 roomId
+          message.info('进入已存在的面试间');
         } else {
-          console.warn('⚠️ 创建面试间记录失败，但继续加入房间:', error);
+          // 没有活跃面试间，创建新的
+          console.log('ℹ️ 没有活跃面试间，创建新的');
+          await apiService.post('/api/interview/rooms', {
+            roomId,
+            roomName: `${userName}的面试间`,
+            hostName: userName,
+            hostZegoUserId: userId,
+          });
+          console.log('✅ 面试间记录已创建');
         }
+      } catch (error: any) {
+        console.warn('⚠️ 检查/创建面试间失败，但继续加入房间:', error);
       }
 
       // 从后端获取配置和 Token
@@ -1455,48 +1461,23 @@ const VideoInterview: React.FC = () => {
             </Form.Item>
 
             <Form.Item style={{ marginBottom: '16px' }}>
-              <Space style={{ width: '100%' }} direction="vertical" size="middle">
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  size="large"
-                  icon={<VideoCameraOutlined />}
-                  loading={loading}
-                  block
-                  style={{
-                    height: '56px',
-                    fontSize: '18px',
-                    fontWeight: 'bold',
-                    background: '#5DBFB3',
-                    borderColor: '#5DBFB3'
-                  }}
-                >
-                  创建面试间
-                </Button>
-
-                {/* 如果有上次的房间，显示重新进入按钮 */}
-                {localStorage.getItem('lastRoomId') && (
-                  <Button
-                    size="large"
-                    icon={<ReloadOutlined />}
-                    block
-                    style={{
-                      height: '48px',
-                      borderColor: '#5DBFB3',
-                      color: '#5DBFB3'
-                    }}
-                    onClick={() => {
-                      const lastRoomId = localStorage.getItem('lastRoomId');
-                      if (lastRoomId) {
-                        form.setFieldsValue({ roomId: lastRoomId });
-                        form.submit();
-                      }
-                    }}
-                  >
-                    重新进入上次的面试间
-                  </Button>
-                )}
-              </Space>
+              <Button
+                type="primary"
+                htmlType="submit"
+                size="large"
+                icon={<VideoCameraOutlined />}
+                loading={loading}
+                block
+                style={{
+                  height: '56px',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  background: '#5DBFB3',
+                  borderColor: '#5DBFB3'
+                }}
+              >
+                创建面试间
+              </Button>
             </Form.Item>
           </Form>
         </Spin>

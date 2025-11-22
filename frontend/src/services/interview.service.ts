@@ -50,11 +50,19 @@ export const checkRoomStatus = async (roomId: string) => {
   return await apiService.get<RoomStatusResponse>(`/api/interview/rooms/${roomId}/status`);
 };
 
+/**
+ * 获取用户当前活跃的面试间
+ */
+export const getActiveRoom = async () => {
+  return await apiService.get<InterviewRoom | null>('/api/interview/active-room');
+};
+
 export const interviewService = {
   createRoom,
   getRooms,
   getRoomDetail,
   endRoom,
   checkRoomStatus,
+  getActiveRoom,
 };
 

@@ -114,6 +114,29 @@ export class InterviewService {
   }
 
   /**
+   * 获取用户当前活跃的面试间
+   */
+  async getUserActiveRoom(userId: string): Promise<InterviewRoom | null> {
+    this.logger.log(`🔍 查询用户 ${userId} 的活跃面试间`);
+
+    const activeRoom = await this.interviewRoomModel
+      .findOne({
+        hostUserId: new Types.ObjectId(userId),
+        status: 'active',
+      })
+      .sort({ createdAt: -1 }) // 获取最新的活跃面试间
+      .exec();
+
+    if (activeRoom) {
+      this.logger.log(`✅ 找到活跃面试间: ${activeRoom.roomId}`);
+    } else {
+      this.logger.log(`✅ 用户没有活跃的面试间`);
+    }
+
+    return activeRoom;
+  }
+
+  /**
    * 根据主持人ID查询面试间列表
    */
   async findByHostUserId(userId: string, query: QueryRoomsDto) {

@@ -47,6 +47,31 @@ export class InterviewController {
   }
 
   /**
+   * 获取用户当前活跃的面试间
+   */
+  @Get('active-room')
+  async getActiveRoom(@Request() req) {
+    try {
+      const userId = req.user.userId;
+      const room = await this.interviewService.getUserActiveRoom(userId);
+      return {
+        success: true,
+        data: room,
+        message: room ? '找到活跃面试间' : '没有活跃的面试间',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message || '查询活跃面试间失败',
+          error: error.name,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
    * 获取面试间列表
    */
   @Get('rooms')

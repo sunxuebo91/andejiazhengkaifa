@@ -63,6 +63,8 @@
         console.log('💡 提示：请使用小程序分享的加密链接打开');
       }
     })();
+
+
   </script>
 
   <!-- 使用本地 ZEGO SDK（v3.11.0 独立打包版本，包含所有依赖） -->
@@ -164,7 +166,7 @@
       background: rgba(255, 255, 255, 0.95);
       border-radius: 8px;
       margin: 8px 8px 0 8px;
-      box-shadow: 0 2px 6px rgba(95, 179, 163, 0.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
       flex-shrink: 0;
     }
 
@@ -217,6 +219,12 @@
       border-radius: 12px;
       overflow: hidden;
       min-height: 0;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
+      transition: box-shadow 0.3s ease;
+    }
+
+    .video-item:hover {
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 6px 12px rgba(0, 0, 0, 0.25);
     }
 
     .video-box {
@@ -355,61 +363,62 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #2a2a2a;
-      color: #999;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+      color: #666;
     }
 
-    /* 邀请按钮样式 */
-    .invite-placeholder {
-      cursor: pointer;
-      transition: all 0.3s ease;
-      background: rgba(95, 179, 163, 0.1) !important;
-      border: 2px dashed rgba(95, 179, 163, 0.3);
-    }
-
-    .invite-placeholder .placeholder-icon {
-      color: #5fb3a3;
-      font-size: 64px;
-      font-weight: 300;
-      line-height: 1;
-    }
-
-    .invite-placeholder .placeholder-text {
-      color: #fff;
-    }
-
-    .invite-placeholder:hover {
-      background: rgba(95, 179, 163, 0.2) !important;
-      border-color: rgba(95, 179, 163, 0.5);
-    }
-
-    .invite-placeholder:hover .placeholder-icon {
-      transform: rotate(90deg);
-    }
-
-    .invite-placeholder:active {
-      transform: scale(0.98);
-    }
-
-    /* 🎯 小程序环境下隐藏邀请按钮和邀请弹窗 */
-    body.miniprogram-env .invite-placeholder {
-      display: none !important;
-    }
-
-    body.miniprogram-env #inviteModal {
-      display: none !important;
-    }
-
-    /* 小程序环境下显示普通占位符 */
-    body.miniprogram-env .video-placeholder.empty-slot {
-      display: flex !important;
-      background: #1a1a1a;
+    /* 空位占位符样式 - 优化版 */
+    .empty-slot {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
       border: 1px solid #333;
-      cursor: default;
+    }
+
+    .empty-slot .placeholder-icon {
+      /* 创建主题色渐变圆形容器 */
+      width: 70px;  /* 原100px缩小30% = 70px */
+      height: 70px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+
+      /* 主题色渐变背景 */
+      background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%);
+
+      /* 柔和阴影效果 */
+      box-shadow:
+        0 4px 12px rgba(95, 179, 163, 0.3),
+        0 2px 6px rgba(0, 0, 0, 0.2),
+        inset 0 1px 2px rgba(255, 255, 255, 0.2);
+
+      /* 图标样式 */
+      font-size: 32px;  /* 缩小图标尺寸 */
+      color: #ffffff;
+      opacity: 1;
+
+      /* 添加微妙的过渡效果 */
+      transition: all 0.3s ease;
+    }
+
+    /* 悬停效果（可选） */
+    .empty-slot .placeholder-icon:hover {
+      transform: scale(1.05);
+      box-shadow:
+        0 6px 16px rgba(95, 179, 163, 0.4),
+        0 3px 8px rgba(0, 0, 0, 0.25),
+        inset 0 1px 2px rgba(255, 255, 255, 0.3);
+    }
+
+    .empty-slot .placeholder-text {
+      color: #888;
+      font-size: 14px;
+      font-weight: 400;
+      margin-top: 4px;
     }
 
     body.miniprogram-env .video-placeholder.empty-slot .placeholder-text {
-      color: #666;
+      color: #888;
       font-size: 14px;
     }
 
@@ -516,7 +525,7 @@
       border-radius: 16px;
       width: 85%;
       max-width: 400px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.3), 0 8px 16px rgba(0,0,0,0.2);
     }
 
     .join-box h2 {
@@ -790,9 +799,9 @@
       <!-- 远程视频1 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox1">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -800,9 +809,9 @@
       <!-- 远程视频2 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox2">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -810,9 +819,9 @@
       <!-- 远程视频3 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox3">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -820,9 +829,9 @@
       <!-- 远程视频4 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox4">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -830,9 +839,9 @@
       <!-- 远程视频5 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox5">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -1885,9 +1894,9 @@
 
           // 恢复占位符
           box.innerHTML = `
-            <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-              <div class="placeholder-icon">+</div>
-              <div class="placeholder-text">邀请用户</div>
+            <div class="video-placeholder empty-slot">
+              <div class="placeholder-icon">👤</div>
+              <div class="placeholder-text">等待加入</div>
             </div>
           `;
 
@@ -2854,9 +2863,52 @@
       }
     };
     
+    // 🔥 统一的离开房间通知函数
+    function notifyLeaveRoom(eventName) {
+      if (!roomId || !currentUserId) {
+        console.log(`⚠️ ${eventName}: roomId 或 currentUserId 为空，跳过通知`);
+        return;
+      }
+
+      console.log(`🔔 ${eventName}: 准备通知后端主持人离开`);
+      console.log(`  - roomId: ${roomId}`);
+      console.log(`  - currentUserId: ${currentUserId}`);
+
+      const apiUrl = window.location.origin + '/api/zego/leave-room';
+      const leaveData = { roomId: roomId, userId: currentUserId };
+
+      // 🔥 方法1：尝试使用 sendBeacon（最可靠）
+      if (navigator.sendBeacon) {
+        try {
+          const blob = new Blob([JSON.stringify(leaveData)], { type: 'application/json' });
+          const success = navigator.sendBeacon(apiUrl, blob);
+          console.log(`✅ ${eventName}: sendBeacon 发送${success ? '成功' : '失败'}`);
+          if (success) return; // 如果成功就返回
+        } catch (error) {
+          console.error(`❌ ${eventName}: sendBeacon 失败:`, error);
+        }
+      } else {
+        console.warn(`⚠️ ${eventName}: navigator.sendBeacon 不支持`);
+      }
+
+      // 🔥 方法2：使用同步 XMLHttpRequest（兜底方案）
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', apiUrl, false); // false = 同步请求
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify(leaveData));
+        console.log(`✅ ${eventName}: 同步 XHR 发送成功`);
+      } catch (error) {
+        console.error(`❌ ${eventName}: 同步 XHR 失败:`, error);
+      }
+    }
+
     // 🔥 页面卸载时清理资源
     window.addEventListener('beforeunload', function(e) {
       console.log('⚠️ 页面即将卸载（beforeunload）');
+      notifyLeaveRoom('beforeunload');
+
+      // 清理 ZEGO 资源
       if (zg && localStream) {
         zg.destroyStream(localStream);
         zg.logoutRoom(roomId);
@@ -2866,6 +2918,9 @@
     // 🔥 pagehide 事件在页面真正卸载时触发（移动端更可靠）
     window.addEventListener('pagehide', function(e) {
       console.log('⚠️ 页面卸载（pagehide）');
+      notifyLeaveRoom('pagehide');
+
+      // 清理 ZEGO 资源
       if (zg && localStream) {
         zg.destroyStream(localStream);
         zg.logoutRoom(roomId);
@@ -2881,6 +2936,7 @@
       }
     });
   </script>
+
 </body>
 </html>
 

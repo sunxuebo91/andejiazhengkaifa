@@ -4,6 +4,57 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>视频面试 - 访客</title>
+  <!-- 版本: v2024.01.20.002 - 添加调试浮窗 -->
+
+  <!-- 🎯 微信环境检测（最先执行） -->
+  <script>
+    // 🎯 全局环境检测变量（供后续使用）
+    var IS_IN_MINIPROGRAM = false;
+    var IS_WECHAT = false;
+
+    (function() {
+      // 检测是否在微信中
+      function isWechat() {
+        return /MicroMessenger/i.test(navigator.userAgent);
+      }
+
+      // 检测是否在小程序 WebView 中（微信官方推荐方法）
+      function isInMiniProgram() {
+        // 方法1：通过 window.__wxjs_environment 判断（最可靠）
+        if (window.__wxjs_environment === 'miniprogram') {
+          return true;
+        }
+
+        // 方法2：通过 userAgent 判断（微信 7.0.0+ 支持）
+        if (/miniProgram/i.test(navigator.userAgent)) {
+          return true;
+        }
+
+        return false;
+      }
+
+      // 设置全局变量
+      IS_WECHAT = isWechat();
+      IS_IN_MINIPROGRAM = isInMiniProgram();
+
+      console.log('🔍 环境检测:');
+      console.log('  - 是否在微信中:', IS_WECHAT);
+      console.log('  - 是否在小程序 WebView 中:', IS_IN_MINIPROGRAM);
+      console.log('  - UserAgent:', navigator.userAgent);
+      console.log('  - __wxjs_environment:', window.__wxjs_environment);
+
+      if (IS_IN_MINIPROGRAM) {
+        console.log('✅ 已在小程序 WebView 中，正常加载 H5 页面');
+        console.log('💡 邀请功能将被隐藏（小程序环境使用分享功能）');
+      } else if (!IS_WECHAT) {
+        console.log('🌐 浏览器环境，正常加载 H5 页面');
+      } else if (IS_WECHAT && !IS_IN_MINIPROGRAM) {
+        console.log('⚠️ 微信浏览器环境，但不在小程序中');
+      }
+    })();
+
+
+  </script>
 
   <!-- ZEGO Token 生成库（内嵌实现） -->
   <script>
@@ -100,7 +151,7 @@
       background: rgba(255, 255, 255, 0.95);
       border-radius: 8px;
       margin: 8px 8px 0 8px;
-      box-shadow: 0 2px 6px rgba(95, 179, 163, 0.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
       flex-shrink: 0;
     }
 
@@ -160,6 +211,12 @@
       border-radius: 12px;
       overflow: hidden;
       min-height: 0;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
+      transition: box-shadow 0.3s ease;
+    }
+
+    .video-item:hover {
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 6px 12px rgba(0, 0, 0, 0.25);
     }
 
     .video-box {
@@ -203,41 +260,58 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #2a2a2a;
-      color: #999;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+      color: #666;
     }
 
-    /* 邀请按钮样式 */
-    .invite-placeholder {
-      cursor: pointer;
-      transition: all 0.3s ease;
-      background: rgba(95, 179, 163, 0.1) !important;
-      border: 2px dashed rgba(95, 179, 163, 0.3);
+    /* 空位占位符样式 - 优化版 */
+    .empty-slot {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+      border: 1px solid #333;
     }
 
-    .invite-placeholder .placeholder-icon {
-      color: #5fb3a3;
-      font-size: 64px;
-      font-weight: 300;
-      line-height: 1;
+    .empty-slot .placeholder-icon {
+      /* 创建主题色渐变圆形容器 */
+      width: 70px;  /* 原100px缩小30% = 70px */
+      height: 70px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+
+      /* 主题色渐变背景 */
+      background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%);
+
+      /* 柔和阴影效果 */
+      box-shadow:
+        0 4px 12px rgba(95, 179, 163, 0.3),
+        0 2px 6px rgba(0, 0, 0, 0.2),
+        inset 0 1px 2px rgba(255, 255, 255, 0.2);
+
+      /* 图标样式 */
+      font-size: 32px;  /* 缩小图标尺寸 */
+      color: #ffffff;
       opacity: 1;
+
+      /* 添加微妙的过渡效果 */
+      transition: all 0.3s ease;
     }
 
-    .invite-placeholder .placeholder-text {
-      color: #fff;
+    /* 悬停效果（可选） */
+    .empty-slot .placeholder-icon:hover {
+      transform: scale(1.05);
+      box-shadow:
+        0 6px 16px rgba(95, 179, 163, 0.4),
+        0 3px 8px rgba(0, 0, 0, 0.25),
+        inset 0 1px 2px rgba(255, 255, 255, 0.3);
     }
 
-    .invite-placeholder:hover {
-      background: rgba(95, 179, 163, 0.2) !important;
-      border-color: rgba(95, 179, 163, 0.5);
-    }
-
-    .invite-placeholder:hover .placeholder-icon {
-      transform: rotate(90deg);
-    }
-
-    .invite-placeholder:active {
-      transform: scale(0.98);
+    .empty-slot .placeholder-text {
+      color: #888;
+      font-size: 14px;
+      font-weight: 400;
+      margin-top: 4px;
     }
 
     .placeholder-icon {
@@ -528,7 +602,7 @@
       padding: 40px 30px;
       width: calc(100% - 20px);
       max-width: 400px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4), 0 12px 24px rgba(0, 0, 0, 0.3);
     }
 
     .identity-header {
@@ -723,6 +797,87 @@
     .teleprompter-content.scrolling {
       /* 不使用CSS动画，改用JavaScript平滑滚动 */
     }
+
+    /* 🔍 调试浮窗样式 */
+    #debugPanel {
+      position: fixed !important;
+      top: 60px !important;
+      left: 10px !important;
+      background: rgba(255, 0, 0, 0.95) !important;
+      color: #fff !important;
+      font-family: 'Courier New', monospace;
+      font-size: 12px !important;
+      padding: 15px !important;
+      border-radius: 8px;
+      z-index: 9999999 !important;
+      max-width: 90vw !important;
+      max-height: 70vh !important;
+      overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(255, 0, 0, 0.8) !important;
+      border: 3px solid #ff0 !important;
+      pointer-events: auto !important;
+    }
+
+    #debugPanel.hidden {
+      display: none;
+    }
+
+    #debugPanel .debug-title {
+      color: #fff !important;
+      font-weight: bold;
+      margin-bottom: 8px;
+      border-bottom: 2px solid #ff0 !important;
+      padding-bottom: 5px;
+      font-size: 14px !important;
+    }
+
+    #debugPanel .debug-item {
+      margin: 8px 0 !important;
+      line-height: 1.6 !important;
+    }
+
+    #debugPanel .debug-label {
+      color: #ff0 !important;
+      font-weight: bold;
+    }
+
+    #debugPanel .debug-value {
+      color: #fff !important;
+    }
+
+    #debugPanel .debug-value.error {
+      color: #ff0 !important;
+      background: #800 !important;
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    #debugPanel .debug-value.success {
+      color: #0f0 !important;
+      background: #080 !important;
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    #debugPanel .debug-toggle {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #fff !important;
+      color: #f00 !important;
+      border: 2px solid #ff0 !important;
+      border-radius: 5px;
+      padding: 5px 10px !important;
+      cursor: pointer;
+      font-size: 14px !important;
+      font-weight: bold;
+    }
+
+    #debugPanel .debug-section {
+      margin-top: 12px !important;
+      padding-top: 10px !important;
+      border-top: 2px dashed #ff0 !important;
+    }
   </style>
 </head>
 <body>
@@ -816,9 +971,9 @@
       <!-- 位置3：其他参与者 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox2">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -826,9 +981,9 @@
       <!-- 位置4：其他参与者 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox3">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -836,9 +991,9 @@
       <!-- 位置5：其他参与者 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox4">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -846,9 +1001,9 @@
       <!-- 位置6：其他参与者 -->
       <div class="video-item">
         <div class="video-box" id="remoteBox5">
-          <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">邀请用户</div>
+          <div class="video-placeholder empty-slot">
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-text">等待加入</div>
           </div>
         </div>
       </div>
@@ -1833,14 +1988,16 @@
 
               // 恢复占位符
               box.innerHTML = `
-                <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-                  <div class="placeholder-icon">+</div>
-                  <div class="placeholder-text">邀请用户</div>
+                <div class="video-placeholder empty-slot">
+                  <div class="placeholder-icon">👤</div>
+                  <div class="placeholder-text">等待加入</div>
                 </div>
               `;
 
               delete remoteStreams[stream.streamID];
               console.log(`✅ 视频容器 ${streamInfo.boxId} 已彻底清理`);
+
+
             }
           }
         }
@@ -2188,14 +2345,65 @@
 
     // 显示邀请弹窗
     function showInviteModal() {
+      console.log('📨 显示邀请弹窗');
+      console.log('🏠 当前roomId:', roomId);
+
+      // 🔥 检查roomId是否存在
+      if (!roomId || roomId === '') {
+        alert('房间号不存在，无法生成邀请链接！');
+        console.error('❌ roomId为空，无法生成邀请链接');
+        return;
+      }
+
+      // 🎯 小程序环境下，发送 triggerShare 消息给小程序
+      if (IS_IN_MINIPROGRAM) {
+        try {
+          console.log('💡 小程序环境，发送 triggerShare 消息给小程序');
+
+          // 生成访客H5链接
+          const baseUrl = window.location.origin + window.location.pathname.replace('video-interview-guest-room.html', '');
+          const inviteLink = `${baseUrl}video-interview-guest.html?roomId=${roomId}`;
+
+          console.log('📤 准备发送 triggerShare 消息');
+          console.log('📤 roomId:', roomId);
+          console.log('📤 inviteLink:', inviteLink);
+
+          // 发送消息给小程序
+          if (typeof wx !== 'undefined' && wx.miniProgram) {
+            wx.miniProgram.postMessage({
+              data: {
+                type: 'triggerShare',
+                roomId: roomId,
+                inviteLink: inviteLink,
+                shareTitle: '邀请你参加视频面试',
+                shareDesc: `面试间号：${roomId.replace(/^room_/, 'AD-').split('_')[0]}`
+              }
+            });
+            console.log('✅ 已发送 triggerShare 消息给小程序');
+
+            // 提示用户点击右上角分享
+            alert('请点击右上角"..."按钮，选择"转发"分享给访客');
+          } else {
+            console.warn('⚠️ 未找到 wx.miniProgram，无法发送消息');
+          }
+        } catch (error) {
+          console.error('❌ 发送 triggerShare 消息失败:', error);
+          // 不影响主流程
+        }
+        return;
+      }
+
+      // 非小程序环境，显示邀请弹窗
       const modal = document.getElementById('inviteModal');
-      const inviteLink = document.getElementById('inviteLink');
+      const inviteLinkInput = document.getElementById('inviteLink');
 
       // 生成邀请链接（访客端）
       const baseUrl = window.location.origin + window.location.pathname.replace('video-interview-guest-room.html', 'video-interview-guest.html');
       const link = `${baseUrl}?roomId=${roomId}`;
 
-      inviteLink.value = link;
+      console.log('🔗 生成的邀请链接:', link);
+
+      inviteLinkInput.value = link;
       modal.classList.add('show');
     }
 
@@ -2238,57 +2446,124 @@
 
     // 离开房间
     function leaveRoom() {
-      if (confirm('确定要离开面试吗？')) {
-        try {
-          console.log('🚪 开始离开房间...');
+      // 显示自定义确认弹窗
+      showLeaveConfirmModal();
+    }
 
-          // 🔥 标记为主动离开，防止触发被踢出弹窗
-          hasLeftRoom = true;
+    // ✅ 显示"确认离开"弹窗
+    function showLeaveConfirmModal() {
+      console.log('📢 显示确认离开弹窗');
 
-          // 停止计时器和轮询
-          stopTimer();
-          stopRemoteControlPolling();
+      // 创建遮罩层
+      const overlay = document.createElement('div');
+      overlay.id = 'leaveConfirmOverlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
 
-          // 清理本地流
-          if (zg && localStream) {
-            console.log('🧹 清理本地流...');
+      // 创建弹窗
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      `;
 
-            // 停止推流
-            try {
-              zg.stopPublishingStream(localStream.streamID);
-              console.log('✅ 已停止推流');
-            } catch (error) {
-              console.error('停止推流失败:', error);
-            }
+      modal.innerHTML = `
+        <div style="font-size: 48px; margin-bottom: 20px;">❓</div>
+        <h2 style="margin: 0 0 15px 0; font-size: 24px; color: #333;">确定要离开面试吗？</h2>
+        <div style="display: flex; gap: 12px; margin-top: 25px;">
+          <button id="cancelLeaveBtn" style="flex: 1; background: #f5f5f5; color: #666; border: none; padding: 12px 24px;
+                         border-radius: 8px; font-size: 16px; cursor: pointer;">
+            退出房间
+          </button>
+          <button id="confirmLeaveBtn" style="flex: 1; background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%); color: white; border: none; padding: 12px 24px;
+                         border-radius: 8px; font-size: 16px; cursor: pointer;">
+            确定离开
+          </button>
+        </div>
+      `;
 
-            // 销毁本地流
-            try {
-              zg.destroyStream(localStream);
-              console.log('✅ 已销毁本地流');
-            } catch (error) {
-              console.error('销毁本地流失败:', error);
-            }
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
 
-            // 退出房间
-            try {
-              zg.logoutRoom(roomId);
-              console.log('✅ 已退出房间');
-            } catch (error) {
-              console.error('退出房间失败:', error);
-            }
+      // 绑定按钮事件
+      document.getElementById('cancelLeaveBtn').onclick = function() {
+        console.log('❌ 用户取消离开');
+        document.body.removeChild(overlay);
+      };
+
+      document.getElementById('confirmLeaveBtn').onclick = function() {
+        console.log('✅ 用户确认离开');
+        document.body.removeChild(overlay);
+        executeLeaveRoom();
+      };
+    }
+
+    // 执行离开房间的实际操作
+    function executeLeaveRoom() {
+      try {
+        console.log('🚪 开始离开房间...');
+
+        // 🔥 标记为主动离开，防止触发被踢出弹窗
+        hasLeftRoom = true;
+
+        // 停止计时器和轮询
+        stopTimer();
+        stopRemoteControlPolling();
+
+        // 清理本地流
+        if (zg && localStream) {
+          console.log('🧹 清理本地流...');
+
+          // 停止推流
+          try {
+            zg.stopPublishingStream(localStream.streamID);
+            console.log('✅ 已停止推流');
+          } catch (error) {
+            console.error('停止推流失败:', error);
           }
 
-          console.log('✅ 已离开房间');
+          // 销毁本地流
+          try {
+            zg.destroyStream(localStream);
+            console.log('✅ 已销毁本地流');
+          } catch (error) {
+            console.error('销毁本地流失败:', error);
+          }
 
-          // 🎯 主动离开：显示提示，用户可以刷新页面重新进入
-          alert('您已离开面试间。\n\n如需重新进入，请刷新页面。');
-
-          // 🎯 不删除 localStorage 中的用户信息，这样刷新后可以直接重新进入
-          console.log('✅ 保留用户信息，刷新页面可重新进入');
-        } catch (error) {
-          console.error('❌ 离开房间失败:', error.message);
-          alert('离开房间失败，请刷新页面重试');
+          // 退出房间
+          try {
+            zg.logoutRoom(roomId);
+            console.log('✅ 已退出房间');
+          } catch (error) {
+            console.error('退出房间失败:', error);
+          }
         }
+
+        console.log('✅ 已离开房间');
+
+        // 🎯 主动离开：显示提示，用户需要重新点击链接
+        alert('您已离开面试间。\n\n如需重新进入，请重新点击链接。');
+
+        // 🎯 不删除 localStorage 中的用户信息，这样重新进入后可以直接加入
+        console.log('✅ 保留用户信息，重新进入可直接加入');
+      } catch (error) {
+        console.error('❌ 离开房间失败:', error.message);
+        alert('离开房间失败，请刷新页面重试');
       }
     }
 
@@ -2321,9 +2596,46 @@
       document.getElementById('loading').style.display = 'none';
     }
 
-    // 🔥 阶段1：DOM 加载完成后立即显示浮窗
+    // � 更新调试面板
+
+
+    // �🔥 阶段1：DOM 加载完成后立即显示浮窗
     document.addEventListener('DOMContentLoaded', () => {
       console.log('📱 DOM 加载完成，立即显示浮窗');
+      console.log('🔍 [调试] 页面版本: v2024.01.20.002');
+
+
+
+
+
+      // 🎯 根据环境添加 body class（用于控制邀请按钮显示）
+      console.log('🔍 [调试] IS_IN_MINIPROGRAM =', IS_IN_MINIPROGRAM);
+      console.log('🔍 [调试] 当前 body.className =', document.body.className);
+
+      if (IS_IN_MINIPROGRAM) {
+        document.body.classList.add('miniprogram-env');
+        console.log('✅ 已添加小程序环境标识，邀请按钮将被隐藏');
+        console.log('🔍 [调试] 添加后 body.className =', document.body.className);
+
+        // 验证邀请按钮是否真的隐藏了
+        setTimeout(() => {
+          const invitePlaceholders = document.querySelectorAll('.invite-placeholder');
+          console.log('🔍 [调试] 找到', invitePlaceholders.length, '个邀请按钮');
+          invitePlaceholders.forEach((el, index) => {
+            const style = window.getComputedStyle(el);
+            console.log(`🔍 [调试] 邀请按钮 ${index + 1} display =`, style.display);
+            if (style.display !== 'none') {
+              console.error(`❌ [错误] 邀请按钮 ${index + 1} 没有隐藏！`);
+            }
+          });
+
+
+        }, 100);
+      } else {
+        console.log('✅ 浏览器环境，邀请按钮正常显示');
+
+
+      }
 
       // 🔥 关键修复：页面加载时强制清理残留状态
       // 这样可以确保重新进入时状态是干净的
@@ -2355,11 +2667,11 @@
             video.srcObject = null;
             video.src = '';
           });
-          // 重置容器内容为邀请占位符
+          // 重置容器内容为普通占位符
           box.innerHTML = `
-            <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-              <div class="placeholder-icon">+</div>
-              <div class="placeholder-text">邀请用户</div>
+            <div class="video-placeholder empty-slot">
+              <div class="placeholder-icon">👤</div>
+              <div class="placeholder-text">等待加入</div>
             </div>
           `;
         }
@@ -2373,6 +2685,8 @@
         localVideo.src = '';
       }
       console.log('✅ 残留DOM元素已清理');
+
+
 
       // 重置全局变量
       zg = null;
@@ -2754,6 +3068,57 @@
       // 🔥 标记为主动离开，防止触发被踢出弹窗
       hasLeftRoom = true;
 
+      // 🔥 通知后端用户离开
+      if (roomId && currentUserId) {
+        console.log(`🔔 cleanup: 准备通知后端用户离开`);
+        console.log(`  - roomId: ${roomId}`);
+        console.log(`  - currentUserId: ${currentUserId}`);
+
+        const apiUrl = window.location.origin + '/api/zego/leave-room';
+        const leaveData = { roomId: roomId, userId: currentUserId };
+
+        // 🔥 方法1：尝试使用 sendBeacon（最可靠）
+        if (navigator.sendBeacon) {
+          try {
+            const blob = new Blob([JSON.stringify(leaveData)], { type: 'application/json' });
+            const success = navigator.sendBeacon(apiUrl, blob);
+            console.log(`✅ cleanup: sendBeacon 发送${success ? '成功' : '失败'}`);
+            if (!success) {
+              // 如果 sendBeacon 失败，尝试同步 XHR
+              throw new Error('sendBeacon 返回 false');
+            }
+          } catch (error) {
+            console.error(`❌ cleanup: sendBeacon 失败:`, error);
+
+            // 🔥 方法2：使用同步 XMLHttpRequest（兜底方案）
+            try {
+              const xhr = new XMLHttpRequest();
+              xhr.open('POST', apiUrl, false); // false = 同步请求
+              xhr.setRequestHeader('Content-Type', 'application/json');
+              xhr.send(JSON.stringify(leaveData));
+              console.log(`✅ cleanup: 同步 XHR 发送成功`);
+            } catch (xhrError) {
+              console.error(`❌ cleanup: 同步 XHR 失败:`, xhrError);
+            }
+          }
+        } else {
+          console.warn(`⚠️ cleanup: navigator.sendBeacon 不支持，使用同步 XHR`);
+
+          // 直接使用同步 XHR
+          try {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', apiUrl, false);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify(leaveData));
+            console.log(`✅ cleanup: 同步 XHR 发送成功`);
+          } catch (xhrError) {
+            console.error(`❌ cleanup: 同步 XHR 失败:`, xhrError);
+          }
+        }
+      } else {
+        console.log(`⚠️ cleanup: roomId 或 currentUserId 为空，跳过通知`);
+      }
+
       // 🔥 关键修复：标记用户已离开，用于重新进入时检测
       // 这样重新进入时可以知道需要完全重新初始化
       try {
@@ -2823,11 +3188,11 @@
               video.srcObject = null;
               video.src = '';
             });
-            // 重置容器内容为邀请占位符
+            // 重置容器内容为普通占位符
             box.innerHTML = `
-              <div class="video-placeholder invite-placeholder" onclick="showInviteModal()">
-                <div class="placeholder-icon">+</div>
-                <div class="placeholder-text">邀请用户</div>
+              <div class="video-placeholder empty-slot">
+                <div class="placeholder-icon">👤</div>
+                <div class="placeholder-text">等待加入</div>
               </div>
             `;
           }
@@ -2876,6 +3241,7 @@
   <!-- 🎯 将 ZEGO SDK 移到页面底部，避免阻塞页面渲染 -->
   <!-- 这样用户可以立即看到半透明背景和表单，提升体验 -->
   <script src="./ZegoExpressWebRTC-standalone.js"></script>
+
 </body>
 </html>
 

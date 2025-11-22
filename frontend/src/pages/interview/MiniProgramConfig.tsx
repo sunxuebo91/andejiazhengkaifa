@@ -46,7 +46,7 @@ Page({
     
     let url = '';
     if (role === 'host') {
-      // HR端
+      // 主持人端
       url = '${hostUrl}';
     } else {
       // 访客端
@@ -93,7 +93,7 @@ page {
               <QrcodeOutlined /> 小程序视频面试配置
             </Title>
             <Paragraph type="secondary">
-              将视频面试功能集成到微信小程序中，支持HR端和访客端视频面试
+              将视频面试功能集成到微信小程序中，支持主持人端和访客端视频面试
             </Paragraph>
           </div>
 
@@ -110,17 +110,17 @@ page {
           <Card title={<><LinkOutlined /> H5文件访问地址</>} size="small">
             <Space direction="vertical" style={{ width: '100%' }}>
               <div>
-                <Text strong>HR端（主持人）：</Text>
+                <Text strong>主持人端：</Text>
                 <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Tag color="blue" style={{ flex: 1, padding: '8px 12px', fontSize: '13px' }}>
                     {hostUrl}
                   </Tag>
                   <Button
                     icon={<CopyOutlined />}
-                    onClick={() => copyToClipboard(hostUrl, 'HR端地址')}
-                    type={copiedText === 'HR端地址' ? 'primary' : 'default'}
+                    onClick={() => copyToClipboard(hostUrl, '主持人端地址')}
+                    type={copiedText === '主持人端地址' ? 'primary' : 'default'}
                   >
-                    {copiedText === 'HR端地址' ? '已复制' : '复制'}
+                    {copiedText === '主持人端地址' ? '已复制' : '复制'}
                   </Button>
                 </div>
               </div>
@@ -241,7 +241,7 @@ page {
                     message="跳转到视频面试页面"
                     description={
                       <pre style={{ background: 'transparent', padding: 0, margin: '8px 0 0 0' }}>
-                        <code>{`// HR端（主持人）
+                        <code>{`// 主持人端
 wx.navigateTo({
   url: '/pages/interview/interview?role=host'
 });
@@ -297,7 +297,7 @@ wx.navigateTo({
                 icon={<LinkOutlined />}
                 onClick={() => window.open(hostUrl, '_blank')}
               >
-                测试HR端页面
+                测试主持人端页面
               </Button>
               <Button
                 icon={<LinkOutlined />}

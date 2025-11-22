@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { getToken } from '../../services/auth';
 
 /**
- * 小程序HR主持人页面跳转
+ * 小程序主持人页面跳转
  * 直接跳转到打包好的H5页面，并携带JWT Token
  */
 const MiniProgramHost: React.FC = () => {

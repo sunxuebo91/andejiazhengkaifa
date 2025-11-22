@@ -1400,13 +1400,49 @@
       }
 
       try {
+        showMessage('正在检查面试间状态...');
+
+        // 🎯 步骤0: 检查是否已存在活跃面试间
+        const jwtToken = getJwtToken();
+        if (jwtToken) {
+          try {
+            console.log('🔍 检查是否已存在活跃面试间...');
+            const checkResponse = await fetch(window.location.origin + '/api/interview/active-room', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${jwtToken}`
+              }
+            });
+
+            if (checkResponse.ok) {
+              const checkResult = await checkResponse.json();
+              if (checkResult.success && checkResult.data) {
+                // 找到活跃面试间，直接进入
+                const activeRoom = checkResult.data;
+                console.log('✅ 找到活跃面试间，直接进入:', activeRoom.roomId);
+                showMessage('进入已存在的面试间...');
+
+                // 设置 roomId 并重新加载页面（带 room 参数）
+                const hostUrl = `${window.location.origin}/miniprogram/video-interview-host.html?token=${jwtToken}&room=${activeRoom.roomId}`;
+                console.log('🔗 重定向到:', hostUrl);
+                window.location.href = hostUrl;
+                return; // 停止执行后续代码
+              } else {
+                console.log('ℹ️ 没有活跃面试间，创建新的');
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ 检查活跃面试间失败，继续创建新的:', error);
+          }
+        }
+
         showMessage('正在创建面试间...');
 
         // ✅ 优化：不再提前检查权限，直接让 ZEGO SDK 的 createStream 一次性请求摄像头和麦克风权限
         // 这样用户只需要授权一次，体验更好
 
         // 🎯 步骤1: 获取当前用户信息
-        const jwtToken = getJwtToken();
+        // jwtToken 已在步骤0中声明，这里直接使用
         if (jwtToken) {
           try {
             console.log('📱 正在获取当前用户信息...');

@@ -89,7 +89,9 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onRejoin, onEnd, onViewDetail
    * 复制访客邀请链接
    */
   const handleCopyInviteLink = () => {
-    const inviteLink = `https://crm.andejiazheng.com/miniprogram/video-interview-guest-room.html?roomId=${room.roomId}`;
+    // 🎯 使用 video-interview-guest.html（选择身份页面），而不是 video-interview-guest-room.html
+    // 这样访客可以先选择身份（客户/阿姨），然后再进入房间
+    const inviteLink = `https://crm.andejiazheng.com/miniprogram/video-interview-guest.html?roomId=${room.roomId}`;
 
     // 使用 Clipboard API 复制
     if (navigator.clipboard && navigator.clipboard.writeText) {

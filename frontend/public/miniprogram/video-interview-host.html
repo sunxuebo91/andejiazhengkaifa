@@ -1400,12 +1400,16 @@
       }
 
       try {
-        showMessage('正在检查面试间状态...');
+        // 🎯 步骤0: 检查是否已存在活跃面试间（仅在首次创建时检查）
+        const urlParams = new URLSearchParams(window.location.search);
+        const isRejoin = urlParams.get('room'); // 如果URL中有room参数，说明是重新加入
 
-        // 🎯 步骤0: 检查是否已存在活跃面试间
         const jwtToken = getJwtToken();
-        if (jwtToken) {
+
+        // 🔥 关键：只有在首次创建（没有room参数）时才检查活跃面试间
+        if (jwtToken && !isRejoin) {
           try {
+            showMessage('正在检查面试间状态...');
             console.log('🔍 检查是否已存在活跃面试间...');
             const checkResponse = await fetch(window.location.origin + '/api/interview/active-room', {
               method: 'GET',
@@ -1434,6 +1438,8 @@
           } catch (error) {
             console.warn('⚠️ 检查活跃面试间失败，继续创建新的:', error);
           }
+        } else if (isRejoin) {
+          console.log('🔄 重新加入房间，跳过活跃面试间检查');
         }
 
         showMessage('正在创建面试间...');
@@ -1498,10 +1504,8 @@
         console.log('✅ Token:', token ? 'Token 已生成' : '使用空 Token');
 
         // 🎯 步骤4: 创建面试间数据库记录（仅在创建新房间时）
-        const urlParams = new URLSearchParams(window.location.search);
-        const isRejoin = urlParams.get('room'); // 如果URL中有room参数，说明是重新加入
-
-        // jwtToken 已在步骤1中声明，这里直接使用
+        // urlParams 和 isRejoin 已在步骤0中声明，这里直接使用
+        // jwtToken 已在步骤0中声明，这里直接使用
         if (jwtToken && !isRejoin) {
           try {
             console.log('💾 正在创建面试间数据库记录...');

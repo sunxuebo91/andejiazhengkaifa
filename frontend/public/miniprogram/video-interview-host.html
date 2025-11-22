@@ -696,6 +696,41 @@
       background: rgba(250, 173, 20, 0.9);
     }
 
+    /* ✅ 重连提示样式 */
+    .reconnect-toast {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 20px;
+      font-size: 14px;
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .reconnect-toast.show {
+      display: flex;
+    }
+
+    .reconnect-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     /* 邀请弹窗样式 */
     .modal {
       display: none;
@@ -822,6 +857,12 @@
   </style>
 </head>
 <body>
+  <!-- ✅ 重连提示 -->
+  <div class="reconnect-toast" id="reconnectToast">
+    <div class="reconnect-spinner"></div>
+    <span>正在重新连接...</span>
+  </div>
+
   <div class="container">
     <!-- 创建面试间面板 -->
     <div class="join-panel" id="joinPanel">
@@ -1237,12 +1278,22 @@
       // 监听房间状态
       zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
         console.log('房间状态更新:', state, errorCode);
+
         if (state === 'DISCONNECTED') {
-          showMessage('已断开连接');
+          console.log('⚠️ 检测到断开连接，errorCode=' + errorCode);
+
+          // ✅ 只在非正常断开时显示提示（errorCode !== 0）
+          // errorCode = 0 表示正常断开（主动退出），不需要提示
+          if (errorCode !== 0) {
+            console.log('🔄 网络断开，显示重连提示');
+            showReconnectToast();
+          }
         } else if (state === 'CONNECTING') {
-          showMessage('正在连接...');
+          console.log('🔄 正在重新连接...');
+          showReconnectToast();
         } else if (state === 'CONNECTED') {
-          console.log('已连接到房间');
+          console.log('✅ 已连接到房间');
+          hideReconnectToast();
         }
       });
 
@@ -2976,6 +3027,22 @@
       const loading = document.getElementById('loading');
       if (loading) {
         loading.style.display = 'none';
+      }
+    }
+
+    // ✅ 显示重连提示
+    function showReconnectToast() {
+      const toast = document.getElementById('reconnectToast');
+      if (toast) {
+        toast.classList.add('show');
+      }
+    }
+
+    // ✅ 隐藏重连提示
+    function hideReconnectToast() {
+      const toast = document.getElementById('reconnectToast');
+      if (toast) {
+        toast.classList.remove('show');
       }
     }
 

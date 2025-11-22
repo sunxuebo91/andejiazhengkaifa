@@ -421,6 +421,53 @@
       z-index: 2000;
     }
 
+    /* Toast 提示样式（替代 alert，避免微信劫持） */
+    .toast {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      padding: 16px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      z-index: 3000;
+      display: none;
+      max-width: 80%;
+      text-align: center;
+      word-wrap: break-word;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      animation: toastFadeIn 0.3s ease;
+    }
+
+    @keyframes toastFadeIn {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+    }
+
+    .toast.success {
+      background: rgba(82, 196, 26, 0.9);
+    }
+
+    .toast.error {
+      background: rgba(255, 77, 79, 0.9);
+    }
+
+    .toast.warning {
+      background: rgba(250, 173, 20, 0.9);
+    }
+
+    .toast.info {
+      background: rgba(24, 144, 255, 0.9);
+    }
+
     /* 邀请弹窗样式 */
     .modal {
       display: none;
@@ -1750,13 +1797,15 @@
           isCameraOn = true;
           zg.mutePublishStreamVideo(localStream, false);
           updateCameraButton();
-          alert('主持人已开启您的摄像头');
+          // ✅ 使用 Toast 替代 alert，避免微信劫持显示"关闭网页"按钮
+          showToast('📹 主持人已开启您的摄像头', 'info', 2000);
         } else if (!message.enabled && isCameraOn) {
           // 关闭摄像头
           isCameraOn = false;
           zg.mutePublishStreamVideo(localStream, true);
           updateCameraButton();
-          alert('主持人已关闭您的摄像头');
+          // ✅ 使用 Toast 替代 alert，避免微信劫持显示"关闭网页"按钮
+          showToast('📹 主持人已关闭您的摄像头', 'info', 2000);
         }
       } else if (message.controlType === 'microphone') {
         // 远程控制麦克风
@@ -1765,13 +1814,15 @@
           isMicOn = true;
           zg.muteMicrophone(false);
           updateMicButton();
-          alert('主持人已开启您的麦克风');
+          // ✅ 使用 Toast 替代 alert，避免微信劫持显示"关闭网页"按钮
+          showToast('🎤 主持人已开启您的麦克风', 'info', 2000);
         } else if (!message.enabled && isMicOn) {
           // 关闭麦克风
           isMicOn = false;
           zg.muteMicrophone(true);
           updateMicButton();
-          alert('主持人已关闭您的麦克风');
+          // ✅ 使用 Toast 替代 alert，避免微信劫持显示"关闭网页"按钮
+          showToast('🎤 主持人已关闭您的麦克风', 'info', 2000);
         }
       }
     }
@@ -2678,6 +2729,27 @@
 
     function hideLoading() {
       document.getElementById('loading').style.display = 'none';
+    }
+
+    // Toast 提示函数（替代 alert，避免小程序环境出现"关闭网页"弹窗）
+    function showToast(msg, type = 'success', duration = 2000) {
+      let toast = document.getElementById('toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+      }
+
+      // 设置样式类型
+      toast.className = 'toast ' + type;
+      toast.textContent = msg;
+      toast.style.display = 'block';
+
+      // 自动隐藏
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, duration);
     }
 
     // � 更新调试面板

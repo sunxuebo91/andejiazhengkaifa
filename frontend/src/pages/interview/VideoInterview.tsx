@@ -286,6 +286,7 @@ const VideoInterview: React.FC = () => {
           console.log('✅ 找到活跃面试间，直接进入:', activeRoom.roomId);
           roomId = activeRoom.roomId; // 使用活跃面试间的 roomId
           message.info('进入已存在的面试间');
+          // 🔥 关键：找到活跃面试间后，不需要创建新的，直接跳过创建步骤
         } else {
           // 没有活跃面试间，创建新的
           console.log('ℹ️ 没有活跃面试间，创建新的');

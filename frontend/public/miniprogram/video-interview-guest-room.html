@@ -2574,15 +2574,72 @@
 
         console.log('✅ 已离开房间');
 
-        // 🎯 主动离开：显示提示，用户需要重新点击链接
-        alert('您已离开面试间。\n\n如需重新进入，请重新点击链接。');
-
         // 🎯 不删除 localStorage 中的用户信息，这样重新进入后可以直接加入
         console.log('✅ 保留用户信息，重新进入可直接加入');
+
+        // 🎯 显示离开成功弹窗
+        showLeaveSuccessModal();
       } catch (error) {
         console.error('❌ 离开房间失败:', error.message);
         alert('离开房间失败，请刷新页面重试');
       }
+    }
+
+    // ✅ 显示离开成功弹窗
+    function showLeaveSuccessModal() {
+      console.log('📢 显示离开成功弹窗');
+
+      // 创建遮罩层
+      const overlay = document.createElement('div');
+      overlay.id = 'leaveSuccessOverlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+
+      // 创建弹窗
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      `;
+
+      modal.innerHTML = `
+        <div style="font-size: 48px; margin-bottom: 20px;">👋</div>
+        <h2 style="margin: 0 0 15px 0; font-size: 24px; color: #333;">已离开面试间</h2>
+        <p style="margin: 0 0 25px 0; font-size: 16px; color: #666;">如需重新进入，请重新点击邀请链接</p>
+        <button id="closeLeavePageBtn" style="background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%); color: white; border: none; padding: 12px 40px;
+                       border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%;">
+          确定
+        </button>
+      `;
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+
+      // 绑定按钮事件
+      document.getElementById('closeLeavePageBtn').onclick = function() {
+        // 尝试关闭当前窗口
+        window.close();
+
+        // 如果无法关闭（不是通过脚本打开的窗口），则跳转到访客入口页
+        setTimeout(() => {
+          window.location.href = 'video-interview-guest.html';
+        }, 100);
+      };
     }
 
     // 计时器

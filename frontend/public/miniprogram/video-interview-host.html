@@ -655,6 +655,47 @@
       z-index: 2000;
     }
 
+    /* Toast 提示样式 */
+    .toast {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 16px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      z-index: 3000;
+      display: none;
+      max-width: 80%;
+      text-align: center;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+    }
+
+    .toast.success {
+      background: rgba(82, 196, 26, 0.9);
+    }
+
+    .toast.error {
+      background: rgba(255, 77, 79, 0.9);
+    }
+
+    .toast.warning {
+      background: rgba(250, 173, 20, 0.9);
+    }
+
     /* 邀请弹窗样式 */
     .modal {
       display: none;
@@ -924,6 +965,7 @@
           <textarea
             id="teleprompterContent"
             placeholder="请输入提词内容..."
+            oninput="this.scrollTop = this.scrollHeight"
             style="width: 100%; min-height: 120px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; resize: vertical;"
           ></textarea>
         </div>
@@ -985,15 +1027,6 @@
           >
             ❌ 关闭提词器
           </button>
-        </div>
-
-        <!-- 使用说明 -->
-        <div style="margin-top: 20px; padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px; color: #666; line-height: 1.6;">
-          <strong>使用说明：</strong><br>
-          1. 输入提词内容<br>
-          2. 点击"🚀 一键推送并开启"即可<br>
-          3. 阿姨端会自动显示并播放<br>
-          4. 可以使用"播放/暂停"控制滚动
         </div>
       </div>
     </div>
@@ -1469,7 +1502,7 @@
               sharpenIntensity: 30   // 适度锐化（720p 需要适度锐化）
             });
             console.log('✅ 基础美颜已启用 - 自然不夸张的美颜效果');
-            addLog('✅ 智能美颜已开启，画面更清晰自然 ✨', 'success');
+            // 移除美颜开启的用户提示，静默启用
           } catch (error) {
             console.warn('⚠️ 美颜启用失败:', error);
             // 美颜失败不影响正常通话，继续执行
@@ -2535,15 +2568,21 @@
         hideMessage();
 
         if (result.success) {
-          alert('🚀 提词器已启动！');
+          // 使用 Toast 替代 alert，避免小程序环境出现"关闭网页"弹窗
+          showToast('🚀 提词器已启动！', 'success', 2000);
           console.log('✅ 提词器启动成功');
+
+          // 自动关闭提词器弹窗
+          setTimeout(() => {
+            closeTeleprompterModal();
+          }, 2000);
         } else {
           throw new Error(result.message || '启动失败');
         }
       } catch (error) {
         console.error('❌ 启动提词器失败:', error);
         hideMessage();
-        alert('启动失败: ' + error.message);
+        showToast('启动失败: ' + error.message, 'error', 3000);
       }
     }
 
@@ -2597,7 +2636,8 @@
         hideMessage();
 
         if (result.success) {
-          alert('📤 内容已推送');
+          // 使用 Toast 替代 alert
+          showToast('📤 内容已推送', 'success', 2000);
           console.log('✅ 提词内容推送成功');
         } else {
           throw new Error(result.message || '推送失败');
@@ -2605,7 +2645,7 @@
       } catch (error) {
         console.error('❌ 推送提词内容失败:', error);
         hideMessage();
-        alert('推送失败: ' + error.message);
+        showToast('推送失败: ' + error.message, 'error', 3000);
       }
     }
 
@@ -2660,7 +2700,8 @@
         if (result.success) {
           console.log(`✅ 提词器${actionText}成功`);
           if (action === 'HIDE') {
-            alert('❌ 提词器已关闭');
+            // 使用 Toast 替代 alert
+            showToast('❌ 提词器已关闭', 'success', 2000);
           }
         } else {
           throw new Error(result.message || '操作失败');
@@ -2668,112 +2709,259 @@
       } catch (error) {
         console.error(`❌ 控制提词器失败:`, error);
         hideMessage();
-        alert('操作失败: ' + error.message);
+        showToast('操作失败: ' + error.message, 'error', 3000);
       }
     }
 
-    async function leaveRoom() {
-      if (confirm('确定要结束面试并解散房间吗？所有参与者将被踢出。')) {
-        try {
-          showMessage('正在结束面试...');
+    // ✅ 显示结束面试确认弹窗（自定义弹窗，避免微信劫持）
+    function leaveRoom() {
+      showEndInterviewModal();
+    }
 
-          // 1. 结束面试间数据库记录
-          const jwtToken = getJwtToken();
-          if (jwtToken) {
-            try {
-              const endResponse = await fetch(`/api/interview/rooms/${roomId}/end`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${jwtToken}`
-                }
-              });
+    // ✅ 显示结束面试确认弹窗
+    function showEndInterviewModal() {
+      console.log('📢 显示结束面试确认弹窗');
 
-              const endResult = await endResponse.json();
-              if (endResult.success) {
-                console.log('✅ 面试间记录已结束');
-              } else {
-                console.warn('⚠️ 结束面试间记录失败:', endResult.message);
-              }
-            } catch (error) {
-              console.error('❌ 结束面试间记录失败:', error);
-            }
+      // 创建遮罩层
+      const overlay = document.createElement('div');
+      overlay.id = 'endInterviewOverlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
 
-            // 2. 调用后端API解散房间（踢出所有人）
-            try {
-              const response = await fetch('/api/zego/dismiss-room', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${jwtToken}`
-                },
-                body: JSON.stringify({
-                  roomId: roomId,
-                  hostUserId: currentUserId  // ✅ 添加主持人的 ZEGO userId
-                })
-              });
+      // 创建弹窗
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      `;
 
-              const result = await response.json();
-              if (result.success) {
-                console.log('✅ 房间已解散，所有用户已被踢出');
-              } else {
-                console.warn('⚠️ 解散房间失败:', result.message);
-              }
-            } catch (error) {
-              console.error('❌ 调用解散房间API失败:', error);
-            }
-          }
+      modal.innerHTML = `
+        <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+        <h2 style="margin: 0 0 15px 0; font-size: 24px; color: #333;">确定要结束面试并解散房间吗？</h2>
+        <p style="margin: 0 0 25px 0; font-size: 16px; color: #666;">所有参与者将被踢出，此操作不可撤销</p>
+        <div style="display: flex; gap: 12px;">
+          <button id="cancelEndBtn" style="flex: 1; background: #f5f5f5; color: #666; border: none; padding: 12px 24px;
+                         border-radius: 8px; font-size: 16px; cursor: pointer;">
+            取消
+          </button>
+          <button id="confirmEndBtn" style="flex: 1; background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%); color: white; border: none; padding: 12px 24px;
+                         border-radius: 8px; font-size: 16px; cursor: pointer;">
+            确定结束
+          </button>
+        </div>
+      `;
 
-          // 2. 停止计时器
-          stopTimer();
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
 
-          // 3. 停止推流并销毁本地流
-          if (zg && localStream) {
-            try {
-              const streamID = 'stream_' + currentUserId;
-              await zg.stopPublishingStream(streamID);
-              console.log('✅ 已停止推流');
-            } catch (error) {
-              console.error('停止推流失败:', error);
-            }
+      // 绑定按钮事件
+      document.getElementById('cancelEndBtn').onclick = closeEndInterviewModal;
+      document.getElementById('confirmEndBtn').onclick = confirmEndInterview;
+    }
 
-            try {
-              zg.destroyStream(localStream);
-              console.log('✅ 已销毁本地流');
-            } catch (error) {
-              console.error('销毁本地流失败:', error);
-            }
+    // ✅ 关闭结束面试确认弹窗
+    function closeEndInterviewModal() {
+      const overlay = document.getElementById('endInterviewOverlay');
+      if (overlay) {
+        overlay.remove();
+      }
+    }
 
-            localStream = null;
-          }
+    // ✅ 显示结束成功弹窗
+    function showEndSuccessModal() {
+      console.log('📢 显示结束成功弹窗');
 
-          // 4. 登出房间
-          if (zg) {
-            try {
-              await zg.logoutRoom(roomId);
-              console.log('✅ 已登出房间');
-            } catch (error) {
-              console.error('登出房间失败:', error);
-            }
-          }
+      // 创建遮罩层
+      const overlay = document.createElement('div');
+      overlay.id = 'endSuccessOverlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
 
-          hideMessage();
+      // 创建弹窗
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      `;
 
-          // 5. 关闭面试间界面
-          if (typeof wx !== 'undefined' && wx.miniProgram) {
-            // 在小程序中，返回上一页
-            wx.miniProgram.navigateBack();
+      modal.innerHTML = `
+        <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
+        <h2 style="margin: 0 0 15px 0; font-size: 24px; color: #333;">面试已结束</h2>
+        <p style="margin: 0 0 25px 0; font-size: 16px; color: #666;">房间已解散，感谢您的使用</p>
+        <button id="closePageBtn" style="background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%); color: white; border: none; padding: 12px 40px;
+                       border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%;">
+          确定
+        </button>
+      `;
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+
+      // 绑定按钮事件
+      document.getElementById('closePageBtn').onclick = function() {
+        // 尝试关闭当前窗口
+        window.close();
+
+        // 如果无法关闭（不是通过脚本打开的窗口），则返回上一页
+        setTimeout(() => {
+          if (window.history.length > 1) {
+            window.history.back();
           } else {
-            // 🔥 关键修复：清除 URL 参数，防止页面重新加载时自动创建新房间
-            alert('面试已结束，房间已解散');
-            // 清除 URL 参数后刷新页面
-            window.location.href = window.location.pathname;
+            // 如果没有历史记录，显示提示
+            overlay.remove();
+            const hint = document.createElement('div');
+            hint.style.cssText = `
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              background: white;
+              padding: 30px;
+              border-radius: 12px;
+              text-align: center;
+              z-index: 10001;
+              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            `;
+            hint.innerHTML = `
+              <p style="margin: 0; font-size: 16px; color: #666;">请手动关闭此页面</p>
+            `;
+            document.body.appendChild(hint);
           }
-        } catch (error) {
-          console.error('❌ 结束面试失败:', error);
-          hideMessage();
-          alert('结束面试失败: ' + error.message);
+        }, 100);
+      };
+    }
+
+    // ✅ 确认结束面试
+    async function confirmEndInterview() {
+      closeEndInterviewModal();
+
+      try {
+        showMessage('正在结束面试...');
+
+        // 1. 结束面试间数据库记录
+        const jwtToken = getJwtToken();
+        if (jwtToken) {
+          try {
+            const endResponse = await fetch(`/api/interview/rooms/${roomId}/end`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${jwtToken}`
+              }
+            });
+
+            const endResult = await endResponse.json();
+            if (endResult.success) {
+              console.log('✅ 面试间记录已结束');
+            } else {
+              console.warn('⚠️ 结束面试间记录失败:', endResult.message);
+            }
+          } catch (error) {
+            console.error('❌ 结束面试间记录失败:', error);
+          }
+
+          // 2. 调用后端API解散房间（踢出所有人）
+          try {
+            const response = await fetch('/api/zego/dismiss-room', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${jwtToken}`
+              },
+              body: JSON.stringify({
+                roomId: roomId,
+                hostUserId: currentUserId  // ✅ 添加主持人的 ZEGO userId
+              })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+              console.log('✅ 房间已解散，所有用户已被踢出');
+            } else {
+              console.warn('⚠️ 解散房间失败:', result.message);
+            }
+          } catch (error) {
+            console.error('❌ 调用解散房间API失败:', error);
+          }
         }
+
+        // 2. 停止计时器
+        stopTimer();
+
+        // 3. 停止推流并销毁本地流
+        if (zg && localStream) {
+          try {
+            const streamID = 'stream_' + currentUserId;
+            await zg.stopPublishingStream(streamID);
+            console.log('✅ 已停止推流');
+          } catch (error) {
+            console.error('停止推流失败:', error);
+          }
+
+          try {
+            zg.destroyStream(localStream);
+            console.log('✅ 已销毁本地流');
+          } catch (error) {
+            console.error('销毁本地流失败:', error);
+          }
+
+          localStream = null;
+        }
+
+        // 4. 登出房间
+        if (zg) {
+          try {
+            await zg.logoutRoom(roomId);
+            console.log('✅ 已登出房间');
+          } catch (error) {
+            console.error('登出房间失败:', error);
+          }
+        }
+
+        hideMessage();
+
+        // 5. 关闭面试间界面
+        if (typeof wx !== 'undefined' && wx.miniProgram) {
+          // 在小程序中，返回上一页
+          wx.miniProgram.navigateBack();
+        } else {
+          // 🔥 显示成功提示后关闭页面（避免 token 丢失问题）
+          showEndSuccessModal();
+        }
+      } catch (error) {
+        console.error('❌ 结束面试失败:', error);
+        hideMessage();
+        showToast('结束面试失败: ' + error.message, 'error', 3000);
       }
     }
     
@@ -2789,12 +2977,33 @@
       loading.textContent = msg;
       loading.style.display = 'block';
     }
-    
+
     function hideMessage() {
       const loading = document.getElementById('loading');
       if (loading) {
         loading.style.display = 'none';
       }
+    }
+
+    // Toast 提示函数（替代 alert，避免小程序环境出现"关闭网页"弹窗）
+    function showToast(msg, type = 'success', duration = 2000) {
+      let toast = document.getElementById('toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+      }
+
+      // 设置样式类型
+      toast.className = 'toast ' + type;
+      toast.textContent = msg;
+      toast.style.display = 'block';
+
+      // 自动隐藏
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, duration);
     }
 
     // ==================== 计时器函数 ====================

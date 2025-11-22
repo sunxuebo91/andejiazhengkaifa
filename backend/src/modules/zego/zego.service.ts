@@ -13,6 +13,8 @@ interface RoomState {
   isDismissed: boolean;
   participants: Set<string>;
   kickedUsers: Set<string>; // ✅ 被踢出的用户黑名单
+  hostLeftAt: number | null; // 🔥 主持人离开的时间戳（null表示主持人还在）
+  hasAnyActivity: boolean; // 🔥 是否有过任何活动（推流、参与者加入等）
 }
 
 // 提词器消息接口
@@ -43,7 +45,7 @@ export class ZegoService {
   // 房间状态管理
   private rooms: Map<string, RoomState> = new Map();
   private dismissedRooms: Map<string, number> = new Map(); // 记录已解散的房间，value是解散时间戳
-  private readonly ROOM_TIMEOUT = 10 * 60 * 1000; // 10分钟无人自动关闭
+  private readonly ROOM_TIMEOUT = 10 * 60 * 1000; // 🔥 10分钟无人自动关闭（主持人可在此期间重新进入）
   private cleanupInterval: NodeJS.Timeout;
 
   // 提词器消息队列 (roomId -> messages[])
@@ -51,6 +53,9 @@ export class ZegoService {
 
   // 远程控制消息队列 (roomId -> userId -> messages[])
   private remoteControlMessages: Map<string, Map<string, RemoteControlMessage[]>> = new Map();
+
+  // 延迟注入 InterviewService 避免循环依赖
+  private interviewService: any;
 
   constructor(private configService: ConfigService) {
     this.appId = parseInt(this.configService.get<string>('ZEGO_APP_ID') || '0');
@@ -96,6 +101,14 @@ export class ZegoService {
   }
 
   /**
+   * 设置 InterviewService（用于避免循环依赖）
+   */
+  setInterviewService(interviewService: any): void {
+    this.interviewService = interviewService;
+    this.logger.log('✅ InterviewService 已注入到 ZegoService');
+  }
+
+  /**
    * 获取 ZEGO 配置信息
    */
   getConfig() {
@@ -110,7 +123,7 @@ export class ZegoService {
    */
   createRoom(roomId: string, hostUserId: string): void {
     const now = Date.now();
-    const roomState = {
+    const roomState: RoomState = {
       roomId,
       hostUserId,
       createdAt: now,
@@ -118,6 +131,8 @@ export class ZegoService {
       isDismissed: false,
       participants: new Set([hostUserId]),
       kickedUsers: new Set<string>(), // ✅ 初始化黑名单
+      hostLeftAt: null, // 🔥 主持人还在房间
+      hasAnyActivity: false, // 🔥 初始状态：没有活动
     };
     this.rooms.set(roomId, roomState);
     this.logger.log(`✅ 房间已创建: ${roomId}, 主持人: ${hostUserId}, 当前房间总数: ${this.rooms.size}`);
@@ -151,8 +166,30 @@ export class ZegoService {
     // 添加参与者并更新活动时间
     room.participants.add(userId);
     room.lastActivityAt = Date.now();
+    room.hasAnyActivity = true; // 🔥 标记有活动
+
+    // 🔥 如果是主持人重新加入，取消关闭倒计时
+    if (userId === room.hostUserId && room.hostLeftAt !== null) {
+      this.logger.log(`🎉 主持人 ${userId} 重新加入房间: ${roomId}，取消关闭倒计时`);
+      room.hostLeftAt = null;
+    }
+    // 🔥 如果主持人已离开，但有其他用户加入，也取消关闭倒计时
+    else if (room.hostLeftAt !== null) {
+      this.logger.log(`🔄 主持人已离开，但有新用户 ${userId} 加入，取消关闭倒计时`);
+      room.hostLeftAt = null;
+    }
+
     this.logger.log(`✅ 用户 ${userId} 加入房间: ${roomId}, 当前人数: ${room.participants.size}`);
     return true;
+  }
+
+  /**
+   * 检查用户是否是房间主持人
+   */
+  isHostUser(roomId: string, userId: string): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room) return false;
+    return userId === room.hostUserId;
   }
 
   /**
@@ -166,9 +203,22 @@ export class ZegoService {
     room.lastActivityAt = Date.now();
     this.logger.log(`用户 ${userId} 离开房间: ${roomId}, 剩余人数: ${room.participants.size}`);
 
-    // 如果房间没人了，标记最后活动时间（10分钟后自动清理）
-    if (room.participants.size === 0) {
-      this.logger.log(`房间 ${roomId} 已无人，将在10分钟后自动关闭`);
+    // 🔥 场景1：检测主持人离开
+    if (userId === room.hostUserId) {
+      room.hostLeftAt = Date.now();
+      this.logger.log(`🔔 主持人 ${userId} 离开房间: ${roomId}`);
+
+      // 如果房间内没有其他人，开始10分钟倒计时
+      if (room.participants.size === 0) {
+        this.logger.log(`⏰ 房间 ${roomId} 无人，将在10分钟后自动关闭（主持人可在此期间重新进入）`);
+      } else {
+        this.logger.log(`⏰ 房间 ${roomId} 还有 ${room.participants.size} 人，将在主持人离开后10分钟自动关闭`);
+      }
+    } else {
+      // 普通参与者离开
+      if (room.participants.size === 0) {
+        this.logger.log(`⏰ 房间 ${roomId} 已无人，将在10分钟后自动关闭`);
+      }
     }
   }
 
@@ -437,27 +487,88 @@ export class ZegoService {
    * 启动定时清理任务
    */
   private startCleanupTask(): void {
-    this.cleanupInterval = setInterval(() => {
+    this.cleanupInterval = setInterval(async () => {
       const now = Date.now();
       const roomsToDelete: string[] = [];
 
+      // 🔍 打印当前所有房间状态（调试用）
+      this.logger.debug(`🔍 定时检查: 当前共有 ${this.rooms.size} 个房间`);
+
       this.rooms.forEach((room, roomId) => {
-        // 如果房间无人且超过10分钟，自动关闭
-        if (room.participants.size === 0 && now - room.lastActivityAt > this.ROOM_TIMEOUT) {
+        const idleTime = Math.floor((now - room.lastActivityAt) / 1000);
+        const roomAge = Math.floor((now - room.createdAt) / 1000);
+        const timeoutSeconds = Math.floor(this.ROOM_TIMEOUT / 1000); // 🔥 转换为秒
+
+        this.logger.debug(`  - 房间 ${roomId}: 参与者数=${room.participants.size}, 空闲时间=${idleTime}秒, 房间年龄=${roomAge}秒, 主持人离开=${room.hostLeftAt !== null}, 有活动=${room.hasAnyActivity}`);
+
+        let shouldClose = false;
+        let closeReason = '';
+
+        // 🔥 场景1（优先级最高）：主持人离开且房间无人，超过10分钟
+        if (room.hostLeftAt !== null && room.participants.size === 0) {
+          const timeSinceHostLeft = now - room.hostLeftAt;
+          const timeSinceHostLeftSeconds = Math.floor(timeSinceHostLeft / 1000);
+          this.logger.debug(`  🔍 场景1检查: 主持人离开=${room.hostLeftAt !== null}, 房间无人=${room.participants.size === 0}, 时长=${timeSinceHostLeftSeconds}秒, 超时=${timeoutSeconds}秒`);
+          if (timeSinceHostLeft > this.ROOM_TIMEOUT) {
+            shouldClose = true;
+            closeReason = `主持人离开${timeSinceHostLeftSeconds}秒，房间无人`;
+            this.logger.debug(`  ✅ 场景1触发`);
+          }
+        }
+        // 🔥 场景2（兜底方案1）：房间创建后一直没有活动，超过10分钟
+        // 这种情况通常是主持人创建房间后没有授权摄像头/麦克风，或者网络断开，或者关闭浏览器时 leaveRoom 没有被调用
+        else if (!room.hasAnyActivity && roomAge > timeoutSeconds) {
+          this.logger.debug(`  🔍 场景2检查: hasAnyActivity=${room.hasAnyActivity}, roomAge=${roomAge}秒, 超时=${timeoutSeconds}秒`);
+          shouldClose = true;
+          closeReason = `房间创建${roomAge}秒，一直无活动（可能未授权设备或网络断开）`;
+          this.logger.debug(`  ✅ 场景2触发`);
+        }
+        // 🔥 场景3（兜底方案2）：房间无人且超过10分钟无活动
+        else if (room.participants.size === 0 && idleTime > timeoutSeconds) {
+          this.logger.debug(`  🔍 场景3检查: 参与者数=${room.participants.size}, 空闲时间=${idleTime}秒, 超时=${timeoutSeconds}秒`);
+          shouldClose = true;
+          closeReason = `房间无人且${idleTime}秒无活动`;
+          this.logger.debug(`  ✅ 场景3触发`);
+        }
+        // 🔥 场景4（兜底方案3）：房间有人但长时间无活动（15分钟），可能是主持人关闭页面但leaveRoom没有被调用
+        else if (room.participants.size > 0 && idleTime > timeoutSeconds * 1.5) {
+          this.logger.debug(`  🔍 场景4检查: 参与者数=${room.participants.size}, 空闲时间=${idleTime}秒, 超时=${timeoutSeconds * 1.5}秒`);
+          shouldClose = true;
+          closeReason = `房间有${room.participants.size}人但${idleTime}秒无活动（可能主持人已离开但未通知后端）`;
+          this.logger.debug(`  ✅ 场景4触发`);
+        }
+
+        if (shouldClose) {
           roomsToDelete.push(roomId);
-          this.logger.log(`房间 ${roomId} 超过10分钟无人，自动关闭`);
+          this.logger.log(`🔔 房间 ${roomId} 将被关闭: ${closeReason}`);
+        } else {
+          this.logger.debug(`  ⏸️ 房间 ${roomId} 不满足关闭条件`);
         }
       });
 
-      // 删除超时的房间
-      roomsToDelete.forEach(roomId => {
+      // 删除超时的房间并更新数据库状态
+      for (const roomId of roomsToDelete) {
+        // 1. 删除内存中的房间数据
         this.rooms.delete(roomId);
-      });
+        this.logger.log(`✅ 已从内存中删除房间: ${roomId}`);
+
+        // 2. 🔥 更新数据库中的面试间状态为 ended
+        if (this.interviewService) {
+          try {
+            await this.interviewService.autoEndRoom(roomId);
+            this.logger.log(`✅ 房间 ${roomId} 数据库状态已更新为 ended`);
+          } catch (error) {
+            this.logger.error(`❌ 更新房间 ${roomId} 数据库状态失败:`, error.message);
+          }
+        } else {
+          this.logger.warn(`⚠️ InterviewService 未注入，无法更新数据库状态`);
+        }
+      }
 
       if (roomsToDelete.length > 0) {
-        this.logger.log(`清理了 ${roomsToDelete.length} 个超时房间`);
+        this.logger.log(`🧹 清理了 ${roomsToDelete.length} 个超时房间`);
       }
-    }, 60 * 1000); // 每分钟检查一次
+    }, 30 * 1000); // 每30秒检查一次（测试用）
   }
 
   /**

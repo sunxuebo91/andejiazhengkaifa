@@ -1152,7 +1152,7 @@
       // 检查 ZEGO SDK 是否加载
       if (typeof ZegoExpressEngine === 'undefined') {
         console.error('ZEGO SDK 未加载');
-        alert('视频SDK加载失败，请刷新页面重试');
+        showToast('视频SDK加载失败，请刷新页面重试', 'error', 3000);
         return false;
       }
 
@@ -1229,7 +1229,7 @@
         // 1106012: 麦克风被占用
         if (errorCode === 1106011 || errorCode === 1106012) {
           const deviceType = errorCode === 1106011 ? '摄像头' : '麦克风';
-          alert(`${deviceType}被其他页面或应用占用，请关闭其他页面后刷新重试`);
+          showToast(`${deviceType}被其他页面或应用占用，请关闭其他页面后刷新重试`, 'error', 3000);
           console.error(`❌ iOS设备占用问题: ${deviceType}被占用，需要用户关闭其他页面`);
         }
       });
@@ -1339,7 +1339,7 @@
       // 检查 ZEGO SDK 是否已初始化
       if (!zg) {
         console.error('ZEGO SDK 未初始化');
-        alert('视频SDK未初始化，正在重新初始化...');
+        showToast('视频SDK未初始化，正在重新初始化...', 'warning', 2000);
         const success = initZego();
         if (!success) {
           return;
@@ -1567,7 +1567,7 @@
       } catch (error) {
         console.error('❌ 创建面试间失败:', error);
         hideMessage();
-        alert('创建面试间失败: ' + (error.message || error.toString() || '未知错误'));
+        showToast('创建面试间失败: ' + (error.message || error.toString() || '未知错误'), 'error', 3000);
       }
     }
 
@@ -1575,19 +1575,19 @@
     async function joinRoom() {
       const userName = document.getElementById('userName').value.trim();
       if (!userName) {
-        alert('请输入您的姓名');
+        showToast('请输入您的姓名', 'warning', 2000);
         return;
       }
 
       if (!currentUserRole) {
-        alert('请选择您的身份');
+        showToast('请选择您的身份', 'warning', 2000);
         return;
       }
 
       // 检查 ZEGO SDK 是否已初始化
       if (!zg) {
         console.error('ZEGO SDK 未初始化');
-        alert('视频SDK未初始化，正在重新初始化...');
+        showToast('视频SDK未初始化，正在重新初始化...', 'warning', 2000);
         const success = initZego();
         if (!success) {
           return;
@@ -1681,7 +1681,7 @@
           errorMsg += ': ' + JSON.stringify(error);
         }
 
-        alert(errorMsg);
+        showToast(errorMsg, 'error', 3000);
         hideMessage();
       }
     }
@@ -1891,7 +1891,7 @@
                       playButton.remove();
                     } catch (e) {
                       console.error('❌ 用户点击后仍然播放失败:', e);
-                      alert('播放失败，请检查浏览器权限设置或刷新页面重试');
+                      showToast('播放失败，请检查浏览器权限设置或刷新页面重试', 'error', 3000);
                     }
                   };
 
@@ -1917,7 +1917,7 @@
 
                   } catch (e) {
                     console.error('❌ 降级方案也失败了:', e.name, e.message);
-                    alert('播放远程视频失败，请刷新页面重试');
+                    showToast('播放远程视频失败，请刷新页面重试', 'error', 3000);
                     return false;
                   }
                 }
@@ -2095,7 +2095,7 @@
       try {
         const jwtToken = getJwtToken();
         if (!jwtToken) {
-          alert('未找到认证信息');
+          showToast('未找到认证信息', 'error', 3000);
           return;
         }
 
@@ -2125,14 +2125,14 @@
         const result = await response.json();
         if (result.success) {
           console.log('✅ 远程控制摄像头成功');
-          alert(enabled ? '已开启对方摄像头' : '已关闭对方摄像头');
+          showToast(enabled ? '✅ 已开启对方摄像头' : '✅ 已关闭对方摄像头', 'success', 2000);
         } else {
           console.error('❌ 远程控制摄像头失败:', result.message);
-          alert('操作失败: ' + result.message);
+          showToast('操作失败: ' + result.message, 'error', 3000);
         }
       } catch (error) {
         console.error('❌ 远程控制摄像头失败:', error);
-        alert('操作失败: ' + error.message);
+        showToast('操作失败: ' + error.message, 'error', 3000);
       }
     }
 
@@ -2141,7 +2141,7 @@
       try {
         const jwtToken = getJwtToken();
         if (!jwtToken) {
-          alert('未找到认证信息');
+          showToast('未找到认证信息', 'error', 3000);
           return;
         }
 
@@ -2171,14 +2171,14 @@
         const result = await response.json();
         if (result.success) {
           console.log('✅ 远程控制麦克风成功');
-          alert(enabled ? '已开启对方麦克风' : '已关闭对方麦克风');
+          showToast(enabled ? '✅ 已开启对方麦克风' : '✅ 已关闭对方麦克风', 'success', 2000);
         } else {
           console.error('❌ 远程控制麦克风失败:', result.message);
-          alert('操作失败: ' + result.message);
+          showToast('操作失败: ' + result.message, 'error', 3000);
         }
       } catch (error) {
         console.error('❌ 远程控制麦克风失败:', error);
-        alert('操作失败: ' + error.message);
+        showToast('操作失败: ' + error.message, 'error', 3000);
       }
     }
 
@@ -2192,18 +2192,79 @@
       console.log('📍 roomId:', roomId);
       console.log('═══════════════════════════════════════════════════════');
 
-      if (!confirm(`确定要将 ${userName} 移出面试间吗？`)) {
-        console.log('❌ 用户取消了踢出操作');
-        return;
-      }
+      // ✅ 使用自定义确认弹窗替代 confirm()
+      showKickUserModal(targetUserId, userName);
+    }
 
+    // ✅ 显示踢出用户确认弹窗
+    function showKickUserModal(targetUserId, userName) {
+      // 创建遮罩层
+      const overlay = document.createElement('div');
+      overlay.id = 'kickUserOverlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+
+      // 创建弹窗
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      `;
+
+      modal.innerHTML = `
+        <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+        <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #333;">确定要移出此用户吗？</h2>
+        <p style="margin: 0 0 25px 0; font-size: 16px; color: #666;">${userName}</p>
+        <div style="display: flex; gap: 12px;">
+          <button id="cancelKickBtn" style="flex: 1; background: #f5f5f5; color: #666; border: none; padding: 12px 24px;
+                         border-radius: 8px; font-size: 16px; cursor: pointer;">
+            取消
+          </button>
+          <button id="confirmKickBtn" style="flex: 1; background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%); color: white; border: none; padding: 12px 24px;
+                         border-radius: 8px; font-size: 16px; cursor: pointer;">
+            确定移出
+          </button>
+        </div>
+      `;
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+
+      // 绑定按钮事件
+      document.getElementById('cancelKickBtn').onclick = () => {
+        overlay.remove();
+        console.log('❌ 用户取消了踢出操作');
+      };
+      document.getElementById('confirmKickBtn').onclick = () => {
+        overlay.remove();
+        executeKickUser(targetUserId, userName);
+      };
+    }
+
+    // ✅ 执行踢出用户操作
+    async function executeKickUser(targetUserId, userName) {
       console.log('✅ 用户确认踢出操作，开始执行...');
 
       try {
         const jwtToken = getJwtToken();
         if (!jwtToken) {
           console.error('❌ 未找到 JWT Token');
-          alert('未找到认证信息');
+          showToast('未找到认证信息', 'error', 3000);
           return;
         }
 
@@ -2236,15 +2297,15 @@
 
         if (result.success) {
           console.log('✅ 踢出用户成功');
-          alert(`已将 ${userName} 移出面试间`);
+          showToast(`✅ 已将 ${userName} 移出面试间`, 'success', 2000);
         } else {
           console.error('❌ 踢出用户失败:', result.message);
-          alert('操作失败: ' + result.message);
+          showToast('操作失败: ' + result.message, 'error', 3000);
         }
       } catch (error) {
         console.error('❌ 踢出用户失败:', error);
         hideMessage();
-        alert('操作失败: ' + error.message);
+        showToast('操作失败: ' + error.message, 'error', 3000);
       }
     }
 
@@ -2253,7 +2314,7 @@
     // 官方文档：https://doc-zh.zego.im/real-time-video-web/best-practice/mobile-front-and-rear-camera-switching
     async function flipCamera() {
       if (!localStream || !isCameraOn) {
-        alert('请先打开摄像头');
+        showToast('请先打开摄像头', 'warning', 2000);
         return;
       }
 
@@ -2271,14 +2332,14 @@
 
         console.log('✅ 摄像头切换成功:', isFrontCamera ? '前置' : '后置');
         hideMessage();
-        alert('摄像头已切换到' + (isFrontCamera ? '前置' : '后置'));
+        showToast('✅ 摄像头已切换到' + (isFrontCamera ? '前置' : '后置'), 'success', 2000);
       } catch (error) {
         console.error('❌ 切换摄像头失败:', error);
         hideMessage();
 
         // 切换回原来的方向
         isFrontCamera = !isFrontCamera;
-        alert('切换摄像头失败: ' + error.message);
+        showToast('切换摄像头失败: ' + error.message, 'error', 3000);
       }
     }
 
@@ -2289,7 +2350,7 @@
 
       // 🔥 检查roomId是否存在
       if (!roomId || roomId === '') {
-        alert('请先创建面试间！');
+        showToast('请先创建面试间！', 'warning', 2000);
         console.error('❌ roomId为空，无法生成邀请链接');
         return;
       }
@@ -2321,7 +2382,7 @@
             console.log('✅ 已发送 triggerShare 消息给小程序');
 
             // 提示用户点击右上角分享
-            alert('请点击右上角"..."按钮，选择"转发"分享给客户/阿姨');
+            showToast('请点击右上角"..."按钮，选择"转发"分享给客户/阿姨', 'info', 3000);
           } else {
             console.warn('⚠️ 未找到 wx.miniProgram，无法发送消息');
           }
@@ -2376,7 +2437,7 @@
         }, 1500);
 
       } catch (err) {
-        alert('复制失败，请手动复制链接');
+        showToast('复制失败，请手动复制链接', 'error', 3000);
       }
     }
 
@@ -2520,12 +2581,12 @@
     async function quickStartTeleprompter() {
       const content = document.getElementById('teleprompterContent').value.trim();
       if (!content) {
-        alert('请输入提词内容');
+        showToast('请输入提词内容', 'warning', 2000);
         return;
       }
 
       if (!roomId) {
-        alert('请先创建房间');
+        showToast('请先创建房间', 'warning', 2000);
         return;
       }
 
@@ -2588,12 +2649,12 @@
     async function pushTeleprompterContent() {
       const content = document.getElementById('teleprompterContent').value.trim();
       if (!content) {
-        alert('请输入提词内容');
+        showToast('请输入提词内容', 'warning', 2000);
         return;
       }
 
       if (!roomId) {
-        alert('请先创建房间');
+        showToast('请先创建房间', 'warning', 2000);
         return;
       }
 
@@ -2650,7 +2711,7 @@
     // 控制提词器播放状态
     async function controlTeleprompter(action) {
       if (!roomId) {
-        alert('请先创建房间');
+        showToast('请先创建房间', 'warning', 2000);
         return;
       }
 
@@ -3032,7 +3093,7 @@
         } catch (error) {
           console.error('❌ ZEGO SDK 加载失败:', error);
           addLog('❌ ZEGO SDK 加载失败', 'error');
-          alert('视频SDK加载失败，请检查网络连接后刷新页面重试');
+          showToast('视频SDK加载失败，请检查网络连接后刷新页面重试', 'error', 3000);
           return;
         }
       } else {

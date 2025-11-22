@@ -1201,7 +1201,7 @@
               </ol>
             </div>
 
-            <button onclick="navigator.clipboard.writeText('${window.location.href}').then(() => alert('URL已复制到剪贴板！'))"
+            <button onclick="navigator.clipboard.writeText('${window.location.href}').then(() => showToast('✅ URL已复制到剪贴板！', 'success', 2000))"
               style="
                 width: 100%;
                 padding: 15px;
@@ -1303,8 +1303,10 @@
     document.getElementById('localLabel').textContent = userName || roleDisplay;
 
     if (!roomId) {
-      alert('无效的房间号');
-      window.location.href = 'video-interview-guest.html';
+      showToast('无效的房间号', 'error', 2000);
+      setTimeout(() => {
+        window.location.href = 'video-interview-guest.html';
+      }, 2000);
     }
 
     // ZEGO配置（与主持人端保持一致）
@@ -1419,7 +1421,7 @@
           if (timeSinceLeft < 2000) {
             const waitTime = Math.ceil((2000 - timeSinceLeft) / 1000);
             hideLoading();
-            alert(`请稍等${waitTime}秒后再进入，以确保资源完全释放`);
+            showToast(`请稍等${waitTime}秒后再进入，以确保资源完全释放`, 'warning', 3000);
             // 重新显示浮窗
             const identityOverlay = document.getElementById('identityOverlay');
             identityOverlay.style.display = 'flex';
@@ -1578,7 +1580,7 @@
       } catch (error) {
         console.error('❌ 初始化失败:', error);
         hideLoading();
-        alert('连接失败: ' + (error.message || '未知错误'));
+        showToast('连接失败: ' + (error.message || '未知错误'), 'error', 3000);
 
         // 🔥 初始化失败时也清除标记，允许用户重新尝试
         sessionStorage.removeItem('fromGuestPage');
@@ -1657,7 +1659,7 @@
         return true;
       } catch (error) {
         console.error('❌ 麦克风权限被拒绝:', error);
-        alert('请允许使用麦克风，否则无法进行语音通话');
+        showToast('请允许使用麦克风，否则无法进行语音通话', 'warning', 3000);
         return false;
       }
     }
@@ -1671,7 +1673,7 @@
 
         if (microphones.length === 0) {
           console.error('❌ 未检测到麦克风设备');
-          alert('未检测到麦克风，请检查设备连接');
+          showToast('未检测到麦克风，请检查设备连接', 'error', 3000);
           return false;
         }
 
@@ -2391,7 +2393,7 @@
     // 官方文档：https://doc-zh.zego.im/real-time-video-web/best-practice/mobile-front-and-rear-camera-switching
     async function flipCamera() {
       if (!localStream || !isCameraOn) {
-        alert('请先打开摄像头');
+        showToast('请先打开摄像头', 'warning', 2000);
         return;
       }
 
@@ -2409,7 +2411,7 @@
 
         console.log('✅ 摄像头切换成功:', isFrontCamera ? '前置' : '后置');
         hideLoading();
-        alert('摄像头已切换到' + (isFrontCamera ? '前置' : '后置'));
+        showToast('✅ 摄像头已切换到' + (isFrontCamera ? '前置' : '后置'), 'success', 2000);
 
       } catch (error) {
         console.error('❌ 切换摄像头失败:', error);
@@ -2417,7 +2419,7 @@
 
         // 切换回原来的方向
         isFrontCamera = !isFrontCamera;
-        alert('切换摄像头失败: ' + error.message);
+        showToast('切换摄像头失败: ' + error.message, 'error', 3000);
       }
     }
 
@@ -2428,7 +2430,7 @@
 
       // 🔥 检查roomId是否存在
       if (!roomId || roomId === '') {
-        alert('房间号不存在，无法生成邀请链接！');
+        showToast('房间号不存在，无法生成邀请链接！', 'error', 2000);
         console.error('❌ roomId为空，无法生成邀请链接');
         return;
       }
@@ -2460,7 +2462,7 @@
             console.log('✅ 已发送 triggerShare 消息给小程序');
 
             // 提示用户点击右上角分享
-            alert('请点击右上角"..."按钮，选择"转发"分享给客户/阿姨');
+            showToast('请点击右上角"..."按钮，选择"转发"分享给客户/阿姨', 'info', 3000);
           } else {
             console.warn('⚠️ 未找到 wx.miniProgram，无法发送消息');
           }
@@ -2510,7 +2512,7 @@
         }, 1500);
 
       } catch (err) {
-        alert('复制失败，请手动复制链接');
+        showToast('复制失败，请手动复制链接', 'error', 3000);
       }
     }
 
@@ -2641,7 +2643,7 @@
         showLeaveSuccessModal();
       } catch (error) {
         console.error('❌ 离开房间失败:', error.message);
-        alert('离开房间失败，请刷新页面重试');
+        showToast('离开房间失败，请刷新页面重试', 'error', 3000);
       }
     }
 
@@ -2910,7 +2912,7 @@
           console.log('✅ 自动加入房间成功');
         } catch (error) {
           console.error('❌ 自动加入房间失败:', error);
-          alert('自动加入房间失败，请重新进入');
+          showToast('自动加入房间失败，请重新进入', 'error', 3000);
           // 清除保存的用户信息，让用户重新填写
           const savedUserInfoKey = `guest_user_info_${roomId}`;
           localStorage.removeItem(savedUserInfoKey);
@@ -2953,7 +2955,7 @@
 
         // 🔥 如果选择阿姨角色，名字必填
         if (selectedRole === 'helper' && !inputName) {
-          alert('请输入您的姓名');
+          showToast('请输入您的姓名', 'warning', 2000);
           nameInput.focus();
           return;
         }

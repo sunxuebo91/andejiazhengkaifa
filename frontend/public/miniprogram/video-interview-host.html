@@ -1282,9 +1282,17 @@
         if (state === 'DISCONNECTED') {
           console.log('⚠️ 检测到断开连接，errorCode=' + errorCode);
 
-          // ✅ 只在非正常断开时显示提示（errorCode !== 0）
-          // errorCode = 0 表示正常断开（主动退出），不需要提示
-          if (errorCode !== 0) {
+          // 🔥 errorCode 说明：
+          // 0 = 正常断开（主动退出）
+          // 1002055 = 房间被解散
+          // 其他 = 网络断开等异常情况
+
+          if (errorCode === 1002055) {
+            // 房间被解散，不显示重连提示（已经有"房间已解散"的弹窗）
+            console.log('🔴 房间已被解散，不显示重连提示');
+            hideReconnectToast(); // 确保隐藏重连提示
+          } else if (errorCode !== 0) {
+            // 其他非正常断开，显示重连提示
             console.log('🔄 网络断开，显示重连提示');
             showReconnectToast();
           }

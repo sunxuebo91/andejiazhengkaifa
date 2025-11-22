@@ -2126,6 +2126,9 @@
           if (errorCode === 1002055) {
             console.log('✅ 确认：被服务端强制踢出 (errorCode=1002055)');
 
+            // 🔥 立即隐藏重连提示（避免显示"正在重新连接"）
+            hideReconnectToast();
+
             // 检查 extendedData 中的踢出原因
             if (extendedData && extendedData.custom_kickout_message) {
               console.log('📝 踢出原因:', extendedData.custom_kickout_message);

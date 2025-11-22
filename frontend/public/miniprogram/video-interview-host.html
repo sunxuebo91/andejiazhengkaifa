@@ -2572,10 +2572,8 @@
           showToast('🚀 提词器已启动！', 'success', 2000);
           console.log('✅ 提词器启动成功');
 
-          // 自动关闭提词器弹窗
-          setTimeout(() => {
-            closeTeleprompterModal();
-          }, 2000);
+          // ✅ 不自动关闭提词器弹窗，让主持人可以继续控制
+          // 主持人可以手动点击 X 关闭，或者继续使用播放/暂停/关闭等功能
         } else {
           throw new Error(result.message || '启动失败');
         }

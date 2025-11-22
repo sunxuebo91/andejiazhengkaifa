@@ -2752,8 +2752,8 @@
 
       modal.innerHTML = `
         <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
-        <h2 style="margin: 0 0 15px 0; font-size: 24px; color: #333;">确定要结束面试并解散房间吗？</h2>
-        <p style="margin: 0 0 25px 0; font-size: 16px; color: #666;">所有参与者将被踢出，此操作不可撤销</p>
+        <h2 style="margin: 0 0 15px 0; font-size: 18px; color: #333;">确定要结束面试并解散房间吗？</h2>
+        <p style="margin: 0 0 25px 0; font-size: 14px; color: #999;">所有参与者将被踢出，此操作不可撤销</p>
         <div style="display: flex; gap: 12px;">
           <button id="cancelEndBtn" style="flex: 1; background: #f5f5f5; color: #666; border: none; padding: 12px 24px;
                          border-radius: 8px; font-size: 16px; cursor: pointer;">
@@ -2780,85 +2780,6 @@
       if (overlay) {
         overlay.remove();
       }
-    }
-
-    // ✅ 显示结束成功弹窗
-    function showEndSuccessModal() {
-      console.log('📢 显示结束成功弹窗');
-
-      // 创建遮罩层
-      const overlay = document.createElement('div');
-      overlay.id = 'endSuccessOverlay';
-      overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-      `;
-
-      // 创建弹窗
-      const modal = document.createElement('div');
-      modal.style.cssText = `
-        background: white;
-        border-radius: 12px;
-        padding: 30px;
-        max-width: 400px;
-        width: 90%;
-        text-align: center;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-      `;
-
-      modal.innerHTML = `
-        <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
-        <h2 style="margin: 0 0 15px 0; font-size: 24px; color: #333;">面试已结束</h2>
-        <p style="margin: 0 0 25px 0; font-size: 16px; color: #666;">房间已解散，感谢您的使用</p>
-        <button id="closePageBtn" style="background: linear-gradient(135deg, #5fb3a3 0%, #4a9d8e 100%); color: white; border: none; padding: 12px 40px;
-                       border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%;">
-          确定
-        </button>
-      `;
-
-      overlay.appendChild(modal);
-      document.body.appendChild(overlay);
-
-      // 绑定按钮事件
-      document.getElementById('closePageBtn').onclick = function() {
-        // 尝试关闭当前窗口
-        window.close();
-
-        // 如果无法关闭（不是通过脚本打开的窗口），则返回上一页
-        setTimeout(() => {
-          if (window.history.length > 1) {
-            window.history.back();
-          } else {
-            // 如果没有历史记录，显示提示
-            overlay.remove();
-            const hint = document.createElement('div');
-            hint.style.cssText = `
-              position: fixed;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%);
-              background: white;
-              padding: 30px;
-              border-radius: 12px;
-              text-align: center;
-              z-index: 10001;
-              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            `;
-            hint.innerHTML = `
-              <p style="margin: 0; font-size: 16px; color: #666;">请手动关闭此页面</p>
-            `;
-            document.body.appendChild(hint);
-          }
-        }, 100);
-      };
     }
 
     // ✅ 确认结束面试
@@ -2951,12 +2872,26 @@
         hideMessage();
 
         // 5. 关闭面试间界面
+        console.log('🚪 准备关闭页面...');
+
+        // 优先使用小程序 API 关闭页面
         if (typeof wx !== 'undefined' && wx.miniProgram) {
-          // 在小程序中，返回上一页
+          console.log('✅ 使用小程序 API 关闭页面');
           wx.miniProgram.navigateBack();
         } else {
-          // 🔥 显示成功提示后关闭页面（避免 token 丢失问题）
-          showEndSuccessModal();
+          // 非小程序环境，尝试关闭窗口
+          console.log('⚠️ 非小程序环境，尝试关闭窗口');
+          window.close();
+
+          // 如果无法关闭，返回上一页
+          setTimeout(() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              // 如果都失败，显示提示
+              showToast('✅ 面试已结束，请手动关闭此页面', 'success', 3000);
+            }
+          }, 100);
         }
       } catch (error) {
         console.error('❌ 结束面试失败:', error);

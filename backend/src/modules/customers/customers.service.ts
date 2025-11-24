@@ -611,6 +611,16 @@ export class CustomersService {
           createdBy: new Types.ObjectId(adminUserId),
         } as any);
 
+        // 🔔 发送站内通知（为每个客户单独发送）
+        await this.notificationHelper.notifyCustomerAssigned(assignedTo, {
+          customerId: customerId,
+          customerName: updated.name,
+          phone: this.maskPhoneNumber(updated.phone),
+          leadSource: updated.leadSource,
+        }).catch(err => {
+          this.logger.error(`发送客户分配通知失败: ${err.message}`);
+        });
+
         successCount++;
       } catch (error) {
         errors.push({ customerId, error: error.message || '分配失败' });
@@ -618,7 +628,7 @@ export class CustomersService {
       }
     }
 
-    // 批量分配完成后发送一次通知
+    // 批量分配完成后发送一次微信通知
     if (successCount > 0) {
       await this.sendBatchAssignmentNotification(successCount, targetUser as any, assignmentReason);
     }

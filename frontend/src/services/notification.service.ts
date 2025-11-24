@@ -14,7 +14,7 @@ class NotificationService {
    */
   async getNotifications(params: NotificationQueryDto = {}): Promise<NotificationListResponse> {
     try {
-      const response = await api.get('/notifications', { params });
+      const response = await api.get('/api/notifications', { params });
       console.log('API响应 (getNotifications):', response);
       // api拦截器已经返回了response.data，所以这里直接访问data
       if (response && response.data) {
@@ -32,7 +32,7 @@ class NotificationService {
    * 获取未读数量
    */
   async getUnreadCount(): Promise<number> {
-    const response = await api.get('/notifications/unread-count');
+    const response = await api.get('/api/notifications/unread-count');
     // api拦截器已经返回了response.data，所以这里直接访问data
     return response.data?.count || 0;
   }
@@ -41,7 +41,7 @@ class NotificationService {
    * 标记通知为已读
    */
   async markAsRead(notificationIds: string[]): Promise<number> {
-    const response = await api.put('/notifications/mark-read', {
+    const response = await api.put('/api/notifications/mark-read', {
       notificationIds,
     } as MarkReadDto);
     // api拦截器已经返回了response.data，所以这里直接访问data
@@ -52,7 +52,7 @@ class NotificationService {
    * 标记全部为已读
    */
   async markAllAsRead(): Promise<number> {
-    const response = await api.put('/notifications/mark-all-read');
+    const response = await api.put('/api/notifications/mark-all-read');
     // api拦截器已经返回了response.data，所以这里直接访问data
     return response.data?.count || 0;
   }

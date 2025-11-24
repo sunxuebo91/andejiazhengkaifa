@@ -153,6 +153,7 @@ export const getCustomerStatusStyle = (status: string): { color: string; backgro
   const statusStyles: Record<string, { color: string; backgroundColor: string }> = {
     '已签约': { color: '#52c41a', backgroundColor: '#f6ffed' },
     '匹配中': { color: '#1890ff', backgroundColor: '#e6f7ff' },
+    '已面试': { color: '#13c2c2', backgroundColor: '#e6fffb' },
     '流失客户': { color: '#ff4d4f', backgroundColor: '#fff2f0' },
     '已退款': { color: '#faad14', backgroundColor: '#fffbe6' },
     '退款中': { color: '#fa8c16', backgroundColor: '#fff7e6' },

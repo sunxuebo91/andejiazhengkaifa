@@ -9,7 +9,7 @@ export interface Customer {
   idCardNumber?: string;
   leadSource: '美团' | '抖音' | '快手' | '小红书' | '转介绍' | '其他';
   serviceCategory: '月嫂' | '住家育儿嫂' | '保洁' | '住家保姆' | '养宠' | '小时工' | '白班育儿' | '白班保姆' | '住家护老';
-  contractStatus: '已签约' | '匹配中' | '流失客户' | '已退款' | '退款中' | '待定';
+  contractStatus: '已签约' | '匹配中' | '已面试' | '流失客户' | '已退款' | '退款中' | '待定';
   leadLevel: 'A类' | 'B类' | 'C类' | 'D类' | '流失';
   salaryBudget: number;
   expectedStartDate: string;
@@ -110,7 +110,7 @@ export const SERVICE_CATEGORIES = [
   '月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老'
 ] as const;
 
-export const CONTRACT_STATUSES = ['已签约', '匹配中', '流失客户', '已退款', '退款中', '待定'] as const;
+export const CONTRACT_STATUSES = ['已签约', '匹配中', '已面试', '流失客户', '已退款', '退款中', '待定'] as const;
 
 export const LEAD_LEVELS = ['O类', 'A类', 'B类', 'C类', 'D类', '流失'] as const;
 

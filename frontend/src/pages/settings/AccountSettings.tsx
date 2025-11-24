@@ -185,7 +185,7 @@ const AccountSettings: React.FC = () => {
               </Spin>
             </div>
           </TabPane>
-          
+
           <TabPane
             tab={
               <span>
@@ -240,7 +240,7 @@ const AccountSettings: React.FC = () => {
               </Form>
             </Spin>
           </TabPane>
-          
+
           <TabPane
             tab={
               <span>
@@ -279,7 +279,7 @@ const AccountSettings: React.FC = () => {
               </Form.Item>
             </Form>
           </TabPane>
-          
+
           <TabPane
             tab={
               <span>
@@ -325,4 +325,4 @@ const AccountSettings: React.FC = () => {
   );
 };
 
-export default AccountSettings; 
+export default AccountSettings;

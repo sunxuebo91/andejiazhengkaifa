@@ -62,3 +62,9 @@ body {
   max-width: 600px !important;
   min-width: 400px !important;
 }
+
+/* Ant Design Pro PageContainer 右侧内容区：去掉额外内边距，统一使用 ProLayout 的 10px 外边距 */
+.ant-pro-page-container-children-content {
+  padding: 0 !important;
+  margin: 0 !important;
+}

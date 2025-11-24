@@ -56,7 +56,7 @@ const Dashboard: React.FC = () => {
   // 获取时间范围的开始和结束日期
   const getDateRange = (range: string): [string, string] => {
     const now = dayjs();
-    
+
     switch (range) {
       case 'today':
         return [now.startOf('day').toISOString(), now.endOf('day').toISOString()];
@@ -86,6 +86,32 @@ const Dashboard: React.FC = () => {
         return [now.startOf('month').toISOString(), now.endOf('month').toISOString()];
       default:
         return [now.startOf('month').toISOString(), now.endOf('month').toISOString()];
+    }
+  };
+
+  // 根据时间范围获取动态标题
+  const getTimeRangeLabel = (range: string): string => {
+    switch (range) {
+      case 'today':
+        return '今日';
+      case 'yesterday':
+        return '昨日';
+      case 'thisWeek':
+        return '本周';
+      case 'lastWeek':
+        return '上周';
+      case 'thisMonth':
+        return '本月';
+      case 'lastMonth':
+        return '上月';
+      case 'last7Days':
+        return '近7天';
+      case 'last30Days':
+        return '近30天';
+      case 'custom':
+        return '时间段内';
+      default:
+        return '本月';
     }
   };
 
@@ -348,7 +374,7 @@ const Dashboard: React.FC = () => {
           <Col xs={24} sm={12} md={6} lg={6} xl={6}>
             <Card variant="outlined">
               <Statistic
-                title="本月新增简历"
+                title={`${getTimeRangeLabel(timeRange)}新增简历`}
                 value={stats?.resumes.newTodayResumes || 0}
                 valueStyle={{ color: '#52c41a' }}
                 prefix={<FileAddOutlined />}
@@ -409,7 +435,7 @@ const Dashboard: React.FC = () => {
           <Col xs={24} sm={12} md={6} lg={6} xl={6}>
             <Card variant="outlined">
               <Statistic
-                title="本月新增客户"
+                title={`${getTimeRangeLabel(timeRange)}新增客户`}
                 value={stats?.customerBusiness.newTodayCustomers || 0}
                 valueStyle={{ color: '#52c41a' }}
                 prefix={<UserOutlined />}
@@ -485,7 +511,7 @@ const Dashboard: React.FC = () => {
           <Col xs={24} sm={12} md={8} lg={8} xl={8}>
             <Card variant="outlined">
               <Statistic
-                title="本月新签"
+                title={`${getTimeRangeLabel(timeRange)}新签合同`}
                 value={stats?.contracts.newThisMonthContracts || 0}
                 valueStyle={{ color: '#52c41a' }}
                 prefix={<FileAddOutlined />}
@@ -536,7 +562,7 @@ const Dashboard: React.FC = () => {
           <Col xs={24} sm={12} md={6} lg={6} xl={6}>
             <Card variant="outlined">
               <Statistic
-                title="本月服务费收入"
+                title={`${getTimeRangeLabel(timeRange)}服务费收入`}
                 value={stats?.financial.monthlyServiceFeeIncome || 0}
                 valueStyle={{ color: '#1890ff' }}
                 prefix={<MoneyCollectOutlined />}
@@ -547,7 +573,7 @@ const Dashboard: React.FC = () => {
           <Col xs={24} sm={12} md={6} lg={6} xl={6}>
             <Card variant="outlined">
               <Statistic
-                title="本月工资支出"
+                title={`${getTimeRangeLabel(timeRange)}工资支出`}
                 value={stats?.financial.monthlyWageExpenditure || 0}
                 valueStyle={{ color: '#ff4d4f' }}
                 prefix={<BankOutlined />}
@@ -573,8 +599,8 @@ const Dashboard: React.FC = () => {
                 title="环比增长率"
                 value={stats?.financial.monthOverMonthGrowthRate || 0}
                 precision={2}
-                valueStyle={{ 
-                  color: (stats?.financial.monthOverMonthGrowthRate || 0) >= 0 ? '#52c41a' : '#ff4d4f' 
+                valueStyle={{
+                  color: (stats?.financial.monthOverMonthGrowthRate || 0) >= 0 ? '#52c41a' : '#ff4d4f'
                 }}
                 prefix={<LineChartOutlined />}
                 suffix="%"
@@ -835,9 +861,9 @@ const Dashboard: React.FC = () => {
         subTitle: '实时监控核心业务指标',
       }}
     >
-      <Spin 
-        spinning={loading || refreshing} 
-        tip="加载驾驶舱数据..." 
+      <Spin
+        spinning={loading || refreshing}
+        tip="加载驾驶舱数据..."
         size="large"
       >
         <div style={{ minHeight: '400px' }}>
@@ -857,4 +883,4 @@ const Dashboard: React.FC = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

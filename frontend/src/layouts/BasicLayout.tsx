@@ -284,9 +284,10 @@ const BasicLayout = () => {
       navTheme="light"
       fixedHeader
       fixSiderbar
+      // 全局右侧内容区域：设置微边距（10px），统一所有业务页面的外圈留白
       contentStyle={{
         margin: 0,
-        padding: 0,
+        padding: 10,
       }}
       rightContentRender={() => (
         user && (

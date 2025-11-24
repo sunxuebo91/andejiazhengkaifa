@@ -2,7 +2,6 @@ import React, { ReactNode, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, App as AntdApp, Spin, message } from 'antd';
 import BasicLayout from './layouts/BasicLayout';
-import { PageContainer } from '@ant-design/pro-components';
 import { AuthProvider } from './contexts/AuthContext';
 import AuthorizedRoute from './components/AuthorizedRoute';
 
@@ -102,11 +101,7 @@ export default function App({ children }: AppProps) {
                 {/* 需要登录的路由 */}
                 <Route
                   path="/"
-                  element={
-                    <PageContainer>
-                      <BasicLayout />
-                    </PageContainer>
-                  }
+                  element={<BasicLayout />}
                 >
                   {/* 默认首页 */}
                   <Route index element={<Navigate to="/dashboard" replace />} />

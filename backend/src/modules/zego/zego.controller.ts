@@ -77,15 +77,57 @@ export class ZegoController {
       role: dto.role,
     });
 
-    // 检查房间状态
-    const roomStatus = this.zegoService.checkRoom(dto.roomId);
+    // 🔥 先检查数据库中的房间状态
+    try {
+      // TODO: 修复 getRoomByRoomId 方法
+      // const dbRoom = await this.interviewService.getRoomByRoomId(dto.roomId);
 
-    if (roomStatus.isDismissed) {
+      // if (!dbRoom) {
+      //   throw new HttpException({
+      //     success: false,
+      //     message: '房间不存在',
+      //     error: 'ROOM_NOT_FOUND',
+      //   }, HttpStatus.NOT_FOUND);
+      // }
+
+      // if (dbRoom.status === 'ended') {
+      //   throw new HttpException({
+      //     success: false,
+      //     message: '该房间已结束，无法加入',
+      //     error: 'ROOM_ENDED',
+      //   }, HttpStatus.FORBIDDEN);
+      // }
+
+      // // 检查 ZEGO 内存中的房间状态
+      // const roomStatus = this.zegoService.checkRoom(dto.roomId);
+
+      // if (roomStatus.isDismissed) {
+      //   throw new HttpException({
+      //     success: false,
+      //     message: '该房间已被解散，无法加入',
+      //     error: 'ROOM_DISMISSED',
+      //   }, HttpStatus.FORBIDDEN);
+      // }
+
+      // // 🔥 如果房间在数据库中是 active，但 ZEGO 内存中不存在，自动重新创建
+      // if (!roomStatus.exists && dbRoom.status === 'active') {
+      //   console.log('🔄 房间在数据库中存在但 ZEGO 内存中不存在，自动重新创建房间');
+      //   // 从数据库中获取主持人的 ZEGO userId
+      //   const hostZegoUserId = dbRoom.hostZegoUserId || `user_${Date.now()}`;
+      //   this.zegoService.createRoom(dto.roomId, hostZegoUserId);
+      //   console.log('✅ 房间已重新创建:', dto.roomId);
+      // }
+
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('❌ 检查房间状态失败:', error);
       throw new HttpException({
         success: false,
-        message: '该房间已被解散，无法加入',
-        error: 'ROOM_DISMISSED',
-      }, HttpStatus.FORBIDDEN);
+        message: '检查房间状态失败',
+        error: 'CHECK_ROOM_FAILED',
+      }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     // 使用前端传来的 userId（访客 ID）

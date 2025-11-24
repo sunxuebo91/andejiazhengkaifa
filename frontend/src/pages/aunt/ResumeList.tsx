@@ -83,7 +83,7 @@ const ResumeList = () => {
     fail: number;
     errors: string[];
   } | null>(null);
-  
+
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -92,7 +92,7 @@ const ResumeList = () => {
   const fetchFilterOptions = async () => {
     try {
       const response = await apiService.get('/api/resumes/options');
-      
+
       if (response.success && response.data) {
         setNativePlaceOptions(response.data.nativePlaces || []);
         setEthnicityOptions(response.data.ethnicities || []);
@@ -154,7 +154,7 @@ const ResumeList = () => {
     checkImmediate();
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -163,38 +163,38 @@ const ResumeList = () => {
   // 获取简历列表
   const fetchResumeList = async (params: SearchParams & { page?: number; pageSize?: number; _t?: number } = {}) => {
     setLoading(true);
-    
+
     // 添加超时控制
     const timeoutId = setTimeout(() => {
       setLoading(false);
       messageApi.error('请求超时，请重试');
     }, 10000); // 10秒超时
-    
+
     try {
       // 将所有筛选参数传递给后端API
       const apiParams = { ...params };
-      
+
       // console.log('开始请求简历列表，参数:', apiParams);
       // 使用正确的API路径和参数格式
       const response = await apiService.get('/api/resumes', apiParams, {
         timeout: 30000 // 增加超时时间到30秒
       });
-      
+
       // 清除超时计时器
       clearTimeout(timeoutId);
-      
+
       // console.log('API响应数据:', response);
-      
+
       // 检查响应格式
       if (!response || !response.data) {
         throw new Error('服务器返回数据为空');
       }
-      
+
       // 直接从响应数据中提取 items（因为 axios 拦截器已经处理过）
       const { items: resumes = [], total: totalCount = 0 } = response.data;
-      
+
       // console.log('解析后的简历数据:', { resumesCount: resumes.length, totalCount, sampleResume: resumes[0] });
-      
+
       // 格式化数据
       let formattedData: ResumeData[] = resumes.map((resume: any) => {
         // 确保id存在且为字符串
@@ -202,12 +202,12 @@ const ResumeList = () => {
           console.error('简历数据缺少ID字段:', resume);
           return null;
         }
-        
+
         const resumeId = resume._id.toString();
-        
+
         // 格式化ID显示
         const formattedId = resumeId.substring(0, 8).padEnd(8, '0');
-        
+
         return {
           ...resume,
           id: resumeId, // 使用 _id 作为 id
@@ -215,32 +215,32 @@ const ResumeList = () => {
           hasMedicalReport: resume.medicalReportUrls && resume.medicalReportUrls.length > 0
         };
       }).filter(Boolean);
-      
+
       console.log('🔥 后端返回的数据（前10条记录）:');
       formattedData.slice(0, 10).forEach((item, index) => {
         const updateTime = item.updatedAt || item.createdAt || '未知';
         console.log(`  ${index + 1}. ${item.name} - 更新时间: ${updateTime}`);
       });
-      
+
       // 🔥 使用强制排序后的数据
       let filteredData = [...formattedData]; // 创建副本，避免引用问题
-      
+
       console.log('🔥 最终设置到state的数据（前3条）- 强制排序:');
       filteredData.slice(0, 3).forEach((item, index) => {
         const updateTime = item.updatedAt || item.createdAt || '未知';
         console.log(`  最终${index + 1}. ${item.name} - 更新时间: ${updateTime}`);
       });
-      
+
       // 直接设置数据，不做任何前端排序
       setResumeList(filteredData);
       setTotal(totalCount); // 使用后端返回的总记录数，而不是前端筛选后的数据长度
-      
+
       // 保存原始简历列表到localStorage
       localStorage.setItem('resumeList', JSON.stringify(formattedData));
     } catch (error) {
       // 清除超时计时器
       clearTimeout(timeoutId);
-      
+
       console.error('获取简历列表失败:', error);
       messageApi.error('获取简历列表失败，请稍后重试');
       setResumeList([]);
@@ -257,7 +257,7 @@ const ResumeList = () => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    
+
     // 延迟执行搜索，防止频繁请求
     searchTimeoutRef.current = setTimeout(() => {
       fetchResumeList({
@@ -266,7 +266,7 @@ const ResumeList = () => {
         pageSize
       });
     }, 500); // 增加到500ms的防抖时间
-    
+
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
@@ -281,7 +281,7 @@ const ResumeList = () => {
       clearInterval(autoRefreshIntervalRef.current);
       autoRefreshIntervalRef.current = null;
     }
-    
+
     // 只有在启用自动刷新且没有筛选条件时才设置定时器
     if (autoRefreshEnabled && Object.keys(searchParams).length === 0) {
       // console.log('启动定时检查新简历...');
@@ -296,7 +296,7 @@ const ResumeList = () => {
         });
       }, 60000); // 1分钟刷新一次
     }
-    
+
     // 组件卸载时清除定时器
     return () => {
       if (autoRefreshIntervalRef.current) {
@@ -322,27 +322,27 @@ const ResumeList = () => {
   }) => {
     // 如果正在加载，不处理
     if (loading) return;
-    
+
     const { keyword, jobType, maxAge, nativePlace, ethnicity, orderStatus } = values;
-    
+
     // 构建搜索参数
     const searchQuery: SearchParams = {};
-    
+
     if (keyword) searchQuery.keyword = keyword;
     if (jobType) searchQuery.jobType = jobType;
     if (maxAge !== undefined && maxAge !== null) searchQuery.maxAge = maxAge;
     if (nativePlace) searchQuery.nativePlace = nativePlace;
     if (ethnicity) searchQuery.ethnicity = ethnicity;
     if (orderStatus) searchQuery.orderStatus = orderStatus;
-    
+
     // 如果有筛选条件，自动禁用自动刷新
     if (Object.keys(searchQuery).length > 0 && autoRefreshEnabled) {
       setAutoRefreshEnabled(false);
       messageApi.info('已应用筛选条件，自动刷新已暂停');
     }
-    
+
     console.log('搜索参数:', searchQuery);
-    
+
     setSearchParams(searchQuery);
     setCurrentPage(1); // 重置到第一页
   };
@@ -352,7 +352,7 @@ const ResumeList = () => {
     form.resetFields();
     setSearchParams({});
     setCurrentPage(1);
-    
+
     // 恢复自动刷新
     if (!autoRefreshEnabled) {
       setAutoRefreshEnabled(true);
@@ -384,23 +384,23 @@ const ResumeList = () => {
     try {
       setFollowUpLoading(true);
       const values = await followUpForm.validateFields();
-      
+
       if (!currentResumeId) {
         messageApi.error('简历ID不存在');
         return;
       }
-      
+
       // 调用API创建跟进记录
       await createFollowUp({
         resumeId: currentResumeId,
         type: values.type,
         content: values.content,
       });
-      
+
       messageApi.success('添加跟进记录成功');
       setFollowUpVisible(false);
       followUpForm.resetFields();
-      
+
       // 刷新列表
       fetchResumeList({
         ...searchParams,
@@ -419,35 +419,35 @@ const ResumeList = () => {
   const handleExcelImport: UploadProps['customRequest'] = async (options) => {
     setImportLoading(true);
     setImportResult(null);
-    
+
     try {
       const { file } = options;
       const uploadFile = file as File;
-      
+
       // 验证文件类型
-      const isExcel = 
-        uploadFile.name.endsWith('.xlsx') || 
+      const isExcel =
+        uploadFile.name.endsWith('.xlsx') ||
         uploadFile.name.endsWith('.xls') ||
-        uploadFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+        uploadFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
         uploadFile.type === 'application/vnd.ms-excel';
-      
+
       if (!isExcel) {
         messageApi.error('只支持Excel文件(.xlsx, .xls)');
         setImportLoading(false);
         return;
       }
-      
+
       // 准备表单数据
       const formData = new FormData();
       formData.append('file', uploadFile);
-      
+
       // 发送请求
       const response = await apiService.upload('/api/resumes/import-excel', formData);
-      
+
       if (response.success) {
         messageApi.success(response.message || '导入成功');
         setImportResult(response.data);
-        
+
         // 刷新列表
         fetchResumeList({
           ...searchParams,
@@ -455,7 +455,7 @@ const ResumeList = () => {
           pageSize,
           _t: Date.now() // 添加时间戳防止缓存
         });
-        
+
         // 如果导入全部成功且没有错误，自动关闭弹窗
         if (response.data.success > 0 && response.data.fail === 0) {
           setTimeout(() => {
@@ -480,23 +480,23 @@ const ResumeList = () => {
       ['张三', '13800138000', '月嫂', '女', '35', '四川成都', '汉族', '8000', '5', '高中', '想接单', '', 'wx123'],
       ['李四', '13900139000', '住家育儿嫂', '女', '42', '湖南长沙', '汉族', '9000', '8', '初中', '想接单', '', '']
     ];
-    
+
     // 创建CSV内容
     let csv = columns.join(',') + '\n';
     data.forEach(row => {
       csv += row.join(',') + '\n';
     });
-    
+
     // 创建Blob并下载
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    
+
     // 创建下载链接
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
     link.setAttribute('download', '简历导入模板.csv');
     link.style.visibility = 'hidden';
-    
+
     // 触发下载
     document.body.appendChild(link);
     link.click();
@@ -612,10 +612,10 @@ const ResumeList = () => {
       render: (_: any, record: ResumeData) => (
         <Space size="middle">
           <Tooltip title="添加跟进记录">
-            <Button 
-              type="primary" 
-              icon={<CommentOutlined />} 
-              size="small" 
+            <Button
+              type="primary"
+              icon={<CommentOutlined />}
+              size="small"
               onClick={() => handleFollowUp(record.id)}
             />
           </Tooltip>
@@ -627,7 +627,7 @@ const ResumeList = () => {
   // 显示自动刷新状态的组件
   const AutoRefreshIndicator = () => (
     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8, alignItems: 'center' }}>
-      <Button 
+      <Button
         type={autoRefreshEnabled ? "primary" : "default"}
         size="small"
         icon={<ReloadOutlined spin={autoRefreshEnabled} />}
@@ -654,17 +654,17 @@ const ResumeList = () => {
       header={{
         title: '简历列表',
         extra: [
-          <Button 
-            key="import" 
+          <Button
+            key="import"
             icon={<UploadOutlined />}
             onClick={() => setImportModalVisible(true)}
             style={{ marginRight: 8 }}
           >
             批量导入
           </Button>,
-          <Button 
-            key="add" 
-            type="primary" 
+          <Button
+            key="add"
+            type="primary"
             icon={<PlusOutlined />}
             onClick={() => {
               localStorage.removeItem('editingResume');
@@ -692,16 +692,16 @@ const ResumeList = () => {
                 style={{ width: '180px' }}
               />
             </Form.Item>
-            
+
             <Form.Item name="jobType" style={{ marginBottom: 0 }}>
-              <Select 
-                placeholder="工种" 
+              <Select
+                placeholder="工种"
                 allowClear
                 options={Object.entries(jobTypeMap).map(([value, label]) => ({ value, label }))}
                 style={{ width: '140px' }}
               />
             </Form.Item>
-            
+
             <Form.Item name="maxAge" style={{ marginBottom: 0 }}>
               <InputNumber
                 placeholder="≤年龄"
@@ -710,10 +710,10 @@ const ResumeList = () => {
                 style={{ width: '100px' }}
               />
             </Form.Item>
-            
+
             <Form.Item name="nativePlace" style={{ marginBottom: 0 }}>
-              <Select 
-                placeholder="籍贯" 
+              <Select
+                placeholder="籍贯"
                 allowClear
                 options={nativePlaceOptions.map(value => ({ value, label: value }))}
                 style={{ width: '140px' }}
@@ -723,31 +723,31 @@ const ResumeList = () => {
                 }
               />
             </Form.Item>
-            
+
             <Form.Item name="ethnicity" style={{ marginBottom: 0 }}>
-              <Select 
-                placeholder="民族" 
+              <Select
+                placeholder="民族"
                 allowClear
                 options={ethnicityOptions.map(value => ({ value, label: value }))}
                 style={{ width: '120px' }}
               />
             </Form.Item>
-            
+
             <Form.Item name="orderStatus" style={{ marginBottom: 0 }}>
-              <Select 
-                placeholder="接单状态" 
+              <Select
+                placeholder="接单状态"
                 allowClear
                 options={Object.entries(orderStatusMap).map(([value, { text }]) => ({ value, label: text }))}
                 style={{ width: '120px' }}
               />
             </Form.Item>
-            
+
             <Form.Item style={{ marginBottom: 0 }}>
               <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
                 查询
               </Button>
             </Form.Item>
-            
+
             <Form.Item style={{ marginBottom: 0 }}>
               <Button onClick={handleReset} icon={<ReloadOutlined />} disabled={loading}>
                 重置
@@ -756,7 +756,7 @@ const ResumeList = () => {
           </div>
         </Form>
       </Card>
-      
+
       {/* 数据表格 */}
       <Card>
         <AutoRefreshIndicator />
@@ -786,9 +786,9 @@ const ResumeList = () => {
           <Button key="cancel" onClick={() => setFollowUpVisible(false)}>
             取消
           </Button>,
-          <Button 
-            key="submit" 
-            type="primary" 
+          <Button
+            key="submit"
+            type="primary"
             loading={followUpLoading}
             onClick={handleFollowUpSubmit}
           >
@@ -845,7 +845,7 @@ const ResumeList = () => {
             <p>请上传Excel文件，文件第一行必须包含以下列：姓名、手机号、工种</p>
             <p>其他可选列：年龄、性别、期望薪资、工作经验、学历、籍贯、民族、接单状态等</p>
             <p><a onClick={downloadExcelTemplate} style={{ color: '#1890ff', cursor: 'pointer' }}>点击下载模板</a></p>
-            
+
             <Upload.Dragger
               name="file"
               multiple={false}
@@ -867,7 +867,7 @@ const ResumeList = () => {
             <h3>导入结果</h3>
             <p>成功导入: <span style={{ color: 'green', fontWeight: 'bold' }}>{importResult.success}</span> 条</p>
             <p>导入失败: <span style={{ color: 'red', fontWeight: 'bold' }}>{importResult.fail}</span> 条</p>
-            
+
             {importResult.errors.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <h4>错误信息:</h4>
@@ -878,7 +878,7 @@ const ResumeList = () => {
                 </ul>
               </div>
             )}
-            
+
             <div style={{ marginTop: 16 }}>
               <Button onClick={() => setImportResult(null)} style={{ marginRight: 8 }}>
                 再次上传
@@ -889,7 +889,7 @@ const ResumeList = () => {
             </div>
           </div>
         )}
-        
+
         {importLoading && (
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <p>正在导入，请稍候...</p>

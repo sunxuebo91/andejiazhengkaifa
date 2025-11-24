@@ -360,6 +360,7 @@ const CustomerList: React.FC = () => {
     const colors: Record<string, string> = {
       '已签约': 'green',
       '匹配中': 'blue',
+      '已面试': 'cyan',
       '流失客户': 'red',
       '已退款': 'orange',
       '退款中': 'orange',
@@ -510,7 +511,7 @@ const CustomerList: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: 0 }}>
       <Card title="客户管理" style={{ marginBottom: '24px' }}>
         {/* 搜索筛选和操作区域 */}
         <div style={{ marginBottom: '16px' }}>

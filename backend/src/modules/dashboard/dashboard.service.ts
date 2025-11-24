@@ -538,10 +538,12 @@ export class DashboardService {
 
     try {
       // 聚合查询：按销售人员统计
+      // 🔥 [FIX] 只统计非公海客户（销售人员当前持有的客户）
       const salesAggregation = await this.customerModel.aggregate([
         {
           $match: {
-            assignedTo: { $exists: true, $ne: null }
+            assignedTo: { $exists: true, $ne: null },
+            inPublicPool: false
           }
         },
         {

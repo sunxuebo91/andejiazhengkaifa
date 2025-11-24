@@ -31,7 +31,7 @@ export class CustomerQueryDto {
   serviceCategory?: string;
 
   @IsOptional()
-  @IsEnum(['已签约', '匹配中', '流失客户', '已退款', '退款中', '待定'])
+  @IsEnum(['已签约', '匹配中', '已面试', '流失客户', '已退款', '退款中', '待定'])
   contractStatus?: string;
 
   @IsOptional()

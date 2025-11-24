@@ -203,6 +203,7 @@ const CustomerDetail: React.FC = () => {
       '已签约': 'green',
       '签约中': 'blue',
       '匹配中': 'orange',
+      '已面试': 'cyan',
       '流失客户': 'red',
       '已退款': 'orange',
       '退款中': 'orange',

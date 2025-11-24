@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Badge, Popover, List, Button, Empty, Spin, Typography, Space, Tag } from 'antd';
-import { BellOutlined, CheckOutlined } from '@ant-design/icons';
+import { BellOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import notificationService from '../services/notification.service';
 import notificationSocketService from '../services/notification-socket.service';

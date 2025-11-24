@@ -455,7 +455,7 @@ export class CustomersService {
     if ((targetUser as any).active === false) {
       throw new ConflictException('指定的负责人未激活');
     }
-    if (!['employee', 'manager'].includes((targetUser as any).role)) {
+    if (!['admin', 'employee', 'manager'].includes((targetUser as any).role)) {
       throw new ConflictException('指定的负责人角色不允许被分配');
     }
 
@@ -543,7 +543,7 @@ export class CustomersService {
     if ((targetUser as any).active === false) {
       throw new ConflictException('指定的负责人未激活');
     }
-    if (!['employee', 'manager'].includes((targetUser as any).role)) {
+    if (!['admin', 'employee', 'manager'].includes((targetUser as any).role)) {
       throw new ConflictException('指定的负责人角色不允许被分配');
     }
 

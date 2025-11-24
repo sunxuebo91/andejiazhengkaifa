@@ -32,29 +32,48 @@ class NotificationService {
    * 获取未读数量
    */
   async getUnreadCount(): Promise<number> {
-    const response = await api.get('/api/notifications/unread-count');
-    // api拦截器已经返回了response.data，所以这里直接访问data
-    return response.data?.count || 0;
+    try {
+      const response = await api.get('/api/notifications/unread-count');
+      console.log('API响应 (getUnreadCount):', response);
+      // api拦截器返回response.data，格式为 { success: true, data: { count: 1 } }
+      // 所以这里访问 response.data.count
+      return response.data?.count || 0;
+    } catch (error) {
+      console.error('获取未读数量失败:', error);
+      return 0;
+    }
   }
 
   /**
    * 标记通知为已读
    */
   async markAsRead(notificationIds: string[]): Promise<number> {
-    const response = await api.put('/api/notifications/mark-read', {
-      notificationIds,
-    } as MarkReadDto);
-    // api拦截器已经返回了response.data，所以这里直接访问data
-    return response.data?.count || 0;
+    try {
+      const response = await api.put('/api/notifications/mark-read', {
+        notificationIds,
+      } as MarkReadDto);
+      console.log('API响应 (markAsRead):', response);
+      // api拦截器返回response.data，格式为 { success: true, data: { count: 1 } }
+      return response.data?.count || 0;
+    } catch (error) {
+      console.error('标记已读失败:', error);
+      return 0;
+    }
   }
 
   /**
    * 标记全部为已读
    */
   async markAllAsRead(): Promise<number> {
-    const response = await api.put('/api/notifications/mark-all-read');
-    // api拦截器已经返回了response.data，所以这里直接访问data
-    return response.data?.count || 0;
+    try {
+      const response = await api.put('/api/notifications/mark-all-read');
+      console.log('API响应 (markAllAsRead):', response);
+      // api拦截器返回response.data，格式为 { success: true, data: { count: 1 } }
+      return response.data?.count || 0;
+    } catch (error) {
+      console.error('标记全部已读失败:', error);
+      return 0;
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Badge, Popover, List, Button, Empty, Spin, Typography, Space, Tag } from 'antd';
+import { Badge, Popover, List, Button, Empty, Spin, Typography, Space, Tag, notification as antNotification } from 'antd';
 import { BellOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import notificationService from '../services/notification.service';
@@ -95,6 +95,29 @@ const NotificationBell: React.FC = () => {
     }
   };
 
+  // 显示通知弹窗
+  const showNotificationPopup = (notification: Notification) => {
+    const priorityConfig = {
+      [NotificationPriority.HIGH]: { duration: 6, style: { borderLeft: '4px solid #ff4d4f' } },
+      [NotificationPriority.MEDIUM]: { duration: 4, style: { borderLeft: '4px solid #faad14' } },
+      [NotificationPriority.LOW]: { duration: 3, style: { borderLeft: '4px solid #1890ff' } },
+    };
+
+    const config = priorityConfig[notification.priority] || priorityConfig[NotificationPriority.MEDIUM];
+
+    antNotification.open({
+      message: notification.title,
+      description: notification.content,
+      icon: <BellOutlined style={{ color: '#1890ff' }} />,
+      duration: config.duration,
+      style: config.style,
+      onClick: () => {
+        handleNotificationClick(notification);
+        antNotification.destroy();
+      },
+    });
+  };
+
   // 初始化
   useEffect(() => {
     loadUnreadCount();
@@ -103,6 +126,9 @@ const NotificationBell: React.FC = () => {
     const handleNewNotification = (notification: Notification) => {
       setNotifications((prev) => [notification, ...prev.slice(0, 9)]);
       setUnreadCount((prev) => prev + 1);
+
+      // 🔔 显示桌面通知弹窗
+      showNotificationPopup(notification);
     };
 
     // 监听未读数量更新

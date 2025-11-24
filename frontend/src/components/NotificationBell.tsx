@@ -28,9 +28,16 @@ const NotificationBell: React.FC = () => {
         pageSize: 10,
         status: NotificationStatus.SENT,
       });
-      setNotifications(response.items);
+      console.log('通知列表响应:', response);
+      if (response && response.items) {
+        setNotifications(response.items);
+      } else {
+        console.warn('通知列表响应格式异常:', response);
+        setNotifications([]);
+      }
     } catch (error) {
       console.error('加载通知失败:', error);
+      setNotifications([]);
     } finally {
       setLoading(false);
     }

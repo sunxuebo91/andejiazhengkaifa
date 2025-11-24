@@ -13,9 +13,19 @@ class NotificationService {
    * 获取通知列表
    */
   async getNotifications(params: NotificationQueryDto = {}): Promise<NotificationListResponse> {
-    const response = await api.get('/notifications', { params });
-    // api拦截器已经返回了response.data，所以这里直接访问data
-    return response.data;
+    try {
+      const response = await api.get('/notifications', { params });
+      console.log('API响应 (getNotifications):', response);
+      // api拦截器已经返回了response.data，所以这里直接访问data
+      if (response && response.data) {
+        return response.data;
+      }
+      console.error('响应格式异常:', response);
+      return { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+    } catch (error) {
+      console.error('获取通知列表失败:', error);
+      return { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+    }
   }
 
   /**

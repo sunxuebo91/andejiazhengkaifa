@@ -3,8 +3,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
 import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
-import { Avatar, Dropdown, MenuProps } from 'antd';
-import { useMemo } from 'react';
+import { Avatar, Dropdown, MenuProps, Space } from 'antd';
+import { useMemo, useEffect } from 'react';
+import NotificationBell from '../components/NotificationBell';
+import notificationSocketService from '../services/notification-socket.service';
 
 // 定义菜单项类型
 interface MenuRoute {
@@ -18,6 +20,20 @@ const BasicLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, hasRole, hasPermission } = useAuth();
+
+  // 初始化WebSocket连接
+  useEffect(() => {
+    if (user) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        notificationSocketService.connect(token);
+      }
+    }
+
+    return () => {
+      notificationSocketService.disconnect();
+    };
+  }, [user]);
 
   // 根据用户权限过滤菜单
   const getAuthorizedMenus = useMemo((): MenuRoute[] => {
@@ -271,20 +287,26 @@ const BasicLayout = () => {
       rightContentRender={() => (
         user && (
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Dropdown 
-              menu={{ items: userMenuItems }}
-              placement="bottomRight" 
-              trigger={['click']}  // 改为点击触发，而非悬停
-              arrow
-            >
-              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                <Avatar
-                  style={{ marginRight: 8, backgroundColor: '#5DBFB3' }}
-                  icon={<UserOutlined />}
-                />
-                <span>{String(user?.name ?? user?.username ?? '')}</span>
-              </div>
-            </Dropdown>
+            <Space size="large">
+              {/* 通知铃铛 */}
+              <NotificationBell />
+
+              {/* 用户菜单 */}
+              <Dropdown
+                menu={{ items: userMenuItems }}
+                placement="bottomRight"
+                trigger={['click']}  // 改为点击触发，而非悬停
+                arrow
+              >
+                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  <Avatar
+                    style={{ marginRight: 8, backgroundColor: '#5DBFB3' }}
+                    icon={<UserOutlined />}
+                  />
+                  <span>{String(user?.name ?? user?.username ?? '')}</span>
+                </div>
+              </Dropdown>
+            </Space>
           </div>
         )
       )}

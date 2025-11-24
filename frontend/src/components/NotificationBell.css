@@ -1,0 +1,13 @@
+.notification-bell {
+  position: relative;
+  cursor: pointer;
+}
+
+.notification-bell:hover {
+  opacity: 0.8;
+}
+
+.ant-list-item:hover {
+  background-color: #f5f5f5 !important;
+}
+

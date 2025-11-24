@@ -20,6 +20,7 @@ import { WeixinModule } from './modules/weixin/weixin.module';
 import { WeChatModule } from './modules/wechat/wechat.module';
 import { ZegoModule } from './modules/zego/zego.module';
 import { InterviewModule } from './modules/interview/interview.module';
+import { NotificationModule } from './modules/notification/notification.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { InterviewModule } from './modules/interview/interview.module';
     WeChatModule,
     ZegoModule,
     InterviewModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -10,6 +10,7 @@ import { PublicPoolLog, PublicPoolLogSchema } from './models/public-pool-log.mod
 import { WeChatModule } from '../wechat/wechat.module';
 import { WeixinModule } from '../weixin/weixin.module';
 import { UsersModule } from '../users/users.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { UsersModule } from '../users/users.module';
     WeChatModule,
     WeixinModule,
     UsersModule,
+    NotificationModule,
   ],
   controllers: [CustomersController],
   providers: [CustomersService],

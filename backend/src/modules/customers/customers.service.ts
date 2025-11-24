@@ -12,6 +12,7 @@ import { WeChatService } from '../wechat/wechat.service';
 import { CustomerAssignmentLog } from './models/customer-assignment-log.model';
 import { PublicPoolLog } from './models/public-pool-log.model';
 import { PublicPoolQueryDto } from './dto/public-pool.dto';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 
@@ -27,6 +28,7 @@ export class CustomersService {
     @InjectModel(CustomerAssignmentLog.name) private assignmentLogModel: Model<CustomerAssignmentLog>,
     @InjectModel(PublicPoolLog.name) private publicPoolLogModel: Model<PublicPoolLog>,
     private wechatService: WeChatService,
+    private notificationHelper: NotificationHelperService,
   ) {}
 
   // 生成客户ID
@@ -34,6 +36,12 @@ export class CustomersService {
     const timestamp = Date.now().toString();
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     return `CUS${timestamp.slice(-8)}${random}`;
+  }
+
+  // 手机号脱敏
+  private maskPhoneNumber(phone: string): string {
+    if (!phone || phone.length < 11) return phone;
+    return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
   }
 
   // 创建客户（支持创建时指定负责人，未指定则默认分配给创建人）
@@ -93,6 +101,9 @@ export class CustomersService {
     } = query as any;
 
     const searchConditions: any = {};
+
+    // 🔥 [FIX] 客户列表应该只显示非公海客户
+    searchConditions.inPublicPool = false;
 
     // 构建搜索条件
     if (search) {
@@ -195,6 +206,7 @@ export class CustomersService {
 
     // 🔥 [CUSTOMER-SORT-FIX] 强制按更新时间倒序排序，与简历列表保持一致
     console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 开始查询客户列表 - page: ${page}, limit: ${limit}, sortBy: ${sortBy}`);
+    console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 查询条件:`, JSON.stringify(searchConditions));
 
     const findQuery = this.customerModel
       .find(searchConditions)
@@ -354,15 +366,19 @@ export class CustomersService {
     byLeadSource: Record<string, number>;
     byServiceCategory: Record<string, number>;
   }> {
+    // 🔥 [FIX] 统计信息应该只统计非公海客户
     const [total, byContractStatus, byLeadSource, byServiceCategory] = await Promise.all([
-      this.customerModel.countDocuments().exec(),
+      this.customerModel.countDocuments({ inPublicPool: false }).exec(),
       this.customerModel.aggregate([
+        { $match: { inPublicPool: false } },
         { $group: { _id: '$contractStatus', count: { $sum: 1 } } }
       ]).exec(),
       this.customerModel.aggregate([
+        { $match: { inPublicPool: false } },
         { $group: { _id: '$leadSource', count: { $sum: 1 } } }
       ]).exec(),
       this.customerModel.aggregate([
+        { $match: { inPublicPool: false } },
         { $group: { _id: '$serviceCategory', count: { $sum: 1 } } }
       ]).exec(),
     ]);
@@ -476,6 +492,16 @@ export class CustomersService {
 
     // 发送微信通知给被分配的员工
     await this.sendAssignmentNotification(updated, targetUser as any, assignmentReason);
+
+    // 🔔 发送站内通知
+    await this.notificationHelper.notifyCustomerAssigned(assignedTo, {
+      customerId: customerId,
+      customerName: updated.name,
+      phone: this.maskPhoneNumber(updated.phone),
+      leadSource: updated.leadSource,
+    }).catch(err => {
+      this.logger.error(`发送客户分配通知失败: ${err.message}`);
+    });
 
     return updated;
   }
@@ -1122,6 +1148,14 @@ export class CustomersService {
           type: 'other' as any,
           content: `系统：${adminUser.name}从公海将客户分配给${targetUser.name}。原因：${reason || '未填写'}`,
           createdBy: new Types.ObjectId(adminUserId),
+        });
+
+        // 🔔 发送站内通知
+        await this.notificationHelper.notifyCustomerAssignedFromPool(assignedTo, {
+          customerId: customerId,
+          customerName: customer.name,
+        }).catch(err => {
+          this.logger.error(`发送公海分配通知失败: ${err.message}`);
         });
 
         successCount++;

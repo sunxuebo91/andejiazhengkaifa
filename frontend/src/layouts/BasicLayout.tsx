@@ -286,7 +286,7 @@ const BasicLayout = () => {
       fixSiderbar
       contentStyle={{
         margin: 0,
-        padding: '16px',
+        padding: 0,
       }}
       rightContentRender={() => (
         user && (

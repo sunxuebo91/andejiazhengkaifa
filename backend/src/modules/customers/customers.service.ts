@@ -59,6 +59,7 @@ export class CustomersService {
     const now = new Date();
     const dtoAny: any = createCustomerDto as any;
     const hasAssignedTo = !!dtoAny.assignedTo;
+    const assignedToUserId = hasAssignedTo ? dtoAny.assignedTo : userId;
 
     const customerData: any = {
       ...createCustomerDto,
@@ -67,14 +68,29 @@ export class CustomersService {
       expectedStartDate: createCustomerDto.expectedStartDate ? new Date(createCustomerDto.expectedStartDate) : undefined,
       expectedDeliveryDate: createCustomerDto.expectedDeliveryDate ? new Date(createCustomerDto.expectedDeliveryDate) : undefined,
       // 分配信息（确保转换为 ObjectId）
-      assignedTo: new Types.ObjectId(hasAssignedTo ? dtoAny.assignedTo : userId),
+      assignedTo: new Types.ObjectId(assignedToUserId),
       assignedBy: new Types.ObjectId(userId),
       assignedAt: now,
       assignmentReason: hasAssignedTo ? (dtoAny.assignmentReason || '创建时指定负责人') : '创建默认分配给创建人',
     };
 
     const customer = new this.customerModel(customerData);
-    return await customer.save();
+    const savedCustomer = await customer.save();
+
+    // 🔔 发送客户分配通知（如果分配给其他人或自己）
+    try {
+      await this.notificationHelper.notifyCustomerAssigned(assignedToUserId, {
+        customerId: savedCustomer._id.toString(),
+        customerName: savedCustomer.name,
+        phone: this.maskPhoneNumber(savedCustomer.phone),
+        leadSource: savedCustomer.leadSource,
+      });
+      this.logger.log(`✅ 客户创建通知已发送: ${savedCustomer.name} -> 用户ID: ${assignedToUserId}`);
+    } catch (err) {
+      this.logger.error(`❌ 发送客户创建通知失败: ${err.message}`);
+    }
+
+    return savedCustomer;
   }
 
   // 获取客户列表（支持搜索和分页 + 角色可见性 + 指定负责人过滤）

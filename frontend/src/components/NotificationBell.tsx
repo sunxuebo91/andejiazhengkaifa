@@ -97,20 +97,24 @@ const NotificationBell: React.FC = () => {
 
   // 显示通知弹窗
   const showNotificationPopup = (notification: Notification) => {
-    const priorityConfig = {
-      [NotificationPriority.HIGH]: { duration: 6, style: { borderLeft: '4px solid #ff4d4f' } },
-      [NotificationPriority.MEDIUM]: { duration: 4, style: { borderLeft: '4px solid #faad14' } },
-      [NotificationPriority.LOW]: { duration: 3, style: { borderLeft: '4px solid #1890ff' } },
+    // 根据优先级设置边框颜色
+    const priorityColors = {
+      [NotificationPriority.HIGH]: '#ff4d4f',    // 红色
+      [NotificationPriority.MEDIUM]: '#faad14',  // 橙色
+      [NotificationPriority.LOW]: '#1890ff',     // 蓝色
     };
 
-    const config = priorityConfig[notification.priority] || priorityConfig[NotificationPriority.MEDIUM];
+    const borderColor = priorityColors[notification.priority] || priorityColors[NotificationPriority.MEDIUM];
 
     antNotification.open({
       message: notification.title,
       description: notification.content,
       icon: <BellOutlined style={{ color: '#1890ff' }} />,
-      duration: config.duration,
-      style: config.style,
+      duration: 2, // 统一2秒后自动消失
+      style: {
+        borderLeft: `4px solid ${borderColor}`,
+        cursor: 'pointer',
+      },
       onClick: () => {
         handleNotificationClick(notification);
         antNotification.destroy();

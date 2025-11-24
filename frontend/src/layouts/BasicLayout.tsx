@@ -275,7 +275,7 @@ const BasicLayout = () => {
         style: { background: '#fff' }
       }}
       onMenuHeaderClick={() => navigate('/')}
-      style={{ 
+      style={{
         height: '100vh',
         background: '#fff'
       }}
@@ -284,6 +284,10 @@ const BasicLayout = () => {
       navTheme="light"
       fixedHeader
       fixSiderbar
+      contentStyle={{
+        margin: 0,
+        padding: '16px',
+      }}
       rightContentRender={() => (
         user && (
           <div style={{ display: 'flex', alignItems: 'center' }}>

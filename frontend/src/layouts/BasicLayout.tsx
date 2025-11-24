@@ -288,9 +288,6 @@ const BasicLayout = () => {
         user && (
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <Space size="large">
-              {/* 通知铃铛 */}
-              <NotificationBell />
-
               {/* 用户菜单 */}
               <Dropdown
                 menu={{ items: userMenuItems }}
@@ -306,6 +303,9 @@ const BasicLayout = () => {
                   <span>{String(user?.name ?? user?.username ?? '')}</span>
                 </div>
               </Dropdown>
+
+              {/* 通知铃铛 */}
+              <NotificationBell />
             </Space>
           </div>
         )

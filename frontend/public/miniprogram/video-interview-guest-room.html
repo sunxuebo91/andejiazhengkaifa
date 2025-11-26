@@ -6,11 +6,19 @@
   <title>视频面试 - 访客</title>
   <!-- 版本: v2024.01.20.002 - 添加调试浮窗 -->
 
+  <!-- 🚀 性能优化：预连接 ZEGO 服务器 -->
+  <link rel="preconnect" href="https://webliveroom-api.zego.im">
+  <link rel="dns-prefetch" href="https://webliveroom-api.zego.im">
+
   <!-- 🎯 微信环境检测（最先执行） -->
   <script>
     // 🎯 全局环境检测变量（供后续使用）
     var IS_IN_MINIPROGRAM = false;
     var IS_WECHAT = false;
+    var ZEGO_SDK_LOADED = false;
+
+    // 🚀 性能优化：生产环境关闭详细日志
+    var DEBUG_MODE_EARLY = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
     (function() {
       // 检测是否在微信中
@@ -18,43 +26,25 @@
         return /MicroMessenger/i.test(navigator.userAgent);
       }
 
-      // 检测是否在小程序 WebView 中（微信官方推荐方法）
+      // 检测是否在小程序 WebView 中
       function isInMiniProgram() {
-        // 方法1：通过 window.__wxjs_environment 判断（最可靠）
-        if (window.__wxjs_environment === 'miniprogram') {
-          return true;
-        }
-
-        // 方法2：通过 userAgent 判断（微信 7.0.0+ 支持）
-        if (/miniProgram/i.test(navigator.userAgent)) {
-          return true;
-        }
-
+        if (window.__wxjs_environment === 'miniprogram') return true;
+        if (/miniProgram/i.test(navigator.userAgent)) return true;
         return false;
       }
 
-      // 设置全局变量
       IS_WECHAT = isWechat();
       IS_IN_MINIPROGRAM = isInMiniProgram();
 
-      console.log('🔍 环境检测:');
-      console.log('  - 是否在微信中:', IS_WECHAT);
-      console.log('  - 是否在小程序 WebView 中:', IS_IN_MINIPROGRAM);
-      console.log('  - UserAgent:', navigator.userAgent);
-      console.log('  - __wxjs_environment:', window.__wxjs_environment);
-
-      if (IS_IN_MINIPROGRAM) {
-        console.log('✅ 已在小程序 WebView 中，正常加载 H5 页面');
-        console.log('💡 邀请功能将被隐藏（小程序环境使用分享功能）');
-      } else if (!IS_WECHAT) {
-        console.log('🌐 浏览器环境，正常加载 H5 页面');
-      } else if (IS_WECHAT && !IS_IN_MINIPROGRAM) {
-        console.log('⚠️ 微信浏览器环境，但不在小程序中');
+      if (DEBUG_MODE_EARLY) {
+        console.log('🔍 环境检测: 微信=' + IS_WECHAT + ', 小程序=' + IS_IN_MINIPROGRAM);
       }
     })();
 
-
   </script>
+
+  <!-- ZEGO SDK（同步加载，确保可用性） -->
+  <script src="./ZegoExpressWebRTC-standalone.js"></script>
 
   <!-- ZEGO Token 生成库（内嵌实现） -->
   <script>
@@ -213,6 +203,9 @@
       min-height: 0;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
       transition: box-shadow 0.3s ease;
+      /* 🚀 性能优化：GPU 加速 */
+      transform: translateZ(0);
+      will-change: transform;
     }
 
     .video-item:hover {
@@ -230,6 +223,9 @@
       height: 100%;
       object-fit: cover;
       display: block;
+      /* 🚀 性能优化：视频元素 GPU 加速，减少重绘 */
+      transform: translateZ(0);
+      backface-visibility: hidden;
     }
 
     /* ✅ 本地视频镜像：让前置摄像头的画面符合自拍习惯（左右翻转）
@@ -657,7 +653,7 @@
       bottom: 0;
       background: rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(10px);
-      display: flex;
+      display: none; /* 🔥 初始隐藏，避免 FOUC（无样式内容闪烁） */
       align-items: center;
       justify-content: center;
       z-index: 10000;
@@ -946,9 +942,21 @@
       padding-top: 10px !important;
       border-top: 2px dashed #ff0 !important;
     }
+
+    /* 🚀 SDK 加载骨架屏 - 已禁用 */
+    .sdk-loading-overlay {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
+  <!-- 🚀 SDK 加载骨架屏 -->
+  <div class="sdk-loading-overlay" id="sdkLoadingOverlay">
+    <div class="sdk-loading-spinner"></div>
+    <div class="sdk-loading-text">正在加载视频组件...</div>
+    <div class="sdk-loading-hint">首次加载可能需要几秒钟</div>
+  </div>
+
   <!-- ✅ 重连提示 -->
   <div class="reconnect-toast" id="reconnectToast">
     <div class="reconnect-spinner"></div>
@@ -1121,10 +1129,36 @@
   </div>
 
   <script>
+    // ==================== 性能优化：日志控制 ====================
+    // 生产环境设为 false 可大幅减少 console 输出，提升性能
+    const DEBUG_MODE = false;
+    const log = DEBUG_MODE ? console.log.bind(console) : () => {};
+    const warn = DEBUG_MODE ? console.warn.bind(console) : () => {};
+    // 错误日志始终输出
+    const error = console.error.bind(console);
+
+    // ==================== 性能优化：DOM 元素缓存 ====================
+    const DOM = {
+      _cache: {},
+      get(id) {
+        if (!this._cache[id]) {
+          this._cache[id] = document.getElementById(id);
+        }
+        return this._cache[id];
+      },
+      clear(id) {
+        if (id) {
+          delete this._cache[id];
+        } else {
+          this._cache = {};
+        }
+      }
+    };
+
     // 🔥 最早的调试日志 - 确认页面已加载
-    console.log('🎬 video-interview-guest-room.html 页面开始加载');
-    console.log('🌐 当前URL:', window.location.href);
-    console.log('🔍 URL search部分:', window.location.search);
+    log('🎬 video-interview-guest-room.html 页面开始加载');
+    log('🌐 当前URL:', window.location.href);
+    log('🔍 URL search部分:', window.location.search);
 
     // 获取URL参数 - 🔥 只需要roomId
     const urlParams = new URLSearchParams(window.location.search);
@@ -1396,6 +1430,71 @@
 
     // 🔥 全局初始化锁，防止并发初始化
     let isInitializing = false;
+
+    // ==================== 隐藏 SDK 加载骨架屏 ====================
+    function hideSDKLoadingOverlay() {
+      const overlay = document.getElementById('sdkLoadingOverlay');
+      if (overlay) {
+        overlay.classList.add('hidden');
+        setTimeout(() => overlay.remove(), 300);
+      }
+    }
+
+    // ==================== 等待 SDK 加载（优化版）====================
+    function waitForSDK(maxWaitMs = 10000) {
+      return new Promise((resolve, reject) => {
+        // 🚀 如果 SDK 已加载，立即返回
+        if (ZEGO_SDK_LOADED || typeof ZegoExpressEngine !== 'undefined') {
+          console.log('✅ ZEGO SDK 已就绪');
+          resolve(true);
+          return;
+        }
+
+        console.log('⏳ 等待 ZEGO SDK 加载...');
+        let resolved = false;
+
+        // 🚀 监听异步加载完成事件
+        const onLoaded = () => {
+          if (resolved) return;
+          resolved = true;
+          console.log('✅ ZEGO SDK 异步加载完成（事件触发）');
+          clearTimeout(timeout);
+          clearInterval(pollInterval);
+          resolve(true);
+        };
+
+        window.addEventListener('zegoSDKLoaded', onLoaded, { once: true });
+
+        // 🔥 同时使用轮询作为后备（防止事件丢失）
+        const pollInterval = setInterval(() => {
+          if (resolved) return;
+          if (ZEGO_SDK_LOADED || typeof ZegoExpressEngine !== 'undefined') {
+            resolved = true;
+            console.log('✅ ZEGO SDK 已加载（轮询检测）');
+            clearTimeout(timeout);
+            clearInterval(pollInterval);
+            window.removeEventListener('zegoSDKLoaded', onLoaded);
+            resolve(true);
+          }
+        }, 100);
+
+        // 超时处理
+        const timeout = setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
+          clearInterval(pollInterval);
+          window.removeEventListener('zegoSDKLoaded', onLoaded);
+          // 最后再检查一次
+          if (ZEGO_SDK_LOADED || typeof ZegoExpressEngine !== 'undefined') {
+            console.log('✅ ZEGO SDK 已加载（超时前检查）');
+            resolve(true);
+          } else {
+            console.error('❌ ZEGO SDK 加载超时');
+            reject(new Error('SDK 加载超时'));
+          }
+        }, maxWaitMs);
+      });
+    }
 
     // 🔥 统一的初始化流程 - 在用户点击"确定进入面试间"后执行
     async function init() {
@@ -2710,18 +2809,39 @@
       };
     }
 
-    // 计时器
+    // 计时器（🚀 性能优化：使用 requestAnimationFrame）
+    let timerRunning = false;
+    let lastTimerUpdate = 0;
+
     function startTimer() {
+      stopTimer();
       startTime = Date.now();
-      timerInterval = setInterval(() => {
+      timerRunning = true;
+      lastTimerUpdate = 0;
+      requestAnimationFrame(timerLoop);
+    }
+
+    function timerLoop(timestamp) {
+      if (!timerRunning) return;
+
+      // 每秒更新一次
+      if (timestamp - lastTimerUpdate >= 1000) {
+        lastTimerUpdate = timestamp;
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
         const seconds = (elapsed % 60).toString().padStart(2, '0');
-        document.getElementById('timer').textContent = `${minutes}:${seconds}`;
-      }, 1000);
+        // 🚀 使用 DOM 缓存
+        const timerEl = DOM.get('timer');
+        if (timerEl) {
+          timerEl.textContent = `${minutes}:${seconds}`;
+        }
+      }
+
+      requestAnimationFrame(timerLoop);
     }
 
     function stopTimer() {
+      timerRunning = false;
       if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
@@ -2912,10 +3032,10 @@
 
       if (hasUserInfo) {
         // 🎯 有保存的用户信息，自动加入房间
-        console.log('🔄 自动加入房间，用户信息:', { userName, userRole });
+        log('🔄 自动加入房间，用户信息:', { userName, userRole });
         try {
           await init();
-          console.log('✅ 自动加入房间成功');
+          log('✅ 自动加入房间成功');
         } catch (error) {
           console.error('❌ 自动加入房间失败:', error);
           showToast('自动加入房间失败，请重新进入', 'error', 3000);

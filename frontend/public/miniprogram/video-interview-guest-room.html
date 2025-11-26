@@ -4,7 +4,60 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>视频面试 - 访客</title>
-  <!-- 版本: v2024.01.20.002 - 添加调试浮窗 -->
+  <!-- 版本: v2024.01.20.003 - 修复 FOUC 闪烁问题 -->
+
+  <!-- 🔥 关键 CSS：必须在任何 JS 之前加载，防止 FOUC 闪烁 -->
+  <style id="critical-css">
+    /* 页面初始状态：显示加载遮罩，隐藏所有内容 */
+    body {
+      margin: 0;
+      padding: 0;
+      background: #5f9e8e;
+    }
+    /* 初始加载遮罩 - 覆盖整个页面 */
+    #initialLoader {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+    }
+    #initialLoader .loader-content {
+      background: white;
+      padding: 40px 60px;
+      border-radius: 20px;
+      text-align: center;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+    #initialLoader .loader-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e0e0e0;
+      border-top-color: #5f9e8e;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    #initialLoader .loader-text {
+      color: #333;
+      font-size: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    /* 身份选择浮窗初始隐藏 */
+    #identityOverlay {
+      display: none !important;
+    }
+  </style>
 
   <!-- 🚀 性能优化：预连接 ZEGO 服务器 -->
   <link rel="preconnect" href="https://webliveroom-api.zego.im">
@@ -950,6 +1003,14 @@
   </style>
 </head>
 <body>
+  <!-- 🔥 初始加载遮罩：在任何 JS 执行前显示，防止 FOUC 闪烁 -->
+  <div id="initialLoader">
+    <div class="loader-content">
+      <div class="loader-spinner"></div>
+      <div class="loader-text">正在加载资源...</div>
+    </div>
+  </div>
+
   <!-- 🚀 SDK 加载骨架屏 -->
   <div class="sdk-loading-overlay" id="sdkLoadingOverlay">
     <div class="sdk-loading-spinner"></div>
@@ -3001,6 +3062,13 @@
       // 🎯 检查是否有保存的用户信息（重新进入场景）
       const hasUserInfo = userName && userRole; // 从前面的代码中获取（第二次进入时已赋值）
 
+      // 🔥 隐藏初始加载遮罩（关键！）
+      const initialLoader = document.getElementById('initialLoader');
+      if (initialLoader) {
+        initialLoader.style.display = 'none';
+        console.log('✅ 已隐藏初始加载遮罩');
+      }
+
       if (hasUserInfo) {
         // 🎯 有保存的用户信息，直接隐藏身份选择浮窗，准备自动加入
         console.log('🔄 检测到保存的用户信息，准备自动加入房间:', { userName, userRole });
@@ -3010,7 +3078,7 @@
       } else {
         // 🔥 显示身份选择浮窗（所有平台统一）
         const identityOverlay = document.getElementById('identityOverlay');
-        identityOverlay.style.display = 'flex';
+        identityOverlay.style.cssText = 'display: flex !important;'; // 覆盖 critical-css 中的 !important
 
         // 显示房间号（格式化为 AD-时间戳）
         const displayRoomId = roomId ? roomId.replace(/^room_/, 'AD-').split('_')[0] : '-';

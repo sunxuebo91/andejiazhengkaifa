@@ -16,6 +16,8 @@ const CreateCustomer = React.lazy(() => import('./pages/customers/CreateCustomer
 const CustomerDetail = React.lazy(() => import('./pages/customers/CustomerDetail'));
 const EditCustomer = React.lazy(() => import('./pages/customers/EditCustomer'));
 const PublicPool = React.lazy(() => import('./pages/customers/PublicPool'));
+const LeadTransferRules = React.lazy(() => import('./pages/customers/LeadTransferRules'));
+const LeadTransferRecords = React.lazy(() => import('./pages/customers/LeadTransferRecords'));
 const ContractList = React.lazy(() => import('./pages/contracts/ContractList'));
 const ContractDetail = React.lazy(() => import('./pages/contracts/ContractDetail'));
 const UserList = React.lazy(() => import('./pages/users/UserList'));
@@ -149,6 +151,14 @@ export default function App({ children }: AppProps) {
                     <Route
                       path="edit/:id"
                       element={<AuthorizedRoute element={<EditCustomer />} />}
+                    />
+                    <Route
+                      path="lead-transfer-rules"
+                      element={<AuthorizedRoute element={<LeadTransferRules />} role="admin" />}
+                    />
+                    <Route
+                      path="lead-transfer-records"
+                      element={<AuthorizedRoute element={<LeadTransferRecords />} />}
                     />
                     {/* 重定向 /customers 到 /customers/list */}
                     <Route index element={<Navigate to="list" replace />} />

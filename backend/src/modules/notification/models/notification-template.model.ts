@@ -20,6 +20,10 @@ export enum NotificationType {
   CUSTOMER_ASSIGNED_FROM_POOL = 'CUSTOMER_ASSIGNED_FROM_POOL', // 从公海分配
   CUSTOMER_STATUS_CHANGED = 'CUSTOMER_STATUS_CHANGED', // 客户状态变更
   CUSTOMER_FOLLOW_UP_DUE = 'CUSTOMER_FOLLOW_UP_DUE',  // 客户长期未跟进
+
+  // 线索自动流转相关
+  LEAD_AUTO_TRANSFER_OUT = 'LEAD_AUTO_TRANSFER_OUT',   // 线索流出通知
+  LEAD_AUTO_TRANSFER_IN = 'LEAD_AUTO_TRANSFER_IN',     // 线索流入通知
   
   // 合同相关
   CONTRACT_CREATED = 'CONTRACT_CREATED',               // 合同创建

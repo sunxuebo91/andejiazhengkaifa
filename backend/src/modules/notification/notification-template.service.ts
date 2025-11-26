@@ -127,6 +127,32 @@ export class NotificationTemplateService implements OnModuleInit {
         actionText: '去跟进',
       },
 
+      // ========== 线索自动流转相关 ==========
+      {
+        type: NotificationType.LEAD_AUTO_TRANSFER_OUT,
+        name: '线索流出通知',
+        description: '系统自动流转线索时通知流出用户',
+        title: '线索自动流出通知',
+        content: '您有 {{count}} 条线索已于 {{time}} 自动流转给其他同事，规则：{{ruleName}}',
+        priority: NotificationPriority.MEDIUM,
+        icon: 'ExportOutlined',
+        color: '#faad14',
+        actionUrl: '/customers/lead-transfer-records',
+        actionText: '查看详情',
+      },
+      {
+        type: NotificationType.LEAD_AUTO_TRANSFER_IN,
+        name: '线索流入通知',
+        description: '系统自动流转线索时通知接收用户',
+        title: '线索自动流入通知',
+        content: '您有 {{count}} 条新线索已于 {{time}} 自动流转给您，规则：{{ruleName}}',
+        priority: NotificationPriority.HIGH,
+        icon: 'ImportOutlined',
+        color: '#52c41a',
+        actionUrl: '/customers/lead-transfer-records',
+        actionText: '查看详情',
+      },
+
       // ========== 合同相关 ==========
       {
         type: NotificationType.CONTRACT_CREATED,

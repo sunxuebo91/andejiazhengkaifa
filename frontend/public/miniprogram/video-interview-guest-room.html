@@ -3397,9 +3397,257 @@
       cleanup();
     });
 
-    // ❌ 移除：不再在 visibilitychange 时清理资源
-    // 因为用户可能只是切换到其他应用，而不是真正关闭页面
-    // 保持连接可以让用户切换回来时继续面试
+    // ==================== iOS 视频恢复功能 ====================
+
+    // 🔍 检测是否是 iOS 设备
+    function isIOSDevice() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+             (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+
+    // 🔍 检查本地视频轨道是否存活
+    function isLocalVideoTrackAlive() {
+      if (!localStream) {
+        console.log('❌ [轨道检查] localStream 不存在');
+        return false;
+      }
+
+      const videoTracks = localStream.getVideoTracks();
+      if (videoTracks.length === 0) {
+        console.log('❌ [轨道检查] 没有视频轨道');
+        return false;
+      }
+
+      const track = videoTracks[0];
+      const isAlive = track.readyState === 'live' && track.enabled;
+      console.log('🔍 [轨道检查] 视频轨道状态:', {
+        readyState: track.readyState,
+        enabled: track.enabled,
+        muted: track.muted,
+        isAlive: isAlive
+      });
+
+      return isAlive;
+    }
+
+    // 🔍 检查本地视频元素是否正常显示
+    function isLocalVideoDisplaying() {
+      const localVideo = document.getElementById('localVideo');
+      if (!localVideo) return false;
+
+      const hasSource = localVideo.srcObject !== null;
+      const hasSize = localVideo.videoWidth > 0 && localVideo.videoHeight > 0;
+
+      console.log('🔍 [视频检查] 本地视频元素状态:', {
+        hasSource,
+        paused: localVideo.paused,
+        videoWidth: localVideo.videoWidth,
+        videoHeight: localVideo.videoHeight,
+        hasSize
+      });
+
+      return hasSource && hasSize;
+    }
+
+    // 🔄 恢复本地视频流
+    async function recoverLocalStream() {
+      console.log('🔄 [恢复] 开始恢复本地视频流...');
+
+      try { showReconnectToast(); } catch (e) {}
+
+      try {
+        // 1. 停止旧的推流
+        if (currentStreamId && zg) {
+          try {
+            zg.stopPublishingStream(currentStreamId);
+            console.log('✅ [恢复] 已停止旧推流');
+          } catch (e) {
+            console.warn('⚠️ [恢复] 停止旧推流失败:', e);
+          }
+        }
+
+        // 2. 销毁旧的本地流
+        if (localStream && zg) {
+          try {
+            zg.destroyStream(localStream);
+            console.log('✅ [恢复] 已销毁旧本地流');
+          } catch (e) {
+            console.warn('⚠️ [恢复] 销毁旧本地流失败:', e);
+          }
+          localStream = null;
+        }
+
+        // 3. 等待系统释放资源
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // 4. 重新创建本地流
+        console.log('📹 [恢复] 重新创建本地流...');
+        localStream = await zg.createStream({
+          camera: { video: true, audio: true }
+        });
+        console.log('✅ [恢复] 本地流重新创建成功');
+
+        // 5. 重新启用美颜
+        if (zg.setEffectsBeauty && typeof zg.setEffectsBeauty === 'function') {
+          try {
+            await zg.setEffectsBeauty(localStream, true, {
+              smoothIntensity: 35, whitenIntensity: 25,
+              rosyIntensity: 20, sharpenIntensity: 30
+            });
+          } catch (e) {}
+        }
+
+        // 6. 恢复麦克风和摄像头状态
+        if (!isMicOn) zg.muteMicrophone(true);
+        if (!isCameraOn) zg.mutePublishStreamVideo(localStream, true);
+
+        // 7. 播放本地视频
+        const localVideo = document.getElementById('localVideo');
+        localVideo.srcObject = localStream;
+        localVideo.muted = true;
+        localVideo.setAttribute('playsinline', 'true');
+
+        try {
+          await localVideo.play();
+          console.log('✅ [恢复] 本地视频播放成功');
+        } catch (e) {
+          localVideo.play().catch(() => {});
+        }
+
+        // 8. 重新推流
+        await zg.startPublishingStream(currentStreamId, localStream);
+        console.log('✅ [恢复] 重新推流成功');
+
+        try {
+          hideReconnectToast();
+          showToast('✅ 视频已恢复', 'success', 2000);
+        } catch (e) {}
+
+        return true;
+      } catch (error) {
+        console.error('❌ [恢复] 失败:', error);
+        try {
+          hideReconnectToast();
+          showToast('视频恢复失败，请刷新页面', 'error', 3000);
+        } catch (e) {}
+        return false;
+      }
+    }
+
+    // 🔄 恢复远程视频播放
+    async function recoverRemoteVideos() {
+      const remoteVideos = document.querySelectorAll('.video-player:not(#localVideo)');
+      for (const video of remoteVideos) {
+        if (video.srcObject) {
+          try {
+            video.muted = false;
+            await video.play();
+          } catch (e) {}
+        }
+      }
+    }
+
+    // 状态变量
+    let lastVisibilityChangeTime = 0;
+    let isRecovering = false;
+    let videoCheckInterval = null;
+
+    // 🔄 统一的视频恢复检查函数
+    async function checkAndRecoverVideo(source) {
+      console.log(`🔍 [${source}] 检查视频状态...`);
+
+      if (isRecovering) return;
+      if (!zg || !currentStreamId) return;
+      if (isKickedOut || hasLeftRoom || isRoomDismissed) return;
+
+      await recoverRemoteVideos();
+
+      const trackAlive = isLocalVideoTrackAlive();
+      const videoDisplaying = isLocalVideoDisplaying();
+
+      if (!trackAlive || !videoDisplaying) {
+        console.log(`⚠️ [${source}] 需要恢复视频`);
+        isRecovering = true;
+        try {
+          await recoverLocalStream();
+        } finally {
+          isRecovering = false;
+        }
+      } else {
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo && localVideo.paused) {
+          try { await localVideo.play(); } catch (e) {}
+        }
+      }
+    }
+
+    // ✅ 监听页面可见性变化
+    document.addEventListener('visibilitychange', async () => {
+      if (document.hidden) {
+        console.log('📱 [visibilitychange] 进入后台');
+        lastVisibilityChangeTime = Date.now();
+        if (videoCheckInterval) {
+          clearInterval(videoCheckInterval);
+          videoCheckInterval = null;
+        }
+      } else {
+        console.log('📱 [visibilitychange] 返回前台');
+        setTimeout(() => checkAndRecoverVideo('visibilitychange'), 500);
+        if (isIOSDevice() && !videoCheckInterval) startVideoHealthCheck();
+      }
+    });
+
+    // 🍎 监听 focus 事件
+    window.addEventListener('focus', () => {
+      console.log('📱 [focus] 获得焦点');
+      setTimeout(() => checkAndRecoverVideo('focus'), 500);
+    });
+
+    // 🍎 监听 pageshow 事件
+    window.addEventListener('pageshow', (event) => {
+      console.log('📱 [pageshow] persisted:', event.persisted);
+      setTimeout(() => checkAndRecoverVideo('pageshow'), 500);
+    });
+
+    // 🍎 iOS 定时健康检查
+    function startVideoHealthCheck() {
+      if (videoCheckInterval) return;
+      console.log('🍎 [健康检查] 启动');
+
+      videoCheckInterval = setInterval(async () => {
+        if (document.hidden) return;
+        if (!zg || !localStream || !currentStreamId) return;
+        if (isKickedOut || hasLeftRoom || isRoomDismissed) return;
+
+        if (!isLocalVideoTrackAlive() || !isLocalVideoDisplaying()) {
+          console.log('⚠️ [健康检查] 检测到异常');
+          clearInterval(videoCheckInterval);
+          videoCheckInterval = null;
+          await checkAndRecoverVideo('healthCheck');
+          setTimeout(() => startVideoHealthCheck(), 3000);
+        }
+      }, 3000);
+    }
+
+    // 🍎 iOS 启动健康检查
+    if (isIOSDevice()) {
+      const checkJoinedInterval = setInterval(() => {
+        if (zg && localStream && currentStreamId) {
+          clearInterval(checkJoinedInterval);
+          setTimeout(() => startVideoHealthCheck(), 5000);
+        }
+      }, 1000);
+    }
+
+    // 🍎 触摸时尝试播放
+    document.addEventListener('touchstart', () => {
+      if (isIOSDevice() && zg && localStream && currentStreamId) {
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo && localVideo.paused) {
+          localVideo.play().catch(() => {});
+        }
+      }
+    }, { passive: true });
   </script>
 
   <!-- 🎯 将 ZEGO SDK 移到页面底部，避免阻塞页面渲染 -->

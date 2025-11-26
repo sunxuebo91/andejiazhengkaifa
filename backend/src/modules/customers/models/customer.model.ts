@@ -121,6 +121,19 @@ export class Customer {
   @Prop({ default: 0 })
   claimCount: number; // 被领取次数（用于统计）
 
+  // 线索流转相关字段
+  @Prop({ default: Date.now })
+  lastActivityAt: Date; // 最后活动时间（关键字段，用于判断是否需要流转）
+
+  @Prop({ default: true })
+  autoTransferEnabled: boolean; // 是否允许自动流转
+
+  @Prop({ default: 0 })
+  transferCount: number; // 被流转次数统计
+
+  @Prop()
+  lastTransferredAt: Date; // 最后一次被流转的时间
+
   @Prop({ default: Date.now })
   createdAt: Date;
 
@@ -140,3 +153,11 @@ CustomerSchema.index({ assignedBy: 1, assignedAt: -1 });
 // 公海相关索引
 CustomerSchema.index({ inPublicPool: 1, publicPoolEntryTime: -1 });
 CustomerSchema.index({ lastFollowUpTime: 1 });
+// 线索流转相关索引（优化自动流转查询性能）
+CustomerSchema.index({
+  assignedTo: 1,
+  contractStatus: 1,
+  lastActivityAt: 1,
+  autoTransferEnabled: 1,
+  inPublicPool: 1
+});

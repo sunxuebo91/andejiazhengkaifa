@@ -135,6 +135,30 @@ export class NotificationHelperService {
     return this.sendAndPush([userId], NotificationType.CUSTOMER_ASSIGNED_FROM_POOL, data);
   }
 
+  // ========== 线索自动流转相关通知 ==========
+
+  /**
+   * 线索流出通知
+   */
+  async notifyLeadTransferOut(userId: string, data: {
+    count: number;
+    time: string;
+    ruleName: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.LEAD_AUTO_TRANSFER_OUT, data);
+  }
+
+  /**
+   * 线索流入通知
+   */
+  async notifyLeadTransferIn(userId: string, data: {
+    count: number;
+    time: string;
+    ruleName: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.LEAD_AUTO_TRANSFER_IN, data);
+  }
+
   // ========== 合同相关通知 ==========
 
   /**

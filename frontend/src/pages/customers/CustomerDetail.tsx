@@ -585,17 +585,19 @@ const CustomerDetail: React.FC = () => {
                   items={assignmentLogs.map((log: any, idx: number) => {
                     const assignedAt = log.assignedAt || log.createdAt;
                     const oldUser = String(log.oldAssignedToUser?.name || log.oldAssignedToUser?.username || log.oldAssignedTo || '-');
-                    const newUser = String(log.newAssignedToUser?.name || log.newAssignedToUser?.username || log.newAssignedTo || '-');
+                    // 如果是释放到公海操作，新负责人显示为"公海"
+                    const isReleaseToPool = log.action === 'release' || (!log.newAssignedTo && !log.newAssignedToUser);
+                    const newUser = isReleaseToPool ? '公海' : String(log.newAssignedToUser?.name || log.newAssignedToUser?.username || log.newAssignedTo || '-');
                     const byUser = String(log.assignedByUser?.name || log.assignedByUser?.username || log.assignedBy || '-');
                     return {
                       key: log._id || idx,
-                      color: idx === 0 ? 'green' : 'blue',
+                      color: isReleaseToPool ? 'orange' : (idx === 0 ? 'green' : 'blue'),
                       label: assignedAt ? formatDateTime(assignedAt) : '-',
                       children: (
-                        <Card size="small" style={{ backgroundColor: '#fafafa' }}>
+                        <Card size="small" style={{ backgroundColor: isReleaseToPool ? '#fff7e6' : '#fafafa' }}>
                           <Space direction="vertical" style={{ width: '100%' }}>
                             <div>
-                              <strong>负责人变更：</strong>{oldUser} → {newUser}
+                              <strong>{isReleaseToPool ? '释放到公海：' : '负责人变更：'}</strong>{oldUser} → {newUser}
                             </div>
                             <div style={{ fontSize: 12, color: '#666' }}>
                               <span>执行人：{byUser}</span>

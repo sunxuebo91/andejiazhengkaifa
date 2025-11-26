@@ -293,7 +293,7 @@ const PublicPool: React.FC = () => {
           <Row gutter={16}>
             <Col span={6}>
               <Input
-                placeholder="搜索客户姓名或电话"
+                placeholder="搜索客户姓名、电话、微信号"
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 onPressEnter={handleSearch}

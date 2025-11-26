@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps, Space } from 'antd';
 import { useMemo, useEffect } from 'react';
@@ -111,6 +111,22 @@ const BasicLayout = () => {
           icon: <FileAddOutlined />,
         });
       }
+
+      // 线索流转规则 - 仅管理员可见
+      if (hasRole('admin')) {
+        customerMenu.routes!.push({
+          path: '/customers/lead-transfer-rules',
+          name: '线索流转规则',
+          icon: <SwapOutlined />,
+        });
+      }
+
+      // 线索流转记录 - 所有人可见
+      customerMenu.routes!.push({
+        path: '/customers/lead-transfer-records',
+        name: '流转记录',
+        icon: <HistoryOutlined />,
+      });
 
       baseMenus.push(customerMenu);
     }

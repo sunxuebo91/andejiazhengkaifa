@@ -1,0 +1,87 @@
+### 线索流转功能测试
+
+### 1. 登录获取 Token (管理员)
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### 2. 创建流转规则
+POST http://localhost:3000/api/lead-transfer/rules
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "ruleName": "销售组48小时自动流转",
+  "description": "销售组线索超过48小时无跟进自动流转",
+  "enabled": true,
+  "triggerConditions": {
+    "inactiveHours": 48,
+    "contractStatuses": ["待定", "匹配中"],
+    "createdDateRange": {
+      "startDate": "2024-01-01",
+      "endDate": null
+    }
+  },
+  "executionWindow": {
+    "enabled": true,
+    "startTime": "09:30",
+    "endTime": "18:30"
+  },
+  "sourceUserIds": ["user_id_1", "user_id_2"],
+  "targetUserIds": ["user_id_3", "user_id_4"],
+  "distributionConfig": {
+    "strategy": "balanced-random",
+    "enableCompensation": true,
+    "compensationPriority": 5
+  }
+}
+
+### 3. 获取所有规则
+GET http://localhost:3000/api/lead-transfer/rules
+Authorization: Bearer {{token}}
+
+### 4. 获取规则详情
+GET http://localhost:3000/api/lead-transfer/rules/{{ruleId}}
+Authorization: Bearer {{token}}
+
+### 5. 更新规则
+PATCH http://localhost:3000/api/lead-transfer/rules/{{ruleId}}
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "enabled": false,
+  "triggerConditions": {
+    "inactiveHours": 72
+  }
+}
+
+### 6. 切换规则启用状态
+PATCH http://localhost:3000/api/lead-transfer/rules/{{ruleId}}/toggle
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "enabled": true
+}
+
+### 7. 获取流转记录
+GET http://localhost:3000/api/lead-transfer/records?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### 8. 获取流转统计
+GET http://localhost:3000/api/lead-transfer/statistics?startDate=2024-01-01&endDate=2024-12-31
+Authorization: Bearer {{token}}
+
+### 9. 获取用户流转统计
+GET http://localhost:3000/api/lead-transfer/user-statistics/{{userId}}?startDate=2024-01-01
+Authorization: Bearer {{token}}
+
+### 10. 删除规则
+DELETE http://localhost:3000/api/lead-transfer/rules/{{ruleId}}
+Authorization: Bearer {{token}}
+

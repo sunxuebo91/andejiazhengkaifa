@@ -518,7 +518,7 @@ const CustomerList: React.FC = () => {
           <Row gutter={[12, 8]} align="middle">
             <Col span={5}>
               <Search
-                placeholder="搜索客户姓名、电话"
+                placeholder="搜索客户姓名、电话、微信号"
                 allowClear
                 style={{ width: '100%' }}
                 onSearch={handleSearch}

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ResumeModule } from './modules/resume/resume.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { OcrModule } from './modules/ocr/ocr.module';
@@ -28,6 +29,7 @@ import { NotificationModule } from './modules/notification/notification.module';
       isGlobal: true,
       envFilePath: process.env.NODE_ENV === 'development' ? ['.env.dev', '.env'] : ['.env'],
     }),
+    ScheduleModule.forRoot(),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

@@ -72,6 +72,8 @@ export class CustomersService {
       assignedBy: new Types.ObjectId(userId),
       assignedAt: now,
       assignmentReason: hasAssignedTo ? (dtoAny.assignmentReason || '创建时指定负责人') : '创建默认分配给创建人',
+      // 活动时间追踪
+      lastActivityAt: now,
     };
 
     const customer = new this.customerModel(customerData);
@@ -121,12 +123,14 @@ export class CustomersService {
     // 🔥 [FIX] 客户列表应该只显示非公海客户
     searchConditions.inPublicPool = false;
 
-    // 构建搜索条件
+    // 构建搜索条件（支持姓名、电话、微信号）
     if (search) {
       searchConditions.$or = [
         { name: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
         { phone: (search || '').trim() }, // 添加精确匹配
+        { wechatId: { $regex: search, $options: 'i' } }, // 微信号模糊搜索
+        { wechatId: (search || '').trim() }, // 微信号精确匹配
       ];
     }
 
@@ -356,6 +360,9 @@ export class CustomersService {
       updateData.lastUpdatedBy = userId;
     }
 
+    // 更新活动时间
+    updateData.lastActivityAt = new Date();
+
     const customer = await this.customerModel
       .findByIdAndUpdate(id, updateData, { new: true })
       .exec();
@@ -430,7 +437,16 @@ export class CustomersService {
       createdBy: userId,
     });
 
-    return await followUp.save();
+    const saved = await followUp.save();
+
+    // 更新客户的最后活动时间
+    await this.customerModel.findByIdAndUpdate(customerId, {
+      lastActivityAt: new Date(),
+      lastFollowUpBy: new Types.ObjectId(userId),
+      lastFollowUpTime: new Date(),
+    });
+
+    return saved;
   }
 
   // 分配客户给指定用户
@@ -476,6 +492,7 @@ export class CustomersService {
         assignedAt: now,
         assignmentReason: assignmentReason,
         lastUpdatedBy: adminUserId,
+        lastActivityAt: now, // 更新活动时间
       },
       { new: true }
     ).exec();
@@ -939,11 +956,12 @@ export class CustomersService {
 
     const searchConditions: any = { inPublicPool: true };
 
-    // 搜索条件
+    // 搜索条件（支持姓名、电话、微信号）
     if (search) {
       searchConditions.$or = [
         { name: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
+        { wechatId: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -1246,6 +1264,17 @@ export class CustomersService {
       operatedAt: now,
     });
 
+    // 记录分配历史（释放到公海）
+    await this.assignmentLogModel.create({
+      customerId: new Types.ObjectId(customerId),
+      oldAssignedTo: oldAssignedTo ? new Types.ObjectId(oldAssignedTo) : undefined,
+      newAssignedTo: undefined, // 释放到公海，新负责人为空
+      assignedBy: new Types.ObjectId(userId),
+      assignedAt: now,
+      reason: releaseReason,
+      action: 'release',
+    } as any);
+
     // 创建系统跟进记录
     const operatorUser = await this.userModel.findById(userId).select('name').lean();
     await this.customerFollowUpModel.create({
@@ -1324,6 +1353,17 @@ export class CustomersService {
           reason: releaseReason,
           operatedAt: now,
         });
+
+        // 记录分配历史（释放到公海）
+        await this.assignmentLogModel.create({
+          customerId: new Types.ObjectId(customerId),
+          oldAssignedTo: oldAssignedTo ? new Types.ObjectId(oldAssignedTo) : undefined,
+          newAssignedTo: undefined, // 释放到公海，新负责人为空
+          assignedBy: new Types.ObjectId(userId),
+          assignedAt: now,
+          reason: releaseReason,
+          action: 'release',
+        } as any);
 
         // 创建系统跟进记录
         await this.customerFollowUpModel.create({

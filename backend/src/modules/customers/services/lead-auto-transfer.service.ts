@@ -433,7 +433,7 @@ export class LeadAutoTransferService implements OnModuleInit {
         sourceUserId,
         targetUserId,
         count: 1,
-        customerId: customer.customerId  // 🔥 [FIX] 记录具体的客户ID
+        customerId: customer.customerId  // 🔥 [FIX] 使用MongoDB ObjectId作为唯一标识（已在第364行转换为string）
       });
 
       // 更新统计

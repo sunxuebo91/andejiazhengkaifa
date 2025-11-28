@@ -222,68 +222,66 @@ export class LeadAutoTransferService implements OnModuleInit {
       });
     }
 
-    // 🔥 [FIX] 记录每个流出用户已处理的客户索引，避免重复流转同一个客户
-    const sourceCustomerIndex = new Map<string, number>();
     // 🔥 [FIX] 记录已经流转的客户ID，防止重复
     const transferredCustomerIds = new Set<string>();
 
+    // 🔥 [FIX] 创建客户ID到客户对象的映射，方便快速查找
+    const customerMap = new Map<string, any>();
+    for (const [, customerList] of customersBySource) {
+      for (const customer of customerList) {
+        customerMap.set(customer._id.toString(), customer);
+      }
+    }
+
     for (const allocation of allocationPlan) {
-      const sourceCustomers = customersBySource.get(allocation.sourceUserId) || [];
-
-      // 获取该流出用户当前的索引位置
-      let currentIndex = sourceCustomerIndex.get(allocation.sourceUserId) || 0;
-
-      for (let i = 0; i < allocation.count; i++) {
-        // 找到下一个未被流转的客户
-        while (currentIndex < sourceCustomers.length &&
-               transferredCustomerIds.has(sourceCustomers[currentIndex]._id.toString())) {
-          currentIndex++;
-        }
-
-        // 如果没有更多客户可以流转，跳出
-        if (currentIndex >= sourceCustomers.length) {
-          this.logger.warn(`流出用户 ${allocation.sourceUserId} 没有更多客户可流转`);
-          break;
-        }
-
-        const customer = sourceCustomers[currentIndex];
-
-        try {
-          // 执行流转
-          await this.transferCustomer(customer, allocation.targetUserId, rule);
-
-          // 🔥 [FIX] 标记该客户已被流转
-          transferredCustomerIds.add(customer._id.toString());
-          currentIndex++;
-
-          // 更新配额统计
-          await this.ruleService.updateUserQuota(
-            rule._id.toString(),
-            allocation.sourceUserId,
-            allocation.targetUserId
-          );
-
-          // 更新本次统计
-          const sourceStats = userStatsMap.get(allocation.sourceUserId);
-          if (sourceStats) {
-            sourceStats.transferredOut++;
-          }
-
-          const targetStats = userStatsMap.get(allocation.targetUserId);
-          if (targetStats) {
-            targetStats.transferredIn++;
-          }
-
-          successCount++;
-        } catch (error) {
-          this.logger.error(`流转客户 ${customer._id} 失败:`, error);
-          failedCount++;
-          currentIndex++; // 即使失败也要移动索引，避免无限循环
-        }
+      // 🔥 [FIX] 使用分配计划中的具体客户ID
+      if (!allocation.customerId) {
+        this.logger.warn(`分配计划缺少客户ID，跳过`);
+        continue;
       }
 
-      // 保存该流出用户的索引位置
-      sourceCustomerIndex.set(allocation.sourceUserId, currentIndex);
+      // 🔥 [FIX] 检查是否已经流转过（防止重复）
+      if (transferredCustomerIds.has(allocation.customerId)) {
+        this.logger.warn(`客户 ${allocation.customerId} 已被流转，跳过重复分配`);
+        continue;
+      }
+
+      const customer = customerMap.get(allocation.customerId);
+      if (!customer) {
+        this.logger.warn(`找不到客户 ${allocation.customerId}，跳过`);
+        continue;
+      }
+
+      try {
+        // 执行流转
+        await this.transferCustomer(customer, allocation.targetUserId, rule);
+
+        // 🔥 [FIX] 标记该客户已被流转
+        transferredCustomerIds.add(allocation.customerId);
+
+        // 更新配额统计
+        await this.ruleService.updateUserQuota(
+          rule._id.toString(),
+          allocation.sourceUserId,
+          allocation.targetUserId
+        );
+
+        // 更新本次统计
+        const sourceStats = userStatsMap.get(allocation.sourceUserId);
+        if (sourceStats) {
+          sourceStats.transferredOut++;
+        }
+
+        const targetStats = userStatsMap.get(allocation.targetUserId);
+        if (targetStats) {
+          targetStats.transferredIn++;
+        }
+
+        successCount++;
+      } catch (error) {
+        this.logger.error(`流转客户 ${customer._id} 失败:`, error);
+        failedCount++;
+      }
     }
 
     // 更新规则统计
@@ -347,12 +345,13 @@ export class LeadAutoTransferService implements OnModuleInit {
 
   /**
    * 轮流分配算法（Round-Robin + 余量补偿）
+   * 返回包含具体客户ID的分配计划
    */
   private calculateRoundRobinAllocation(
     rule: LeadTransferRule,
     customersBySource: Map<string, any[]>
-  ): Array<{ sourceUserId: string; targetUserId: string; count: number }> {
-    const allocationPlan: Array<{ sourceUserId: string; targetUserId: string; count: number }> = [];
+  ): Array<{ sourceUserId: string; targetUserId: string; count: number; customerId?: string }> {
+    const allocationPlan: Array<{ sourceUserId: string; targetUserId: string; count: number; customerId?: string }> = [];
 
     // 🎴 [轮流发牌模式] 把所有线索收集并打散
 
@@ -429,11 +428,12 @@ export class LeadAutoTransferService implements OnModuleInit {
         continue;
       }
 
-      // 添加到分配计划
+      // 添加到分配计划，包含具体的客户ID
       allocationPlan.push({
         sourceUserId,
         targetUserId,
-        count: 1
+        count: 1,
+        customerId: customer.customerId  // 🔥 [FIX] 记录具体的客户ID
       });
 
       // 更新统计
@@ -575,6 +575,8 @@ export class LeadAutoTransferService implements OnModuleInit {
       fromUserId: oldAssignedTo,
       toUserId: new Types.ObjectId(targetUserId),
       snapshot: {
+        customerNumber: customer.customerId, // 保存客户编号快照
+        customerName: customer.name, // 保存客户名称快照
         contractStatus: customer.contractStatus,
         inactiveHours,
         lastActivityAt: lastActivity, // 使用计算后的值（有后备逻辑）

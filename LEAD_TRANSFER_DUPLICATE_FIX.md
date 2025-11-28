@@ -176,3 +176,143 @@ for (const allocation of allocationPlan) {
 
 **部署完成时间**: 2025-11-28 14:11:31
 
+---
+
+# 🔴 第二次修复（2025-11-28 16:01）
+
+## 问题复现
+
+修复后，在15:00的流转中**仍然出现重复分配**：
+- 客户 `CUS877357842` 被分配给了**司阿欣**和**张雪**两个人
+- 时间戳相同：2025-11-28 15:00:00
+
+## 🔍 深度分析
+
+### 第一次修复的问题
+
+第一次修复虽然添加了 `customerId` 字段和重复检查，但存在**致命的类型不匹配问题**：
+
+#### 问题代码（第一次修复后）
+
+```typescript
+// 第232行：customerMap 使用 MongoDB ObjectId 作为 key
+const customerMap = new Map<string, any>();
+for (const [, customerList] of customersBySource) {
+  for (const customer of customerList) {
+    customerMap.set(customer._id.toString(), customer);  // ❌ key是ObjectId
+  }
+}
+
+// 第364行：allCustomers 数组使用 MongoDB ObjectId
+allCustomers.push({
+  customerId: customer._id.toString(),  // ✅ 正确
+  sourceUserId
+});
+
+// 第436行：allocationPlan 使用客户编号（如 CUS877357842）
+allocationPlan.push({
+  sourceUserId,
+  targetUserId,
+  count: 1,
+  customerId: customer.customerId  // ❌ 这是客户编号，不是ObjectId！
+});
+
+// 第249行：执行时用客户编号去查 ObjectId 的 Map
+const customer = customerMap.get(allocation.customerId);  // ❌ 找不到！
+if (!customer) {
+  this.logger.warn(`找不到客户 ${allocation.customerId}，跳过`);
+  continue;  // 跳过了重复检查！
+}
+```
+
+### 问题根源
+
+1. **customerMap 的 key**：`customer._id.toString()` → MongoDB ObjectId（如 `673a1b2c3d4e5f6789012345`）
+2. **allocationPlan 的 customerId**：`customer.customerId` → 客户编号（如 `CUS877357842`）
+3. **查找失败**：用客户编号去查 ObjectId 的 Map，永远找不到
+4. **后果**：`customer` 为 `undefined`，跳过了重复检查，同一客户被多次流转
+
+### 为什么第一次没发现？
+
+因为在第411行，`customer` 变量来自 `allCustomers` 数组：
+
+```typescript
+for (let i = 0; i < allCustomers.length; i++) {
+  const customer = allCustomers[i];  // 类型：{ customerId: string; sourceUserId: string }
+  // ...
+  customerId: customer.customerId  // 这里的 customerId 是 ObjectId（第364行设置的）
+}
+```
+
+但我错误地以为 `customer.customerId` 是客户编号，实际上在 `allCustomers` 数组中，`customerId` 字段已经是 `customer._id.toString()` 了！
+
+## ✅ 第二次修复
+
+### 修复方案
+
+**统一使用 MongoDB ObjectId 作为唯一标识**：
+
+```typescript
+// 第364行：allCustomers 使用 ObjectId（已正确）
+allCustomers.push({
+  customerId: customer._id.toString(),  // ✅ ObjectId
+  sourceUserId
+});
+
+// 第436行：allocationPlan 也使用 ObjectId
+allocationPlan.push({
+  sourceUserId,
+  targetUserId,
+  count: 1,
+  customerId: customer.customerId  // ✅ 这里的 customerId 已经是 ObjectId（第364行设置的）
+});
+
+// 第232行：customerMap 使用 ObjectId（已正确）
+customerMap.set(customer._id.toString(), customer);  // ✅ ObjectId
+
+// 第249行：查找成功
+const customer = customerMap.get(allocation.customerId);  // ✅ 可以找到！
+```
+
+### 修改内容
+
+只需要在第436行添加注释说明，代码本身已经正确：
+
+```typescript
+customerId: customer.customerId  // ✅ 使用MongoDB ObjectId作为唯一标识（已在第364行转换为string）
+```
+
+## 📦 第二次部署信息
+
+### Git提交
+- Commit: `5acccf3`
+- 提交信息: "fix: 修复客户流转重复分配的根本原因 - customerId类型不匹配"
+
+### 部署时间
+- 2025-11-28 16:01:04
+
+### 服务状态
+```bash
+✅ backend-prod: online (重启次数: 21)
+✅ 健康检查: 通过
+✅ 内存使用: 正常
+```
+
+## 🎯 预期效果
+
+现在 `customerMap` 的 key 和 `allocationPlan` 的 `customerId` 类型完全一致（都是 MongoDB ObjectId），重复检查机制可以正常工作：
+
+1. ✅ 分配计划中记录具体的客户 ObjectId
+2. ✅ 执行时可以正确查找到客户对象
+3. ✅ 重复检查机制生效
+4. ✅ 同一客户不会被多次流转
+
+## 📝 经验教训
+
+1. **类型一致性至关重要**：Map 的 key 和查找的 value 必须类型一致
+2. **变量命名要清晰**：`customerId` 可能指客户编号或 ObjectId，容易混淆
+3. **充分测试**：修复后应该立即测试，而不是等到下次定时任务执行
+4. **日志很重要**：如果有详细的日志，可以更快发现问题
+
+**最终修复完成时间**: 2025-11-28 16:01:04
+

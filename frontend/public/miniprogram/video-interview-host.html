@@ -2060,20 +2060,10 @@
           try {
             console.log(`🎬 尝试播放远程流 (第${retryCount + 1}次):`, stream.streamID);
 
-                // 🚀 优化：配置拉流参数以提升播放性能
-                const playConfig = {
-                  resourceMode: 0  // 0: 按质量优先(默认) 1: 按延迟优先 2: 按流畅优先
-                };
-
-                // 移动端使用低延迟模式
-                if (DeviceHelper.isMobile()) {
-                  playConfig.resourceMode = 1; // 延迟优先，减少卡顿
-                }
-
-                // 🔥 iOS 修复：不传 video 元素给 SDK，手动处理所有步骤
-                // 这样可以确保在 iOS 上正确设置 srcObject 和调用 play()
-                const remoteStream = await zg.startPlayingStream(stream.streamID, playConfig);
-                console.log('🚀 拉流模式:', playConfig.resourceMode === 1 ? '低延迟' : '高质量');
+                // 🔥 修复：移除不支持的 resourceMode 参数，使用标准方式调用
+                // ZEGO Web SDK 不支持 resourceMode 参数，之前的配置可能导致拉流问题
+                const remoteStream = await zg.startPlayingStream(stream.streamID);
+                console.log('✅ SDK 返回远程流');
 
                 console.log('✅ SDK 返回远程流:', remoteStream);
                 console.log('📹 远程流视频轨道数量:', remoteStream.getVideoTracks().length);

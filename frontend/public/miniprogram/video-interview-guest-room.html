@@ -2145,18 +2145,10 @@
       }
 
       try {
-        // 🚀 优化：配置拉流参数以提升播放性能
-        const playConfig = {
-          resourceMode: 0  // 0: 按质量优先(默认) 1: 按延迟优先 2: 按流畅优先
-        };
-
-        // 移动端使用低延迟模式
-        if (DeviceHelper.isMobile()) {
-          playConfig.resourceMode = 1; // 延迟优先，减少卡顿
-        }
-
-        const remoteStream = await zg.startPlayingStream(stream.streamID, playConfig);
-        console.log('✅ 开始播放远程流:', stream.streamID, '模式:', playConfig.resourceMode === 1 ? '低延迟' : '高质量');
+        // 🔥 修复：移除不支持的 resourceMode 参数，使用标准方式调用
+        // ZEGO Web SDK 不支持 resourceMode 参数，之前的配置导致访客端拉流失败
+        const remoteStream = await zg.startPlayingStream(stream.streamID);
+        console.log('✅ 开始播放远程流:', stream.streamID);
 
         // 显示远程视频
         const box = document.getElementById(emptyBoxId);

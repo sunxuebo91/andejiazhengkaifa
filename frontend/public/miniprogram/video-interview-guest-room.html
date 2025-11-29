@@ -1428,6 +1428,77 @@
     let roomStatusPolling = null; // 房间状态轮询定时器
     let isRoomDismissed = false; // 标记房间是否已解散
 
+    // ==================== 🚀 性能优化：设备检测和自适应配置 ====================
+    const DeviceHelper = {
+      // 检测是否为移动设备
+      isMobile() {
+        return /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      },
+      // 检测是否为小屏幕
+      isSmallScreen() {
+        return window.innerWidth < 768;
+      },
+      // 检测网络类型
+      getNetworkType() {
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (connection) {
+          return connection.effectiveType || connection.type || 'unknown';
+        }
+        return 'unknown';
+      },
+      // 检测是否为慢速网络
+      isSlowNetwork() {
+        const networkType = this.getNetworkType();
+        return ['slow-2g', '2g'].includes(networkType);
+      },
+      // 获取推荐的视频配置
+      getVideoConfig() {
+        const isMobile = this.isMobile();
+        const isSlowNetwork = this.isSlowNetwork();
+        const networkType = this.getNetworkType();
+
+        console.log('📱 设备检测:', { isMobile, isSlowNetwork, networkType });
+
+        // 慢速网络（2G）- 最低配置
+        if (isSlowNetwork) {
+          return {
+            width: 320,
+            height: 240,
+            frameRate: 10,
+            bitrate: 200,
+            quality: 'low',
+            description: '240p - 慢速网络优化'
+          };
+        }
+
+        // 移动设备 - 中等配置（360p，优化带宽）
+        if (isMobile) {
+          return {
+            width: 640,
+            height: 360,
+            frameRate: 15,
+            bitrate: 500,
+            quality: 'medium',
+            description: '360p - 移动端优化'
+          };
+        }
+
+        // PC端 - 标准配置（720p）
+        return {
+          width: 1280,
+          height: 720,
+          frameRate: 15,
+          bitrate: 1000,
+          quality: 'high',
+          description: '720p - PC端标准'
+        };
+      }
+    };
+
+    // 当前视频配置
+    let currentVideoConfig = DeviceHelper.getVideoConfig();
+    console.log('🎬 初始视频配置:', currentVideoConfig);
+
     // 生成Token（访客模式：调用后端公开接口）
     async function generateToken(userID, roomID) {
       try {
@@ -1644,14 +1715,24 @@
           showLoading('正在请求摄像头和麦克风权限...');
         }
 
+        // 🚀 获取自适应视频配置（根据设备和网络自动调整）
+        currentVideoConfig = DeviceHelper.getVideoConfig();
+        console.log('🎬 使用视频配置:', currentVideoConfig);
+
         localStream = await zg.createStream({
           camera: {
-            video: true,  // 简化配置，使用默认值
-            audio: true   // 简化配置，使用默认值
+            video: {
+              width: currentVideoConfig.width,
+              height: currentVideoConfig.height,
+              frameRate: currentVideoConfig.frameRate,
+              bitrate: currentVideoConfig.bitrate,
+              facingMode: 'user'  // 前置摄像头
+            },
+            audio: true
           }
         });
 
-        console.log('✅ 权限授权成功，本地流创建成功', localStream);
+        console.log(`✅ 权限授权成功，本地流创建成功 (${currentVideoConfig.description})`);
 
         // 🎨 启用基础美颜（自然效果，不夸张）
         if (zg.setEffectsBeauty && typeof zg.setEffectsBeauty === 'function') {
@@ -2064,8 +2145,18 @@
       }
 
       try {
-        const remoteStream = await zg.startPlayingStream(stream.streamID);
-        console.log('✅ 开始播放远程流:', stream.streamID);
+        // 🚀 优化：配置拉流参数以提升播放性能
+        const playConfig = {
+          resourceMode: 0  // 0: 按质量优先(默认) 1: 按延迟优先 2: 按流畅优先
+        };
+
+        // 移动端使用低延迟模式
+        if (DeviceHelper.isMobile()) {
+          playConfig.resourceMode = 1; // 延迟优先，减少卡顿
+        }
+
+        const remoteStream = await zg.startPlayingStream(stream.streamID, playConfig);
+        console.log('✅ 开始播放远程流:', stream.streamID, '模式:', playConfig.resourceMode === 1 ? '低延迟' : '高质量');
 
         // 显示远程视频
         const box = document.getElementById(emptyBoxId);
@@ -2254,6 +2345,67 @@
         console.log('📍 updateType:', updateType);
         console.log('📍 userList:', userList);
         console.log('═══════════════════════════════════════════════════════');
+      });
+
+      // 🚀 监听推流质量（上行网络状况）
+      zg.on('publishQualityUpdate', (streamID, stats) => {
+        const videoBitrate = Math.round(stats.video?.videoBitrate || 0);
+        const audioPacketsLostRate = stats.audio?.audioPacketsLostRate || 0;
+        const videoPacketsLostRate = stats.video?.videoPacketsLostRate || 0;
+        const rtt = stats.video?.rtt || 0;
+
+        // 丢包率 > 5% 或 RTT > 300ms 认为网络较差
+        if (audioPacketsLostRate > 5 || videoPacketsLostRate > 5 || rtt > 300) {
+          console.warn('⚠️ 推流质量较差:', {
+            streamID,
+            videoBitrate: videoBitrate + 'kbps',
+            videoPacketsLostRate: videoPacketsLostRate.toFixed(2) + '%',
+            audioPacketsLostRate: audioPacketsLostRate.toFixed(2) + '%',
+            rtt: rtt + 'ms'
+          });
+
+          // 网络很差时提示用户
+          if (videoPacketsLostRate > 15 || rtt > 500) {
+            showNetworkWarning('网络较差，视频可能卡顿');
+          }
+        }
+      });
+
+      // 🚀 监听拉流质量（下行网络状况）
+      zg.on('playQualityUpdate', (streamID, stats) => {
+        const videoBitrate = Math.round(stats.video?.videoBitrate || 0);
+        const audioPacketsLostRate = stats.audio?.audioPacketsLostRate || 0;
+        const videoPacketsLostRate = stats.video?.videoPacketsLostRate || 0;
+        const videoJitter = stats.video?.videoJitter || 0;
+
+        // 丢包率 > 5% 或 抖动 > 100ms 认为接收质量较差
+        if (audioPacketsLostRate > 5 || videoPacketsLostRate > 5 || videoJitter > 100) {
+          console.warn('⚠️ 拉流质量较差:', {
+            streamID,
+            videoBitrate: videoBitrate + 'kbps',
+            videoPacketsLostRate: videoPacketsLostRate.toFixed(2) + '%',
+            videoJitter: videoJitter + 'ms'
+          });
+        }
+      });
+
+      // 🚀 监听网络质量（整体网络状况）
+      zg.on('networkQuality', (userID, upstreamQuality, downstreamQuality) => {
+        // 网络质量等级：0-未知 1-优秀 2-良好 3-一般 4-差 5-极差
+        const qualityDesc = ['未知', '优秀', '良好', '一般', '差', '极差'];
+
+        if (upstreamQuality >= 4 || downstreamQuality >= 4) {
+          console.warn('⚠️ 网络质量较差:', {
+            userID,
+            上行: qualityDesc[upstreamQuality] || '未知',
+            下行: qualityDesc[downstreamQuality] || '未知'
+          });
+
+          // 网络极差时提示
+          if (upstreamQuality >= 5 || downstreamQuality >= 5) {
+            showNetworkWarning('网络信号弱，请检查网络');
+          }
+        }
       });
 
       // ✅ 监听房间状态变化（用于检测被踢出、房间解散和断线重连）
@@ -2941,6 +3093,21 @@
       }, duration);
     }
 
+    // 🚀 网络质量提示（防抖，避免频繁提示）
+    let networkWarningTimeout = null;
+    let lastNetworkWarningTime = 0;
+    function showNetworkWarning(msg) {
+      const now = Date.now();
+      // 10秒内不重复提示
+      if (now - lastNetworkWarningTime < 10000) {
+        return;
+      }
+      lastNetworkWarningTime = now;
+
+      // 使用 showToast 显示警告
+      showToast(msg, 'warning', 3000);
+    }
+
     // � 更新调试面板
 
 
@@ -3626,15 +3793,26 @@
       const hasSource = localVideo.srcObject !== null;
       const hasSize = localVideo.videoWidth > 0 && localVideo.videoHeight > 0;
 
+      // 🍎 iOS 额外检查：即使有 srcObject，也要检查轨道是否真的在输出
+      let trackActive = true;
+      if (hasSource && localVideo.srcObject) {
+        const tracks = localVideo.srcObject.getVideoTracks ? localVideo.srcObject.getVideoTracks() : [];
+        if (tracks.length > 0) {
+          // 检查轨道是否已结束或被静音
+          trackActive = tracks[0].readyState === 'live' && !tracks[0].muted;
+        }
+      }
+
       console.log('🔍 [视频检查] 本地视频元素状态:', {
         hasSource,
         paused: localVideo.paused,
         videoWidth: localVideo.videoWidth,
         videoHeight: localVideo.videoHeight,
-        hasSize
+        hasSize,
+        trackActive
       });
 
-      return hasSource && hasSize;
+      return hasSource && hasSize && trackActive;
     }
 
     // 🔄 恢复本地视频流
@@ -3780,7 +3958,29 @@
         }
       } else {
         console.log('📱 [visibilitychange] 返回前台');
-        setTimeout(() => checkAndRecoverVideo('visibilitychange'), 500);
+        const timeInBackground = Date.now() - lastVisibilityChangeTime;
+        console.log(`📱 [visibilitychange] 后台时长: ${Math.round(timeInBackground / 1000)}秒`);
+
+        // 🔥 iOS 关键修复：如果后台时间超过3秒，很可能轨道已失效
+        // 对于 iOS 直接强制恢复，不依赖检测
+        if (isIOSDevice() && timeInBackground > 3000) {
+          console.log('🍎 [visibilitychange] iOS 后台时间过长，强制恢复视频');
+          setTimeout(async () => {
+            if (!zg || !currentStreamId) return;
+            if (isKickedOut || hasLeftRoom || isRoomDismissed) return;
+            if (isRecovering) return;
+
+            isRecovering = true;
+            try {
+              await recoverLocalStream();
+            } finally {
+              isRecovering = false;
+            }
+          }, 300);
+        } else {
+          setTimeout(() => checkAndRecoverVideo('visibilitychange'), 500);
+        }
+
         if (isIOSDevice() && !videoCheckInterval) startVideoHealthCheck();
       }
     });
@@ -3794,7 +3994,27 @@
     // 🍎 监听 pageshow 事件
     window.addEventListener('pageshow', (event) => {
       console.log('📱 [pageshow] persisted:', event.persisted);
-      setTimeout(() => checkAndRecoverVideo('pageshow'), 500);
+
+      // 🔥 iOS 关键修复：当 persisted=true 时，页面是从 bfcache 恢复的
+      // 此时视频轨道很可能已经失效，需要强制恢复
+      if (event.persisted && isIOSDevice()) {
+        console.log('🍎 [pageshow] iOS 从 bfcache 恢复，强制重建视频流');
+        // 延迟执行，等待页面完全恢复
+        setTimeout(async () => {
+          if (!zg || !currentStreamId) return;
+          if (isKickedOut || hasLeftRoom || isRoomDismissed) return;
+
+          // 强制恢复，不依赖检测逻辑
+          isRecovering = true;
+          try {
+            await recoverLocalStream();
+          } finally {
+            isRecovering = false;
+          }
+        }, 300);
+      } else {
+        setTimeout(() => checkAndRecoverVideo('pageshow'), 500);
+      }
     });
 
     // 🍎 iOS 定时健康检查
@@ -3822,20 +4042,52 @@
       const checkJoinedInterval = setInterval(() => {
         if (zg && localStream && currentStreamId) {
           clearInterval(checkJoinedInterval);
-          setTimeout(() => startVideoHealthCheck(), 5000);
+          // 🔥 缩短首次检查时间：从5秒改为2秒
+          setTimeout(() => startVideoHealthCheck(), 2000);
         }
       }, 1000);
     }
 
-    // 🍎 触摸时尝试播放
-    document.addEventListener('touchstart', () => {
+    // 🍎 触摸时尝试播放（增强版）
+    document.addEventListener('touchstart', async () => {
       if (isIOSDevice() && zg && localStream && currentStreamId) {
         const localVideo = document.getElementById('localVideo');
-        if (localVideo && localVideo.paused) {
-          localVideo.play().catch(() => {});
+        if (localVideo) {
+          // 🔥 增强：不仅尝试播放，还检查轨道状态
+          if (localVideo.paused) {
+            console.log('🍎 [触摸] 尝试播放本地视频');
+            try {
+              await localVideo.play();
+            } catch (e) {}
+          }
+
+          // 🔥 关键：检查视频是否真的在显示
+          // 如果 videoWidth 为0，说明轨道可能已失效
+          setTimeout(() => {
+            if (localVideo.videoWidth === 0 || localVideo.videoHeight === 0) {
+              console.log('🍎 [触摸] 检测到视频尺寸为0，触发恢复');
+              checkAndRecoverVideo('touchRecover');
+            }
+          }, 500);
         }
       }
     }, { passive: true });
+
+    // 🍎 iOS 专用：监听 resume 事件（微信小程序 WebView 可能触发）
+    document.addEventListener('resume', () => {
+      console.log('📱 [resume] 页面恢复');
+      if (isIOSDevice()) {
+        setTimeout(() => checkAndRecoverVideo('resume'), 300);
+      }
+    });
+
+    // 🍎 iOS 专用：监听 WeixinJSBridgeReady（小程序环境）
+    document.addEventListener('WeixinJSBridgeReady', () => {
+      console.log('📱 [WeixinJSBridgeReady] 微信 JSBridge 就绪');
+      if (isIOSDevice() && zg && currentStreamId) {
+        setTimeout(() => checkAndRecoverVideo('wxBridgeReady'), 500);
+      }
+    });
   </script>
 
   <!-- 🎯 将 ZEGO SDK 移到页面底部，避免阻塞页面渲染 -->

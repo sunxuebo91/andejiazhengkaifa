@@ -1499,44 +1499,6 @@
     let currentVideoConfig = DeviceHelper.getVideoConfig();
     console.log('🎬 初始视频配置:', currentVideoConfig);
 
-    // 🔥 动态码率调整函数 - 解决弱网环境下的卡顿问题
-    async function adjustVideoBitrate(level) {
-      if (!zg || !localStream) {
-        console.warn('⚠️ adjustVideoBitrate: zg或localStream不存在');
-        return;
-      }
-
-      const bitrateConfigs = {
-        veryLow: { width: 320, height: 240, frameRate: 10, bitrate: 150 },
-        low: { width: 480, height: 360, frameRate: 12, bitrate: 300 },
-        normal: currentVideoConfig // 使用初始配置
-      };
-
-      const config = bitrateConfigs[level] || bitrateConfigs.normal;
-      console.log(`🔧 调整视频质量到 ${level}:`, config);
-
-      try {
-        // 使用 ZEGO SDK 的 setVideoConfig 方法动态调整
-        if (typeof zg.setVideoConfig === 'function') {
-          await zg.setVideoConfig(localStream, {
-            width: config.width,
-            height: config.height,
-            frameRate: config.frameRate,
-            bitrate: config.bitrate
-          });
-          console.log(`✅ 视频质量已调整到 ${level}`);
-
-          if (level !== 'normal') {
-            showToast(`📶 网络较差，已降低视频质量`, 'warning', 2000);
-          }
-        } else {
-          console.warn('⚠️ setVideoConfig 方法不可用');
-        }
-      } catch (error) {
-        console.error('❌ 调整视频质量失败:', error);
-      }
-    }
-
     // 生成Token（访客模式：调用后端公开接口）
     async function generateToken(userID, roomID) {
       try {
@@ -1895,17 +1857,12 @@
       // 获取Token
       const token = await generateToken(currentUserId, roomId);
 
-      // 🔥 关键修复：添加 userUpdate: true 参数，确保能收到用户和流更新通知
-      // 这是导致"重新进入看不到全部人"问题的核心原因之一
       const result = await zg.loginRoom(roomId, token, {
         userID: currentUserId,
         userName: userName
-      }, {
-        userUpdate: true  // 🔥 开启用户和流更新通知（与主持人端保持一致）
       });
 
       console.log('✅ 登录房间成功, result:', result);
-      console.log('✅ 已开启用户和流更新通知 (userUpdate: true)');
 
       // 🔥 启动提词器轮询
       startTeleprompterPolling();
@@ -2382,11 +2339,6 @@
         console.log('═══════════════════════════════════════════════════════');
       });
 
-      // 🔥 动态码率调整状态
-      let currentBitrateLevel = 'normal'; // 'normal', 'low', 'veryLow'
-      let lastBitrateAdjustTime = 0;
-      const BITRATE_ADJUST_INTERVAL = 5000; // 5秒内不重复调整
-
       // 🚀 监听推流质量（上行网络状况）
       zg.on('publishQualityUpdate', (streamID, stats) => {
         const videoBitrate = Math.round(stats.video?.videoBitrate || 0);
@@ -2404,38 +2356,9 @@
             rtt: rtt + 'ms'
           });
 
-          // 🔥 关键修复：动态降低视频码率以减少卡顿
-          const now = Date.now();
-          if (now - lastBitrateAdjustTime > BITRATE_ADJUST_INTERVAL) {
-            if (videoPacketsLostRate > 20 || rtt > 600) {
-              // 网络极差，降到最低配置
-              if (currentBitrateLevel !== 'veryLow') {
-                adjustVideoBitrate('veryLow');
-                currentBitrateLevel = 'veryLow';
-                lastBitrateAdjustTime = now;
-              }
-            } else if (videoPacketsLostRate > 10 || rtt > 400) {
-              // 网络较差，降到低配置
-              if (currentBitrateLevel !== 'low' && currentBitrateLevel !== 'veryLow') {
-                adjustVideoBitrate('low');
-                currentBitrateLevel = 'low';
-                lastBitrateAdjustTime = now;
-              }
-            }
-          }
-
           // 网络很差时提示用户
           if (videoPacketsLostRate > 15 || rtt > 500) {
             showNetworkWarning('网络较差，视频可能卡顿');
-          }
-        } else if (currentBitrateLevel !== 'normal') {
-          // 🔥 网络恢复正常，逐步恢复码率
-          const now = Date.now();
-          if (now - lastBitrateAdjustTime > BITRATE_ADJUST_INTERVAL * 2) {
-            adjustVideoBitrate('normal');
-            currentBitrateLevel = 'normal';
-            lastBitrateAdjustTime = now;
-            console.log('✅ 网络恢复，已恢复正常视频质量');
           }
         }
       });
@@ -2593,11 +2516,6 @@
           console.log('✅ 重新连接成功');
           if (!isKickedOut) {
             hideReconnectToast();
-
-            // 🔥 关键修复：重连成功后主动同步房间内的流
-            // 这是导致"重新进入看不到全部人"问题的核心原因
-            console.log('🔄 重连成功，开始同步房间内的流...');
-            await syncRoomStreams();
           }
         }
       });
@@ -2617,90 +2535,6 @@
     function hideReconnectToast() {
       const toast = document.getElementById('reconnectToast');
       toast.classList.remove('show');
-    }
-
-    // 🔥 关键修复：重连成功后同步房间内的流
-    // 解决"重新进入看不到全部人"的问题
-    async function syncRoomStreams() {
-      if (!zg || !roomId) {
-        console.warn('⚠️ syncRoomStreams: zg或roomId不存在');
-        return;
-      }
-
-      try {
-        console.log('🔄 开始同步房间内的流...');
-
-        // 🔥 方法1: 使用 ZEGO SDK 的 getStreamList 获取当前房间内的所有流
-        // 注意：某些版本的SDK可能不支持此方法，需要降级处理
-        let streamList = [];
-
-        try {
-          // 尝试使用 SDK 方法获取流列表
-          if (typeof zg.getStreamList === 'function') {
-            streamList = await zg.getStreamList(roomId);
-            console.log('✅ 通过 getStreamList 获取到流列表:', streamList.length);
-          }
-        } catch (e) {
-          console.warn('⚠️ getStreamList 不可用，尝试其他方法');
-        }
-
-        // 🔥 方法2: 如果 SDK 方法不可用，通过后端 API 获取
-        if (streamList.length === 0) {
-          try {
-            const response = await fetch('/api/zego/get-room-streams', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ roomId: roomId })
-            });
-            const result = await response.json();
-            if (result.success && result.data && result.data.streams) {
-              streamList = result.data.streams;
-              console.log('✅ 通过后端API获取到流列表:', streamList.length);
-            }
-          } catch (e) {
-            console.warn('⚠️ 后端API获取流列表失败:', e);
-          }
-        }
-
-        // 🔥 播放所有未播放的流
-        const currentStreamIds = Object.keys(remoteStreams);
-        console.log('📋 当前已播放的流:', currentStreamIds);
-        console.log('📋 房间内的流:', streamList.map(s => s.streamID || s.stream_id));
-
-        for (const stream of streamList) {
-          const streamID = stream.streamID || stream.stream_id;
-
-          // 跳过自己的流
-          if (streamID === currentStreamId) {
-            console.log('⏭️ 跳过自己的流:', streamID);
-            continue;
-          }
-
-          // 跳过已经在播放的流
-          if (remoteStreams[streamID]) {
-            console.log('⏭️ 流已在播放，跳过:', streamID);
-            continue;
-          }
-
-          // 播放新发现的流
-          console.log('🎬 发现未播放的流，开始播放:', streamID);
-          try {
-            await playRemoteStream({
-              streamID: streamID,
-              user: stream.user || { userID: stream.user_id, userName: stream.user_name || '未知用户' }
-            });
-            console.log('✅ 流播放成功:', streamID);
-          } catch (error) {
-            console.error('❌ 播放流失败:', streamID, error);
-          }
-        }
-
-        console.log('✅ 房间流同步完成');
-        showToast('✅ 已同步房间内所有参与者', 'success', 2000);
-
-      } catch (error) {
-        console.error('❌ 同步房间流失败:', error);
-      }
     }
 
     // ✅ 显示"面试已结束"弹窗

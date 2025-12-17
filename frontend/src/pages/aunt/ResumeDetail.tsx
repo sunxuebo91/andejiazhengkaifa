@@ -313,6 +313,23 @@ const leadSourceMap: LeadSourceMapType = {
   other: '其他'
 };
 
+// 学习意向映射
+const learningIntentionMap: { [key: string]: string } = {
+  'yuesao': '月嫂',
+  'yuersao': '育儿嫂',
+  'baomu': '保姆',
+  'hulao': '护老'
+};
+
+// 当前阶段映射
+const currentStageMap: { [key: string]: string } = {
+  'experienced-certified': '有经验有证书',
+  'experienced-no-cert': '有经验无证书',
+  'certified-no-exp': '有证书无经验',
+  'beginner': '小白',
+  'not-looking': '不找工作'
+};
+
 // 添加类型定义
 interface WorkExperience {
   startDate: string;
@@ -381,6 +398,8 @@ interface ResumeData {
   emergencyContactName: string;
   emergencyContactPhone: string;
   medicalExamDate: string;
+  learningIntention?: keyof typeof learningIntentionMap;
+  currentStage?: keyof typeof currentStageMap;
   createdAt: string;
   updatedAt: string;
   userId?: {
@@ -1366,6 +1385,18 @@ const ResumeDetail = () => {
                     <Tag key={skill}>{skillsMap[skill] || skill}</Tag>
                   ))
                 ) : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+
+          {/* 培训意向卡片 */}
+          <Card title="培训意向" style={{ marginBottom: 24 }}>
+            <Descriptions bordered column={2}>
+              <Descriptions.Item label="学习意向">
+                {resume?.learningIntention ? learningIntentionMap[resume.learningIntention] : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="当前阶段">
+                {resume?.currentStage ? currentStageMap[resume.currentStage] : '-'}
               </Descriptions.Item>
             </Descriptions>
           </Card>

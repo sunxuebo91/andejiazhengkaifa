@@ -119,6 +119,23 @@ export enum LeadSource {
   OTHER = 'other'
 }
 
+// 学习意向枚举
+export enum LearningIntention {
+  YUESAO = 'yuesao',           // 月嫂
+  YUERSAO = 'yuersao',         // 育儿嫂
+  BAOMU = 'baomu',             // 保姆
+  HULAO = 'hulao'              // 护老
+}
+
+// 当前阶段枚举
+export enum CurrentStage {
+  EXPERIENCED_CERTIFIED = 'experienced-certified',     // 有经验有证书
+  EXPERIENCED_NO_CERT = 'experienced-no-cert',         // 有经验无证书
+  CERTIFIED_NO_EXP = 'certified-no-exp',               // 有证书无经验
+  BEGINNER = 'beginner',                               // 小白
+  NOT_LOOKING = 'not-looking'                          // 不找工作
+}
+
 // V2版本的创建简历DTO - 专为小程序设计，支持宽松输入和强校验
 export class CreateResumeV2Dto {
   // 必填字段
@@ -483,6 +500,16 @@ export class CreateResumeV2Dto {
     description: string;
   }>;
 
+  @ApiProperty({ description: '学习意向', enum: ['yuesao', 'yuersao', 'baomu', 'hulao'], required: false })
+  @IsOptional()
+  @IsEnum(['yuesao', 'yuersao', 'baomu', 'hulao'], { message: '请选择正确的学习意向' })
+  learningIntention?: string;
+
+  @ApiProperty({ description: '当前阶段', enum: ['experienced-certified', 'experienced-no-cert', 'certified-no-exp', 'beginner', 'not-looking'], required: false })
+  @IsOptional()
+  @IsEnum(['experienced-certified', 'experienced-no-cert', 'certified-no-exp', 'beginner', 'not-looking'], { message: '请选择正确的当前阶段' })
+  currentStage?: string;
+
   // 内部字段
   @IsOptional()
   userId?: string;
@@ -840,6 +867,30 @@ export class CreateResumeDto {
   @IsOptional()
   @IsDateString()
   medicalExamDate?: string;
+
+  @ApiProperty({ description: '学习意向', enum: LearningIntention, required: false })
+  @IsOptional()
+  @IsEnum(LearningIntention, { message: '请选择有效的学习意向' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    if (!Object.values(LearningIntention).includes(value as LearningIntention)) {
+      return undefined;
+    }
+    return value;
+  })
+  learningIntention?: LearningIntention;
+
+  @ApiProperty({ description: '当前阶段', enum: CurrentStage, required: false })
+  @IsOptional()
+  @IsEnum(CurrentStage, { message: '请选择有效的当前阶段' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    if (!Object.values(CurrentStage).includes(value as CurrentStage)) {
+      return undefined;
+    }
+    return value;
+  })
+  currentStage?: CurrentStage;
 
   @ApiProperty({ description: '文件类型数组', example: ['idCardFront', 'idCardBack', 'personalPhoto'] })
   @IsOptional()

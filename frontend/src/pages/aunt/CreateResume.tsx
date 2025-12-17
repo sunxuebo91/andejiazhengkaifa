@@ -708,6 +708,9 @@ const CreateResume: React.FC = () => {
           religion: extendedResume.religion,
           emergencyContactName: extendedResume.emergencyContactName,
           emergencyContactPhone: extendedResume.emergencyContactPhone,
+          // 培训意向字段
+          learningIntention: (extendedResume as any).learningIntention,
+          currentStage: (extendedResume as any).currentStage,
           workExperiences: extendedResume.workExperiences?.map(exp => ({
             startDate: exp.startDate || '',
             endDate: exp.endDate || '',
@@ -1605,6 +1608,9 @@ const CreateResume: React.FC = () => {
         religion: editingResume.religion,
         emergencyContactName: editingResume.emergencyContactName,
         emergencyContactPhone: editingResume.emergencyContactPhone,
+        // 培训意向字段
+        learningIntention: (editingResume as any).learningIntention,
+        currentStage: (editingResume as any).currentStage,
         workExperiences: (editingResume.workExperiences || [])
           .filter((exp: WorkExperienceItem | null): exp is WorkExperienceItem => exp !== null)
           .map((exp: WorkExperienceItem) => ({
@@ -2149,6 +2155,45 @@ const CreateResume: React.FC = () => {
                       showCount
                       style={{ width: '100%' }}
                     />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Card>
+          </Form.Item>
+
+          {/* 培训意向区域 */}
+          <Form.Item noStyle>
+            <Card
+              title={<Divider orientation="left">
+                培训意向</Divider>}
+              style={{ marginBottom: 24 }}
+            >
+              <Row gutter={24}>
+                <Col span={12}>
+                  <Form.Item
+                    label="学习意向"
+                    name="learningIntention"
+                  >
+                    <Select placeholder="请选择学习意向" allowClear>
+                      <Option value="yuesao">月嫂</Option>
+                      <Option value="yuersao">育儿嫂</Option>
+                      <Option value="baomu">保姆</Option>
+                      <Option value="hulao">护老</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    label="当前阶段"
+                    name="currentStage"
+                  >
+                    <Select placeholder="请选择当前阶段" allowClear>
+                      <Option value="experienced-certified">有经验有证书</Option>
+                      <Option value="experienced-no-cert">有经验无证书</Option>
+                      <Option value="certified-no-exp">有证书无经验</Option>
+                      <Option value="beginner">小白</Option>
+                      <Option value="not-looking">不找工作</Option>
+                    </Select>
                   </Form.Item>
                 </Col>
               </Row>

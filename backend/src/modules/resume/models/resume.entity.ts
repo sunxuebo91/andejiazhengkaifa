@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { User } from '../../users/models/user.entity';
-import { Education, Gender, JobType, LeadSource, MaritalStatus, OrderStatus, Religion, Skill, Zodiac, ZodiacSign } from '../dto/create-resume.dto';
+import { Education, Gender, JobType, LeadSource, MaritalStatus, OrderStatus, Religion, Skill, Zodiac, ZodiacSign, LearningIntention, CurrentStage } from '../dto/create-resume.dto';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsEnum, IsNumber, IsOptional, IsArray } from 'class-validator';
 import { WorkExperienceSchema } from './work-experience.schema';
@@ -70,6 +70,8 @@ export interface IResume extends Document {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   medicalExamDate?: string;
+  learningIntention?: LearningIntention;
+  currentStage?: CurrentStage;
 }
 
 @Schema({ timestamps: true, collection: 'resumes' })
@@ -254,6 +256,18 @@ export class Resume extends Document implements IResume {
 
   @Prop({ nullable: true })
   medicalExamDate?: string;
+
+  @ApiProperty({ description: '学习意向', enum: LearningIntention })
+  @Prop({ type: String, enum: LearningIntention, nullable: true })
+  @IsEnum(LearningIntention)
+  @IsOptional()
+  learningIntention?: LearningIntention;
+
+  @ApiProperty({ description: '当前阶段', enum: CurrentStage })
+  @Prop({ type: String, enum: CurrentStage, nullable: true })
+  @IsEnum(CurrentStage)
+  @IsOptional()
+  currentStage?: CurrentStage;
 }
 
 export const ResumeSchema = SchemaFactory.createForClass(Resume);

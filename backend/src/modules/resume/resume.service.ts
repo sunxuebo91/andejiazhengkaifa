@@ -1024,6 +1024,12 @@ export class ResumeService {
     }
 
     // 更新简历基本信息，但跳过undefined值和文件相关字段
+    this.logger.log(`📋 updateWithFiles 接收到的DTO: ${JSON.stringify({
+      learningIntention: updateResumeDto.learningIntention,
+      currentStage: updateResumeDto.currentStage,
+      allKeys: Object.keys(updateResumeDto)
+    })}`);
+
     const updateFields = Object.keys(updateResumeDto)
       .filter(key => updateResumeDto[key] !== undefined && updateResumeDto[key] !== null)
       .filter(key => !['idCardFront', 'idCardBack', 'photoUrls', 'certificateUrls', 'medicalReportUrls', 'certificates', 'reports', 'personalPhoto'].includes(key))
@@ -1032,7 +1038,7 @@ export class ResumeService {
         return obj;
       }, {});
 
-    this.logger.debug(`更新的字段: ${JSON.stringify(Object.keys(updateFields))}`);
+    this.logger.log(`✅ 准备更新的字段: ${JSON.stringify(updateFields)}`);
 
     // 只更新非undefined和非文件相关的字段
     Object.assign(resume, updateFields);

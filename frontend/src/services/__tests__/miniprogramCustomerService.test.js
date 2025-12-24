@@ -149,6 +149,21 @@ describe('MiniprogramCustomerService', () => {
         .rejects.toThrow('该手机号已存在客户记录');
     });
 
+    it('应该处理缺少联系方式错误', async () => {
+      const mockResponse = {
+        data: {
+          success: false,
+          message: '请填写手机号或微信号',
+          error: 'MISSING_CONTACT'
+        }
+      };
+
+      mockApiService.post.mockResolvedValue(mockResponse);
+
+      await expect(miniprogramCustomerService.createCustomer(customerData))
+        .rejects.toThrow('请填写手机号或微信号');
+    });
+
     it('应该处理幂等性键', async () => {
       const mockResponse = {
         data: {

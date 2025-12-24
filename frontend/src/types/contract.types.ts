@@ -19,13 +19,13 @@ export interface Contract {
   salaryPaymentDay?: number;
   remarks?: string;
   monthlyWorkDays?: number;
-  customerId: string;
-  workerId: string;
+  customerId: string | { _id: string; name?: string; phone?: string; customerId?: string; address?: string; };
+  workerId: string | { _id: string; name?: string; phone?: string; idNumber?: string; };
   createdBy: string | { _id: string; name?: string; username?: string; };
   lastUpdatedBy?: string | { _id: string; name?: string; username?: string; };
   createdAt: string;
   updatedAt: string;
-  
+
   // 爱签相关字段
   esignContractNo?: string;
   esignStatus?: string;

@@ -187,25 +187,35 @@ const CustomerList: React.FC = () => {
 
   // 处理释放到公海
   const handleReleaseToPool = (customer: Customer) => {
+    let selectedReason = '';
+
     Modal.confirm({
       title: '释放到公海',
       content: (
         <div>
           <p>确定要将客户 <strong>{customer.name}</strong> 释放到公海吗？</p>
-          <Input.TextArea
-            id="releaseReason"
-            placeholder="请输入释放原因（选填）"
-            rows={3}
-            style={{ marginTop: 10 }}
-          />
+          <div style={{ marginTop: 10 }}>
+            <div style={{ marginBottom: 5, color: '#ff4d4f' }}>释放原因 *</div>
+            <Select
+              placeholder="请选择释放原因"
+              style={{ width: '100%' }}
+              onChange={(value) => { selectedReason = value; }}
+              options={[
+                { value: '客户不需要了', label: '客户不需要了' },
+                { value: '客户找到了', label: '客户找到了' }
+              ]}
+            />
+          </div>
         </div>
       ),
       onOk: async () => {
-        const reasonInput = document.getElementById('releaseReason') as HTMLTextAreaElement;
-        const reason = reasonInput?.value?.trim() || '未填写原因';
+        if (!selectedReason) {
+          message.error('请选择释放原因');
+          return Promise.reject();
+        }
 
         try {
-          await customerService.releaseToPool(customer._id, reason);
+          await customerService.releaseToPool(customer._id, selectedReason);
           message.success('客户已释放到公海');
           loadCustomers(currentPage, pageSize);
         } catch (error: any) {
@@ -223,25 +233,35 @@ const CustomerList: React.FC = () => {
       return;
     }
 
+    let selectedReason = '';
+
     Modal.confirm({
       title: '批量释放到公海',
       content: (
         <div>
           <p>确定要将选中的 <strong>{selectedRowKeys.length}</strong> 个客户释放到公海吗？</p>
-          <Input.TextArea
-            id="batchReleaseReason"
-            placeholder="请输入释放原因（选填）"
-            rows={3}
-            style={{ marginTop: 10 }}
-          />
+          <div style={{ marginTop: 10 }}>
+            <div style={{ marginBottom: 5, color: '#ff4d4f' }}>释放原因 *</div>
+            <Select
+              placeholder="请选择释放原因"
+              style={{ width: '100%' }}
+              onChange={(value) => { selectedReason = value; }}
+              options={[
+                { value: '客户不需要了', label: '客户不需要了' },
+                { value: '客户找到了', label: '客户找到了' }
+              ]}
+            />
+          </div>
         </div>
       ),
       onOk: async () => {
-        const reasonInput = document.getElementById('batchReleaseReason') as HTMLTextAreaElement;
-        const reason = reasonInput?.value?.trim() || '未填写原因';
+        if (!selectedReason) {
+          message.error('请选择释放原因');
+          return Promise.reject();
+        }
 
         try {
-          const result = await customerService.batchReleaseToPool(selectedRowKeys as string[], reason);
+          const result = await customerService.batchReleaseToPool(selectedRowKeys as string[], selectedReason);
           if (result.success > 0) {
             message.success(`成功释放 ${result.success} 个客户到公海`);
             setSelectedRowKeys([]);

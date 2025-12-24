@@ -7,7 +7,8 @@ module.exports = {
       script: 'dist/main.js',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3000,
+        ESIGN_HOST: 'https://oapi.asign.cn'
       },
       instances: 1,
       exec_mode: 'fork',

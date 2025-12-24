@@ -1114,11 +1114,10 @@ const ESignatureStepPage: React.FC = () => {
                   const fieldKey = field.key.toLowerCase();
                   const fieldLabel = (field.label || '').toLowerCase();
 
-                  // 过滤签名相关字段 - 隐藏这些字段
+                  // 过滤签名相关字段 - 只隐藏签名区和签章区，保留日期字段
+                  // 签约日期/签署日期字段需要保留，爱签平台会在签署时自动填充
                   if (fieldKey.includes('签名区') || fieldLabel.includes('签名区') ||
-                      fieldKey.includes('签章区') || fieldLabel.includes('签章区') ||
-                      fieldKey.includes('签约日期') || fieldLabel.includes('签约日期') ||
-                      fieldKey.includes('签署日期') || fieldLabel.includes('签署日期')) {
+                      fieldKey.includes('签章区') || fieldLabel.includes('签章区')) {
                     console.log('跳过签名相关字段:', field.key, field.label);
                     return; // 跳过这些字段，不显示
                   }
@@ -1300,7 +1299,24 @@ const ESignatureStepPage: React.FC = () => {
                     case 'number':
                       return <Input type="number" placeholder={`请输入${field.label}`} />;
                     case 'date':
-                      return <Input type="date" placeholder={`请选择${field.label}`} />;
+                      // 签约日期/签署日期字段特殊处理：显示但禁用，由爱签平台在签署时自动填充
+                      const isSignDate = field.key.includes('签约日期') || field.key.includes('签署日期') ||
+                                        field.label.includes('签约日期') || field.label.includes('签署日期');
+                      return (
+                        <div>
+                          <Input
+                            type="date"
+                            placeholder={`请选择${field.label}`}
+                            disabled={isSignDate}
+                            style={isSignDate ? { backgroundColor: '#f5f5f5' } : undefined}
+                          />
+                          {isSignDate && (
+                            <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+                              此日期将在签署时由爱签平台自动填充
+                            </div>
+                          )}
+                        </div>
+                      );
                     case 'checkbox':
                       return (
                         <Select placeholder={`请选择${field.label}`}>

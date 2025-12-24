@@ -141,6 +141,32 @@ export class ContractsController {
     }
   }
 
+  /**
+   * 根据服务人员信息查询合同（用于保险投保页面自动填充）
+   * 注意：此路由必须放在 @Get(':id') 之前，否则会被当作 ID 参数处理
+   */
+  @Public()
+  @Get('search-by-worker')
+  async searchByWorkerInfo(
+    @Query('name') name?: string,
+    @Query('idCard') idCard?: string,
+    @Query('phone') phone?: string,
+  ) {
+    try {
+      const contracts = await this.contractsService.searchByWorkerInfo(name, idCard, phone);
+      return {
+        success: true,
+        data: contracts,
+        message: contracts.length > 0 ? '查询成功' : '未找到匹配的合同',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '查询合同失败',
+      };
+    }
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     console.log('🚨🚨🚨 [CONTRACTS API CALLED] 收到合同详情请求, ID:', id);
@@ -505,4 +531,4 @@ export class ContractsTestController {
       };
     }
   }
-} 
+}

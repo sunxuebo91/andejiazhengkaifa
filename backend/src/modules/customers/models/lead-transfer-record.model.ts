@@ -6,6 +6,12 @@ export type LeadTransferRecordDocument = LeadTransferRecord & Document;
 // 流转时的状态快照
 @Schema({ _id: false })
 export class TransferSnapshot {
+  @Prop()
+  customerNumber: string; // 客户编号快照
+
+  @Prop()
+  customerName: string; // 客户名称快照
+
   @Prop({ required: true })
   contractStatus: string; // 客户状态
 

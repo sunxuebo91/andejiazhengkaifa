@@ -36,6 +36,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ApiResponse } from '../../common/interfaces/api-response.interface';
 import { Public } from '../auth/decorators/public.decorator';
 import { WeixinService } from '../weixin/weixin.service';
+import { WechatCloudService } from '../weixin/services/wechat-cloud.service';
 import { UsersService } from '../users/users.service';
 
 @ApiTags('客户管理')
@@ -47,6 +48,7 @@ export class CustomersController {
   constructor(
     private readonly customersService: CustomersService,
     private readonly weixinService: WeixinService,
+    private readonly wechatCloudService: WechatCloudService,
     private readonly usersService: UsersService,
   ) {}
 
@@ -197,6 +199,21 @@ export class CustomersController {
     }
   }
 
+  // 根据手机号获取客户地址（用于合同详情页显示服务地址）
+  @Get('address-by-phone/:phone')
+  @ApiOperation({ summary: '根据手机号获取客户地址' })
+  async getAddressByPhone(@Param('phone') phone: string): Promise<ApiResponse> {
+    try {
+      const customer = await this.customersService.findByPhone(phone);
+      if (!customer) {
+        return this.createResponse(false, '客户不存在', null);
+      }
+      return this.createResponse(true, '获取客户地址成功', { address: customer.address || null });
+    } catch (error) {
+      return this.createResponse(false, '获取客户地址失败', null, error.message);
+    }
+  }
+
   // 可分配的用户列表 - 必须在 :id 路由之前
   @Get('assignable-users')
   async getAssignableUsers(): Promise<ApiResponse> {
@@ -226,8 +243,29 @@ export class CustomersController {
         req.user.userId
       );
 
+      // ✅ 为批量分配添加通知数据
+      const notificationData = {
+        assignedToId: dto.assignedTo,
+        source: dto.assignmentReason || '批量分配',
+        assignerName: req.user.name || req.user.username,
+        assignTime: new Date(),
+        customerCount: result.success,  // 成功分配的客户数量
+        customerIds: dto.customerIds,   // 客户ID列表
+      };
+
+      // 🚀 CRM端主动调用云函数发送批量通知（异步执行，不阻塞响应）
+      if (result.success > 0) {
+        this.wechatCloudService.sendBatchCustomerAssignNotification(notificationData)
+          .catch(error => {
+            this.logger.error(`发送批量通知失败: ${error.message}`);
+          });
+      }
+
       const message = `批量分配完成：成功 ${result.success} 个，失败 ${result.failed} 个`;
-      return this.createResponse(true, message, result);
+      return this.createResponse(true, message, {
+        ...result,
+        notificationData,
+      });
     } catch (error) {
       return this.createResponse(false, error.message || '批量分配失败', null, error.message);
     }
@@ -308,8 +346,31 @@ export class CustomersController {
         dto.reason,
         req.user.userId
       );
+
+      // ✅ 为从公海分配添加通知数据
+      const notificationData = {
+        assignedToId: dto.assignedTo,
+        source: dto.reason || '从公海分配',
+        assignerName: req.user.name || req.user.username,
+        assignTime: new Date(),
+        customerCount: result.success,
+        customerIds: dto.customerIds,
+        fromPublicPool: true,  // 标记来自公海
+      };
+
+      // 🚀 CRM端主动调用云函数发送通知（异步执行，不阻塞响应）
+      if (result.success > 0) {
+        this.wechatCloudService.sendBatchCustomerAssignNotification(notificationData)
+          .catch(error => {
+            this.logger.error(`发送公海分配通知失败: ${error.message}`);
+          });
+      }
+
       const message = `分配完成：成功 ${result.success} 个，失败 ${result.failed} 个`;
-      return this.createResponse(true, message, result);
+      return this.createResponse(true, message, {
+        ...result,
+        notificationData,
+      });
     } catch (error) {
       return this.createResponse(false, error.message || '分配失败', null, error.message);
     }
@@ -359,9 +420,9 @@ export class CustomersController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('id') id: string): Promise<ApiResponse> {
+  async remove(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
     try {
-      await this.customersService.remove(id);
+      await this.customersService.remove(id, req.user.userId);
       return this.createResponse(true, '客户删除成功');
     } catch (error) {
       return this.createResponse(false, '客户删除失败', null, error.message);
@@ -404,7 +465,30 @@ export class CustomersController {
   ): Promise<ApiResponse> {
     try {
       const updated = await this.customersService.assignCustomer(id, dto.assignedTo, dto.assignmentReason, req.user.userId);
-      return this.createResponse(true, '客户分配成功', updated);
+
+      // ✅ 构建通知数据
+      const notificationData = {
+        assignedToId: dto.assignedTo,
+        customerName: (updated as any).name,
+        customerPhone: (updated as any).phone,
+        source: dto.assignmentReason || '手动分配',
+        assignerName: req.user.name || req.user.username,
+        customerId: id,
+        assignTime: (updated as any).assignedAt || new Date(),
+        serviceCategory: (updated as any).serviceCategory,
+        leadSource: (updated as any).leadSource,
+      };
+
+      // 🚀 CRM端主动调用云函数发送通知（异步执行，不阻塞响应）
+      this.wechatCloudService.sendCustomerAssignNotification(notificationData)
+        .catch(error => {
+          this.logger.error(`发送通知失败: ${error.message}`);
+        });
+
+      return this.createResponse(true, '客户分配成功', {
+        ...(updated as any).toObject ? (updated as any).toObject() : updated,
+        notificationData,
+      });
     } catch (error) {
       return this.createResponse(false, error.message || '客户分配失败', null, error.message);
     }
@@ -420,6 +504,25 @@ export class CustomersController {
       return this.createResponse(true, '分配历史获取成功', logs);
     } catch (error) {
       return this.createResponse(false, '分配历史获取失败', null, error.message);
+    }
+  }
+
+  // 获取客户操作日志（仅管理员可访问）
+  @Get(':id/operation-logs')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: '获取客户操作日志（仅管理员）' })
+  @ApiParam({ name: 'id', description: '客户ID' })
+  async getOperationLogs(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
+    try {
+      // 验证用户是否为管理员
+      if (req.user.role !== 'admin') {
+        return this.createResponse(false, '权限不足，仅管理员可查看操作日志', null, 'Forbidden');
+      }
+      const logs = await this.customersService.getOperationLogs(id);
+      return this.createResponse(true, '操作日志获取成功', logs);
+    } catch (error) {
+      return this.createResponse(false, '操作日志获取失败', null, error.message);
     }
   }
 
@@ -563,6 +666,11 @@ export class CustomersController {
         return this.createResponse(false, '该手机号已存在客户记录', null, 'DUPLICATE_PHONE');
       }
 
+      // 处理手机号或微信号验证错误
+      if (error.message?.includes('请填写手机号或微信号')) {
+        return this.createResponse(false, '请填写手机号或微信号', null, 'MISSING_CONTACT');
+      }
+
       return this.createResponse(false, error.message || '客户创建失败', { requestId }, 'DUPLICATE_PHONE');
     }
   }
@@ -650,6 +758,12 @@ export class CustomersController {
       if (error instanceof ForbiddenException) {
         return this.createResponse(false, error.message, null, 'FORBIDDEN');
       }
+
+      // 处理手机号或微信号验证错误
+      if (error.message?.includes('请填写手机号或微信号')) {
+        return this.createResponse(false, '请填写手机号或微信号', null, 'MISSING_CONTACT');
+      }
+
       return this.createResponse(false, '客户信息更新失败', null, error.message);
     }
   }
@@ -674,22 +788,42 @@ export class CustomersController {
         req.user.userId
       );
 
-      // 发送微信通知给新负责人
-      try {
-        // 这里可以集成微信通知功能
-        console.log(`📱 发送客户分配通知给: ${dto.assignedTo}`);
-        // await this.weixinService.sendCustomerAssignmentNotification({...});
-      } catch (notificationError) {
-        console.error('发送分配通知失败:', notificationError);
-        // 通知失败不影响主业务
-      }
-
       console.log(`✅ 小程序分配客户成功: ${id}`);
 
-      // 根据角色脱敏数据
-      const sanitizedCustomer = this.sanitizeCustomerData(updatedCustomer, req.user);
+	      // 根据角色脱敏数据（用于前端展示）
+	      const sanitizedCustomer = this.sanitizeCustomerData(updatedCustomer, req.user);
 
-      return this.createResponse(true, '客户分配成功', sanitizedCustomer);
+	      // ✅ 构建通知数据
+	      const notificationData = {
+	        assignedToId: dto.assignedTo,                                    // 被分配人ID
+	        customerName: (updatedCustomer as any).name,                     // 客户姓名
+	        customerPhone: (updatedCustomer as any).phone,                   // 客户电话
+	        source: dto.assignmentReason || '手动分配',                      // 线索来源/分配原因
+	        assignerName: req.user.name || req.user.username,                // 分配人姓名
+	        customerId: (updatedCustomer as any)._id?.toString?.() ?? id,    // 客户ID
+	        assignTime: (updatedCustomer as any).assignedAt || new Date(),   // 分配时间
+	        serviceCategory: (updatedCustomer as any).serviceCategory,       // 服务类别
+	        leadSource: (updatedCustomer as any).leadSource,                 // 线索来源
+	      };
+
+	      console.log(`📱 通知数据已准备: ${JSON.stringify(notificationData)}`);
+
+	      // 🚀 CRM端主动调用云函数发送通知（异步执行，不阻塞响应）
+	      this.wechatCloudService.sendCustomerAssignNotification(notificationData)
+	        .catch(error => {
+	          this.logger.error(`发送通知失败: ${error.message}`);
+	        });
+
+	      // ✅ 确保返回结构中至少包含 customerId / assignedTo / assignedAt 以及 notificationData
+	      const responseData = {
+	        customerId: (updatedCustomer as any)._id?.toString?.() ?? id,
+	        assignedTo: (updatedCustomer as any).assignedTo,
+	        assignedAt: (updatedCustomer as any).assignedAt,
+	        ...sanitizedCustomer,
+	        notificationData,
+	      };
+
+	      return this.createResponse(true, '客户分配成功', responseData);
     } catch (error) {
       console.error(`小程序分配客户失败: ${error.message}`);
       return this.createResponse(false, error.message || '客户分配失败', null, error.message);

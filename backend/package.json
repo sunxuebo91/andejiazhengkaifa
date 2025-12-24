@@ -80,7 +80,8 @@
     "uuid": "^11.1.0",
     "validator": "^13.15.0",
     "webidl-conversions": "^7.0.0",
-    "wechat-api": "^1.35.1"
+    "wechat-api": "^1.35.1",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
@@ -108,6 +109,7 @@
     "@types/validator": "^13.15.0",
     "@types/webidl-conversions": "^7.0.3",
     "@types/whatwg-url": "^13.0.0",
+    "@types/xml2js": "^0.4.14",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.42.0",

@@ -133,4 +133,16 @@ export const customerService = {
     const response = await apiService.get('/api/customers/my-customer-count');
     return response.data;
   },
+
+  // 根据手机号获取客户地址
+  async getAddressByPhone(phone: string): Promise<{ address: string | null }> {
+    const response = await apiService.get(`/api/customers/address-by-phone/${phone}`);
+    return response.data;
+  },
+
+  // 获取客户操作日志（仅管理员可用）
+  async getOperationLogs(customerId: string): Promise<any[]> {
+    const response = await apiService.get(`/api/customers/${customerId}/operation-logs`);
+    return response.data;
+  },
 };

@@ -57,6 +57,11 @@ interface ErrorResponseData {
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    // 如果响应类型是 blob（二进制数据），直接返回
+    if (response.config.responseType === 'blob') {
+      return response;
+    }
+
     // 检查业务逻辑是否成功
     if (response.data && response.data.success === false) {
       // 🔧 修复：对于批量操作API的部分失败情况，不抛出错误

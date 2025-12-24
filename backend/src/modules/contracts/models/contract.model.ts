@@ -114,7 +114,7 @@ export class Contract {
   @Prop()
   esignPreviewUrl?: string; // 爱签预览链接（缓存）
 
-  // 🆕 换人功能新增字段
+  // 换人功能相关字段
   @Prop({ default: true })
   isLatest: boolean; // 是否为该客户最新合同
 

@@ -110,39 +110,45 @@ const LeadTransferRecords: React.FC = () => {
       title: '流转时间',
       dataIndex: 'transferredAt',
       key: 'transferredAt',
-      width: 180,
+      width: 160,
       render: (date) => dayjs(date).format('YYYY-MM-DD HH:mm:ss'),
+    },
+    {
+      title: '客户编号',
+      dataIndex: 'customerNumber',
+      key: 'customerNumber',
+      width: 130,
     },
     {
       title: '客户名称',
       dataIndex: 'customerName',
       key: 'customerName',
-      width: 150,
+      width: 100,
     },
     {
       title: '流出人员',
       dataIndex: 'fromUserName',
       key: 'fromUserName',
-      width: 120,
+      width: 100,
     },
     {
       title: '流入人员',
       dataIndex: 'toUserName',
       key: 'toUserName',
-      width: 120,
+      width: 100,
     },
     {
       title: '规则名称',
       dataIndex: 'ruleName',
       key: 'ruleName',
-      width: 200,
+      width: 180,
       ellipsis: true,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 80,
       render: (status) => (
         <Tag color={status === 'success' ? 'success' : 'error'} icon={status === 'success' ? <CheckCircleOutlined /> : <CloseCircleOutlined />}>
           {status === 'success' ? '成功' : '失败'}
@@ -153,13 +159,13 @@ const LeadTransferRecords: React.FC = () => {
       title: '客户状态',
       dataIndex: ['snapshot', 'contractStatus'],
       key: 'contractStatus',
-      width: 100,
+      width: 90,
     },
     {
       title: '无活动时长',
       dataIndex: ['snapshot', 'inactiveHours'],
       key: 'inactiveHours',
-      width: 120,
+      width: 110,
       render: (hours) => `${hours}小时`,
     },
   ];
@@ -271,7 +277,7 @@ const LeadTransferRecords: React.FC = () => {
           dataSource={records}
           rowKey="_id"
           loading={loading}
-          scroll={{ x: 1200 }}
+          scroll={{ x: 1150 }}
           pagination={{
             current: currentPage,
             pageSize: pageSize,

@@ -24,8 +24,16 @@ export const validateCustomerForm = (data: Partial<CreateCustomerData>): Validat
     errors.push({ field: 'name', message: '客户姓名不能为空' });
   }
 
-  // 手机号改为可选，但如果填写了需要验证格式
-  if (data.phone?.trim() && !isValidPhoneNumber(data.phone)) {
+  // 手机号或微信号至少填一个
+  const phone = data.phone?.trim();
+  const wechatId = data.wechatId?.trim();
+  if (!phone && !wechatId) {
+    errors.push({ field: 'phone', message: '请填写手机号或微信号' });
+    errors.push({ field: 'wechatId', message: '请填写手机号或微信号' });
+  }
+
+  // 如果填写了手机号，需要验证格式
+  if (phone && !isValidPhoneNumber(data.phone!)) {
     errors.push({ field: 'phone', message: '请输入有效的手机号码' });
   }
 
@@ -305,5 +313,53 @@ export const safeJsonStringify = (obj: any): string => {
   } catch (error) {
     console.warn('JSON字符串化失败:', error);
     return '{}';
+  }
+};
+
+/**
+ * 客户分配通知数据（用于小程序订阅消息）
+ */
+export interface AssignmentNotificationData {
+  assignedToId: string;
+  customerName?: string;
+  customerPhone?: string;
+  source?: string;
+  assignerName?: string;
+  customerId?: string;
+  assignTime?: string | Date;
+  serviceCategory?: string;
+  leadSource?: string;
+  customerCount?: number;
+  customerIds?: string[];
+  fromPublicPool?: boolean;
+  // 兼容后续扩展字段
+  [key: string]: any;
+}
+
+/**
+ * 将分配事件通过微信 JS-SDK 通知给小程序
+ *
+ * 说明：
+ * - 仅在当前 H5 运行在微信小程序 web-view 中且 window.wx.miniProgram 可用时生效
+ * - 小程序端可以通过 onWebviewMessage / onMessage 监听 type === 'customerAssigned'
+ *   然后根据 notificationData 触发订阅消息发送
+ */
+export const notifyMiniProgramAssignment = (notificationData?: AssignmentNotificationData | null) => {
+  if (!notificationData) return;
+
+  try {
+    const wxSdk = (window as any).wx;
+    if (wxSdk && wxSdk.miniProgram && typeof wxSdk.miniProgram.postMessage === 'function') {
+      wxSdk.miniProgram.postMessage({
+        data: {
+          type: 'customerAssigned',
+          notificationData,
+        },
+      });
+    }
+  } catch (error) {
+    // 通知失败不影响主流程
+    // eslint-disable-next-line no-console
+    console.error('发送分配通知到小程序失败:', error);
   }
 };

@@ -1,0 +1,101 @@
+================================================================================
+大树保支付接口（0022）- 当前请求和响应参数
+时间：2025-12-19 16:26:44
+================================================================================
+
+【环境信息】
+接口地址：https://api.dasurebao.com.cn/remoting/ws
+账号：ande
+密码：dsaoifccknferd893#
+
+================================================================================
+【📤 请求参数】
+================================================================================
+
+<?xml version="1.0" encoding="UTF-8"?>
+<Packet type="REQUEST" version="1.0">
+  <Head>
+    <RequestType>0022</RequestType>
+    <User>ande</User>
+    <Password>dsaoifccknferd893#</Password>
+  </Head>
+  <Body>
+    
+    <PayInfo>
+      <Target>WeChat</Target>
+      <TradeType>MWEB</TradeType>
+      <NotifyUrl>https://api.dasurebao.com.cn/payment/notify</NotifyUrl>
+    </PayInfo>
+    
+    <Policy>
+      <AgencyPolicyRef>ANDE1766132624344ixftu2</AgencyPolicyRef>
+      <ProductCode>MP10450132</ProductCode>
+      <PlanCode>PK00029001</PlanCode>
+      <EffectiveDate>20251220000000</EffectiveDate>
+      <ExpireDate>20260119000000</ExpireDate>
+      <GroupSize>1</GroupSize>
+      <TotalPremium>12</TotalPremium>
+      <SplitType>0</SplitType>
+    </Policy>
+    
+    <PolicyHolder>
+      <PolicyHolderName>北京安得家政有限公司</PolicyHolderName>
+      <PHIdType>G</PHIdType>
+      <PHIdNumber>91110111MACJMD2R5J</PHIdNumber>
+      <PHAddress>北京市朝阳区望京园602号楼3层339</PHAddress>
+      <PHProvinceCode>110000</PHProvinceCode>
+      <PHCityCode>110100</PHCityCode>
+      <PHDistrictCode>110105</PHDistrictCode>
+    </PolicyHolder>
+    
+    <InsuredList>
+      <Insured>
+        <InsuredId>1</InsuredId>
+        <InsuredName>闫凯欣</InsuredName>
+        <InsuredType>1</InsuredType>
+        <IdType>1</IdType>
+        <IdNumber>13013219930910004X</IdNumber>
+        <BirthDate>19930910000000</BirthDate>
+        <Gender>F</Gender>
+        <Mobile>13264518973</Mobile>
+      </Insured>
+    </InsuredList>
+    
+  </Body>
+</Packet>
+
+================================================================================
+【📥 响应参数】
+================================================================================
+
+<?xml version="1.0" encoding="UTF-8"?>
+<ResultInfo>
+  <Success>false</Success>
+  <OrderId>0</OrderId>
+  <Message>缺少支付参数!</Message>
+</ResultInfo>
+
+================================================================================
+【说明】
+================================================================================
+
+1. 请求格式已严格按照文档 V1.4.3 示例
+2. 已添加 NotifyUrl 回调地址
+3. 已移除文档中没有的字段（IssueDate、PremiumCalType、PolicyHolderType）
+4. 所有必需字段均已包含
+
+【可能的问题】
+1. 生产环境账号 ande 未开通支付功能
+2. 需要在大树保后台配置微信支付商户号
+3. 该产品（MP10450132）可能不支持在线支付
+4. 投保接口返回 OrderId=0，可能影响支付
+
+【建议】
+联系大树保技术支持，提供以上请求响应参数，询问：
+- 账号是否已开通支付功能？
+- 是否需要配置微信支付商户号？
+- 该产品是否支持在线支付？
+- 支付接口是否还需要其他参数？
+
+================================================================================
+

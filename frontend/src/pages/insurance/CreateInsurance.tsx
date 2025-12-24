@@ -27,6 +27,7 @@ import {
   CheckCircleOutlined,
   ShoppingCartOutlined,
   ArrowLeftOutlined,
+  WechatOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -43,6 +44,8 @@ import {
   InsuranceProduct,
 } from '../../config/insuranceProducts';
 import { contractService } from '../../services/contractService';
+import { customerService } from '../../services/customerService';
+import WechatPayModal from '../../components/WechatPayModal';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -76,6 +79,7 @@ const CreateInsurance: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<InsurancePlan | null>(null);
   const [insuranceMonths, setInsuranceMonths] = useState<number>(1); // 月计划的月数
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const resumeId = searchParams.get('resumeId');
@@ -180,10 +184,28 @@ const CreateInsurance: React.FC = () => {
         const contract = contracts[0];
         console.log('✅ 找到匹配的合同:', contract);
 
-        // 自动填充服务地址（从客户信息中获取）
-        const serviceAddress = typeof contract.customerId === 'object' && contract.customerId?.address
-          ? contract.customerId.address
-          : '';
+        // 🆕 通过客户手机号获取服务地址
+        let serviceAddress = '';
+
+        // 方法1: 先尝试从合同的 customerId 对象中获取
+        if (typeof contract.customerId === 'object' && contract.customerId?.address) {
+          serviceAddress = contract.customerId.address;
+          console.log('✅ 从合同对象获取到服务地址:', serviceAddress);
+        }
+
+        // 方法2: 如果方法1失败，通过客户手机号查询
+        if (!serviceAddress && contract.customerPhone) {
+          try {
+            console.log('🔍 通过客户手机号查询服务地址:', contract.customerPhone);
+            const addressData = await customerService.getAddressByPhone(contract.customerPhone);
+            if (addressData?.address) {
+              serviceAddress = addressData.address;
+              console.log('✅ 通过手机号获取到服务地址:', serviceAddress);
+            }
+          } catch (error) {
+            console.warn('通过手机号获取服务地址失败:', error);
+          }
+        }
 
         if (serviceAddress) {
           insuredList[index] = {
@@ -192,6 +214,8 @@ const CreateInsurance: React.FC = () => {
           };
           form.setFieldsValue({ insuredList });
           message.success(`已自动填充服务地址：${serviceAddress}`);
+        } else {
+          console.log('⚠️ 未能获取到服务地址');
         }
       }
     } catch (error) {
@@ -230,9 +254,21 @@ const CreateInsurance: React.FC = () => {
         // 如果只有一个匹配，直接填充
         if (contracts.length === 1) {
           const contract = contracts[0];
-          const serviceAddress = typeof contract.customerId === 'object' && contract.customerId?.address
-            ? contract.customerId.address
-            : '';
+
+          // 🆕 获取服务地址
+          let serviceAddress = '';
+          if (typeof contract.customerId === 'object' && contract.customerId?.address) {
+            serviceAddress = contract.customerId.address;
+          } else if (contract.customerPhone) {
+            try {
+              const addressData = await customerService.getAddressByPhone(contract.customerPhone);
+              if (addressData?.address) {
+                serviceAddress = addressData.address;
+              }
+            } catch (error) {
+              console.warn('获取服务地址失败:', error);
+            }
+          }
 
           // 从身份证号提取出生日期和性别
           const info = extractInfoFromIdCard(contract.workerIdCard);
@@ -258,10 +294,21 @@ const CreateInsurance: React.FC = () => {
                   <div key={idx} style={{ marginBottom: 8 }}>
                     <Button
                       block
-                      onClick={() => {
-                        const serviceAddress = typeof contract.customerId === 'object' && contract.customerId?.address
-                          ? contract.customerId.address
-                          : '';
+                      onClick={async () => {
+                        // 🆕 获取服务地址
+                        let serviceAddress = '';
+                        if (typeof contract.customerId === 'object' && contract.customerId?.address) {
+                          serviceAddress = contract.customerId.address;
+                        } else if (contract.customerPhone) {
+                          try {
+                            const addressData = await customerService.getAddressByPhone(contract.customerPhone);
+                            if (addressData?.address) {
+                              serviceAddress = addressData.address;
+                            }
+                          } catch (error) {
+                            console.warn('获取服务地址失败:', error);
+                          }
+                        }
 
                         // 从身份证号提取出生日期和性别
                         const info = extractInfoFromIdCard(contract.workerIdCard);
@@ -316,6 +363,9 @@ const CreateInsurance: React.FC = () => {
           phIdNumber: values.phIdNumber,
           phTelephone: values.phTelephone,
           phAddress: values.phAddress,
+          phProvinceCode: values.phProvinceCode,
+          phCityCode: values.phCityCode,
+          phDistrictCode: values.phDistrictCode,
         },
         insuredList: values.insuredList.map((item: any, index: number) => ({
           insuredId: String(index + 1),
@@ -332,12 +382,38 @@ const CreateInsurance: React.FC = () => {
 
       const result = await insuranceService.createPolicy(policyData);
       setPolicyResult(result);
-      setCurrentStep(2);
-      message.success('投保成功！');
+
+      // 检查是否需要支付
+      if (result.status === 'pending' && result.errorMessage?.includes('余额不足')) {
+        // 需要支付
+        setPaymentModalVisible(true);
+        message.warning('保单创建成功，请完成支付');
+      } else if (result.status === 'active' || result.policyNo) {
+        // 直接生效（见费出单）
+        setCurrentStep(2);
+        message.success('投保成功！');
+      } else {
+        // 其他情况，显示结果
+        setCurrentStep(2);
+        message.success('投保成功！');
+      }
     } catch (error: any) {
       message.error(error.message || '投保失败，请重试');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 支付成功回调
+  const handlePaymentSuccess = () => {
+    setPaymentModalVisible(false);
+    setCurrentStep(2);
+    message.success('支付成功，保单已生效！');
+    // 刷新保单信息
+    if (policyResult?.agencyPolicyRef) {
+      insuranceService.getPolicyByPolicyNo(policyResult.agencyPolicyRef).then((updatedPolicy) => {
+        setPolicyResult(updatedPolicy);
+      });
     }
   };
 
@@ -355,7 +431,7 @@ const CreateInsurance: React.FC = () => {
     // 重置月数为1（月计划默认1个月）
     setInsuranceMonths(1);
 
-    // 计算次日生效日期
+    // 默认生效日期为次日，但用户可以修改
     const effectiveDate = getTomorrowDate();
     const expireDate = calculateExpireDate(effectiveDate, 1, plan.period === 'year');
 
@@ -443,10 +519,10 @@ const CreateInsurance: React.FC = () => {
             name="policyHolderType"
             label="投保人类型"
             rules={[{ required: true, message: '请选择投保人类型' }]}
-            initialValue="B"
+            initialValue="C"
           >
             <Select disabled>
-              <Option value="B">企业</Option>
+              <Option value="C">企业</Option>
             </Select>
           </Form.Item>
         </Col>
@@ -503,6 +579,38 @@ const CreateInsurance: React.FC = () => {
           </Form.Item>
         </Col>
       </Row>
+      <Row gutter={16}>
+        <Col span={8}>
+          <Form.Item
+            name="phProvinceCode"
+            label="省级编码"
+            initialValue="110000"
+            hidden
+          >
+            <Input />
+          </Form.Item>
+        </Col>
+        <Col span={8}>
+          <Form.Item
+            name="phCityCode"
+            label="市级编码"
+            initialValue="110100"
+            hidden
+          >
+            <Input />
+          </Form.Item>
+        </Col>
+        <Col span={8}>
+          <Form.Item
+            name="phDistrictCode"
+            label="区级编码"
+            initialValue="110105"
+            hidden
+          >
+            <Input />
+          </Form.Item>
+        </Col>
+      </Row>
     </Card>
   );
 
@@ -550,13 +658,24 @@ const CreateInsurance: React.FC = () => {
             name="effectiveDate"
             label="生效日期"
             rules={[{ required: true, message: '请选择生效日期' }]}
-            tooltip="保险默认次日生效"
+            tooltip="可选择任意日期作为保险生效日期"
           >
             <DatePicker
               style={{ width: '100%' }}
-              placeholder="次日生效"
-              disabled
+              placeholder="请选择生效日期"
               format="YYYY-MM-DD"
+              disabledDate={(current) => {
+                // 不能选择今天之前的日期
+                return current && current < dayjs().startOf('day');
+              }}
+              onChange={(date) => {
+                if (date) {
+                  // 重新计算结束日期
+                  const months = selectedPlan?.period === 'month' ? insuranceMonths : 1;
+                  const expireDate = calculateExpireDate(date, months, selectedPlan?.period === 'year');
+                  form.setFieldsValue({ expireDate });
+                }
+              }}
             />
           </Form.Item>
         </Col>
@@ -719,36 +838,59 @@ const CreateInsurance: React.FC = () => {
   );
 
   // 渲染结果页面
-  const renderResult = () => (
-    <Result
-      status="success"
-      title="投保成功！"
-      subTitle={
-        <div>
-          <p>保单流水号：{policyResult?.agencyPolicyRef}</p>
-          {policyResult?.policyNo && <p>保单号：{policyResult.policyNo}</p>}
-          <p>总保费：¥{policyResult?.totalPremium}</p>
-        </div>
-      }
-      extra={[
-        <Button type="primary" key="list" onClick={() => navigate('/insurance/list')}>
-          查看保单列表
-        </Button>,
-        <Button key="new" onClick={() => {
-          setCurrentStep(0);
-          setPolicyResult(null);
-          form.resetFields();
-        }}>
-          继续投保
-        </Button>,
-        policyResult?.policyPdfUrl && (
-          <Button key="pdf" href={policyResult.policyPdfUrl} target="_blank">
-            下载电子保单
-          </Button>
-        ),
-      ]}
-    />
-  );
+  const renderResult = () => {
+    const isPending = policyResult?.status === 'pending';
+
+    return (
+      <Result
+        status={isPending ? 'warning' : 'success'}
+        title={isPending ? '保单待支付' : '投保成功！'}
+        subTitle={
+          <div>
+            <p>保单流水号：{policyResult?.agencyPolicyRef}</p>
+            {policyResult?.policyNo && <p>保单号：{policyResult.policyNo}</p>}
+            <p>总保费：¥{policyResult?.totalPremium}</p>
+            {isPending && (
+              <p style={{ color: '#faad14', marginTop: 8 }}>
+                {policyResult?.errorMessage || '请完成支付后保单才能生效'}
+              </p>
+            )}
+          </div>
+        }
+        extra={[
+          isPending && (
+            <Button
+              type="primary"
+              key="pay"
+              icon={<WechatOutlined />}
+              onClick={() => setPaymentModalVisible(true)}
+            >
+              立即支付
+            </Button>
+          ),
+          <Button
+            type={isPending ? 'default' : 'primary'}
+            key="list"
+            onClick={() => navigate('/insurance/list')}
+          >
+            查看保单列表
+          </Button>,
+          <Button key="new" onClick={() => {
+            setCurrentStep(0);
+            setPolicyResult(null);
+            form.resetFields();
+          }}>
+            继续投保
+          </Button>,
+          policyResult?.policyPdfUrl && (
+            <Button key="pdf" href={policyResult.policyPdfUrl} target="_blank">
+              下载电子保单
+            </Button>
+          ),
+        ].filter(Boolean)}
+      />
+    );
+  };
 
   return (
     <PageContainer
@@ -830,6 +972,18 @@ const CreateInsurance: React.FC = () => {
       )}
 
       {currentStep === 2 && renderResult()}
+
+      {/* 支付弹窗 */}
+      {policyResult && (
+        <WechatPayModal
+          visible={paymentModalVisible}
+          policyNo={policyResult.policyNo || ''}
+          agencyPolicyRef={policyResult.agencyPolicyRef || ''}
+          totalPremium={policyResult.totalPremium || 0}
+          onSuccess={handlePaymentSuccess}
+          onCancel={() => setPaymentModalVisible(false)}
+        />
+      )}
     </PageContainer>
   );
 };

@@ -6,6 +6,7 @@ import { customerService } from '../../services/customerService';
 import { Customer } from '../../types/customer.types';
 import { LEAD_SOURCES, SERVICE_CATEGORIES, LEAD_LEVELS } from '../../types/customer.types';
 import { useAuth } from '../../contexts/AuthContext';
+import { notifyMiniProgramAssignment } from '../../utils/miniprogramUtils';
 
 const { Option } = Select;
 
@@ -156,11 +157,16 @@ const PublicPool: React.FC = () => {
   const handleAssignSubmit = async () => {
     try {
       const values = await assignForm.validateFields();
-      const result = await customerService.assignFromPool(
+	      const result = await customerService.assignFromPool(
         selectedRowKeys as string[],
         values.assignedTo,
         values.reason
       );
+
+	      const anyResult: any = result as any;
+	      if (anyResult && anyResult.notificationData) {
+	        notifyMiniProgramAssignment(anyResult.notificationData);
+	      }
       if (result.success > 0) {
         message.success(`成功分配 ${result.success} 个客户`);
         setSelectedRowKeys([]);

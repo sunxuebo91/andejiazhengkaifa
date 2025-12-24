@@ -27,6 +27,7 @@ import {
 } from '../../types/customer.types';
 import dayjs from 'dayjs';
 import { customerService as cs } from '../../services/customerService';
+import { extractErrorMessage } from '../../utils/errorHandler';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -67,7 +68,8 @@ const CreateCustomer: React.FC = () => {
       message.success('客户创建成功！');
       navigate('/customers');
     } catch (error: any) {
-      message.error(error?.response?.data?.message || '客户创建失败');
+      const errorMessage = extractErrorMessage(error, '客户创建失败');
+      message.error(errorMessage);
       console.error('创建客户错误:', error);
     } finally {
       setLoading(false);
@@ -111,7 +113,7 @@ const CreateCustomer: React.FC = () => {
                 name="name"
                 rules={[
                   { required: true, message: '请输入客户姓名' },
-                  { min: 2, message: '姓名至少2个字符' },
+                  { min: 1, message: '姓名不能为空' },
                   { max: 20, message: '姓名不能超过20个字符' },
                 ]}
               >
@@ -125,9 +127,18 @@ const CreateCustomer: React.FC = () => {
                 name="phone"
                 rules={[
                   { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号码' },
+                  {
+                    validator: async (_, value) => {
+                      const wechatId = form.getFieldValue('wechatId');
+                      if (!value?.trim() && !wechatId?.trim()) {
+                        return Promise.reject('请填写手机号或微信号');
+                      }
+                      return Promise.resolve();
+                    }
+                  }
                 ]}
               >
-                <Input placeholder="请输入客户电话（可选）" style={{ width: '100%' }} />
+                <Input placeholder="请输入客户电话" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
 
@@ -135,8 +146,19 @@ const CreateCustomer: React.FC = () => {
               <Form.Item
                 label="微信号"
                 name="wechatId"
+                rules={[
+                  {
+                    validator: async (_, value) => {
+                      const phone = form.getFieldValue('phone');
+                      if (!value?.trim() && !phone?.trim()) {
+                        return Promise.reject('请填写手机号或微信号');
+                      }
+                      return Promise.resolve();
+                    }
+                  }
+                ]}
               >
-                <Input placeholder="请输入微信号（可选）" style={{ width: '100%' }} />
+                <Input placeholder="请输入微信号" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
 

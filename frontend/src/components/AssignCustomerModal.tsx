@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Form, Select, Input, message } from 'antd';
 import { customerService } from '../services/customerService';
+import { notifyMiniProgramAssignment } from '../utils/miniprogramUtils';
 
 interface AssignCustomerModalProps {
   visible: boolean;
@@ -39,7 +40,18 @@ const AssignCustomerModal: React.FC<AssignCustomerModalProps> = ({ visible, cust
       if (!customerId) return;
       const values = await form.validateFields();
       setLoading(true);
-      await customerService.assignCustomer(customerId, values.assignedTo, values.assignmentReason);
+      const result = await customerService.assignCustomer(
+        customerId,
+        values.assignedTo,
+        values.assignmentReason,
+      );
+
+      // 如果在小程序 web-view 中，并且后端返回了 notificationData，则通知小程序去发订阅消息
+      const anyResult: any = result as any;
+      if (anyResult && anyResult.notificationData) {
+        notifyMiniProgramAssignment(anyResult.notificationData);
+      }
+
       message.success('分配成功');
       form.resetFields();
       onSuccess();

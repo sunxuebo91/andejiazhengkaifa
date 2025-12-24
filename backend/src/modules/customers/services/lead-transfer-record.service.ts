@@ -64,7 +64,7 @@ export class LeadTransferRecordService {
       this.recordModel
         .find(conditions)
         .populate('ruleId', 'ruleName')
-        .populate('customerId', 'name phone contractStatus')
+        .populate('customerId', 'customerId name phone contractStatus')
         .populate('fromUserId', 'name username')
         .populate('toUserId', 'name username')
         .sort({ transferredAt: -1 })
@@ -76,12 +76,14 @@ export class LeadTransferRecordService {
     ]);
 
     // 转换数据格式，将 populate 的对象展平为前端期望的字段
+    // 优先使用 snapshot 中保存的客户信息（防止客户被删除后无法显示）
     const formattedRecords = records.map((record: any) => ({
       _id: record._id,
       ruleId: record.ruleId?._id || record.ruleId,
       ruleName: record.ruleId?.ruleName || '未知规则',
       customerId: record.customerId?._id || record.customerId,
-      customerName: record.customerId?.name || '未知客户',
+      customerNumber: record.snapshot?.customerNumber || record.customerId?.customerId || '-',
+      customerName: record.snapshot?.customerName || record.customerId?.name || '未知客户',
       fromUserId: record.fromUserId?._id || record.fromUserId,
       fromUserName: record.fromUserId?.name || record.fromUserId?.username || '未知用户',
       toUserId: record.toUserId?._id || record.toUserId,

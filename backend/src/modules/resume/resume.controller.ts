@@ -1473,7 +1473,7 @@ export class ResumeController {
     { name: 'medicalReportFiles', maxCount: 10 }
   ], multerConfig))
   @ApiOperation({ summary: '更新简历' })
-  @ApiConsumes('multipart/form-data')
+  @ApiConsumes('multipart/form-data', 'application/json')
   @ApiResponse({ status: 200, description: '更新成功' })
   async update(
     @Param('id') id: string,
@@ -1490,6 +1490,14 @@ export class ResumeController {
     try {
       // 确保files对象存在，避免undefined访问错误
       const safeFiles = files || {};
+
+      this.logger.log('🔄 更新简历请求:', {
+        id,
+        contentType: req.headers['content-type'],
+        bodyKeys: Object.keys(updateResumeDto || {}),
+        learningIntention: updateResumeDto?.learningIntention,
+        currentStage: updateResumeDto?.currentStage,
+      });
 
       this.logger.debug('更新简历 - 接收到的文件数据:', {
         idCardFront: safeFiles.idCardFront?.length || 0,

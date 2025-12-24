@@ -1,17 +1,46 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Contract, ContractDocument } from './models/contract.model';
 import { CustomerContractHistory, CustomerContractHistoryDocument } from './models/customer-contract-history.model';
+import { CustomerOperationLog } from '../customers/models/customer-operation-log.model';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 
 @Injectable()
 export class ContractsService {
+  private readonly logger = new Logger(ContractsService.name);
+
   constructor(
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
     @InjectModel(CustomerContractHistory.name) private customerContractHistoryModel: Model<CustomerContractHistoryDocument>,
+    @InjectModel(CustomerOperationLog.name) private operationLogModel: Model<CustomerOperationLog>,
   ) {}
+
+  /**
+   * 记录客户操作日志（合同相关）
+   */
+  private async logCustomerOperation(
+    customerId: string | Types.ObjectId,
+    operatorId: string,
+    operationType: string,
+    operationName: string,
+    details?: Record<string, any>
+  ): Promise<void> {
+    try {
+      if (!customerId || customerId === 'temp') return;
+      await this.operationLogModel.create({
+        customerId: new Types.ObjectId(customerId.toString()),
+        operatorId: new Types.ObjectId(operatorId),
+        operationType,
+        operationName,
+        details,
+        operatedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(`记录操作日志失败: ${error.message}`);
+    }
+  }
 
   // 生成合同编号
   private generateContractNumber(): string {
@@ -94,9 +123,30 @@ export class ContractsService {
       
       const contract = new this.contractModel(createContractDto);
       const savedContract = await contract.save();
-      
+
       console.log('合同保存成功，ID:', savedContract._id);
-      
+
+      // 📝 记录客户操作日志 - 发起合同
+      if (createContractDto.customerId && createContractDto.customerId !== 'temp' && userId) {
+        await this.logCustomerOperation(
+          createContractDto.customerId,
+          userId,
+          'create_contract',
+          '发起合同',
+          {
+            description: `发起合同：${savedContract.contractNumber}，阿姨：${createContractDto.workerName || '未填写'}`,
+            relatedId: savedContract._id.toString(),
+            relatedType: 'contract',
+            after: {
+              contractNumber: savedContract.contractNumber,
+              workerName: createContractDto.workerName,
+              contractType: createContractDto.contractType,
+              contractAmount: createContractDto.contractAmount,
+            }
+          }
+        );
+      }
+
       return savedContract;
     } catch (error) {
       console.error('创建合同失败:', error);
@@ -130,6 +180,7 @@ export class ContractsService {
         { customerPhone: { $regex: search, $options: 'i' } },
         { workerName: { $regex: search, $options: 'i' } },
         { workerPhone: { $regex: search, $options: 'i' } },
+        { workerIdCard: { $regex: search, $options: 'i' } }, // 支持按阿姨身份证搜索
       ];
       
       if (query.$or) {
@@ -535,6 +586,64 @@ export class ContractsService {
     }
   }
 
+  // 根据服务人员信息查询合同（用于保险投保页面自动填充）
+  async searchByWorkerInfo(name?: string, idCard?: string, phone?: string): Promise<Contract[]> {
+    try {
+      console.log('🔍 根据服务人员信息查询合同:', { name, idCard, phone });
+
+      // 构建查询条件 - 必须同时匹配所有提供的字段
+      const query: any = {};
+
+      if (name) {
+        query.workerName = name;
+      }
+
+      if (idCard) {
+        query.workerIdCard = idCard;
+      }
+
+      if (phone) {
+        query.workerPhone = phone;
+      }
+
+      // 如果没有提供任何查询条件，返回空数组
+      if (Object.keys(query).length === 0) {
+        console.log('❌ 未提供任何查询条件');
+        return [];
+      }
+
+      console.log('🔍 查询条件:', query);
+
+      // 查询合同，只返回最新的合同
+      const contracts = await this.contractModel
+        .find(query)
+        .populate('customerId', 'name phone customerId address')
+        .populate('workerId', 'name phone idNumber')
+        .sort({ createdAt: -1 })
+        .limit(10) // 限制返回数量
+        .exec();
+
+      console.log('📋 查询结果:', {
+        查询条件: query,
+        找到合同数量: contracts.length,
+        合同列表: contracts.map(c => ({
+          id: c._id,
+          contractNumber: c.contractNumber,
+          customerName: c.customerName,
+          customerPhone: c.customerPhone,
+          workerName: c.workerName,
+          workerPhone: c.workerPhone,
+          workerIdCard: c.workerIdCard,
+        }))
+      });
+
+      return contracts;
+    } catch (error) {
+      console.error('根据服务人员信息查询合同失败:', error);
+      throw new BadRequestException(`查询合同失败: ${error.message}`);
+    }
+  }
+
   // 创建换人合同（自动合并模式）
   async createChangeWorkerContract(
     createContractDto: CreateContractDto,
@@ -575,16 +684,17 @@ export class ContractsService {
         customerPhone: originalContract.customerPhone,
         customerIdCard: originalContract.customerIdCard,
         customerId: originalContract.customerId || new Types.ObjectId(),
-        
+
         // 处理新的服务人员信息（来自createContractDto）
         workerId: new Types.ObjectId(),
-        
+
         // 设置创建人
         createdBy: Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : new Types.ObjectId(),
-        
-        // 时间设置：从原合同开始时间开始，使用新的结束时间（如果有）
-        startDate: originalStartDate.toISOString(),
-        endDate: createContractDto.endDate || originalEndDate.toISOString(),
+
+        // 🔧 修正时间设置：换人合同开始时间为当日，结束时间继承原合同
+        // 例如：原合同 2025-06-01 ~ 2026-05-31，换人后新合同为 2025-12-03（当日）~ 2026-05-31
+        startDate: currentDate.toISOString(),  // 换人当日作为新合同开始时间
+        endDate: originalEndDate.toISOString(),  // 结束时间保持原合同不变
         
         // 合并状态管理
         isLatest: true,

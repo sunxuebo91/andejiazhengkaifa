@@ -125,6 +125,9 @@ export const miniprogramCustomerService = {
         if (errorCode === 'DUPLICATE_PHONE') {
           throw new Error('该手机号已存在客户记录');
         }
+        if (errorCode === 'MISSING_CONTACT') {
+          throw new Error('请填写手机号或微信号');
+        }
         throw new Error(response.data?.message || '创建客户失败');
       }
       
@@ -173,6 +176,9 @@ export const miniprogramCustomerService = {
         const errorCode = response.data?.error;
         if (errorCode === 'FORBIDDEN') {
           throw new Error('无权限修改此客户信息');
+        }
+        if (errorCode === 'MISSING_CONTACT') {
+          throw new Error('请填写手机号或微信号');
         }
         throw new Error(response.data?.message || '更新客户信息失败');
       }

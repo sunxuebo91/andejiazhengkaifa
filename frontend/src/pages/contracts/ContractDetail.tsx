@@ -19,9 +19,9 @@ import {
 
   Tooltip,
 } from 'antd';
-import { 
-  ArrowLeftOutlined, 
-  EditOutlined, 
+import {
+  ArrowLeftOutlined,
+  EditOutlined,
   EyeOutlined,
   DownloadOutlined,
   FileTextOutlined,
@@ -32,6 +32,7 @@ import {
   TeamOutlined,
 } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
+import { customerService } from '../../services/customerService';
 import { Contract, ContractType } from '../../types/contract.types';
 import EditContractModal from '../../components/EditContractModal';
 import ContractStatusCard, { ContractStatusInfo } from '../../components/ContractStatusCard';
@@ -58,6 +59,9 @@ const ContractDetail: React.FC = () => {
   const [contractHistory, setContractHistory] = useState<any>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // 🆕 新增：客户服务地址
+  const [customerAddress, setCustomerAddress] = useState<string | null>(null);
+
   // 最后更新人信息已在fetchContractDetail中直接处理
 
   // 处理合同状态变化
@@ -82,8 +86,33 @@ const ContractDetail: React.FC = () => {
     // 🆕 获取客户合同历史
     if (contract?.customerPhone) {
       fetchContractHistory();
+      fetchCustomerAddress();
     }
   }, [contract]);
+
+  // 🆕 获取客户服务地址
+  const fetchCustomerAddress = async () => {
+    console.log('🏠 开始获取客户服务地址, customerPhone:', contract?.customerPhone);
+    if (!contract?.customerPhone) {
+      console.log('⚠️ 缺少客户手机号，跳过地址获取');
+      return;
+    }
+
+    try {
+      console.log('🏠 调用 customerService.getAddressByPhone');
+      const data = await customerService.getAddressByPhone(contract.customerPhone);
+      console.log('🏠 响应数据:', data);
+
+      if (data?.address) {
+        setCustomerAddress(data.address);
+        console.log('✅ 获取客户服务地址成功:', data.address);
+      } else {
+        console.log('⚠️ 响应成功但没有地址数据');
+      }
+    } catch (error) {
+      console.error('❌ 获取客户服务地址失败:', error);
+    }
+  };
 
   // 不再需要独立的useEffect获取用户信息，已在fetchContractDetail中处理
 
@@ -681,14 +710,14 @@ const ContractDetail: React.FC = () => {
         }
         extra={
           <Space>
-            <Button 
+            <Button
               icon={<EyeOutlined />}
               onClick={handlePreviewContract}
               disabled={!contract.esignContractNo}
             >
               预览合同
             </Button>
-            <Button 
+            <Button
               icon={<DownloadOutlined />}
               onClick={handleDownloadContract}
               loading={downloadLoading}
@@ -696,8 +725,8 @@ const ContractDetail: React.FC = () => {
             >
               下载合同
             </Button>
-            <Button 
-              type="primary" 
+            <Button
+              type="primary"
               icon={<EditOutlined />}
               onClick={handleEdit}
             >
@@ -793,16 +822,20 @@ const ContractDetail: React.FC = () => {
                 <Descriptions.Item label="客户姓名">
                   <span style={{ fontWeight: 'bold' }}>{contract.customerName}</span>
                 </Descriptions.Item>
-                
+
                 <Descriptions.Item label="联系电话">
                   {contract.customerPhone}
                 </Descriptions.Item>
-                
+
                 <Descriptions.Item label="身份证号">
-                  {contract.customerIdCard ? 
-                    `${contract.customerIdCard.slice(0, 6)}****${contract.customerIdCard.slice(-4)}` : 
+                  {contract.customerIdCard ?
+                    `${contract.customerIdCard.slice(0, 6)}****${contract.customerIdCard.slice(-4)}` :
                     '未提供'
                   }
+                </Descriptions.Item>
+
+                <Descriptions.Item label="服务地址">
+                  {customerAddress || '未提供'}
                 </Descriptions.Item>
               </Descriptions>
             </Card>
@@ -944,11 +977,11 @@ const ContractDetail: React.FC = () => {
                     }
                   })()}
                 </Descriptions.Item>
-                
+
                 <Descriptions.Item label="创建时间" span={1}>
                   {formatDateTime(contract.createdAt)}
                 </Descriptions.Item>
-                
+
                 <Descriptions.Item label="最后更新人" span={1}>
                   {(() => {
                     // 如果后端返回了用户对象，直接使用
@@ -956,12 +989,12 @@ const ContractDetail: React.FC = () => {
                       const updater = contract.lastUpdatedBy as any;
                       return updater.name || updater.username;
                     }
-                    
+
                     // 如果没有lastUpdatedBy或者仍然是字符串，显示默认值
                     return contract.lastUpdatedBy || '-';
                   })()}
                 </Descriptions.Item>
-                
+
                 <Descriptions.Item label="最后更新时间" span={1}>
                   {formatDateTime(contract.updatedAt)}
                 </Descriptions.Item>
@@ -969,7 +1002,7 @@ const ContractDetail: React.FC = () => {
             </Card>
           </Col>
 
-          {/* 🆕 客户合同历史记录 - 固定显示 */}
+          {/* 客户合同历史记录 - 固定显示 */}
           {contract && (
             <Col span={24}>
               <Card 
@@ -1326,8 +1359,9 @@ const ContractDetail: React.FC = () => {
           onSuccess={handleEditSuccess}
         />
       )}
+
     </div>
   );
 };
 
-export default ContractDetail; 
+export default ContractDetail;

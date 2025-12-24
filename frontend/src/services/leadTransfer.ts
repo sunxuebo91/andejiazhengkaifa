@@ -51,6 +51,7 @@ export interface LeadTransferRecord {
   ruleId: string;
   ruleName: string;
   customerId: string;
+  customerNumber: string; // 添加客户编号
   customerName: string;
   fromUserId: string;
   fromUserName: string;

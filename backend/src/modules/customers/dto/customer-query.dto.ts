@@ -35,7 +35,7 @@ export class CustomerQueryDto {
   contractStatus?: string;
 
   @IsOptional()
-  @IsEnum(['A类', 'B类', 'C类', 'D类', '流失'])
+  @IsEnum(['O类', 'A类', 'B类', 'C类', 'D类', '流失'])
   leadLevel?: string;
 
   // 按负责人过滤（我的客户/指定负责人）

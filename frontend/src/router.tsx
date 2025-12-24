@@ -21,6 +21,9 @@ const WeChatTest = lazy(() => import('./pages/wechat/WeChatTest'));
 // const VideoInterview = lazy(() => import('./pages/interview/VideoInterviewTest'));
 const VideoInterview = VideoInterviewTest;
 const NotFound = lazy(() => import('./pages/NotFound'));
+// 保险相关页面
+const CreateInsurance = lazy(() => import('./pages/insurance/CreateInsurance'));
+const InsuranceList = lazy(() => import('./pages/insurance/InsuranceList'));
 
 export interface RouteConfig {
   path: string;
@@ -118,6 +121,25 @@ export const basicLayoutRoutes: RouteConfig[] = [
         meta: {
           title: '视频面试',
           description: '家政人员视频面试功能'
+        }
+      },
+      // 保险相关路由
+      {
+        path: 'insurance/create',
+        name: '新建投保',
+        element: <CreateInsurance />,
+        meta: {
+          title: '新建投保',
+          description: '为家政服务人员购买保险'
+        }
+      },
+      {
+        path: 'insurance/list',
+        name: '保单管理',
+        element: <InsuranceList />,
+        meta: {
+          title: '保单管理',
+          description: '管理所有保险保单'
         }
       },
     ],

@@ -22,6 +22,7 @@ import { WeChatModule } from './modules/wechat/wechat.module';
 import { ZegoModule } from './modules/zego/zego.module';
 import { InterviewModule } from './modules/interview/interview.module';
 import { NotificationModule } from './modules/notification/notification.module';
+import { DashubaoModule } from './modules/dashubao/dashubao.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { NotificationModule } from './modules/notification/notification.module';
     ZegoModule,
     InterviewModule,
     NotificationModule,
+    DashubaoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

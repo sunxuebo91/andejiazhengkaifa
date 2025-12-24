@@ -10,12 +10,11 @@ import {
   Spin,
   Row,
   Col,
-  Divider,
   Timeline,
   Empty,
   Alert,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined, HistoryOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined, HistoryOutlined, DownOutlined, UpOutlined, AuditOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
 import { contractService } from '../../services/contractService';
 import { Customer } from '../../types/customer.types';
@@ -23,10 +22,12 @@ import { FOLLOW_UP_TYPE_OPTIONS } from '../../types/customer-follow-up.types';
 import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
 import AssignCustomerModal from '../../components/AssignCustomerModal';
 import Authorized from '../../components/Authorized';
+import { useAuth } from '../../contexts/AuthContext';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth(); // 获取当前用户信息
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -79,6 +80,32 @@ const CustomerDetail: React.FC = () => {
     };
     fetchAssignmentLogs();
   }, [id]);
+
+  // 🆕 分配历史展开/折叠状态
+  const [showAllAssignments, setShowAllAssignments] = useState(false);
+
+  // 🆕 操作日志状态（仅管理员可见）
+  const [operationLogs, setOperationLogs] = useState<any[]>([]);
+  const [operationLogsLoading, setOperationLogsLoading] = useState(false);
+  const [showAllOperationLogs, setShowAllOperationLogs] = useState(false);
+
+  // 🆕 获取操作日志（仅管理员）
+  useEffect(() => {
+    const fetchOperationLogs = async () => {
+      if (!id || user?.role !== 'admin') return;
+      try {
+        setOperationLogsLoading(true);
+        const logs = await customerService.getOperationLogs(id);
+        setOperationLogs(Array.isArray(logs) ? logs : []);
+      } catch (e) {
+        console.error('获取操作日志失败', e);
+        setOperationLogs([]);
+      } finally {
+        setOperationLogsLoading(false);
+      }
+    };
+    fetchOperationLogs();
+  }, [id, user?.role]);
 
   const fetchCustomerDetail = async () => {
     if (!id) {
@@ -339,6 +366,14 @@ const CustomerDetail: React.FC = () => {
             >
               编辑客户
             </Button>
+            <Button
+              type="primary"
+              icon={<FileTextOutlined />}
+              onClick={handleCreateContract}
+              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+            >
+              发起合同
+            </Button>
           </Space>
         }
       >
@@ -436,7 +471,7 @@ const CustomerDetail: React.FC = () => {
                   {customer.familySize ? `${customer.familySize}人` : '未设置'}
                 </Descriptions.Item>
 
-                <Descriptions.Item label="客户地址" span={1}>
+                <Descriptions.Item label="服务地址" span={1}>
                   {customer.address || '未设置'}
                 </Descriptions.Item>
               </Descriptions>
@@ -565,56 +600,6 @@ const CustomerDetail: React.FC = () => {
               </Descriptions>
             </Card>
           </Col>
-
-          {/* 分配历史 */}
-          <Col span={24}>
-            <Card
-              type="inner"
-              title={
-                <Space>
-                  <HistoryOutlined />
-                  <span>分配历史</span>
-                </Space>
-              }
-              style={{ marginBottom: '16px' }}
-              loading={assignmentLoading}
-            >
-              {assignmentLogs && assignmentLogs.length > 0 ? (
-                <Timeline
-                  mode="left"
-                  items={assignmentLogs.map((log: any, idx: number) => {
-                    const assignedAt = log.assignedAt || log.createdAt;
-                    const oldUser = String(log.oldAssignedToUser?.name || log.oldAssignedToUser?.username || log.oldAssignedTo || '-');
-                    // 如果是释放到公海操作，新负责人显示为"公海"
-                    const isReleaseToPool = log.action === 'release' || (!log.newAssignedTo && !log.newAssignedToUser);
-                    const newUser = isReleaseToPool ? '公海' : String(log.newAssignedToUser?.name || log.newAssignedToUser?.username || log.newAssignedTo || '-');
-                    const byUser = String(log.assignedByUser?.name || log.assignedByUser?.username || log.assignedBy || '-');
-                    return {
-                      key: log._id || idx,
-                      color: isReleaseToPool ? 'orange' : (idx === 0 ? 'green' : 'blue'),
-                      label: assignedAt ? formatDateTime(assignedAt) : '-',
-                      children: (
-                        <Card size="small" style={{ backgroundColor: isReleaseToPool ? '#fff7e6' : '#fafafa' }}>
-                          <Space direction="vertical" style={{ width: '100%' }}>
-                            <div>
-                              <strong>{isReleaseToPool ? '释放到公海：' : '负责人变更：'}</strong>{oldUser} → {newUser}
-                            </div>
-                            <div style={{ fontSize: 12, color: '#666' }}>
-                              <span>执行人：{byUser}</span>
-                              {log.reason && <span> ｜ 原因：{log.reason}</span>}
-                            </div>
-                          </Space>
-                        </Card>
-                      ),
-                    };
-                  })}
-                />
-              ) : (
-                <Empty description="暂无分配记录" style={{ padding: '40px 0' }} />
-              )}
-            </Card>
-          </Col>
-
 
           {/* 跟进记录 */}
           <Col span={24}>
@@ -820,49 +805,199 @@ const CustomerDetail: React.FC = () => {
               </Card>
             </Col>
           )}
+
+          {/* 分配历史 - 移至最底部 */}
+          <Col span={24}>
+            <Card
+              type="inner"
+              title={
+                <Space>
+                  <HistoryOutlined />
+                  <span>分配历史</span>
+                  {assignmentLogs && assignmentLogs.length > 1 && (
+                    <Tag color="blue">{assignmentLogs.length} 条记录</Tag>
+                  )}
+                </Space>
+              }
+              style={{ marginBottom: '16px' }}
+              loading={assignmentLoading}
+            >
+              {assignmentLogs && assignmentLogs.length > 0 ? (
+                <>
+                  <Timeline
+                    mode="left"
+                    items={(showAllAssignments ? assignmentLogs : assignmentLogs.slice(0, 1)).map((log: any, idx: number) => {
+                      const assignedAt = log.assignedAt || log.createdAt;
+                      const oldUser = String(log.oldAssignedToUser?.name || log.oldAssignedToUser?.username || log.oldAssignedTo || '-');
+                      // 如果是释放到公海操作，新负责人显示为"公海"
+                      const isReleaseToPool = log.action === 'release' || (!log.newAssignedTo && !log.newAssignedToUser);
+                      const newUser = isReleaseToPool ? '公海' : String(log.newAssignedToUser?.name || log.newAssignedToUser?.username || log.newAssignedTo || '-');
+                      const byUser = String(log.assignedByUser?.name || log.assignedByUser?.username || log.assignedBy || '-');
+                      return {
+                        key: log._id || idx,
+                        color: isReleaseToPool ? 'orange' : (idx === 0 ? 'green' : 'blue'),
+                        label: assignedAt ? formatDateTime(assignedAt) : '-',
+                        children: (
+                          <Card size="small" style={{ backgroundColor: isReleaseToPool ? '#fff7e6' : '#fafafa' }}>
+                            <Space direction="vertical" style={{ width: '100%' }}>
+                              <div>
+                                <strong>{isReleaseToPool ? '释放到公海：' : '负责人变更：'}</strong>{oldUser} → {newUser}
+                              </div>
+                              <div style={{ fontSize: 12, color: '#666' }}>
+                                <span>执行人：{byUser}</span>
+                                {log.reason && <span> ｜ 原因：{log.reason}</span>}
+                              </div>
+                            </Space>
+                          </Card>
+                        ),
+                      };
+                    })}
+                  />
+                  {assignmentLogs.length > 1 && (
+                    <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                      <Button
+                        type="link"
+                        onClick={() => setShowAllAssignments(!showAllAssignments)}
+                        icon={showAllAssignments ? <UpOutlined /> : <DownOutlined />}
+                      >
+                        {showAllAssignments ? '收起历史记录' : `查看全部 ${assignmentLogs.length} 条记录`}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Empty description="暂无分配记录" style={{ padding: '40px 0' }} />
+              )}
+            </Card>
+          </Col>
+
+          {/* 🆕 操作日志 - 仅管理员可见 */}
+          <Authorized role={["admin"]} noMatch={null}>
+            <Col span={24}>
+              <Card
+                type="inner"
+                title={
+                  <Space>
+                    <AuditOutlined />
+                    <span>操作日志</span>
+                    {operationLogs && operationLogs.length > 1 && (
+                      <Tag color="purple">{operationLogs.length} 条记录</Tag>
+                    )}
+                  </Space>
+                }
+                style={{ marginBottom: '16px' }}
+                loading={operationLogsLoading}
+              >
+                {operationLogs && operationLogs.length > 0 ? (
+                  <>
+                    <Timeline
+                      mode="left"
+                      items={(showAllOperationLogs ? operationLogs : operationLogs.slice(0, 1)).map((log: any, idx: number) => {
+                        const operatedAt = log.operatedAt || log.createdAt;
+                        const operatorName = log.operator?.name || log.operator?.username || '系统';
+                        // 根据操作类型设置颜色
+                        const colorMap: Record<string, string> = {
+                          'create': 'green',
+                          'update': 'blue',
+                          'delete': 'red',
+                          'assign': 'orange',
+                          'release_to_pool': 'orange',
+                          'create_contract': 'cyan',
+                          'create_follow_up': 'purple',
+                        };
+                        const color = colorMap[log.operationType] || 'gray';
+                        return {
+                          key: log._id || idx,
+                          color,
+                          label: operatedAt ? formatDateTime(operatedAt) : '-',
+                          children: (
+                            <Card size="small" style={{ backgroundColor: '#fafafa' }}>
+                              <Space direction="vertical" style={{ width: '100%' }}>
+                                <div>
+                                  <strong>{log.operationName}</strong>
+                                </div>
+                                {log.details?.description && (
+                                  <div style={{ fontSize: 12, color: '#666' }}>
+                                    {log.details.description}
+                                  </div>
+                                )}
+                                {/* 显示修改前后的详细内容 */}
+                                {log.operationType === 'update' && log.details?.before && log.details?.after && (
+                                  <div style={{ marginTop: 8, fontSize: 12 }}>
+                                    {Object.keys(log.details.after).map((field) => {
+                                      const beforeValue = log.details.before[field];
+                                      const afterValue = log.details.after[field];
+                                      // 字段名映射
+                                      const fieldNameMap: Record<string, string> = {
+                                        'name': '姓名',
+                                        'phone': '电话',
+                                        'wechatId': '微信号',
+                                        'contractStatus': '客户状态',
+                                        'leadLevel': '线索等级',
+                                        'leadSource': '线索来源',
+                                        'serviceCategory': '需求品类',
+                                        'salaryBudget': '薪资预算',
+                                        'serviceAddress': '服务地址',
+                                        'remark': '备注',
+                                        'notes': '备注',
+                                        'remarks': '备注',
+                                        'address': '地址',
+                                        'familySize': '家庭人数',
+                                        'genderRequirement': '性别要求',
+                                        'ageRequirement': '年龄要求',
+                                        'educationRequirement': '学历要求',
+                                        'originRequirement': '籍贯要求',
+                                        'expectedStartDate': '期望上岗时间',
+                                        'expectedDeliveryDate': '预产期',
+                                        'restSchedule': '休息安排',
+                                        'idCardNumber': '身份证号',
+                                        'assignedTo': '负责人',
+                                        'inPublicPool': '公海状态'
+                                      };
+                                      const fieldLabel = fieldNameMap[field] || field;
+                                      const displayBefore = beforeValue === null || beforeValue === undefined || beforeValue === '' ? '空' : String(beforeValue);
+                                      const displayAfter = afterValue === null || afterValue === undefined || afterValue === '' ? '空' : String(afterValue);
+
+                                      return (
+                                        <div key={field} style={{ padding: '4px 0', borderBottom: '1px dashed #e8e8e8' }}>
+                                          <span style={{ color: '#666', fontWeight: 500 }}>{fieldLabel}：</span>
+                                          <span style={{ color: '#ff4d4f', textDecoration: 'line-through' }}>{displayBefore}</span>
+                                          <span style={{ margin: '0 8px', color: '#999' }}>→</span>
+                                          <span style={{ color: '#52c41a', fontWeight: 500 }}>{displayAfter}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                <div style={{ fontSize: 12, color: '#999' }}>
+                                  操作人：{operatorName}
+                                </div>
+                              </Space>
+                            </Card>
+                          ),
+                        };
+                      })}
+                    />
+                    {operationLogs.length > 1 && (
+                      <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                        <Button
+                          type="link"
+                          onClick={() => setShowAllOperationLogs(!showAllOperationLogs)}
+                          icon={showAllOperationLogs ? <UpOutlined /> : <DownOutlined />}
+                        >
+                          {showAllOperationLogs ? '收起日志' : `查看全部 ${operationLogs.length} 条日志`}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <Empty description="暂无操作日志" style={{ padding: '40px 0' }} />
+                )}
+              </Card>
+            </Col>
+          </Authorized>
         </Row>
 
-        {/* 操作按钮 */}
-        <Divider />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          {/* 左侧：分配按钮 */}
-          <div>
-            <Authorized role={["admin","manager"]} noMatch={null}>
-              <Button
-                size="large"
-                onClick={() => setAssignModal({ visible: true, customerId: customer._id })}
-              >
-                分配负责人
-              </Button>
-            </Authorized>
-          </div>
-
-          {/* 右侧：主要操作按钮 */}
-          <div>
-            <Space size="large">
-              <Button size="large" onClick={handleBack}>
-                返回客户列表
-              </Button>
-              <Button
-                type="primary"
-                size="large"
-                icon={<EditOutlined />}
-                onClick={() => navigate(`/customers/edit/${customer._id}`)}
-              >
-                编辑客户信息
-              </Button>
-              <Button
-                type="primary"
-                size="large"
-                icon={<FileTextOutlined />}
-                onClick={handleCreateContract}
-                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-              >
-                发起合同
-              </Button>
-            </Space>
-          </div>
-        </div>
       </Card>
 
       {/* 添加跟进记录弹窗 */}

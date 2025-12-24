@@ -7,6 +7,7 @@ import { CustomerFollowUp, CustomerFollowUpSchema } from './models/customer-foll
 import { User, UserSchema } from '../users/models/user.entity';
 import { CustomerAssignmentLog, CustomerAssignmentLogSchema } from './models/customer-assignment-log.model';
 import { PublicPoolLog, PublicPoolLogSchema } from './models/public-pool-log.model';
+import { CustomerOperationLog, CustomerOperationLogSchema } from './models/customer-operation-log.model';
 import { LeadTransferRule, LeadTransferRuleSchema } from './models/lead-transfer-rule.model';
 import { LeadTransferRecord, LeadTransferRecordSchema } from './models/lead-transfer-record.model';
 import { WeChatModule } from '../wechat/wechat.module';
@@ -28,6 +29,7 @@ import { LeadTransferRecordService } from './services/lead-transfer-record.servi
       { name: User.name, schema: UserSchema },
       { name: LeadTransferRule.name, schema: LeadTransferRuleSchema },
       { name: LeadTransferRecord.name, schema: LeadTransferRecordSchema },
+      { name: CustomerOperationLog.name, schema: CustomerOperationLogSchema },
     ]),
     WeChatModule,
     WeixinModule,

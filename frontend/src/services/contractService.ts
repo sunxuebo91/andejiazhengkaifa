@@ -270,4 +270,17 @@ export const contractService = {
     const response = await apiService.post(`/api/contracts/change-worker/${originalContractId}`, changeData);
     return response.data || response;
   },
-}; 
+
+  // 根据服务人员信息查询合同（用于保险投保页面自动填充）
+  async searchByWorkerInfo(params: {
+    name?: string;
+    idCard?: string;
+    phone?: string;
+  }): Promise<Contract[]> {
+    const response = await apiService.get('/api/contracts/search-by-worker', params);
+    if (response && response.data) {
+      return response.data;
+    }
+    return [];
+  },
+};

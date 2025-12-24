@@ -44,6 +44,9 @@ const MiniProgramHost = React.lazy(() => import('./pages/interview/MiniProgramHo
 const InterviewRoomList = React.lazy(() => import('./pages/interview/InterviewRoomList'));
 // const MiniProgramEntry = React.lazy(() => import('./pages/interview/MiniProgramEntry'));
 // const VideoInterviewMiniprogram = React.lazy(() => import('./pages/interview/VideoInterviewMiniprogram'));
+// 保险相关组件
+const CreateInsurance = React.lazy(() => import('./pages/insurance/CreateInsurance'));
+const InsuranceList = React.lazy(() => import('./pages/insurance/InsuranceList'));
 
 interface AppProps {
   children?: ReactNode;
@@ -166,26 +169,26 @@ export default function App({ children }: AppProps) {
                   
                   {/* 合同管理模块 - 需要contract相关权限 */}
                   <Route path="contracts">
-                    <Route 
-                      path="list" 
-                      element={<AuthorizedRoute element={<ContractList />} />} 
+                    <Route
+                      path="list"
+                      element={<AuthorizedRoute element={<ContractList />} />}
                     />
-                    <Route 
-                      path="create" 
-                      element={<AuthorizedRoute element={<ESignaturePage />} />} 
+                    <Route
+                      path="create"
+                      element={<AuthorizedRoute element={<ESignaturePage />} />}
                     />
-                    <Route 
-                      path="detail/:id" 
-                      element={<AuthorizedRoute element={<ContractDetail />} />} 
+                    <Route
+                      path="detail/:id"
+                      element={<AuthorizedRoute element={<ContractDetail />} />}
                     />
-                    <Route 
-                      path=":id" 
-                      element={<AuthorizedRoute element={<ContractDetail />} />} 
+                    <Route
+                      path=":id"
+                      element={<AuthorizedRoute element={<ContractDetail />} />}
                     />
                     {/* 重定向 /contracts 到 /contracts/list */}
                     <Route index element={<Navigate to="list" replace />} />
                   </Route>
-                  
+
                   {/* 电子签约模块 - 需要esign相关权限 */}
                   <Route path="esign">
                     <Route 
@@ -261,6 +264,20 @@ export default function App({ children }: AppProps) {
                     path="interview/rooms"
                     element={<AuthorizedRoute element={<InterviewRoomList />} />}
                   />
+
+                  {/* 保险管理模块 - 所有登录用户可访问 */}
+                  <Route path="insurance">
+                    <Route
+                      path="list"
+                      element={<AuthorizedRoute element={<InsuranceList />} />}
+                    />
+                    <Route
+                      path="create"
+                      element={<AuthorizedRoute element={<CreateInsurance />} />}
+                    />
+                    {/* 重定向 /insurance 到 /insurance/list */}
+                    <Route index element={<Navigate to="list" replace />} />
+                  </Route>
 
                   {/* 404页面 */}
                   <Route path="*" element={<NotFound />} />

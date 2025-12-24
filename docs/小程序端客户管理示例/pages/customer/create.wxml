@@ -36,9 +36,9 @@
       
       <!-- 客户电话 -->
       <view class="form-item {{errors.phone ? 'error' : ''}}">
-        <view class="item-label required">客户电话</view>
-        <input 
-          class="item-input" 
+        <view class="item-label">客户电话</view>
+        <input
+          class="item-input"
           placeholder="请输入手机号码"
           value="{{formData.phone}}"
           data-field="phone"
@@ -48,18 +48,20 @@
         />
         <view wx:if="{{errors.phone}}" class="error-text">{{errors.phone}}</view>
       </view>
-      
+
       <!-- 微信号 -->
-      <view class="form-item">
+      <view class="form-item {{errors.wechatId ? 'error' : ''}}">
         <view class="item-label">微信号</view>
-        <input 
-          class="item-input" 
-          placeholder="请输入微信号（可选）"
+        <input
+          class="item-input"
+          placeholder="请输入微信号"
           value="{{formData.wechatId}}"
           data-field="wechatId"
           bindinput="onInputChange"
           maxlength="50"
         />
+        <view wx:if="{{errors.wechatId}}" class="error-text">{{errors.wechatId}}</view>
+        <view class="form-hint">提示：手机号和微信号至少填写一个</view>
       </view>
     </view>
 

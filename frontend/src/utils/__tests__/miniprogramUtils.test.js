@@ -27,10 +27,50 @@ describe('MiniprogramUtils', () => {
       const invalidData = {};
       const errors = validateCustomerForm(invalidData);
 
-      expect(errors).toHaveLength(3);
+      expect(errors.length).toBeGreaterThanOrEqual(4);
       expect(errors.find(e => e.field === 'name')).toBeTruthy();
       expect(errors.find(e => e.field === 'phone')).toBeTruthy();
+      expect(errors.find(e => e.field === 'wechatId')).toBeTruthy();
       expect(errors.find(e => e.field === 'leadSource')).toBeTruthy();
+    });
+
+    it('应该要求手机号或微信号至少填一个', () => {
+      const noContactData = {
+        name: '张三',
+        leadSource: '美团',
+        contractStatus: '匹配中',
+        leadLevel: 'A类'
+      };
+
+      const errors = validateCustomerForm(noContactData);
+      expect(errors.find(e => e.field === 'phone' && e.message === '请填写手机号或微信号')).toBeTruthy();
+      expect(errors.find(e => e.field === 'wechatId' && e.message === '请填写手机号或微信号')).toBeTruthy();
+    });
+
+    it('应该通过只有手机号的验证', () => {
+      const phoneOnlyData = {
+        name: '张三',
+        phone: '13812345678',
+        leadSource: '美团',
+        contractStatus: '匹配中',
+        leadLevel: 'A类'
+      };
+
+      const errors = validateCustomerForm(phoneOnlyData);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('应该通过只有微信号的验证', () => {
+      const wechatOnlyData = {
+        name: '张三',
+        wechatId: 'wechat123',
+        leadSource: '美团',
+        contractStatus: '匹配中',
+        leadLevel: 'A类'
+      };
+
+      const errors = validateCustomerForm(wechatOnlyData);
+      expect(errors).toHaveLength(0);
     });
 
     it('应该验证手机号格式', () => {
@@ -38,11 +78,12 @@ describe('MiniprogramUtils', () => {
         name: '张三',
         phone: '123456789',
         leadSource: '美团',
-        contractStatus: '匹配中'
+        contractStatus: '匹配中',
+        leadLevel: 'A类'
       };
 
       const errors = validateCustomerForm(invalidPhoneData);
-      expect(errors.find(e => e.field === 'phone')).toBeTruthy();
+      expect(errors.find(e => e.field === 'phone' && e.message === '请输入有效的手机号码')).toBeTruthy();
     });
 
     it('应该验证数值范围', () => {
@@ -51,6 +92,7 @@ describe('MiniprogramUtils', () => {
         phone: '13812345678',
         leadSource: '美团',
         contractStatus: '匹配中',
+        leadLevel: 'A类',
         salaryBudget: 100, // 太小
         homeArea: 5, // 太小
         familySize: 25 // 太大
@@ -68,6 +110,7 @@ describe('MiniprogramUtils', () => {
         phone: '13812345678',
         leadSource: '美团',
         contractStatus: '匹配中',
+        leadLevel: 'A类',
         salaryBudget: 8000,
         homeArea: 120,
         familySize: 4

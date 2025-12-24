@@ -11,10 +11,12 @@ import { User } from '../users/models/user.entity';
 import { WeChatService } from '../wechat/wechat.service';
 import { CustomerAssignmentLog } from './models/customer-assignment-log.model';
 import { PublicPoolLog } from './models/public-pool-log.model';
+import { CustomerOperationLog } from './models/customer-operation-log.model';
 import { PublicPoolQueryDto } from './dto/public-pool.dto';
 import { NotificationHelperService } from '../notification/notification-helper.service';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
+import axios from 'axios';
 
 
 @Injectable()
@@ -27,9 +29,63 @@ export class CustomersService {
     @InjectModel(CustomerFollowUp.name) private customerFollowUpModel: Model<CustomerFollowUp>,
     @InjectModel(CustomerAssignmentLog.name) private assignmentLogModel: Model<CustomerAssignmentLog>,
     @InjectModel(PublicPoolLog.name) private publicPoolLogModel: Model<PublicPoolLog>,
+    @InjectModel(CustomerOperationLog.name) private operationLogModel: Model<CustomerOperationLog>,
     private wechatService: WeChatService,
     private notificationHelper: NotificationHelperService,
   ) {}
+
+  /**
+   * 记录客户操作日志
+   * @param customerId 客户ID
+   * @param operatorId 操作人ID
+   * @param operationType 操作类型
+   * @param operationName 操作名称（中文）
+   * @param details 操作详情
+   */
+  async logOperation(
+    customerId: string | Types.ObjectId,
+    operatorId: string,
+    operationType: string,
+    operationName: string,
+    details?: {
+      before?: Record<string, any>;
+      after?: Record<string, any>;
+      description?: string;
+      relatedId?: string;
+      relatedType?: string;
+    }
+  ): Promise<void> {
+    try {
+      await this.operationLogModel.create({
+        customerId: new Types.ObjectId(customerId.toString()),
+        operatorId: new Types.ObjectId(operatorId),
+        operationType,
+        operationName,
+        details,
+        operatedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(`记录操作日志失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 获取客户操作日志
+   * @param customerId 客户ID
+   */
+  async getOperationLogs(customerId: string): Promise<any[]> {
+    const logs = await this.operationLogModel
+      .find({ customerId: new Types.ObjectId(customerId) })
+      .populate('operatorId', 'name username')
+      .sort({ operatedAt: -1 })
+      .lean()
+      .exec();
+
+    return logs.map(log => ({
+      ...log,
+      operator: log.operatorId,
+    }));
+  }
 
   // 生成客户ID
   private generateCustomerId(): string {
@@ -46,8 +102,15 @@ export class CustomersService {
 
   // 创建客户（支持创建时指定负责人，未指定则默认分配给创建人）
   async create(createCustomerDto: CreateCustomerDto, userId: string): Promise<Customer> {
+    // 验证手机号或微信号至少填一个
+    const phone = createCustomerDto.phone?.trim();
+    const wechatId = createCustomerDto.wechatId?.trim();
+    if (!phone && !wechatId) {
+      throw new BadRequestException('请填写手机号或微信号');
+    }
+
     // 检查手机号是否已存在（只有当手机号不为空时才检查）
-    if (createCustomerDto.phone && createCustomerDto.phone.trim()) {
+    if (phone) {
       const existingCustomer = await this.customerModel.findOne({ phone: createCustomerDto.phone });
       if (existingCustomer) {
         throw new ConflictException('该手机号已存在客户记录');
@@ -78,6 +141,24 @@ export class CustomersService {
 
     const customer = new this.customerModel(customerData);
     const savedCustomer = await customer.save();
+
+    // 📝 记录操作日志 - 创建客户
+    await this.logOperation(
+      savedCustomer._id.toString(),
+      userId,
+      'create',
+      '创建客户',
+      {
+        description: `创建客户：${savedCustomer.name}`,
+        after: {
+          name: savedCustomer.name,
+          phone: this.maskPhoneNumber(savedCustomer.phone),
+          leadSource: savedCustomer.leadSource,
+          contractStatus: savedCustomer.contractStatus,
+          leadLevel: savedCustomer.leadLevel,
+        }
+      }
+    );
 
     // 🔔 发送客户分配通知（如果分配给其他人或自己）
     try {
@@ -120,8 +201,13 @@ export class CustomersService {
 
     const searchConditions: any = {};
 
-    // 🔥 [FIX] 客户列表应该只显示非公海客户
+    // 🔥 [FIX] 客户列表应该只显示非公海客户，且排除流失客户
     searchConditions.inPublicPool = false;
+    // 🔥 [FIX] 排除流失客户（流失客户只在公海显示）
+    // 注意：如果用户主动筛选 contractStatus='流失客户'，则允许显示
+    if (!filters.contractStatus || filters.contractStatus !== '流失客户') {
+      searchConditions.contractStatus = { $ne: '流失客户' };
+    }
 
     // 构建搜索条件（支持姓名、电话、微信号）
     if (search) {
@@ -333,8 +419,32 @@ export class CustomersService {
     return customer;
   }
 
+  // 根据手机号获取客户信息
+  async findByPhone(phone: string): Promise<Customer | null> {
+    const customer = await this.customerModel.findOne({ phone }).exec();
+    return customer;
+  }
+
   // 更新客户信息
   async update(id: string, updateCustomerDto: UpdateCustomerDto, userId?: string): Promise<Customer> {
+    // 获取当前客户信息
+    const currentCustomer = await this.customerModel.findById(id).exec();
+    if (!currentCustomer) {
+      throw new NotFoundException('客户不存在');
+    }
+
+    // 验证手机号或微信号至少有一个（考虑更新后的值）
+    const updatedPhone = updateCustomerDto.phone !== undefined
+      ? updateCustomerDto.phone?.trim()
+      : currentCustomer.phone?.trim();
+    const updatedWechatId = updateCustomerDto.wechatId !== undefined
+      ? updateCustomerDto.wechatId?.trim()
+      : currentCustomer.wechatId?.trim();
+
+    if (!updatedPhone && !updatedWechatId) {
+      throw new BadRequestException('请填写手机号或微信号');
+    }
+
     // 如果更新手机号，检查是否与其他客户冲突（只有当手机号不为空时才检查）
     if (updateCustomerDto.phone && updateCustomerDto.phone.trim()) {
       const existingCustomer = await this.customerModel.findOne({
@@ -371,15 +481,106 @@ export class CustomersService {
       throw new NotFoundException('客户不存在');
     }
 
+    // 📝 记录操作日志 - 编辑客户
+    if (userId) {
+      // 字段名中英文映射表
+      const fieldNameMap: Record<string, string> = {
+        'name': '姓名',
+        'phone': '电话',
+        'wechatId': '微信号',
+        'contractStatus': '客户状态',
+        'leadLevel': '线索等级',
+        'leadSource': '线索来源',
+        'serviceCategory': '需求品类',
+        'salaryBudget': '薪资预算',
+        'serviceAddress': '服务地址',
+        'remark': '备注',
+        'notes': '备注',
+        'remarks': '备注',
+        'address': '地址',
+        'familySize': '家庭人数',
+        'genderRequirement': '性别要求',
+        'ageRequirement': '年龄要求',
+        'educationRequirement': '学历要求',
+        'originRequirement': '籍贯要求',
+        'expectedStartDate': '期望上岗时间',
+        'expectedDeliveryDate': '预产期',
+        'restSchedule': '休息安排',
+        'idCardNumber': '身份证号',
+        'assignedTo': '负责人',
+        'inPublicPool': '公海状态'
+      };
+
+      // 构建变更详情
+      const changedFields: string[] = [];
+      const beforeData: Record<string, any> = {};
+      const afterData: Record<string, any> = {};
+
+      // 检测变更的字段（跟踪所有重要字段）
+      const fieldsToTrack = [
+        'name', 'phone', 'wechatId', 'contractStatus', 'leadLevel', 'leadSource',
+        'serviceCategory', 'salaryBudget', 'serviceAddress', 'remark', 'notes', 'remarks',
+        'address', 'familySize', 'genderRequirement', 'ageRequirement', 'educationRequirement',
+        'originRequirement', 'expectedStartDate', 'expectedDeliveryDate', 'restSchedule',
+        'idCardNumber', 'assignedTo', 'inPublicPool'
+      ];
+      for (const field of fieldsToTrack) {
+        const currentValue = currentCustomer[field];
+        const newValue = updateCustomerDto[field];
+        if (newValue !== undefined && String(currentValue) !== String(newValue)) {
+          changedFields.push(field);
+          beforeData[field] = currentValue;
+          afterData[field] = newValue;
+        }
+      }
+
+      if (changedFields.length > 0) {
+        // 将英文字段名转换为中文
+        const changedFieldsInChinese = changedFields.map(field => fieldNameMap[field] || field);
+
+        await this.logOperation(
+          id,
+          userId,
+          'update',
+          '编辑客户信息',
+          {
+            before: beforeData,
+            after: afterData,
+            description: `修改了: ${changedFieldsInChinese.join('、')}`,
+          }
+        );
+      }
+    }
+
     return customer;
   }
 
   // 删除客户
-  async remove(id: string): Promise<void> {
-    const result = await this.customerModel.findByIdAndDelete(id).exec();
-    if (!result) {
+  async remove(id: string, userId?: string): Promise<void> {
+    const customer = await this.customerModel.findById(id).exec();
+    if (!customer) {
       throw new NotFoundException('客户不存在');
     }
+
+    // 📝 记录操作日志 - 删除客户（在删除前记录）
+    if (userId) {
+      await this.logOperation(
+        id,
+        userId,
+        'delete',
+        '删除客户',
+        {
+          description: `删除客户：${customer.name}`,
+          before: {
+            name: customer.name,
+            phone: this.maskPhoneNumber(customer.phone),
+            contractStatus: customer.contractStatus,
+          }
+        }
+      );
+    }
+
+    await this.customerModel.findByIdAndDelete(id).exec();
   }
 
   // 获取统计信息
@@ -445,6 +646,19 @@ export class CustomersService {
       lastFollowUpBy: new Types.ObjectId(userId),
       lastFollowUpTime: new Date(),
     });
+
+    // 📝 记录操作日志 - 添加跟进记录
+    await this.logOperation(
+      customerId,
+      userId,
+      'create_follow_up',
+      '添加跟进记录',
+      {
+        description: `添加${createFollowUpDto.type}跟进：${createFollowUpDto.content?.substring(0, 50) || ''}${(createFollowUpDto.content?.length || 0) > 50 ? '...' : ''}`,
+        relatedId: saved._id.toString(),
+        relatedType: 'follow_up',
+      }
+    );
 
     return saved;
   }
@@ -523,10 +737,7 @@ export class CustomersService {
       createdBy: new Types.ObjectId(adminUserId),
     } as any);
 
-    // 发送微信通知给被分配的员工
-    await this.sendAssignmentNotification(updated, targetUser as any, assignmentReason);
-
-    // 🔔 发送站内通知
+	    // 🔔 发送站内通知（保留站内/Socket 通知即可）
     await this.notificationHelper.notifyCustomerAssigned(assignedTo, {
       customerId: customerId,
       customerName: updated.name,
@@ -535,6 +746,32 @@ export class CustomersService {
     }).catch(err => {
       this.logger.error(`发送客户分配通知失败: ${err.message}`);
     });
+
+    // 🔔 发送小程序通知
+    await axios.post('https://cloud1-3gasxujzfa738c39.service.tcloudbase.com/quickstartFunctions', {
+      type: 'sendCustomerAssignNotify',
+      notificationData: {
+        assignedToId: assignedTo,
+        customerName: updated.name,
+        source: assignmentReason || '手动分配',
+        assignerName: (adminUser as any).name,
+        customerId: updated._id,
+        assignTime: updated.assignedAt
+      }
+    }).catch(e => console.error('通知失败:', e));
+
+    // 📝 记录操作日志 - 分配客户
+    await this.logOperation(
+      customerId,
+      adminUserId,
+      'assign',
+      '分配负责人',
+      {
+        before: { assignedTo: oldUser ? oldUser.name : '未分配' },
+        after: { assignedTo: newUser ? newUser.name : '未知' },
+        description: `将客户分配给 ${newUser ? newUser.name : '未知'}${assignmentReason ? '，原因：' + assignmentReason : ''}`,
+      }
+    );
 
     return updated;
   }
@@ -628,7 +865,7 @@ export class CustomersService {
           createdBy: new Types.ObjectId(adminUserId),
         } as any);
 
-        // 🔔 发送站内通知（为每个客户单独发送）
+	        // 🔔 发送站内通知（为每个客户单独发送，微信模板消息改由小程序端处理）
         await this.notificationHelper.notifyCustomerAssigned(assignedTo, {
           customerId: customerId,
           customerName: updated.name,
@@ -643,11 +880,6 @@ export class CustomersService {
         errors.push({ customerId, error: error.message || '分配失败' });
         failedCount++;
       }
-    }
-
-    // 批量分配完成后发送一次微信通知
-    if (successCount > 0) {
-      await this.sendBatchAssignmentNotification(successCount, targetUser as any, assignmentReason);
     }
 
     return {
@@ -1218,7 +1450,7 @@ export class CustomersService {
   }
 
   // 释放客户到公海
-  async releaseToPool(customerId: string, reason: string | undefined, userId: string): Promise<Customer> {
+  async releaseToPool(customerId: string, reason: string, userId: string): Promise<Customer> {
     const customer = await this.customerModel.findById(customerId).exec();
     if (!customer) {
       throw new NotFoundException('客户不存在');
@@ -1239,7 +1471,7 @@ export class CustomersService {
 
     const now = new Date();
     const oldAssignedTo = (customer as any).assignedTo;
-    const releaseReason = reason || '未填写原因';
+    const releaseReason = reason;
 
     // 更新客户状态
     const updated = await this.customerModel.findByIdAndUpdate(
@@ -1284,11 +1516,22 @@ export class CustomersService {
       createdBy: new Types.ObjectId(userId),
     });
 
+    // 📝 记录操作日志 - 释放到公海
+    await this.logOperation(
+      customerId,
+      userId,
+      'release_to_pool',
+      '释放到公海',
+      {
+        description: `将客户释放到公海，原因：${releaseReason}`,
+      }
+    );
+
     return updated;
   }
 
   // 批量释放到公海
-  async batchReleaseToPool(customerIds: string[], reason: string | undefined, userId: string): Promise<{
+  async batchReleaseToPool(customerIds: string[], reason: string, userId: string): Promise<{
     success: number;
     failed: number;
     errors: Array<{ customerId: string; error: string }>;
@@ -1302,7 +1545,7 @@ export class CustomersService {
     let failedCount = 0;
     const errors: Array<{ customerId: string; error: string }> = [];
     const now = new Date();
-    const releaseReason = reason || '未填写原因';
+    const releaseReason = reason;
 
     for (const customerId of customerIds) {
       try {

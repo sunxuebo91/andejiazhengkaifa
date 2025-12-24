@@ -1,15 +1,43 @@
-import { 
-  IsString, 
-  IsNotEmpty, 
-  IsEnum, 
-  IsNumber, 
-  IsDateString, 
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsNumber,
+  IsDateString,
   IsOptional,
   IsPhoneNumber,
   Min,
-  Max
+  Max,
+  ValidateIf,
+  registerDecorator,
+  ValidationOptions,
+  ValidationArguments
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+
+// 自定义验证装饰器：手机号或微信号至少填一个
+function IsPhoneOrWechatRequired(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      name: 'isPhoneOrWechatRequired',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          const obj = args.object as any;
+          const phone = obj.phone?.trim();
+          const wechatId = obj.wechatId?.trim();
+          // 至少有一个不为空
+          return !!(phone || wechatId);
+        },
+        defaultMessage(args: ValidationArguments) {
+          return '请填写手机号或微信号';
+        }
+      }
+    });
+  };
+}
 
 export class CreateCustomerDto {
   @IsString()
@@ -18,7 +46,9 @@ export class CreateCustomerDto {
 
   @IsOptional()
   @IsString()
+  @ValidateIf((o) => o.phone && o.phone.trim())
   @IsPhoneNumber('CN', { message: '请输入有效的中国手机号码' })
+  @IsPhoneOrWechatRequired({ message: '请填写手机号或微信号' })
   phone?: string;
 
   @IsOptional()
@@ -29,8 +59,8 @@ export class CreateCustomerDto {
   @IsString()
   idCardNumber?: string;
 
-  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '其他'], {
-    message: '线索来源必须是：美团、抖音、快手、小红书、转介绍、杭州同馨、握个手平台、线索购买、莲心、美家、天机鹿、孕妈联盟、高阁、星星、其他之一'
+  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '妈妈网', '犀牛', '宝宝树', '其他'], {
+    message: '线索来源必须是：美团、抖音、快手、小红书、转介绍、杭州同馨、握个手平台、线索购买、莲心、美家、天机鹿、孕妈联盟、高阁、星星、妈妈网、犀牛、宝宝树、其他之一'
   })
   leadSource: string;
 

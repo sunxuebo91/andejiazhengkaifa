@@ -14,7 +14,16 @@ import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 // 确保在其他导入之前加载环境变量
-dotenv.config();
+// 根据NODE_ENV加载对应的.env文件
+const envFile = process.env.NODE_ENV === 'production' ? '.env' : '.env.dev';
+const envPath = path.join(__dirname, '..', envFile);
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  console.log(`✅ 已加载环境变量文件: ${envFile}`);
+} else {
+  dotenv.config();
+  console.log(`⚠️  未找到${envFile}，使用默认.env文件`);
+}
 
 // 配置日志目录
 const logDir = path.join(__dirname, '..', 'logs');
@@ -54,6 +63,11 @@ async function bootstrap() {
 
     // 设置静态资源和文件上传配置
     app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));
+
+    // 为支付回调接口配置原始文本解析器（接收XML）
+    app.use('/api/dashubao/payment/callback', express.text({ type: '*/*' }));
+
+    // 其他接口使用JSON解析器
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 

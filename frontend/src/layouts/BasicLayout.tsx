@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps, Space } from 'antd';
 import { useMemo, useEffect } from 'react';
@@ -159,6 +159,36 @@ const BasicLayout = () => {
       }
 
       baseMenus.push(contractMenu);
+    }
+
+    // 保险管理菜单 - 需要保险相关权限
+    if (true || hasPermission('insurance:view') || hasPermission('insurance:create')) {
+      const insuranceMenu: MenuRoute = {
+        path: '/insurance',
+        name: '保险管理',
+        icon: <SafetyOutlined />,
+        routes: [],
+      };
+
+      // 保单列表 - 需要保险查看权限
+      if (true || hasPermission('insurance:view')) {
+        insuranceMenu.routes!.push({
+          path: '/insurance/list',
+          name: '保单列表',
+          icon: <UnorderedListOutlined />,
+        });
+      }
+
+      // 新建投保 - 需要保险创建权限
+      if (true || hasPermission('insurance:create')) {
+        insuranceMenu.routes!.push({
+          path: '/insurance/create',
+          name: '新建投保',
+          icon: <FileAddOutlined />,
+        });
+      }
+
+      baseMenus.push(insuranceMenu);
     }
 
     // 视频面试菜单 - 所有用户可见

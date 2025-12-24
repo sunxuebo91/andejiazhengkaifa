@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Form, Select, Input, message, Alert } from 'antd';
 import { customerService } from '../services/customerService';
+import { notifyMiniProgramAssignment } from '../utils/miniprogramUtils';
 
 interface BatchAssignCustomerModalProps {
   visible: boolean;
@@ -49,13 +50,19 @@ const BatchAssignCustomerModal: React.FC<BatchAssignCustomerModalProps> = ({
       const values = await form.validateFields();
       setLoading(true);
       
-      const result = await customerService.batchAssignCustomers(
-        customerIds, 
-        values.assignedTo, 
-        values.assignmentReason
-      );
-      
-      if (result.success > 0) {
+	      const result = await customerService.batchAssignCustomers(
+	        customerIds,
+	        values.assignedTo,
+	        values.assignmentReason,
+	      );
+
+	      //  
+	      const anyResult: any = result as any;
+	      if (anyResult && anyResult.notificationData) {
+	        notifyMiniProgramAssignment(anyResult.notificationData);
+	      }
+
+	      if (result.success > 0) {
         message.success(`批量分配完成：成功 ${result.success} 个，失败 ${result.failed} 个`);
         
         // 如果有失败的，显示详细错误信息

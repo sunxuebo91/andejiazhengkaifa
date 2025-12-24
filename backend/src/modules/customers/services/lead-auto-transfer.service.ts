@@ -32,6 +32,15 @@ export class LeadAutoTransferService implements OnModuleInit {
   onModuleInit() {
     this.logger.log('✅ LeadAutoTransferService 模块已初始化');
 
+    // 🔒 只在生产环境启用定时任务，避免多进程重复执行
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (!isProduction) {
+      this.logger.warn('⚠️ 非生产环境，跳过注册线索自动流转定时任务');
+      this.logger.log(`📋 当前环境: ${process.env.NODE_ENV || 'undefined'}`);
+      return;
+    }
+
     // 手动注册定时任务（因为@Cron装饰器在当前环境下无法自动注册）
     const CronJob = require('cron').CronJob;
 
@@ -53,6 +62,7 @@ export class LeadAutoTransferService implements OnModuleInit {
 
     const nextDate = hourlyJob.nextDate().toJSDate();
     this.logger.log('✅ 线索自动流转定时任务已注册（每小时整点执行，时区: Asia/Shanghai）');
+    this.logger.log(`📋 当前环境: ${process.env.NODE_ENV}`);
     this.logger.log(`📅 当前服务器时间: ${new Date().toLocaleString('zh-CN')}`);
     this.logger.log(`⏰ 下次执行时间: ${nextDate.toLocaleString('zh-CN')}`);
   }

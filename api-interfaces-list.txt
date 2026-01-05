@@ -1,0 +1,62 @@
+=== 安德家政CRM系统 - 所有API接口清单 ===
+
+【认证授权模块】(5个)
+1. POST /api/auth/login - 登录
+2. POST /api/auth/miniprogram/login - 小程序登录
+3. GET /api/auth/me - 获取当前用户信息
+4. POST /api/auth/avatar - 上传用户头像
+5. POST /api/auth/logout - 登出
+
+【简历管理 - CRM端】(6个)
+6. GET /api/resumes - 获取所有简历
+7. GET /api/resumes/:id - 获取单个简历
+8. POST /api/resumes - 创建简历
+9. PUT /api/resumes/:id - 更新简历
+10. DELETE /api/resumes/:id - 删除简历
+11. GET /api/resumes/check-duplicate - 检查简历是否重复
+
+【简历管理 - 小程序端】(5个)
+12. POST /api/resumes/miniprogram/create - 创建简历（小程序）
+13. GET /api/resumes/miniprogram/:id - 获取简历详情（小程序）
+14. PATCH /api/resumes/miniprogram/:id - 更新简历（小程序）
+15. POST /api/resumes/miniprogram/:id/upload-file - 上传文件（小程序）
+16. DELETE /api/resumes/miniprogram/:id/delete-file - 删除文件（小程序）
+
+【视频面试管理】(6个)
+17. POST /api/video-interviews - 创建视频面试
+18. GET /api/video-interviews - 获取视频面试列表
+19. GET /api/video-interviews/:id - 获取单个视频面试
+20. PATCH /api/video-interviews/:id/status - 更新视频面试状态
+21. DELETE /api/video-interviews/:id - 取消视频面试
+22. GET /api/video-interviews/:id/token - 获取面试房间Token
+
+【订单管理】(6个)
+23. POST /api/orders - 创建订单
+24. GET /api/orders - 获取订单列表
+25. GET /api/orders/:id - 获取单个订单
+26. PUT /api/orders/:id - 更新订单
+27. PATCH /api/orders/:id/status - 更新订单状态
+28. DELETE /api/orders/:id - 删除订单
+
+【文件上传】(3个)
+29. POST /api/upload - 通用文件上传
+30. POST /api/upload/batch - 批量文件上传
+31. DELETE /api/upload - 删除文件
+
+【数据字典】(2个)
+32. GET /api/dictionaries - 获取所有数据字典
+33. GET /api/dictionaries/:type - 获取特定类型的数据字典
+
+【统计分析】(3个)
+34. GET /api/statistics/dashboard - 获取仪表盘统计
+35. GET /api/statistics/resumes - 获取简历统计
+36. GET /api/statistics/orders - 获取订单统计
+
+=== 总计：36个API接口 ===
+
+按HTTP方法分类：
+- GET: 14个 (38.9%)
+- POST: 12个 (33.3%)
+- PUT/PATCH: 7个 (19.4%)
+- DELETE: 3个 (8.3%)
+

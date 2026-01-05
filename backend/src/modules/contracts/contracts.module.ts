@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
@@ -7,6 +7,7 @@ import { CustomerContractHistory, CustomerContractHistorySchema } from './models
 import { CustomerOperationLog, CustomerOperationLogSchema } from '../customers/models/customer-operation-log.model';
 import { ESignModule } from '../esign/esign.module';
 import { TestController } from './test.controller';
+import { ResumeModule } from '../resume/resume.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TestController } from './test.controller';
       { name: CustomerOperationLog.name, schema: CustomerOperationLogSchema },
     ]),
     ESignModule,
+    forwardRef(() => ResumeModule),
   ],
   controllers: [ContractsController, TestController],
   providers: [ContractsService],

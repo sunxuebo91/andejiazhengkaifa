@@ -12,6 +12,7 @@ import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { Public } from '../auth/decorators/public.decorator';
+import { UpdateAvailabilityDto, BatchUpdateAvailabilityDto, QueryAvailabilityDto } from './dto/availability.dto';
 
 // Multer 配置
 const multerConfig: MulterOptions = {
@@ -36,9 +37,14 @@ export class ResumeController {
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'idCardFront', maxCount: 1 },
     { name: 'idCardBack', maxCount: 1 },
-    { name: 'photoFiles', maxCount: 10 },
-    { name: 'certificateFiles', maxCount: 10 },
-    { name: 'medicalReportFiles', maxCount: 10 }
+    { name: 'photoFiles', maxCount: 30 },
+    { name: 'certificateFiles', maxCount: 30 },
+    { name: 'medicalReportFiles', maxCount: 10 },
+    { name: 'selfIntroductionVideo', maxCount: 1 },
+    { name: 'confinementMealPhotos', maxCount: 30 },
+    { name: 'cookingPhotos', maxCount: 30 },
+    { name: 'complementaryFoodPhotos', maxCount: 30 },
+    { name: 'positiveReviewPhotos', maxCount: 30 }
   ], multerConfig))
   @ApiOperation({ summary: '创建简历' })
   @ApiConsumes('multipart/form-data')
@@ -80,6 +86,11 @@ export class ResumeController {
           },
           description: '体检报告'
         },
+        selfIntroductionVideo: {
+          type: 'string',
+          format: 'binary',
+          description: '自我介绍视频（最大10MB）'
+        },
         title: { type: 'string' },
         content: { type: 'string' },
       },
@@ -92,7 +103,12 @@ export class ResumeController {
       idCardBack?: Express.Multer.File[],
       photoFiles?: Express.Multer.File[],
       certificateFiles?: Express.Multer.File[],
-      medicalReportFiles?: Express.Multer.File[]
+      selfIntroductionVideo?: Express.Multer.File[],
+      medicalReportFiles?: Express.Multer.File[],
+      confinementMealPhotos?: Express.Multer.File[],
+      cookingPhotos?: Express.Multer.File[],
+      complementaryFoodPhotos?: Express.Multer.File[],
+      positiveReviewPhotos?: Express.Multer.File[]
     },
     @Req() req,
   ) {
@@ -106,6 +122,11 @@ export class ResumeController {
         photoFiles: files.photoFiles?.length || 0,
         certificateFiles: files.certificateFiles?.length || 0,
         medicalReportFiles: files.medicalReportFiles?.length || 0,
+        selfIntroductionVideo: files.selfIntroductionVideo?.length || 0,
+        confinementMealPhotos: files.confinementMealPhotos?.length || 0,
+        cookingPhotos: files.cookingPhotos?.length || 0,
+        complementaryFoodPhotos: files.complementaryFoodPhotos?.length || 0,
+        positiveReviewPhotos: files.positiveReviewPhotos?.length || 0,
         rawBody: Object.keys(req.body),
       });
 
@@ -141,6 +162,41 @@ export class ResumeController {
       if (files.medicalReportFiles && files.medicalReportFiles.length > 0) {
         filesArray.push(...files.medicalReportFiles);
         fileTypes.push(...files.medicalReportFiles.map(() => 'medicalReport'));
+      }
+
+      // 添加自我介绍视频
+      if (files.selfIntroductionVideo && files.selfIntroductionVideo.length > 0) {
+        // 验证视频文件大小（10MB限制）
+        const videoFile = files.selfIntroductionVideo[0];
+        if (videoFile.size > 10 * 1024 * 1024) {
+          throw new BadRequestException('自我介绍视频文件大小不能超过10MB');
+        }
+        filesArray.push(videoFile);
+        fileTypes.push('selfIntroductionVideo');
+      }
+
+      // 添加月子餐照片
+      if (files.confinementMealPhotos && files.confinementMealPhotos.length > 0) {
+        filesArray.push(...files.confinementMealPhotos);
+        fileTypes.push(...files.confinementMealPhotos.map(() => 'confinementMealPhoto'));
+      }
+
+      // 添加烹饪照片
+      if (files.cookingPhotos && files.cookingPhotos.length > 0) {
+        filesArray.push(...files.cookingPhotos);
+        fileTypes.push(...files.cookingPhotos.map(() => 'cookingPhoto'));
+      }
+
+      // 添加辅食添加照片
+      if (files.complementaryFoodPhotos && files.complementaryFoodPhotos.length > 0) {
+        filesArray.push(...files.complementaryFoodPhotos);
+        fileTypes.push(...files.complementaryFoodPhotos.map(() => 'complementaryFoodPhoto'));
+      }
+
+      // 添加好评展示照片
+      if (files.positiveReviewPhotos && files.positiveReviewPhotos.length > 0) {
+        filesArray.push(...files.positiveReviewPhotos);
+        fileTypes.push(...files.positiveReviewPhotos.map(() => 'positiveReviewPhoto'));
       }
 
       this.logger.debug('解析后的文件信息:', {
@@ -337,9 +393,6 @@ export class ResumeController {
           { value: 'graduate', label: '研究生' }
         ],
         skills: [
-          { value: 'muying', label: '母婴护理师' },
-          { value: 'cuiru', label: '高级催乳师' },
-          { value: 'yuezican', label: '月子餐营养师' },
           { value: 'chanhou', label: '产后修复师' },
           { value: 'teshu-yinger', label: '特殊婴儿护理' },
           { value: 'yiliaobackground', label: '医疗背景' },
@@ -353,6 +406,9 @@ export class ResumeController {
           { value: 'mianshi', label: '面食' },
           { value: 'jiashi', label: '驾驶' },
           { value: 'shouyi', label: '整理收纳' },
+          { value: 'muying', label: '母婴护理师' },
+          { value: 'cuiru', label: '高级催乳师' },
+          { value: 'yuezican', label: '月子餐营养师' },
           { value: 'yingyang', label: '营养师' },
           { value: 'liliao-kangfu', label: '理疗康复' },
           { value: 'shuangtai-huli', label: '双胎护理' },
@@ -415,6 +471,14 @@ export class ResumeController {
           { value: 'door-to-door', label: '地推' },
           { value: 'shared-order', label: '合单' },
           { value: 'other', label: '其他' }
+        ],
+        maternityNurseLevel: [
+          { value: 'junior', label: '初级月嫂' },
+          { value: 'silver', label: '银牌月嫂' },
+          { value: 'gold', label: '金牌月嫂' },
+          { value: 'platinum', label: '铂金月嫂' },
+          { value: 'diamond', label: '钻石月嫂' },
+          { value: 'crown', label: '皇冠月嫂' }
         ],
         fileTypes: [
           { value: 'idCardFront', label: '身份证正面' },
@@ -874,13 +938,19 @@ export class ResumeController {
             skills: createdResume.skills || [],
             serviceArea: createdResume.serviceArea || [],
             expectedSalary: createdResume.expectedSalary,
+            maternityNurseLevel: createdResume.maternityNurseLevel || null, // 🏅 月嫂档位
             workExperiences: createdResume.workExperiences || [],
-            // 文件字段
+            // 文件字段 - 完整对象格式（包含url, filename, size, mimetype）
             idCardFront: createdResume.idCardFront,
             idCardBack: createdResume.idCardBack,
             personalPhoto: createdResume.personalPhoto || [],
-            certificates: createdResume.certificates || [],
-            reports: createdResume.reports || [],
+            certificates: createdResume.certificates || [], // 🎓 技能证书图片（FileInfo对象数组）
+            reports: createdResume.reports || [], // 📋 体检报告（FileInfo对象数组）
+            selfIntroductionVideo: createdResume.selfIntroductionVideo || null, // 🎬 自我介绍视频
+            // 兼容旧格式 - 仅URL字符串数组
+            certificateUrls: createdResume.certificateUrls || [], // 🎓 技能证书图片URL数组（兼容旧版）
+            medicalReportUrls: createdResume.medicalReportUrls || [], // 📋 体检报告URL数组（兼容旧版）
+            selfIntroductionVideoUrl: createdResume.selfIntroductionVideo?.url || null, // 🎬 视频URL兼容
             createdAt: (createdResume as any).createdAt || new Date(),
             updatedAt: (createdResume as any).updatedAt || new Date()
           }
@@ -959,19 +1029,32 @@ export class ResumeController {
         skills: resume.skills || [],
         serviceArea: resume.serviceArea || [],
         expectedSalary: resume.expectedSalary,
+        maternityNurseLevel: resume.maternityNurseLevel || null, // 🏅 月嫂档位
         workExperiences: resume.workExperiences || [],
-        // 文件信息
+        // 文件信息 - 完整对象格式（包含url, filename, size, mimetype）
         idCardFront: resume.idCardFront,
         idCardBack: resume.idCardBack,
         personalPhoto: resume.personalPhoto || [],
-        certificates: resume.certificates || [],
-        reports: resume.reports || [],
-        // 兼容旧格式
+        certificates: resume.certificates || [], // 🎓 技能证书图片（FileInfo对象数组）
+        reports: resume.reports || [], // 📋 体检报告（FileInfo对象数组）
+        selfIntroductionVideo: resume.selfIntroductionVideo || null, // 🎬 自我介绍视频
+        // 🆕 新增的4个相册字段（FileInfo对象数组）
+        confinementMealPhotos: resume.confinementMealPhotos || [], // 🍲 月子餐照片
+        cookingPhotos: resume.cookingPhotos || [], // 👨‍🍳 烹饪照片
+        complementaryFoodPhotos: resume.complementaryFoodPhotos || [], // 🍼 辅食添加照片
+        positiveReviewPhotos: resume.positiveReviewPhotos || [], // ⭐ 好评展示照片
+        // 兼容旧格式 - 仅URL字符串数组
         idCardFrontUrl: resume.idCardFront?.url,
         idCardBackUrl: resume.idCardBack?.url,
         photoUrls: resume.photoUrls || [],
-        certificateUrls: resume.certificateUrls || [],
-        medicalReportUrls: resume.medicalReportUrls || [],
+        certificateUrls: resume.certificateUrls || [], // 🎓 技能证书图片URL数组（兼容旧版）
+        medicalReportUrls: resume.medicalReportUrls || [], // 📋 体检报告URL数组（兼容旧版）
+        selfIntroductionVideoUrl: resume.selfIntroductionVideo?.url || null, // 🎬 视频URL兼容
+        // 🆕 新增的4个相册字段的URL数组（兼容旧版）
+        confinementMealPhotoUrls: (resume.confinementMealPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+        cookingPhotoUrls: (resume.cookingPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+        complementaryFoodPhotoUrls: (resume.complementaryFoodPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+        positiveReviewPhotoUrls: (resume.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean),
         // 时间戳
         createdAt: (resume as any).createdAt || new Date(),
         updatedAt: (resume as any).updatedAt || new Date()
@@ -1030,23 +1113,36 @@ export class ResumeController {
           education: resume.education,
           experienceYears: resume.experienceYears,
           expectedSalary: resume.expectedSalary,
+          maternityNurseLevel: resume.maternityNurseLevel || null, // 🏅 月嫂档位
           nativePlace: resume.nativePlace,
           skills: resume.skills,
           serviceArea: resume.serviceArea,
           selfIntroduction: resume.selfIntroduction,
           workExperiences: resume.workExperiences || resume.workHistory || [],
-          // 文件相关字段
-          idCardFrontUrl: resume.idCardFront?.url,
-          idCardBackUrl: resume.idCardBack?.url,
-          photoUrls: resume.photoUrls || [],
-          certificateUrls: resume.certificateUrls || [],
-          medicalReportUrls: resume.medicalReportUrls || [],
-          // 新格式文件字段
+          // 文件相关字段 - 完整对象格式（包含url, filename, size, mimetype）
           idCardFront: resume.idCardFront,
           idCardBack: resume.idCardBack,
           personalPhoto: resume.personalPhoto,
-          certificates: resume.certificates || [],
-          reports: resume.reports || [],
+          certificates: resume.certificates || [], // 🎓 技能证书图片（FileInfo对象数组）
+          reports: resume.reports || [], // 📋 体检报告（FileInfo对象数组）
+          selfIntroductionVideo: resume.selfIntroductionVideo || null, // 🎬 自我介绍视频
+          // 🆕 新增的4个相册字段（FileInfo对象数组）
+          confinementMealPhotos: resume.confinementMealPhotos || [], // 🍲 月子餐照片
+          cookingPhotos: resume.cookingPhotos || [], // 👨‍🍳 烹饪照片
+          complementaryFoodPhotos: resume.complementaryFoodPhotos || [], // 🍼 辅食添加照片
+          positiveReviewPhotos: resume.positiveReviewPhotos || [], // ⭐ 好评展示照片
+          // 兼容旧格式 - 仅URL字符串数组
+          idCardFrontUrl: resume.idCardFront?.url,
+          idCardBackUrl: resume.idCardBack?.url,
+          photoUrls: resume.photoUrls || [],
+          certificateUrls: resume.certificateUrls || [], // 🎓 技能证书图片URL数组（兼容旧版）
+          medicalReportUrls: resume.medicalReportUrls || [], // 📋 体检报告URL数组（兼容旧版）
+          selfIntroductionVideoUrl: resume.selfIntroductionVideo?.url || null, // 🎬 视频URL兼容
+          // 🆕 新增的4个相册字段的URL数组（兼容旧版）
+          confinementMealPhotoUrls: (resume.confinementMealPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+          cookingPhotoUrls: (resume.cookingPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+          complementaryFoodPhotoUrls: (resume.complementaryFoodPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+          positiveReviewPhotoUrls: (resume.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean),
           updatedAt: (resume as any).updatedAt
         },
         message: '更新简历成功'
@@ -1077,7 +1173,7 @@ export class ResumeController {
         },
         type: {
           type: 'string',
-          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport'],
+          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport', 'selfIntroductionVideo', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto'],
           description: '文件类型'
         },
       },
@@ -1095,8 +1191,9 @@ export class ResumeController {
         throw new BadRequestException('请选择要上传的文件');
       }
 
-      if (!type || !['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport'].includes(type)) {
-        throw new BadRequestException('请指定正确的文件类型');
+      const validTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport', 'selfIntroductionVideo', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto'];
+      if (!type || !validTypes.includes(type)) {
+        throw new BadRequestException(`请指定正确的文件类型，有效类型: ${validTypes.join(', ')}`);
       }
 
       this.logger.log(`小程序上传文件: 简历ID=${id}, 文件类型=${type}, 文件名=${file.originalname}`);
@@ -1126,7 +1223,7 @@ export class ResumeController {
   }
 
   @Post('miniprogram/:id/upload-files')
-  @UseInterceptors(FilesInterceptor('files', 10, multerConfig))
+  @UseInterceptors(FilesInterceptor('files', 30, multerConfig))
   @ApiOperation({ summary: '小程序批量上传文件' })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: '简历ID' })
@@ -1223,7 +1320,7 @@ export class ResumeController {
         },
         fileType: {
           type: 'string',
-          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport'],
+          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport', 'selfIntroductionVideo', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto'],
           description: '文件类型'
         },
       },
@@ -1434,7 +1531,17 @@ export class ResumeController {
       avatarProcessed: resume.avatarProcessed,
       avatarRound: resume.avatarRound,
       // 工作经历（保留必要信息）
-      workExperiences: resume.workExperiences || resume.workHistory || []
+      workExperiences: resume.workExperiences || resume.workHistory || [],
+      // 🆕 新增的4个相册字段（公开展示）
+      confinementMealPhotos: resume.confinementMealPhotos || [], // 🍲 月子餐照片
+      cookingPhotos: resume.cookingPhotos || [], // 👨‍🍳 烹饪照片
+      complementaryFoodPhotos: resume.complementaryFoodPhotos || [], // 🍼 辅食添加照片
+      positiveReviewPhotos: resume.positiveReviewPhotos || [], // ⭐ 好评展示照片
+      // URL数组格式（兼容）
+      confinementMealPhotoUrls: (resume.confinementMealPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+      cookingPhotoUrls: (resume.cookingPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+      complementaryFoodPhotoUrls: (resume.complementaryFoodPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+      positiveReviewPhotoUrls: (resume.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean)
     };
     // 严禁返回：phone、idNumber、身份证照片、报告、内部备注等敏感信息
   }
@@ -1449,9 +1556,21 @@ export class ResumeController {
       const resume = await this.resumeService.findOne(id);
       this.logger.log(`🔧 ResumeService.findOne执行完成，结果类型: ${typeof resume}`);
       this.logger.log(`🔧 返回的lastUpdatedBy类型: ${typeof resume?.lastUpdatedBy}`);
+
+      // 🆕 添加URL数组格式的字段（兼容小程序）
+      const resumeData = resume.toObject ? resume.toObject() : resume;
+      const enhancedData = {
+        ...resumeData,
+        // 🆕 新增的4个相册字段的URL数组（兼容旧版）
+        confinementMealPhotoUrls: (resumeData.confinementMealPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+        cookingPhotoUrls: (resumeData.cookingPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+        complementaryFoodPhotoUrls: (resumeData.complementaryFoodPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+        positiveReviewPhotoUrls: (resumeData.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean)
+      };
+
       return {
         success: true,
-        data: resume,
+        data: enhancedData,
         message: '获取简历详情成功'
       };
     } catch (error) {
@@ -1468,9 +1587,14 @@ export class ResumeController {
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'idCardFront', maxCount: 1 },
     { name: 'idCardBack', maxCount: 1 },
-    { name: 'photoFiles', maxCount: 10 },
-    { name: 'certificateFiles', maxCount: 10 },
-    { name: 'medicalReportFiles', maxCount: 10 }
+    { name: 'photoFiles', maxCount: 30 },
+    { name: 'certificateFiles', maxCount: 30 },
+    { name: 'medicalReportFiles', maxCount: 10 },
+    { name: 'selfIntroductionVideo', maxCount: 1 },
+    { name: 'confinementMealPhotos', maxCount: 30 },
+    { name: 'cookingPhotos', maxCount: 30 },
+    { name: 'complementaryFoodPhotos', maxCount: 30 },
+    { name: 'positiveReviewPhotos', maxCount: 30 }
   ], multerConfig))
   @ApiOperation({ summary: '更新简历' })
   @ApiConsumes('multipart/form-data', 'application/json')
@@ -1483,7 +1607,12 @@ export class ResumeController {
       idCardBack?: Express.Multer.File[],
       photoFiles?: Express.Multer.File[],
       certificateFiles?: Express.Multer.File[],
-      medicalReportFiles?: Express.Multer.File[]
+      medicalReportFiles?: Express.Multer.File[],
+      selfIntroductionVideo?: Express.Multer.File[],
+      confinementMealPhotos?: Express.Multer.File[],
+      cookingPhotos?: Express.Multer.File[],
+      complementaryFoodPhotos?: Express.Multer.File[],
+      positiveReviewPhotos?: Express.Multer.File[]
     } | undefined,
     @Req() req: any,
   ) {
@@ -1505,6 +1634,11 @@ export class ResumeController {
         photoFiles: safeFiles.photoFiles?.length || 0,
         certificateFiles: safeFiles.certificateFiles?.length || 0,
         medicalReportFiles: safeFiles.medicalReportFiles?.length || 0,
+        selfIntroductionVideo: safeFiles.selfIntroductionVideo?.length || 0,
+        confinementMealPhotos: safeFiles.confinementMealPhotos?.length || 0,
+        cookingPhotos: safeFiles.cookingPhotos?.length || 0,
+        complementaryFoodPhotos: safeFiles.complementaryFoodPhotos?.length || 0,
+        positiveReviewPhotos: safeFiles.positiveReviewPhotos?.length || 0,
         rawBody: Object.keys(req.body || {}),
         hasFiles: !!files
       });
@@ -1541,6 +1675,41 @@ export class ResumeController {
       if (safeFiles.medicalReportFiles && safeFiles.medicalReportFiles.length > 0) {
         filesArray.push(...safeFiles.medicalReportFiles);
         fileTypes.push(...safeFiles.medicalReportFiles.map(() => 'medicalReport'));
+      }
+
+      // 添加自我介绍视频
+      if (safeFiles.selfIntroductionVideo && safeFiles.selfIntroductionVideo.length > 0) {
+        // 验证视频文件大小（10MB限制）
+        const videoFile = safeFiles.selfIntroductionVideo[0];
+        if (videoFile.size > 10 * 1024 * 1024) {
+          throw new BadRequestException('自我介绍视频文件大小不能超过10MB');
+        }
+        filesArray.push(videoFile);
+        fileTypes.push('selfIntroductionVideo');
+      }
+
+      // 添加月子餐照片
+      if (safeFiles.confinementMealPhotos && safeFiles.confinementMealPhotos.length > 0) {
+        filesArray.push(...safeFiles.confinementMealPhotos);
+        fileTypes.push(...safeFiles.confinementMealPhotos.map(() => 'confinementMealPhoto'));
+      }
+
+      // 添加烹饪照片
+      if (safeFiles.cookingPhotos && safeFiles.cookingPhotos.length > 0) {
+        filesArray.push(...safeFiles.cookingPhotos);
+        fileTypes.push(...safeFiles.cookingPhotos.map(() => 'cookingPhoto'));
+      }
+
+      // 添加辅食添加照片
+      if (safeFiles.complementaryFoodPhotos && safeFiles.complementaryFoodPhotos.length > 0) {
+        filesArray.push(...safeFiles.complementaryFoodPhotos);
+        fileTypes.push(...safeFiles.complementaryFoodPhotos.map(() => 'complementaryFoodPhoto'));
+      }
+
+      // 添加好评展示照片
+      if (safeFiles.positiveReviewPhotos && safeFiles.positiveReviewPhotos.length > 0) {
+        filesArray.push(...safeFiles.positiveReviewPhotos);
+        fileTypes.push(...safeFiles.positiveReviewPhotos.map(() => 'positiveReviewPhoto'));
       }
 
       this.logger.debug('更新简历 - 解析后的文件信息:', {
@@ -1602,7 +1771,7 @@ export class ResumeController {
         },
         type: {
           type: 'string',
-          description: '文件类型：idCardFront/idCardBack/personalPhoto/certificate/medicalReport'
+          description: '文件类型：idCardFront/idCardBack/personalPhoto/certificate/medicalReport/confinementMealPhoto/complementaryFoodPhoto/positiveReviewPhoto'
         },
       },
     },
@@ -1833,6 +2002,145 @@ export class ResumeController {
         success: false,
         data: null,
         message: `更新个人照片排序失败: ${error.message}`
+      };
+    }
+  }
+
+  // ==================== 档期管理接口 ====================
+
+  @Get(':id/availability')
+  @ApiOperation({ summary: '获取月嫂档期日历' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async getAvailability(
+    @Param('id') id: string,
+    @Query() query: QueryAvailabilityDto,
+  ) {
+    try {
+      const availability = await this.resumeService.getAvailability(id, query);
+      return {
+        success: true,
+        data: availability,
+        message: '获取档期成功'
+      };
+    } catch (error) {
+      this.logger.error(`获取档期失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `获取档期失败: ${error.message}`
+      };
+    }
+  }
+
+  @Post(':id/availability')
+  @ApiOperation({ summary: '更新月嫂档期（按日期范围）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '更新成功' })
+  async updateAvailability(
+    @Param('id') id: string,
+    @Body() dto: UpdateAvailabilityDto,
+  ) {
+    try {
+      const result = await this.resumeService.updateAvailability(id, dto);
+      return {
+        success: true,
+        data: result,
+        message: result.message
+      };
+    } catch (error) {
+      this.logger.error(`更新档期失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `更新档期失败: ${error.message}`
+      };
+    }
+  }
+
+  @Post(':id/availability/batch')
+  @ApiOperation({ summary: '批量更新月嫂档期（按日期列表）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '更新成功' })
+  async batchUpdateAvailability(
+    @Param('id') id: string,
+    @Body() dto: BatchUpdateAvailabilityDto,
+  ) {
+    try {
+      const result = await this.resumeService.batchUpdateAvailability(id, dto);
+      return {
+        success: true,
+        data: result,
+        message: result.message
+      };
+    } catch (error) {
+      this.logger.error(`批量更新档期失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `批量更新档期失败: ${error.message}`
+      };
+    }
+  }
+
+  @Delete(':id/availability')
+  @ApiOperation({ summary: '删除月嫂档期' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '删除成功' })
+  async deleteAvailability(
+    @Param('id') id: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    try {
+      if (!startDate || !endDate) {
+        throw new BadRequestException('开始日期和结束日期不能为空');
+      }
+      const result = await this.resumeService.deleteAvailability(id, startDate, endDate);
+      return {
+        success: true,
+        data: result,
+        message: result.message
+      };
+    } catch (error) {
+      this.logger.error(`删除档期失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `删除档期失败: ${error.message}`
+      };
+    }
+  }
+
+  @Get(':id/availability/check')
+  @ApiOperation({ summary: '检查档期是否可用' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '检查成功' })
+  async checkAvailability(
+    @Param('id') id: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    try {
+      if (!startDate || !endDate) {
+        throw new BadRequestException('开始日期和结束日期不能为空');
+      }
+      const isAvailable = await this.resumeService.checkAvailability(
+        id,
+        new Date(startDate),
+        new Date(endDate)
+      );
+      return {
+        success: true,
+        data: { isAvailable },
+        message: isAvailable ? '档期可用' : '档期已被占用'
+      };
+    } catch (error) {
+      this.logger.error(`检查档期失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `检查档期失败: ${error.message}`
       };
     }
   }

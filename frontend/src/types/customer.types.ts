@@ -43,6 +43,9 @@ export interface Customer {
   lastFollowUpBy?: string;
   lastFollowUpTime?: string;
   claimCount?: number;
+  // 线索流转相关字段
+  transferCount?: number;
+  lastTransferredAt?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -26,6 +26,7 @@ import apiService from '../../services/api';
 import { getCurrentUser } from '@/services/auth';
 import { createFollowUp, getFollowUpsByResumeId, deleteFollowUp, followUpTypeMap, type FollowUpRecord } from '@/services/followUp.service';
 import { isPdfFile } from '../../utils/uploadHelper';
+import AvailabilityCalendar from '@/components/AvailabilityCalendar';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
@@ -313,6 +314,16 @@ const leadSourceMap: LeadSourceMapType = {
   other: '其他'
 };
 
+// 月嫂档位映射
+const maternityNurseLevelMap: { [key: string]: string } = {
+  'junior': '初级月嫂',
+  'silver': '银牌月嫂',
+  'gold': '金牌月嫂',
+  'platinum': '铂金月嫂',
+  'diamond': '钻石月嫂',
+  'crown': '皇冠月嫂'
+};
+
 // 学习意向映射
 const learningIntentionMap: { [key: string]: string } = {
   'yuesao': '月嫂',
@@ -389,6 +400,11 @@ interface ResumeData {
   personalPhoto?: FileInfo[];  // 修改为数组，支持多张个人照片
   certificates?: FileInfo[];
   reports?: FileInfo[];
+  confinementMealPhotos?: FileInfo[];  // 月子餐照片
+  cookingPhotos?: FileInfo[];  // 烹饪照片
+  complementaryFoodPhotos?: FileInfo[];  // 辅食添加照片
+  positiveReviewPhotos?: FileInfo[];  // 好评展示照片
+  selfIntroductionVideo?: FileInfo;
   // 保持向后兼容的旧字段
   photoUrls?: (string | null)[];
   certificateUrls?: (string | null)[];
@@ -1359,6 +1375,9 @@ const ResumeDetail = () => {
           <Card title="工作信息" style={{ marginBottom: 24 }}>
             <Descriptions bordered column={3}>
               <Descriptions.Item label="工种">{resume?.jobType ? jobTypeMap[resume.jobType] : '-'}</Descriptions.Item>
+              <Descriptions.Item label="月嫂档位">
+                {(resume as any)?.maternityNurseLevel ? maternityNurseLevelMap[(resume as any).maternityNurseLevel] : '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="期望薪资">
                 {resume?.expectedSalary ? `¥ ${resume.expectedSalary}` : '-'}
               </Descriptions.Item>
@@ -1379,7 +1398,7 @@ const ResumeDetail = () => {
               <Descriptions.Item label="线索来源">
                 {resume?.leadSource ? leadSourceMap[resume.leadSource] : '-'}
               </Descriptions.Item>
-              <Descriptions.Item label="技能标签" span={3}>
+              <Descriptions.Item label="技能证书" span={3}>
                 {resume?.skills?.length > 0 ? (
                   resume.skills.map((skill: string) => (
                     <Tag key={skill}>{skillsMap[skill] || skill}</Tag>
@@ -1616,6 +1635,202 @@ const ResumeDetail = () => {
             </div>
           </Card>
 
+          {/* 月子餐照片 */}
+          <Card title="月子餐照片" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {resume?.confinementMealPhotos && resume.confinementMealPhotos.length > 0 ? (
+                resume.confinementMealPhotos.map((photo: FileInfo, index: number) => (
+                  <div key={`confinementMeal-${photo.url}-${index}`}>
+                    {renderFilePreview(photo, index, 'confinementMeal')}
+                  </div>
+                ))
+              ) : (
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  border: '1px dashed #d9d9d9',
+                  borderRadius: '6px',
+                  color: '#999',
+                  width: '100%'
+                }}>
+                  <p>未上传月子餐照片</p>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* 烹饪照片 */}
+          <Card title="烹饪照片" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {resume?.cookingPhotos && resume.cookingPhotos.length > 0 ? (
+                resume.cookingPhotos.map((photo: FileInfo, index: number) => (
+                  <div key={`cooking-${photo.url}-${index}`}>
+                    {renderFilePreview(photo, index, 'cooking')}
+                  </div>
+                ))
+              ) : (
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  border: '1px dashed #d9d9d9',
+                  borderRadius: '6px',
+                  color: '#999',
+                  width: '100%'
+                }}>
+                  <p>未上传烹饪照片</p>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* 辅食添加照片 */}
+          <Card title="辅食添加照片" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {resume?.complementaryFoodPhotos && resume.complementaryFoodPhotos.length > 0 ? (
+                resume.complementaryFoodPhotos.map((photo: FileInfo, index: number) => (
+                  <div key={`complementaryFood-${photo.url}-${index}`}>
+                    {renderFilePreview(photo, index, 'complementaryFood')}
+                  </div>
+                ))
+              ) : (
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  border: '1px dashed #d9d9d9',
+                  borderRadius: '6px',
+                  color: '#999',
+                  width: '100%'
+                }}>
+                  <p>未上传辅食添加照片</p>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* 好评展示照片 */}
+          <Card title="好评展示照片" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {resume?.positiveReviewPhotos && resume.positiveReviewPhotos.length > 0 ? (
+                resume.positiveReviewPhotos.map((photo: FileInfo, index: number) => (
+                  <div key={`positiveReview-${photo.url}-${index}`}>
+                    {renderFilePreview(photo, index, 'positiveReview')}
+                  </div>
+                ))
+              ) : (
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  border: '1px dashed #d9d9d9',
+                  borderRadius: '6px',
+                  color: '#999',
+                  width: '100%'
+                }}>
+                  <p>未上传好评展示照片</p>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card title="自我介绍视频" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {resume?.selfIntroductionVideo ? (
+                <div style={{ width: '100%' }}>
+                  <div style={{
+                    padding: '16px',
+                    backgroundColor: '#fff7e6',
+                    border: '1px solid #ffd591',
+                    borderRadius: '4px',
+                    marginBottom: '16px',
+                    fontSize: '14px',
+                    color: '#d46b08'
+                  }}>
+                    <strong>提示：</strong>如果视频无法正常播放（只有声音没有画面），可能是视频编码格式不兼容。
+                    建议下载后使用本地播放器观看，或重新上传H.264编码的MP4格式视频。
+                  </div>
+
+                  <div style={{ maxWidth: '800px' }}>
+                    <video
+                      controls
+                      preload="auto"
+                      playsInline
+                      style={{
+                        width: '100%',
+                        maxHeight: '450px',
+                        borderRadius: '8px',
+                        backgroundColor: '#000'
+                      }}
+                      src={resume.selfIntroductionVideo.url}
+                      onError={(e) => {
+                        const videoEl = e.target as HTMLVideoElement;
+                        console.error('视频加载失败:', e);
+                        console.error('视频URL:', resume.selfIntroductionVideo?.url);
+                        console.error('视频错误代码:', videoEl.error?.code, '消息:', videoEl.error?.message);
+                        // 不显示toast，因为可能是source元素的错误
+                      }}
+                      onLoadedMetadata={(e) => {
+                        const videoEl = e.target as HTMLVideoElement;
+                        console.log('视频元数据加载成功', {
+                          duration: videoEl.duration,
+                          videoWidth: videoEl.videoWidth,
+                          videoHeight: videoEl.videoHeight,
+                          readyState: videoEl.readyState
+                        });
+                      }}
+                      onCanPlay={() => {
+                        console.log('视频可以播放');
+                      }}
+                    >
+                      您的浏览器不支持视频播放
+                    </video>
+
+                    <div style={{ marginTop: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                      <div style={{ flex: 1, color: '#666', fontSize: '14px' }}>
+                        <div>文件名: {resume.selfIntroductionVideo.filename || '未知'}</div>
+                        {resume.selfIntroductionVideo.size && (
+                          <div>大小: {(resume.selfIntroductionVideo.size / 1024 / 1024).toFixed(2)} MB</div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button
+                          type="primary"
+                          onClick={() => {
+                            const link = document.createElement('a');
+                            link.href = resume.selfIntroductionVideo!.url;
+                            link.download = resume.selfIntroductionVideo!.filename || 'video.mp4';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            messageApi.success('开始下载视频');
+                          }}
+                        >
+                          下载视频
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            window.open(resume.selfIntroductionVideo!.url, '_blank');
+                          }}
+                        >
+                          新窗口打开
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  border: '1px dashed #d9d9d9',
+                  borderRadius: '6px',
+                  color: '#999',
+                  width: '100%'
+                }}>
+                  <p>未上传自我介绍视频</p>
+                </div>
+              )}
+            </div>
+          </Card>
+
           <Card
             title="跟进记录"
             style={{ marginBottom: 24 }}
@@ -1635,6 +1850,17 @@ const ResumeDetail = () => {
               pagination={{ pageSize: 5 }}
             />
           </Card>
+
+          {/* 档期日历卡片 - 仅月嫂显示 */}
+          {resume?.jobType === 'yuexin' && (
+            <Card title="月嫂档期" style={{ marginBottom: 24 }}>
+              <AvailabilityCalendar
+                resumeId={resume._id}
+                editable={true}
+                onUpdate={fetchResumeDetail}
+              />
+            </Card>
+          )}
 
           {/* 创建信息卡片 */}
           <Card title="创建信息" style={{ marginBottom: 24 }}>

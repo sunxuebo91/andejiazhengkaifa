@@ -29,6 +29,11 @@ POST /api/resumes/miniprogram/:id/upload-file
 | `personalPhoto` | 个人照片 | `photoUrls` / `personalPhoto` |
 | `certificate` | 技能证书 | `certificateUrls` / `certificates` |
 | `medicalReport` | 体检报告 | `medicalReportUrls` / `reports` |
+| `selfIntroductionVideo` | 自我介绍视频 | `selfIntroductionVideo` |
+| `confinementMealPhoto` | 月子餐照片 | `confinementMealPhotos` |
+| `cookingPhoto` | 烹饪照片 | `cookingPhotos` |
+| `complementaryFoodPhoto` | 辅食添加照片 | `complementaryFoodPhotos` |
+| `positiveReviewPhoto` | 好评展示照片 | `positiveReviewPhotos` |
 
 ### 响应格式
 

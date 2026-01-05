@@ -11,10 +11,10 @@ export class FileInfoSchema {
   @Prop({ type: String, required: true })
   filename: string;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, required: false })
   size: number;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, required: false })
   mimetype: string;
 }
 

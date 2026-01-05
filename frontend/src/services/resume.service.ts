@@ -47,6 +47,7 @@ export interface Resume {
   personalPhoto?: { url: string; filename?: string; size?: number; mimetype?: string };
   certificates?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   reports?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
+  selfIntroductionVideo?: { url: string; filename?: string; size?: number; mimetype?: string };
 
   // 培训意向
   learningIntention?: string;

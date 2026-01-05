@@ -1,11 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { User } from '../../users/models/user.entity';
-import { Education, Gender, JobType, LeadSource, MaritalStatus, OrderStatus, Religion, Skill, Zodiac, ZodiacSign, LearningIntention, CurrentStage } from '../dto/create-resume.dto';
+import { Education, Gender, JobType, LeadSource, MaritalStatus, OrderStatus, Religion, Skill, Zodiac, ZodiacSign, LearningIntention, CurrentStage, MaternityNurseLevel } from '../dto/create-resume.dto';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsEnum, IsNumber, IsOptional, IsArray } from 'class-validator';
 import { WorkExperienceSchema } from './work-experience.schema';
 import { FileInfoSchema } from './file-info.schema';
+import { AvailabilityPeriodSchema } from './availability-period.schema';
 
 // 定义工作经历接口
 interface WorkExperience {
@@ -20,6 +21,14 @@ interface FileInfo {
   filename: string;
   mimetype: string;
   size: number;
+}
+
+// 定义档期接口
+interface AvailabilityPeriod {
+  date: Date;
+  status: 'unset' | 'available' | 'unavailable' | 'occupied' | 'leave';
+  contractId?: Types.ObjectId;
+  remarks?: string;
 }
 
 // 定义Resume接口
@@ -38,6 +47,7 @@ export interface IResume extends Document {
   expectedPosition: string;
   jobType: JobType;
   expectedSalary: number;
+  maternityNurseLevel?: MaternityNurseLevel;
   workExperience: number;
   education: Education;
   workHistory: WorkExperience[];
@@ -67,11 +77,17 @@ export interface IResume extends Document {
   reports?: FileInfo[];
   certificateUrls?: string[];
   medicalReportUrls?: string[];
+  confinementMealPhotos?: FileInfo[];
+  cookingPhotos?: FileInfo[];
+  complementaryFoodPhotos?: FileInfo[];
+  positiveReviewPhotos?: FileInfo[];
+  selfIntroductionVideo?: FileInfo;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   medicalExamDate?: string;
   learningIntention?: LearningIntention;
   currentStage?: CurrentStage;
+  availabilityCalendar?: AvailabilityPeriod[];
 }
 
 @Schema({ timestamps: true, collection: 'resumes' })
@@ -137,6 +153,12 @@ export class Resume extends Document implements IResume {
   @Prop()
   @IsNumber()
   expectedSalary: number;
+
+  @ApiProperty({ description: '月嫂档位', enum: MaternityNurseLevel })
+  @Prop({ type: String, enum: MaternityNurseLevel, nullable: true })
+  @IsEnum(MaternityNurseLevel)
+  @IsOptional()
+  maternityNurseLevel?: MaternityNurseLevel;
 
   @ApiProperty({ description: '工作经验（年）' })
   @Prop()
@@ -248,6 +270,26 @@ export class Resume extends Document implements IResume {
   @Prop({ type: [String], default: [] })
   medicalReportUrls?: string[];
 
+  @ApiProperty({ description: '月子餐照片' })
+  @Prop({ type: [FileInfoSchema], default: [] })
+  confinementMealPhotos?: FileInfo[];
+
+  @ApiProperty({ description: '烹饪照片' })
+  @Prop({ type: [FileInfoSchema], default: [] })
+  cookingPhotos?: FileInfo[];
+
+  @ApiProperty({ description: '辅食添加照片' })
+  @Prop({ type: [FileInfoSchema], default: [] })
+  complementaryFoodPhotos?: FileInfo[];
+
+  @ApiProperty({ description: '好评展示照片' })
+  @Prop({ type: [FileInfoSchema], default: [] })
+  positiveReviewPhotos?: FileInfo[];
+
+  @ApiProperty({ description: '自我介绍视频' })
+  @Prop({ type: FileInfoSchema, nullable: true })
+  selfIntroductionVideo?: FileInfo;
+
   @Prop({ nullable: true })
   emergencyContactName?: string;
 
@@ -268,6 +310,12 @@ export class Resume extends Document implements IResume {
   @IsEnum(CurrentStage)
   @IsOptional()
   currentStage?: CurrentStage;
+
+  @ApiProperty({ description: '档期日历' })
+  @Prop({ type: [AvailabilityPeriodSchema], default: [] })
+  @IsArray()
+  @IsOptional()
+  availabilityCalendar?: AvailabilityPeriodSchema[];
 }
 
 export const ResumeSchema = SchemaFactory.createForClass(Resume);
@@ -276,3 +324,9 @@ export const ResumeSchema = SchemaFactory.createForClass(Resume);
 // 移除之前的索引定义
 // 显式指定索引选项，确保null值不参与唯一性验证
 ResumeSchema.index({ idNumber: 1 }, { unique: true, sparse: true, background: true });
+
+// 为档期日历添加索引，提高查询性能
+ResumeSchema.index({
+  'availabilityCalendar.date': 1,
+  'availabilityCalendar.status': 1
+});

@@ -410,14 +410,26 @@ const CustomerList: React.FC = () => {
       key: 'customerId',
       width: 160,
       fixed: 'left' as const,
-      render: (customerId: string, record: Customer) => (
-        <Link
-          to={`/customers/${record._id}`}
-          style={{ color: '#1890ff', fontWeight: 'bold' }}
-        >
-          {customerId}
-        </Link>
-      ),
+      render: (customerId: string, record: Customer) => {
+        // 判断是否为新线索：只要创建后未被流转（transferCount为0），就显示NEW标识
+        const isNewLead = record.transferCount === 0 || !record.transferCount;
+
+        return (
+          <Space size={4}>
+            <Link
+              to={`/customers/${record._id}`}
+              style={{ color: '#1890ff', fontWeight: 'bold' }}
+            >
+              {customerId}
+            </Link>
+            {isNewLead && (
+              <Tag color="green" style={{ fontSize: '10px', padding: '0 4px', lineHeight: '16px', margin: 0 }}>
+                NEW
+              </Tag>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: '姓名',

@@ -434,7 +434,7 @@
 - **请求头**: `Authorization: Bearer [token]`
 - **请求体**: `multipart/form-data`
   - `file`: 文件
-  - `type`: 文件类型（idCardFront/idCardBack/personalPhoto/certificate/medicalReport）
+  - `type`: 文件类型（idCardFront/idCardBack/personalPhoto/certificate/medicalReport/selfIntroductionVideo/confinementMealPhoto/cookingPhoto/complementaryFoodPhoto/positiveReviewPhoto）
 - **成功响应**:
   ```json
   {
@@ -542,11 +542,22 @@
 - `shouyi`: 整理收纳
 
 ### 文件类型 (fileType)
-- `idCardFront`: 身份证正面
-- `idCardBack`: 身份证背面
-- `personalPhoto`: 个人照片
-- `certificate`: 技能证书
-- `medicalReport`: 体检报告
+
+#### 基础证件类
+- `idCardFront`: 身份证正面（最多1张）
+- `idCardBack`: 身份证背面（最多1张）
+- `personalPhoto`: 个人照片（最多30张）
+- `certificate`: 技能证书（最多30张）
+- `medicalReport`: 体检报告（最多10张）
+
+#### 视频类
+- `selfIntroductionVideo`: 自我介绍视频（最多1个）
+
+#### 作品展示类
+- `confinementMealPhoto`: 月子餐照片（最多30张）
+- `cookingPhoto`: 烹饪照片（最多30张）
+- `complementaryFoodPhoto`: 辅食添加照片（最多30张）
+- `positiveReviewPhoto`: 好评展示照片（最多30张）
 
 ### 婚姻状况 (maritalStatus)
 - `single`: 单身
@@ -570,3 +581,289 @@
 - `door-to-door`: 地推
 - `shared-order`: 合单
 - `other`: 其他
+
+---
+
+## 文件上传详细说明
+
+### 支持的文件格式
+
+#### 图片文件
+- **格式**: JPG, JPEG, PNG, GIF, WEBP
+- **大小限制**: 单个文件最大 10MB
+- **推荐尺寸**:
+  - 身份证照片: 1200x800 像素
+  - 个人照片: 800x800 像素
+  - 证书照片: 1200x900 像素
+  - 作品展示: 800x600 像素
+
+#### 视频文件
+- **格式**: MP4, MOV, AVI
+- **大小限制**: 单个文件最大 100MB
+- **推荐参数**:
+  - 分辨率: 1280x720 或 1920x1080
+  - 帧率: 25-30 fps
+  - 时长: 建议不超过 3 分钟
+
+### 文件上传流程
+
+#### 1. CRM端上传（创建/编辑简历时）
+```
+POST /api/resumes (创建)
+PUT /api/resumes/:id (更新)
+
+Content-Type: multipart/form-data
+
+表单字段:
+- name: 姓名
+- phone: 手机号
+- age: 年龄
+- ...其他文本字段
+
+文件字段:
+- idCardFront: 身份证正面（单个文件）
+- idCardBack: 身份证背面（单个文件）
+- photoFiles: 个人照片（多个文件）
+- certificateFiles: 技能证书（多个文件）
+- medicalReportFiles: 体检报告（多个文件）
+- selfIntroductionVideo: 自我介绍视频（单个文件）
+- confinementMealPhotos: 月子餐照片（多个文件）
+- cookingPhotos: 烹饪照片（多个文件）
+- complementaryFoodPhotos: 辅食添加照片（多个文件）
+- positiveReviewPhotos: 好评展示照片（多个文件）
+```
+
+#### 2. 小程序端上传（单个文件上传）
+```
+POST /api/resumes/miniprogram/:id/upload-file
+
+Content-Type: multipart/form-data
+
+参数:
+- file: 文件（必填）
+- type: 文件类型（必填，见文件类型枚举）
+
+特点:
+- 立即上传到云存储
+- 自动关联到简历记录
+- 返回文件URL
+- 支持断点续传
+```
+
+### 文件存储路径规则
+
+```
+腾讯云COS存储路径:
+- 身份证: /id-card/{resumeId}/{timestamp}-{filename}
+- 个人照片: /photo/{resumeId}/{timestamp}-{filename}
+- 技能证书: /certificate/{resumeId}/{timestamp}-{filename}
+- 体检报告: /medical-report/{resumeId}/{timestamp}-{filename}
+- 自我介绍视频: /video/{resumeId}/{timestamp}-{filename}
+- 月子餐照片: /confinement-meal/{resumeId}/{timestamp}-{filename}
+- 烹饪照片: /cooking/{resumeId}/{timestamp}-{filename}
+- 辅食添加照片: /complementary-food/{resumeId}/{timestamp}-{filename}
+- 好评展示照片: /positive-review/{resumeId}/{timestamp}-{filename}
+```
+
+### 文件删除
+
+#### CRM端删除
+- 在编辑简历时，直接移除文件即可
+- 保存时会自动删除云存储中的文件
+
+#### 小程序端删除
+```
+DELETE /api/resumes/miniprogram/:id/delete-file
+
+Content-Type: application/json
+
+{
+  "fileUrl": "https://example.com/file.jpg",
+  "fileType": "cookingPhoto"
+}
+
+说明:
+- 同时删除数据库记录和云存储文件
+- 删除失败会返回详细错误信息
+```
+
+### 文件压缩策略
+
+系统会自动对上传的图片进行压缩优化：
+
+1. **个人照片**: 压缩至 800x800，质量 85%
+2. **证书照片**: 压缩至 1200x900，质量 90%
+3. **身份证照片**: 保持原始质量，不压缩
+4. **作品展示照片**: 压缩至 800x600，质量 85%
+
+### 错误处理
+
+#### 常见错误码
+
+| 错误码 | 说明 | 解决方案 |
+|--------|------|---------|
+| `FILE_TOO_LARGE` | 文件大小超过限制 | 压缩文件后重新上传 |
+| `INVALID_FILE_TYPE` | 不支持的文件格式 | 使用支持的文件格式 |
+| `UPLOAD_FAILED` | 上传失败 | 检查网络连接后重试 |
+| `FILE_NOT_FOUND` | 文件不存在 | 确认文件URL是否正确 |
+| `DELETE_FAILED` | 删除失败 | 检查文件是否已被删除 |
+| `MAX_FILES_EXCEEDED` | 超过最大文件数量 | 删除部分文件后再上传 |
+
+#### 错误响应示例
+
+```json
+{
+  "success": false,
+  "code": "FILE_TOO_LARGE",
+  "message": "文件大小超过限制，最大允许 10MB",
+  "data": {
+    "maxSize": 10485760,
+    "actualSize": 15728640,
+    "fileName": "photo.jpg"
+  },
+  "timestamp": 1767592939244
+}
+```
+
+### 最佳实践
+
+#### 前端上传建议
+
+1. **显示上传进度**
+```javascript
+wx.uploadFile({
+  url: 'https://api.example.com/upload',
+  filePath: tempFilePath,
+  name: 'file',
+  formData: { type: 'cookingPhoto' },
+  success: (res) => {
+    console.log('上传成功', res);
+  },
+  fail: (err) => {
+    console.error('上传失败', err);
+  }
+});
+```
+
+2. **图片预压缩**
+```javascript
+wx.compressImage({
+  src: tempFilePath,
+  quality: 80,
+  success: (res) => {
+    // 使用压缩后的图片上传
+    uploadFile(res.tempFilePath);
+  }
+});
+```
+
+3. **错误重试机制**
+```javascript
+async function uploadWithRetry(filePath, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const result = await uploadFile(filePath);
+      return result;
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      await sleep(1000 * (i + 1)); // 指数退避
+    }
+  }
+}
+```
+
+4. **批量上传优化**
+```javascript
+// 使用 Promise.all 并发上传，但限制并发数
+async function uploadBatch(files, concurrency = 3) {
+  const results = [];
+  for (let i = 0; i < files.length; i += concurrency) {
+    const batch = files.slice(i, i + concurrency);
+    const batchResults = await Promise.all(
+      batch.map(file => uploadFile(file))
+    );
+    results.push(...batchResults);
+  }
+  return results;
+}
+```
+
+---
+
+## 附录
+
+### 完整的简历数据结构
+
+```typescript
+interface Resume {
+  // 基本信息
+  id: string;
+  name: string;
+  phone: string;
+  age: number;
+  gender: 'male' | 'female';
+  idNumber?: string;
+
+  // 工作信息
+  jobType: string;
+  education: string;
+  experienceYears?: number;
+  expectedSalary?: number;
+
+  // 个人信息
+  nativePlace?: string;
+  currentAddress?: string;
+  maritalStatus?: string;
+  religion?: string;
+  height?: number;
+  weight?: number;
+
+  // 技能和经验
+  skills: string[];
+  serviceArea: string[];
+  selfIntroduction?: string;
+  workExperiences: WorkExperience[];
+
+  // 文件资料
+  idCardFront?: string;
+  idCardBack?: string;
+  photoUrls: string[];
+  certificateUrls: string[];
+  medicalReportUrls: string[];
+  selfIntroductionVideo?: string;
+
+  // 作品展示
+  confinementMealPhotos: string[];
+  cookingPhotos: string[];
+  complementaryFoodPhotos: string[];
+  positiveReviewPhotos: string[];
+
+  // 系统字段
+  status: string;
+  leadSource?: string;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface WorkExperience {
+  startDate: string;
+  endDate: string;
+  description: string;
+}
+```
+
+### API版本历史
+
+| 版本 | 发布日期 | 主要变更 |
+|------|---------|---------|
+| v1.3 | 2026-01-05 | 新增烹饪照片等作品展示类型 |
+| v1.2 | 2025-12-15 | 优化文件上传接口 |
+| v1.1 | 2025-11-20 | 新增小程序专用接口 |
+| v1.0 | 2025-10-01 | 初始版本 |
+
+---
+
+**文档版本**: v1.3
+**最后更新**: 2026-01-05
+**维护团队**: 安得家政技术团队

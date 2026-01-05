@@ -11,6 +11,8 @@ import * as fs from 'fs';
 
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
+import { UpdateAvailabilityDto, BatchUpdateAvailabilityDto, QueryAvailabilityDto } from './dto/availability.dto';
+import { AvailabilityStatus } from './models/availability-period.schema';
 
 @Injectable()
 export class ResumeService {
@@ -64,7 +66,8 @@ export class ResumeService {
       certificateUrls: [],
       medicalReportUrls: [],
       certificates: [],
-      reports: []
+      reports: [],
+      selfIntroductionVideo: null
     };
 
     // 只有在有文件时才处理文件上传
@@ -108,6 +111,9 @@ export class ResumeService {
                   categorizedFiles.reports.push(fileInfo);
                   categorizedFiles.medicalReportUrls.push(fileUrl);
                   break;
+                case 'selfIntroductionVideo':
+                  categorizedFiles.selfIntroductionVideo = fileInfo;
+                  break;
                 default:
                   // 默认归类为个人照片
                   categorizedFiles.photoUrls.push(fileUrl);
@@ -132,7 +138,8 @@ export class ResumeService {
       certificateUrls: categorizedFiles.certificateUrls,
       medicalReportUrls: categorizedFiles.medicalReportUrls,
       certificates: categorizedFiles.certificates,
-      reports: categorizedFiles.reports
+      reports: categorizedFiles.reports,
+      selfIntroductionVideo: categorizedFiles.selfIntroductionVideo
     };
 
     // 如果idNumber为null、空字符串或undefined，则删除它，避免唯一索引问题
@@ -150,7 +157,8 @@ export class ResumeService {
         idCardBack: !!savedResume.idCardBack,
         photoCount: savedResume.photoUrls?.length || 0,
         certificateCount: savedResume.certificates?.length || 0,
-        reportCount: savedResume.reports?.length || 0
+        reportCount: savedResume.reports?.length || 0,
+        selfIntroductionVideo: !!savedResume.selfIntroductionVideo
       })}`);
 
       return {
@@ -464,7 +472,7 @@ export class ResumeService {
       this.logger.debug(`开始处理文件上传: id=${id}, type=${fileType}, filename=${file.originalname}`);
 
       // 验证文件类型参数
-      const validFileTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport'];
+      const validFileTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport', 'selfIntroductionVideo', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto'];
       if (!validFileTypes.includes(fileType)) {
         this.logger.error(`无效的文件类型: ${fileType}, 有效类型: ${validFileTypes.join(', ')}`);
         throw new BadRequestException(`无效的文件类型: ${fileType}`);
@@ -527,6 +535,30 @@ export class ResumeService {
           if (!resumeDoc.medicalReportUrls) resumeDoc.medicalReportUrls = [];
           resumeDoc.medicalReportUrls.push(fileUrl);
           this.logger.debug(`添加到体检报告: ${fileUrl}, 总数: ${resumeDoc.reports.length}`);
+          break;
+        case 'selfIntroductionVideo':
+          resumeDoc.selfIntroductionVideo = uploadedFileInfo;
+          this.logger.debug(`设置自我介绍视频: ${fileUrl}`);
+          break;
+        case 'confinementMealPhoto':
+          if (!resumeDoc.confinementMealPhotos) resumeDoc.confinementMealPhotos = [];
+          resumeDoc.confinementMealPhotos.push(uploadedFileInfo);
+          this.logger.debug(`添加到月子餐照片: ${fileUrl}, 总数: ${resumeDoc.confinementMealPhotos.length}`);
+          break;
+        case 'cookingPhoto':
+          if (!resumeDoc.cookingPhotos) resumeDoc.cookingPhotos = [];
+          resumeDoc.cookingPhotos.push(uploadedFileInfo);
+          this.logger.debug(`添加到烹饪照片: ${fileUrl}, 总数: ${resumeDoc.cookingPhotos.length}`);
+          break;
+        case 'complementaryFoodPhoto':
+          if (!resumeDoc.complementaryFoodPhotos) resumeDoc.complementaryFoodPhotos = [];
+          resumeDoc.complementaryFoodPhotos.push(uploadedFileInfo);
+          this.logger.debug(`添加到辅食添加照片: ${fileUrl}, 总数: ${resumeDoc.complementaryFoodPhotos.length}`);
+          break;
+        case 'positiveReviewPhoto':
+          if (!resumeDoc.positiveReviewPhotos) resumeDoc.positiveReviewPhotos = [];
+          resumeDoc.positiveReviewPhotos.push(uploadedFileInfo);
+          this.logger.debug(`添加到好评展示照片: ${fileUrl}, 总数: ${resumeDoc.positiveReviewPhotos.length}`);
           break;
         default:
           // 移除默认归类，如果到了这里说明验证有问题
@@ -633,6 +665,36 @@ export class ResumeService {
       if (resume.reports.length < originalLength) {
         fileRemoved = true;
         this.logger.debug(`从reports中移除了文件: ${fileUrl}`);
+      }
+    }
+
+    // 从月子餐照片中移除
+    if (resume.confinementMealPhotos && Array.isArray(resume.confinementMealPhotos)) {
+      const originalLength = resume.confinementMealPhotos.length;
+      resume.confinementMealPhotos = resume.confinementMealPhotos.filter(photo => photo.url !== fileUrl);
+      if (resume.confinementMealPhotos.length < originalLength) {
+        fileRemoved = true;
+        this.logger.debug(`从confinementMealPhotos数组中移除了文件: ${fileUrl}`);
+      }
+    }
+
+    // 从辅食添加照片中移除
+    if (resume.complementaryFoodPhotos && Array.isArray(resume.complementaryFoodPhotos)) {
+      const originalLength = resume.complementaryFoodPhotos.length;
+      resume.complementaryFoodPhotos = resume.complementaryFoodPhotos.filter(photo => photo.url !== fileUrl);
+      if (resume.complementaryFoodPhotos.length < originalLength) {
+        fileRemoved = true;
+        this.logger.debug(`从complementaryFoodPhotos数组中移除了文件: ${fileUrl}`);
+      }
+    }
+
+    // 从好评展示照片中移除
+    if (resume.positiveReviewPhotos && Array.isArray(resume.positiveReviewPhotos)) {
+      const originalLength = resume.positiveReviewPhotos.length;
+      resume.positiveReviewPhotos = resume.positiveReviewPhotos.filter(photo => photo.url !== fileUrl);
+      if (resume.positiveReviewPhotos.length < originalLength) {
+        fileRemoved = true;
+        this.logger.debug(`从positiveReviewPhotos数组中移除了文件: ${fileUrl}`);
       }
     }
 
@@ -767,6 +829,63 @@ export class ResumeService {
           if (resume.medicalReportUrls.length < originalLength) {
             fileRemoved = true;
             this.logger.debug(`从medicalReportUrls中移除了文件: ${fileUrl}`);
+          }
+        }
+        break;
+
+      case 'selfIntroductionVideo':
+        // 移除自我介绍视频
+        if (resume.selfIntroductionVideo && resume.selfIntroductionVideo.url === fileUrl) {
+          resume.selfIntroductionVideo = null;
+          fileRemoved = true;
+          this.logger.debug(`移除了自我介绍视频: ${fileUrl}`);
+        }
+        break;
+
+      case 'confinementMealPhoto':
+        // 从confinementMealPhotos数组中移除
+        if (resume.confinementMealPhotos) {
+          const originalLength = resume.confinementMealPhotos.length;
+          resume.confinementMealPhotos = resume.confinementMealPhotos.filter(photo => photo.url !== fileUrl);
+          if (resume.confinementMealPhotos.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从confinementMealPhotos中移除了文件: ${fileUrl}`);
+          }
+        }
+        break;
+
+      case 'cookingPhoto':
+        // 从cookingPhotos数组中移除
+        if (resume.cookingPhotos) {
+          const originalLength = resume.cookingPhotos.length;
+          resume.cookingPhotos = resume.cookingPhotos.filter(photo => photo.url !== fileUrl);
+          if (resume.cookingPhotos.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从cookingPhotos中移除了文件: ${fileUrl}`);
+          }
+        }
+        break;
+
+      case 'complementaryFoodPhoto':
+        // 从complementaryFoodPhotos数组中移除
+        if (resume.complementaryFoodPhotos) {
+          const originalLength = resume.complementaryFoodPhotos.length;
+          resume.complementaryFoodPhotos = resume.complementaryFoodPhotos.filter(photo => photo.url !== fileUrl);
+          if (resume.complementaryFoodPhotos.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从complementaryFoodPhotos中移除了文件: ${fileUrl}`);
+          }
+        }
+        break;
+
+      case 'positiveReviewPhoto':
+        // 从positiveReviewPhotos数组中移除
+        if (resume.positiveReviewPhotos) {
+          const originalLength = resume.positiveReviewPhotos.length;
+          resume.positiveReviewPhotos = resume.positiveReviewPhotos.filter(photo => photo.url !== fileUrl);
+          if (resume.positiveReviewPhotos.length < originalLength) {
+            fileRemoved = true;
+            this.logger.debug(`从positiveReviewPhotos中移除了文件: ${fileUrl}`);
           }
         }
         break;
@@ -1075,6 +1194,9 @@ export class ResumeService {
           resume.reports.push(...categorizedFiles[type]);
           if (!resume.medicalReportUrls) resume.medicalReportUrls = [];
           resume.medicalReportUrls.push(...categorizedFiles[type].map(f => f.url));
+          break;
+        case 'selfIntroductionVideo':
+          resume.selfIntroductionVideo = categorizedFiles[type][0];
           break;
         default:
           // 默认归类为个人照片
@@ -1500,6 +1622,9 @@ export class ResumeService {
       selfIntroduction: r.selfIntroduction,
       serviceArea: r.serviceArea,
       photoUrls: r.photoUrls,
+      // 自我介绍视频（公开可见）
+      selfIntroductionVideo: r.selfIntroductionVideo || null,
+      selfIntroductionVideoUrl: r.selfIntroductionVideo?.url || null,
       // 工作经历（保留必要字段）
       workExperiences: r.workExperiences || r.workHistory || []
     };
@@ -1763,6 +1888,197 @@ export class ResumeService {
 
       throw new BadRequestException(`创建简历失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 获取月嫂档期
+   */
+  async getAvailability(
+    resumeId: string,
+    query?: QueryAvailabilityDto
+  ) {
+    const resume = await this.resumeModel.findById(resumeId);
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    let periods = resume.availabilityCalendar || [];
+
+    // 如果指定了日期范围，进行筛选
+    if (query?.startDate && query?.endDate) {
+      const start = new Date(query.startDate);
+      const end = new Date(query.endDate);
+      periods = periods.filter(p => {
+        const date = new Date(p.date);
+        return date >= start && date <= end;
+      });
+    }
+
+    // 如果指定了状态，进行筛选
+    if (query?.status) {
+      periods = periods.filter(p => p.status === query.status);
+    }
+
+    return {
+      resumeId: resume._id,
+      name: resume.name,
+      jobType: resume.jobType,
+      availabilityCalendar: periods.map(p => ({
+        date: p.date,
+        status: p.status,
+        contractId: p.contractId,
+        remarks: p.remarks
+      }))
+    };
+  }
+
+  /**
+   * 更新月嫂档期（按日期范围）
+   */
+  async updateAvailability(resumeId: string, dto: UpdateAvailabilityDto) {
+    const resume = await this.resumeModel.findById(resumeId);
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    const start = new Date(dto.startDate);
+    const end = new Date(dto.endDate);
+
+    // 验证日期范围
+    if (start > end) {
+      throw new BadRequestException('开始日期不能晚于结束日期');
+    }
+
+    // 生成日期范围内的所有日期
+    const periods = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      periods.push({
+        date: new Date(d),
+        status: dto.status,
+        contractId: dto.contractId ? new Types.ObjectId(dto.contractId) : undefined,
+        remarks: dto.remarks
+      });
+    }
+
+    // 删除旧的档期（在日期范围内的）
+    resume.availabilityCalendar = (resume.availabilityCalendar || []).filter(p => {
+      const date = new Date(p.date);
+      return date < start || date > end;
+    });
+
+    // 添加新的档期
+    resume.availabilityCalendar.push(...periods);
+
+    // 按日期排序
+    resume.availabilityCalendar.sort((a, b) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    await resume.save();
+
+    this.logger.log(`更新档期成功: resumeId=${resumeId}, 更新了${periods.length}天`);
+
+    return {
+      updated: periods.length,
+      message: `成功更新${periods.length}天的档期`
+    };
+  }
+
+  /**
+   * 批量更新档期（按日期列表）
+   */
+  async batchUpdateAvailability(resumeId: string, dto: BatchUpdateAvailabilityDto) {
+    const resume = await this.resumeModel.findById(resumeId);
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    const periods = dto.dates.map(dateStr => ({
+      date: new Date(dateStr),
+      status: dto.status,
+      contractId: dto.contractId ? new Types.ObjectId(dto.contractId) : undefined,
+      remarks: dto.remarks
+    }));
+
+    // 删除旧的档期（在日期列表中的）
+    const datesToUpdate = new Set(dto.dates.map(d => new Date(d).toISOString().split('T')[0]));
+    resume.availabilityCalendar = (resume.availabilityCalendar || []).filter(p => {
+      const dateStr = new Date(p.date).toISOString().split('T')[0];
+      return !datesToUpdate.has(dateStr);
+    });
+
+    // 添加新的档期
+    resume.availabilityCalendar.push(...periods);
+
+    // 按日期排序
+    resume.availabilityCalendar.sort((a, b) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    await resume.save();
+
+    return {
+      updated: periods.length,
+      message: `成功更新${periods.length}天的档期`
+    };
+  }
+
+  /**
+   * 检查档期是否可用（无冲突）
+   */
+  async checkAvailability(
+    resumeId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<boolean> {
+    const resume = await this.resumeModel.findById(resumeId);
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    const periods = resume.availabilityCalendar || [];
+
+    // 检查是否有档期冲突（occupied 状态）
+    const hasConflict = periods.some(period => {
+      const periodDate = new Date(period.date);
+      return (
+        period.status === AvailabilityStatus.OCCUPIED &&
+        periodDate >= startDate &&
+        periodDate <= endDate
+      );
+    });
+
+    return !hasConflict;
+  }
+
+  /**
+   * 删除指定日期范围的档期
+   */
+  async deleteAvailability(resumeId: string, startDate: string, endDate: string) {
+    const resume = await this.resumeModel.findById(resumeId);
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    const originalLength = resume.availabilityCalendar?.length || 0;
+
+    // 删除指定日期范围内的档期
+    resume.availabilityCalendar = (resume.availabilityCalendar || []).filter(p => {
+      const date = new Date(p.date);
+      return date < start || date > end;
+    });
+
+    const deletedCount = originalLength - (resume.availabilityCalendar?.length || 0);
+
+    await resume.save();
+
+    return {
+      deleted: deletedCount,
+      message: `成功删除${deletedCount}天的档期`
+    };
   }
 
 }

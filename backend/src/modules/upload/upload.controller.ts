@@ -1,23 +1,25 @@
 
-import { 
-  Controller, 
-  Post, 
-  UseInterceptors, 
-  UploadedFile, 
-  BadRequestException, 
-  Get, 
-  Param, 
-  Res, 
-  Delete, 
-  Body, 
+import {
+  Controller,
+  Post,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  Get,
+  Param,
+  Res,
+  Delete,
+  Body,
   HttpStatus,
   ParseFilePipe,
   MaxFileSizeValidator,
-  FileTypeValidator
+  FileTypeValidator,
+  Logger
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { UploadService } from './upload.service';
+import { VideoTranscoderService } from './video-transcoder.service';
 // import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiConsumes, ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CosException, CosErrorType } from './exceptions/cos.exception';
@@ -26,7 +28,12 @@ import { CosException, CosErrorType } from './exceptions/cos.exception';
 @Controller('upload')
 // @UseGuards(JwtAuthGuard)
 export class UploadController {
-  constructor(private readonly uploadService: UploadService) {}
+  private readonly logger = new Logger(UploadController.name);
+
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly videoTranscoderService: VideoTranscoderService
+  ) {}
 
   @Post('file')
   @UseInterceptors(FileInterceptor('file'))
@@ -159,10 +166,103 @@ export class UploadController {
           error
         );
       }
-      
+
       throw new CosException(
         CosErrorType.DELETE_FAILED,
         `删除文件失败: ${error.message}`,
+        HttpStatus.BAD_REQUEST,
+        error
+      );
+    }
+  }
+
+  @Post('video')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: '上传视频', description: '上传视频到腾讯云COS，自动转码为H.264格式' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'type'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: '要上传的视频文件',
+        },
+        type: {
+          type: 'string',
+          enum: ['selfIntroductionVideo'],
+          description: '视频类型',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: '视频上传成功' })
+  @ApiResponse({ status: 400, description: '视频验证失败或上传失败' })
+  async uploadVideo(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 50 * 1024 * 1024 }), // 50MB for video before transcoding
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+    @Body('type') type: string,
+  ) {
+    // 验证文件类型
+    const allowedVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv', 'video/webm', 'video/mpeg', 'video/3gpp'];
+    if (!allowedVideoTypes.includes(file.mimetype)) {
+      throw new BadRequestException(`不支持的视频格式: ${file.mimetype}`);
+    }
+
+    if (!['selfIntroductionVideo'].includes(type)) {
+      throw new BadRequestException('无效的视频类型');
+    }
+
+    try {
+      this.logger.log(`开始处理视频上传: ${file.originalname}, 大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+
+      // 转码视频为H.264格式
+      const { buffer: transcodedBuffer, filename: transcodedFilename } =
+        await this.videoTranscoderService.transcodeToH264(file.buffer, file.originalname);
+
+      this.logger.log(`视频转码完成，新文件名: ${transcodedFilename}, 大小: ${(transcodedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+
+      // 创建新的文件对象用于上传
+      const transcodedFile: Express.Multer.File = {
+        ...file,
+        buffer: transcodedBuffer,
+        originalname: transcodedFilename,
+        mimetype: 'video/mp4',
+        size: transcodedBuffer.length,
+      };
+
+      // 上传转码后的视频
+      const fileUrl = await this.uploadService.uploadFile(transcodedFile, { type });
+
+      this.logger.log(`视频上传成功: ${fileUrl}`);
+
+      return {
+        success: true,
+        data: {
+          fileUrl,
+          filename: transcodedFilename,
+          originalFilename: file.originalname,
+          mimeType: 'video/mp4',
+          size: transcodedBuffer.length,
+          originalSize: file.size,
+        }
+      };
+    } catch (error) {
+      this.logger.error(`视频上传失败: ${error.message}`, error.stack);
+      if (error instanceof CosException) {
+        throw error;
+      }
+      throw new CosException(
+        CosErrorType.UPLOAD_FAILED,
+        `视频上传失败: ${error.message}`,
         HttpStatus.BAD_REQUEST,
         error
       );

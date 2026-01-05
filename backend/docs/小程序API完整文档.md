@@ -1,0 +1,1855 @@
+# 小程序API完整文档
+
+## 📋 目录
+
+- [认证授权](#认证授权)
+- [简历管理](#简历管理)
+  - [创建简历](#创建简历)
+  - [获取简历详情](#获取简历详情)
+  - [更新简历](#更新简历)
+- [文件上传](#文件上传)
+- [数据字典](#数据字典)
+- [错误码说明](#错误码说明)
+
+---
+
+## 🔐 认证授权
+
+### 基础信息
+
+- **生产环境**: `https://crm.andejiazheng.com/api`
+- **开发环境**: `http://localhost:3000/api`
+- **认证方式**: Bearer Token
+- **请求头**: `Authorization: Bearer {token}`
+
+### 获取Token
+
+```http
+POST /api/auth/miniprogram/login
+Content-Type: application/json
+
+{
+  "code": "微信登录code"
+}
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "user_id",
+      "openid": "openid"
+    }
+  }
+}
+```
+
+---
+
+## 📝 简历管理
+
+### 创建简历
+
+创建一个新的简历记录。
+
+#### 请求
+
+```http
+POST /api/resumes/miniprogram/create
+Authorization: Bearer {token}
+Content-Type: application/json
+Idempotency-Key: {unique-key}  # 可选，用于防止重复提交
+
+{
+  "name": "张三",
+  "phone": "13800138000",
+  "gender": "female",
+  "age": 35,
+  "jobType": "yuexin",
+  "education": "high",
+  "maternityNurseLevel": "gold",
+  "expectedSalary": 8000,
+  "nativePlace": "河南省郑州市",
+  "experienceYears": 3,
+  "skills": ["chanhou", "yuying"],
+  "serviceArea": ["北京市朝阳区"],
+  "selfIntroduction": "自我介绍内容",
+  "wechat": "wechat123",
+  "currentAddress": "北京市朝阳区",
+  "hukouAddress": "河南省郑州市",
+  "birthDate": "1990-01-01",
+  "idNumber": "410102199001011234",
+  "ethnicity": "汉族",
+  "zodiac": "马",
+  "zodiacSign": "摩羯座",
+  "maritalStatus": "married",
+  "religion": "无",
+  "emergencyContactName": "李四",
+  "emergencyContactPhone": "13900139000",
+  "medicalExamDate": "2024-01-01",
+  "orderStatus": "available",
+  "learningIntention": "yes",
+  "currentStage": "working",
+  "workExperiences": [
+    {
+      "startDate": "2020-01-01",
+      "endDate": "2023-12-31",
+      "description": "工作描述",
+      "company": "某家政公司",
+      "position": "月嫂"
+    }
+  ]
+}
+```
+
+#### 必填字段
+
+| 字段 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `name` | string | 姓名，2-20字符 | "张三" |
+| `phone` | string | 手机号码，11位数字 | "13800138000" |
+| `gender` | string | 性别："female" 或 "male" | "female" |
+| `age` | number | 年龄，18-65岁 | 35 |
+| `jobType` | string | 工种类型，见[工种类型](#工种类型) | "yuexin" |
+| `education` | string | 学历，见[学历类型](#学历类型) | "high" |
+
+#### 可选字段
+
+| 字段 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `maternityNurseLevel` | string | 月嫂档位（仅月嫂），见[月嫂档位](#月嫂档位) | "gold" |
+| `expectedSalary` | number | 期望薪资 | 8000 |
+| `nativePlace` | string | 籍贯，最大20字符 | "河南省郑州市" |
+| `experienceYears` | number | 工作经验年限 | 3 |
+| `skills` | array | 技能列表 | ["chanhou", "yuying"] |
+| `serviceArea` | array | 服务区域 | ["北京市朝阳区"] |
+| `selfIntroduction` | string | 自我介绍 | "自我介绍内容" |
+| `wechat` | string | 微信号 | "wechat123" |
+| `currentAddress` | string | 现居地址 | "北京市朝阳区" |
+| `hukouAddress` | string | 户口地址 | "河南省郑州市" |
+| `birthDate` | string | 出生日期，格式：YYYY-MM-DD | "1990-01-01" |
+| `idNumber` | string | 身份证号 | "410102199001011234" |
+| `ethnicity` | string | 民族 | "汉族" |
+| `zodiac` | string | 生肖 | "马" |
+| `zodiacSign` | string | 星座 | "摩羯座" |
+| `maritalStatus` | string | 婚姻状况，见[婚姻状况](#婚姻状况) | "married" |
+| `religion` | string | 宗教信仰 | "无" |
+| `emergencyContactName` | string | 紧急联系人姓名 | "李四" |
+| `emergencyContactPhone` | string | 紧急联系人电话 | "13900139000" |
+| `medicalExamDate` | string | 体检日期，格式：YYYY-MM-DD | "2024-01-01" |
+| `orderStatus` | string | 接单状态，见[接单状态](#接单状态) | "available" |
+| `learningIntention` | string | 培训意向，见[培训意向](#培训意向) | "yes" |
+| `currentStage` | string | 当前阶段，见[当前阶段](#当前阶段) | "working" |
+| `workExperiences` | array | 工作经历数组 | 见下方说明 |
+
+#### 工作经历对象结构
+
+```json
+{
+  "startDate": "2020-01-01",      // 必填：开始日期
+  "endDate": "2023-12-31",        // 必填：结束日期
+  "description": "工作描述",       // 必填：工作描述
+  "company": "某家政公司",         // 可选：公司名称
+  "position": "月嫂"              // 可选：职位
+}
+```
+
+#### 成功响应 (201)
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "66e2f4af8b1234567890abcd",
+    "createdAt": "2025-09-12T10:19:27.671Z",
+    "action": "CREATED",
+    "resume": {
+      "id": "66e2f4af8b1234567890abcd",
+      "name": "张三",
+      "phone": "13800138000",
+      "age": 35,
+      "gender": "female",
+      "jobType": "yuexin",
+      "education": "high",
+      "maternityNurseLevel": "gold",
+      "expectedSalary": 8000,
+      // ... 其他字段
+    }
+  },
+  "message": "创建简历成功"
+}
+```
+
+#### 错误响应
+
+**重复手机号 (409)**:
+```json
+{
+  "success": false,
+  "code": "DUPLICATE",
+  "data": {
+    "existingId": "66e2f4af8b1234567890abcd"
+  },
+  "message": "该手机号已被使用"
+}
+```
+
+**验证错误 (400)**:
+```json
+{
+  "success": false,
+  "code": "VALIDATION_ERROR",
+  "data": {
+    "errors": ["姓名不能为空", "手机号码格式不正确"]
+  },
+  "message": "数据验证失败"
+}
+```
+
+---
+
+### 获取简历详情
+
+获取指定ID的简历详细信息。
+
+#### 请求
+
+```http
+GET /api/resumes/miniprogram/{id}
+Authorization: Bearer {token}
+```
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 简历ID |
+
+#### 成功响应 (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "66e2f4af8b1234567890abcd",
+    "name": "张三",
+    "phone": "13800138000",
+    "age": 35,
+    "gender": "female",
+    "jobType": "yuexin",
+    "education": "high",
+    "experienceYears": 3,
+    "nativePlace": "河南省郑州市",
+    "selfIntroduction": "自我介绍内容",
+    "wechat": "wechat123",
+    "currentAddress": "北京市朝阳区",
+    "hukouAddress": "河南省郑州市",
+    "birthDate": "1990-01-01",
+    "skills": ["chanhou", "yuying"],
+    "serviceArea": ["北京市朝阳区"],
+    "expectedSalary": 8000,
+    "maternityNurseLevel": "gold",
+    "workExperiences": [
+      {
+        "startDate": "2020-01-01",
+        "endDate": "2023-12-31",
+        "description": "工作描述",
+        "company": "某家政公司",
+        "position": "月嫂"
+      }
+    ],
+    "idCardFront": {
+      "url": "https://example.com/idcard-front.jpg",
+      "key": "uploads/idcard/front.jpg"
+    },
+    "idCardBack": {
+      "url": "https://example.com/idcard-back.jpg",
+      "key": "uploads/idcard/back.jpg"
+    },
+    "personalPhoto": [
+      {
+        "url": "https://example.com/photo1.jpg",
+        "key": "uploads/photo/photo1.jpg"
+      }
+    ],
+    "certificates": [
+      {
+        "url": "https://example.com/cert1.jpg",
+        "key": "uploads/cert/cert1.jpg"
+      }
+    ],
+    "reports": [
+      {
+        "url": "https://example.com/report1.jpg",
+        "key": "uploads/report/report1.jpg"
+      }
+    ],
+    "selfIntroductionVideo": {
+      "url": "https://example.com/video.mp4",
+      "key": "uploads/video/video.mp4"
+    },
+    "createdAt": "2025-09-12T10:19:27.671Z",
+    "updatedAt": "2025-09-12T10:19:27.671Z"
+  },
+  "message": "获取简历成功"
+}
+```
+
+#### 错误响应
+
+**简历不存在 (404)**:
+```json
+{
+  "success": false,
+  "data": null,
+  "message": "简历不存在"
+}
+```
+
+---
+
+### 更新简历
+
+更新指定ID的简历信息。支持部分更新，只需传递需要更新的字段。
+
+#### 请求
+
+```http
+PUT /api/resumes/miniprogram/{id}
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "expectedSalary": 9000,
+  "maternityNurseLevel": "platinum",
+  "selfIntroduction": "更新后的自我介绍",
+  "orderStatus": "available"
+}
+```
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 简历ID |
+
+#### 可更新字段
+
+除了 `phone`（手机号）外，所有创建时的可选字段都可以更新。
+
+#### 成功响应 (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "66e2f4af8b1234567890abcd",
+    "name": "张三",
+    "phone": "13800138000",
+    "age": 35,
+    "gender": "female",
+    "jobType": "yuexin",
+    "education": "high",
+    "experienceYears": 3,
+    "expectedSalary": 9000,
+    "maternityNurseLevel": "platinum",
+    "nativePlace": "河南省郑州市",
+    "skills": ["chanhou", "yuying"],
+    "serviceArea": ["北京市朝阳区"],
+    "selfIntroduction": "更新后的自我介绍",
+    "orderStatus": "available",
+    // ... 其他字段
+  },
+  "message": "更新简历成功"
+}
+```
+
+#### 错误响应
+
+**简历不存在 (404)**:
+```json
+{
+  "success": false,
+  "message": "简历不存在"
+}
+```
+
+**验证错误 (400)**:
+```json
+{
+  "success": false,
+  "code": "VALIDATION_ERROR",
+  "data": {
+    "errors": ["年龄必须在18-65之间"]
+  },
+  "message": "数据验证失败"
+}
+```
+
+---
+
+## 📁 文件上传
+
+### 上传文件
+
+上传各类文件（照片、证书、视频等）。
+
+#### 请求
+
+```http
+POST /api/upload/miniprogram
+Authorization: Bearer {token}
+Content-Type: multipart/form-data
+
+file: [文件二进制数据]
+type: "idcard-front" | "idcard-back" | "photo" | "certificate" | "report" | "video"
+```
+
+#### 文件类型说明
+
+| type值 | 说明 | 支持格式 | 大小限制 |
+|--------|------|----------|----------|
+| `idcard-front` | 身份证正面 | jpg, jpeg, png | 5MB |
+| `idcard-back` | 身份证反面 | jpg, jpeg, png | 5MB |
+| `photo` | 个人照片 | jpg, jpeg, png | 5MB |
+| `certificate` | 证书照片 | jpg, jpeg, png | 5MB |
+| `report` | 体检报告 | jpg, jpeg, png, pdf | 10MB |
+| `video` | 自我介绍视频 | mp4, mov | 50MB |
+
+#### 成功响应 (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://example.com/uploads/photo/123456.jpg",
+    "key": "uploads/photo/123456.jpg",
+    "size": 102400,
+    "mimeType": "image/jpeg"
+  },
+  "message": "上传成功"
+}
+```
+
+#### 错误响应
+
+**文件过大 (413)**:
+```json
+{
+  "success": false,
+  "message": "文件大小超过限制"
+}
+```
+
+**文件格式不支持 (400)**:
+```json
+{
+  "success": false,
+  "message": "不支持的文件格式"
+}
+```
+
+### 删除文件
+
+删除已上传的文件。
+
+#### 请求
+
+```http
+DELETE /api/upload/miniprogram
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "key": "uploads/photo/123456.jpg"
+}
+```
+
+#### 成功响应 (200)
+
+```json
+{
+  "success": true,
+  "message": "删除成功"
+}
+```
+
+---
+
+### 简历文件上传（推荐）
+
+上传简历相关文件，直接关联到简历记录。
+
+#### 上传单个文件
+
+```http
+POST /api/resumes/miniprogram/:id/upload-file
+Authorization: Bearer {token}
+Content-Type: multipart/form-data
+
+file: [文件二进制数据]
+type: "idCardFront" | "idCardBack" | "personalPhoto" | "certificate" | "medicalReport" | "selfIntroductionVideo" | "confinementMealPhoto" | "cookingPhoto" | "complementaryFoodPhoto" | "positiveReviewPhoto"
+```
+
+#### 文件类型说明
+
+| type值 | 说明 | 对应字段 |
+|--------|------|---------|
+| `idCardFront` | 身份证正面 | `idCardFront` |
+| `idCardBack` | 身份证背面 | `idCardBack` |
+| `personalPhoto` | 个人照片 | `photoUrls` / `personalPhoto` |
+| `certificate` | 技能证书 | `certificateUrls` / `certificates` |
+| `medicalReport` | 体检报告 | `medicalReportUrls` / `reports` |
+| `selfIntroductionVideo` | 自我介绍视频 | `selfIntroductionVideo` |
+| `confinementMealPhoto` | 月子餐照片 | `confinementMealPhotos` |
+| `cookingPhoto` | 烹饪照片 | `cookingPhotos` |
+| `complementaryFoodPhoto` | 辅食添加照片 | `complementaryFoodPhotos` |
+| `positiveReviewPhoto` | 好评展示照片 | `positiveReviewPhotos` |
+
+#### 成功响应 (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "fileUrl": "https://housekeeping-1254058915.cos.ap-guangzhou.myqcloud.com/certificate/xxx.jpg",
+    "fileType": "certificate",
+    "fileName": "photo.jpg",
+    "fileSize": 123456,
+    "resumeId": "68ea31595750fa9479e15732"
+  },
+  "message": "文件上传成功"
+}
+```
+
+#### 删除简历文件
+
+```http
+DELETE /api/resumes/miniprogram/:id/delete-file
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "fileUrl": "https://housekeeping-1254058915.cos.ap-guangzhou.myqcloud.com/certificate/xxx.jpg",
+  "fileType": "certificate"
+}
+```
+
+#### 成功响应 (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "resumeId": "68ea31595750fa9479e15732",
+    "deletedFileUrl": "https://...",
+    "fileType": "certificate"
+  },
+  "message": "文件删除成功"
+}
+```
+
+---
+
+## 📖 数据字典
+
+### 工种类型
+
+| 值 | 说明 |
+|---|---|
+| `yuexin` | 月嫂 |
+| `zhujia-yuer` | 住家育儿嫂 |
+| `baiban-yuer` | 白班育儿嫂 |
+| `baojie` | 保洁 |
+| `baiban-baomu` | 白班保姆 |
+| `zhujia-baomu` | 住家保姆 |
+| `yangchong` | 养宠 |
+| `xiaoshi` | 小时工 |
+| `zhujia-hulao` | 住家护老 |
+
+### 学历类型
+
+| 值 | 说明 |
+|---|---|
+| `no` | 无学历 |
+| `primary` | 小学 |
+| `middle` | 初中 |
+| `secondary` | 中专 |
+| `vocational` | 职高 |
+| `high` | 高中 |
+| `college` | 大专 |
+| `bachelor` | 本科 |
+| `graduate` | 研究生 |
+
+### 月嫂档位
+
+**仅当 jobType 为 "yuexin" (月嫂) 时使用**
+
+| 值 | 说明 |
+|---|---|
+| `junior` | 初级月嫂 |
+| `silver` | 银牌月嫂 |
+| `gold` | 金牌月嫂 |
+| `platinum` | 铂金月嫂 |
+| `diamond` | 钻石月嫂 |
+| `crown` | 皇冠月嫂 |
+
+### 婚姻状况
+
+| 值 | 说明 |
+|---|---|
+| `single` | 未婚 |
+| `married` | 已婚 |
+| `divorced` | 离异 |
+| `widowed` | 丧偶 |
+
+### 接单状态
+
+| 值 | 说明 |
+|---|---|
+| `available` | 可接单 |
+| `busy` | 忙碌中 |
+| `unavailable` | 暂不接单 |
+
+### 培训意向
+
+| 值 | 说明 |
+|---|---|
+| `yes` | 有意向 |
+| `no` | 无意向 |
+| `considering` | 考虑中 |
+
+### 当前阶段
+
+| 值 | 说明 |
+|---|---|
+| `training` | 培训中 |
+| `working` | 工作中 |
+| `resting` | 休息中 |
+| `seeking` | 求职中 |
+
+### 技能列表
+
+| 值 | 说明 |
+|---|---|
+| `chanhou` | 产后护理 |
+| `yuying` | 婴儿护理 |
+| `cuiru` | 催乳 |
+| `zaojiao` | 早教 |
+| `yingyang` | 营养配餐 |
+| `jiating` | 家庭保洁 |
+| `laoren` | 老人护理 |
+| `chongwu` | 宠物护理 |
+
+---
+
+## ⚠️ 错误码说明
+
+### HTTP状态码
+
+| 状态码 | 说明 |
+|--------|------|
+| 200 | 请求成功 |
+| 201 | 创建成功 |
+| 400 | 请求参数错误 |
+| 401 | 未授权，token无效或过期 |
+| 403 | 禁止访问 |
+| 404 | 资源不存在 |
+| 409 | 资源冲突（如手机号重复） |
+| 413 | 请求体过大 |
+| 500 | 服务器内部错误 |
+
+### 业务错误码
+
+| 错误码 | 说明 |
+|--------|------|
+| `VALIDATION_ERROR` | 数据验证失败 |
+| `DUPLICATE` | 资源重复（如手机号已存在） |
+| `NOT_FOUND` | 资源不存在 |
+| `UNAUTHORIZED` | 未授权 |
+| `FORBIDDEN` | 禁止访问 |
+| `FILE_TOO_LARGE` | 文件过大 |
+| `INVALID_FILE_TYPE` | 文件类型不支持 |
+
+---
+
+## 💻 小程序端集成示例
+
+### 完整的API封装
+
+```javascript
+// utils/api.js
+const BASE_URL = 'https://crm.andejiazheng.com/api';
+
+class API {
+  // 获取token
+  getToken() {
+    return wx.getStorageSync('token');
+  }
+
+  // 通用请求方法
+  async request(url, options = {}) {
+    const token = this.getToken();
+    const header = {
+      'Content-Type': 'application/json',
+      ...options.header
+    };
+
+    if (token) {
+      header['Authorization'] = `Bearer ${token}`;
+    }
+
+    try {
+      const response = await wx.request({
+        url: `${BASE_URL}${url}`,
+        method: options.method || 'GET',
+        header,
+        data: options.data
+      });
+
+      if (response.statusCode === 401) {
+        // token过期，重新登录
+        await this.login();
+        return this.request(url, options);
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('请求失败:', error);
+      throw error;
+    }
+  }
+
+  // 登录
+  async login() {
+    const { code } = await wx.login();
+    const response = await wx.request({
+      url: `${BASE_URL}/auth/miniprogram/login`,
+      method: 'POST',
+      data: { code }
+    });
+
+    if (response.data.success) {
+      wx.setStorageSync('token', response.data.data.token);
+      return response.data.data;
+    }
+    throw new Error('登录失败');
+  }
+
+  // 创建简历
+  async createResume(data) {
+    return this.request('/resumes/miniprogram/create', {
+      method: 'POST',
+      data
+    });
+  }
+
+  // 获取简历详情
+  async getResume(id) {
+    return this.request(`/resumes/miniprogram/${id}`);
+  }
+
+  // 更新简历
+  async updateResume(id, data) {
+    return this.request(`/resumes/miniprogram/${id}`, {
+      method: 'PUT',
+      data
+    });
+  }
+
+  // 上传文件
+  async uploadFile(filePath, type) {
+    const token = this.getToken();
+
+    return new Promise((resolve, reject) => {
+      wx.uploadFile({
+        url: `${BASE_URL}/upload/miniprogram`,
+        filePath,
+        name: 'file',
+        formData: { type },
+        header: {
+          'Authorization': `Bearer ${token}`
+        },
+        success: (res) => {
+          const data = JSON.parse(res.data);
+          if (data.success) {
+            resolve(data.data);
+          } else {
+            reject(new Error(data.message));
+          }
+        },
+        fail: reject
+      });
+    });
+  }
+
+  // 删除文件
+  async deleteFile(key) {
+    return this.request('/upload/miniprogram', {
+      method: 'DELETE',
+      data: { key }
+    });
+  }
+}
+
+export default new API();
+```
+
+### 创建简历页面示例
+
+```javascript
+// pages/resume/create.js
+import api from '../../utils/api';
+
+Page({
+  data: {
+    formData: {
+      name: '',
+      phone: '',
+      gender: 'female',
+      age: 30,
+      jobType: 'yuexin',
+      education: 'high',
+      maternityNurseLevel: 'gold',
+      expectedSalary: 8000,
+      nativePlace: '',
+      experienceYears: 0,
+      skills: [],
+      serviceArea: [],
+      selfIntroduction: '',
+      wechat: '',
+      currentAddress: '',
+      orderStatus: 'available'
+    },
+
+    // 选项列表
+    jobTypes: [
+      { value: 'yuexin', label: '月嫂' },
+      { value: 'zhujia-yuer', label: '住家育儿嫂' },
+      { value: 'baiban-yuer', label: '白班育儿嫂' }
+    ],
+
+    maternityNurseLevels: [
+      { value: 'junior', label: '初级月嫂' },
+      { value: 'silver', label: '银牌月嫂' },
+      { value: 'gold', label: '金牌月嫂' },
+      { value: 'platinum', label: '铂金月嫂' },
+      { value: 'diamond', label: '钻石月嫂' },
+      { value: 'crown', label: '皇冠月嫂' }
+    ],
+
+    showMaternityLevel: true
+  },
+
+  onLoad() {
+    // 页面加载
+  },
+
+  // 工种变化
+  onJobTypeChange(e) {
+    const jobType = e.detail.value;
+    this.setData({
+      'formData.jobType': jobType,
+      showMaternityLevel: jobType === 'yuexin'
+    });
+  },
+
+  // 表单输入
+  onInputChange(e) {
+    const { field } = e.currentTarget.dataset;
+    this.setData({
+      [`formData.${field}`]: e.detail.value
+    });
+  },
+
+  // 提交表单
+  async onSubmit() {
+    const { formData } = this.data;
+
+    // 验证必填字段
+    if (!formData.name || !formData.phone) {
+      wx.showToast({
+        title: '请填写必填信息',
+        icon: 'none'
+      });
+      return;
+    }
+
+    // 验证手机号
+    if (!/^1[3-9]\d{9}$/.test(formData.phone)) {
+      wx.showToast({
+        title: '手机号格式不正确',
+        icon: 'none'
+      });
+      return;
+    }
+
+    try {
+      wx.showLoading({ title: '提交中...' });
+
+      // 如果不是月嫂，移除档位字段
+      const submitData = { ...formData };
+      if (submitData.jobType !== 'yuexin') {
+        delete submitData.maternityNurseLevel;
+      }
+
+      const response = await api.createResume(submitData);
+
+      wx.hideLoading();
+
+      if (response.success) {
+        wx.showToast({
+          title: '创建成功',
+          icon: 'success'
+        });
+
+        // 跳转到详情页
+        setTimeout(() => {
+          wx.navigateTo({
+            url: `/pages/resume/detail?id=${response.data.id}`
+          });
+        }, 1500);
+      } else {
+        wx.showToast({
+          title: response.message || '创建失败',
+          icon: 'none'
+        });
+      }
+    } catch (error) {
+      wx.hideLoading();
+      wx.showToast({
+        title: '网络错误',
+        icon: 'none'
+      });
+      console.error('创建简历失败:', error);
+    }
+  }
+});
+```
+
+### 简历详情页面示例
+
+```javascript
+// pages/resume/detail.js
+import api from '../../utils/api';
+
+Page({
+  data: {
+    resumeId: '',
+    resume: null,
+    loading: true
+  },
+
+  onLoad(options) {
+    if (options.id) {
+      this.setData({ resumeId: options.id });
+      this.loadResume();
+    }
+  },
+
+  // 加载简历
+  async loadResume() {
+    try {
+      this.setData({ loading: true });
+
+      const response = await api.getResume(this.data.resumeId);
+
+      if (response.success) {
+        this.setData({
+          resume: response.data,
+          loading: false
+        });
+      } else {
+        wx.showToast({
+          title: response.message || '加载失败',
+          icon: 'none'
+        });
+      }
+    } catch (error) {
+      wx.showToast({
+        title: '网络错误',
+        icon: 'none'
+      });
+      console.error('加载简历失败:', error);
+    }
+  },
+
+  // 编辑简历
+  onEdit() {
+    wx.navigateTo({
+      url: `/pages/resume/edit?id=${this.data.resumeId}`
+    });
+  },
+
+  // 更新接单状态
+  async updateOrderStatus(status) {
+    try {
+      wx.showLoading({ title: '更新中...' });
+
+      const response = await api.updateResume(this.data.resumeId, {
+        orderStatus: status
+      });
+
+      wx.hideLoading();
+
+      if (response.success) {
+        wx.showToast({
+          title: '更新成功',
+          icon: 'success'
+        });
+        this.loadResume();
+      }
+    } catch (error) {
+      wx.hideLoading();
+      wx.showToast({
+        title: '更新失败',
+        icon: 'none'
+      });
+    }
+  }
+});
+```
+
+### 文件上传示例
+
+```javascript
+// pages/resume/upload.js
+import api from '../../utils/api';
+
+Page({
+  data: {
+    resumeId: '',
+    photos: []
+  },
+
+  // 选择照片
+  async choosePhoto() {
+    try {
+      const { tempFilePaths } = await wx.chooseImage({
+        count: 9,
+        sizeType: ['compressed'],
+        sourceType: ['album', 'camera']
+      });
+
+      // 上传所有照片
+      for (const filePath of tempFilePaths) {
+        await this.uploadPhoto(filePath);
+      }
+    } catch (error) {
+      console.error('选择照片失败:', error);
+    }
+  },
+
+  // 上传照片
+  async uploadPhoto(filePath) {
+    try {
+      wx.showLoading({ title: '上传中...' });
+
+      const result = await api.uploadFile(filePath, 'photo');
+
+      wx.hideLoading();
+
+      // 添加到照片列表
+      this.setData({
+        photos: [...this.data.photos, result]
+      });
+
+      wx.showToast({
+        title: '上传成功',
+        icon: 'success'
+      });
+    } catch (error) {
+      wx.hideLoading();
+      wx.showToast({
+        title: '上传失败',
+        icon: 'none'
+      });
+      console.error('上传照片失败:', error);
+    }
+  },
+
+  // 删除照片
+  async deletePhoto(index) {
+    const photo = this.data.photos[index];
+
+    try {
+      const result = await wx.showModal({
+        title: '确认删除',
+        content: '确定要删除这张照片吗？'
+      });
+
+      if (result.confirm) {
+        wx.showLoading({ title: '删除中...' });
+
+        await api.deleteFile(photo.key);
+
+        wx.hideLoading();
+
+        // 从列表中移除
+        const photos = [...this.data.photos];
+        photos.splice(index, 1);
+        this.setData({ photos });
+
+        wx.showToast({
+          title: '删除成功',
+          icon: 'success'
+        });
+      }
+    } catch (error) {
+      wx.hideLoading();
+      wx.showToast({
+        title: '删除失败',
+        icon: 'none'
+      });
+      console.error('删除照片失败:', error);
+    }
+  }
+});
+```
+
+---
+
+## 📋 最佳实践
+
+### 1. 错误处理
+
+```javascript
+async function handleRequest() {
+  try {
+    const response = await api.createResume(data);
+
+    if (response.success) {
+      // 处理成功
+    } else {
+      // 处理业务错误
+      if (response.code === 'DUPLICATE') {
+        wx.showModal({
+          title: '提示',
+          content: '该手机号已被使用，是否查看已有简历？',
+          success: (res) => {
+            if (res.confirm) {
+              wx.navigateTo({
+                url: `/pages/resume/detail?id=${response.data.existingId}`
+              });
+            }
+          }
+        });
+      } else {
+        wx.showToast({
+          title: response.message,
+          icon: 'none'
+        });
+      }
+    }
+  } catch (error) {
+    // 处理网络错误
+    wx.showToast({
+      title: '网络错误，请重试',
+      icon: 'none'
+    });
+  }
+}
+```
+
+### 2. 幂等性处理
+
+```javascript
+// 使用幂等性键防止重复提交
+async function createResumeWithIdempotency(data) {
+  const idempotencyKey = `resume_${Date.now()}_${Math.random()}`;
+
+  const response = await wx.request({
+    url: `${BASE_URL}/resumes/miniprogram/create`,
+    method: 'POST',
+    header: {
+      'Authorization': `Bearer ${token}`,
+      'Idempotency-Key': idempotencyKey
+    },
+    data
+  });
+
+  return response.data;
+}
+```
+
+### 3. 数据验证
+
+```javascript
+// 前端验证
+function validateResumeData(data) {
+  const errors = [];
+
+  if (!data.name || data.name.length < 2 || data.name.length > 20) {
+    errors.push('姓名长度应在2-20个字符之间');
+  }
+
+  if (!/^1[3-9]\d{9}$/.test(data.phone)) {
+    errors.push('手机号格式不正确');
+  }
+
+  if (data.age < 18 || data.age > 65) {
+    errors.push('年龄应在18-65岁之间');
+  }
+
+  if (data.jobType === 'yuexin' && !data.maternityNurseLevel) {
+    errors.push('月嫂工种需要选择档位');
+  }
+
+  return errors;
+}
+```
+
+### 4. 缓存策略
+
+```javascript
+// 缓存简历数据
+class ResumeCache {
+  static KEY = 'resume_cache';
+  static EXPIRE_TIME = 5 * 60 * 1000; // 5分钟
+
+  static set(id, data) {
+    const cache = {
+      data,
+      timestamp: Date.now()
+    };
+    wx.setStorageSync(`${this.KEY}_${id}`, cache);
+  }
+
+  static get(id) {
+    const cache = wx.getStorageSync(`${this.KEY}_${id}`);
+    if (!cache) return null;
+
+    // 检查是否过期
+    if (Date.now() - cache.timestamp > this.EXPIRE_TIME) {
+      this.remove(id);
+      return null;
+    }
+
+    return cache.data;
+  }
+
+  static remove(id) {
+    wx.removeStorageSync(`${this.KEY}_${id}`);
+  }
+}
+
+// 使用缓存
+async function getResumeWithCache(id) {
+  // 先从缓存获取
+  const cached = ResumeCache.get(id);
+  if (cached) {
+    return cached;
+  }
+
+  // 缓存不存在，从API获取
+  const response = await api.getResume(id);
+  if (response.success) {
+    ResumeCache.set(id, response.data);
+    return response.data;
+  }
+
+  return null;
+}
+```
+
+### 5. 文件上传优化
+
+```javascript
+// 批量上传文件
+async function uploadMultipleFiles(filePaths, type) {
+  const results = [];
+  const errors = [];
+
+  // 限制并发数
+  const concurrency = 3;
+
+  for (let i = 0; i < filePaths.length; i += concurrency) {
+    const batch = filePaths.slice(i, i + concurrency);
+    const promises = batch.map(async (filePath) => {
+      try {
+        const result = await api.uploadFile(filePath, type);
+        results.push(result);
+      } catch (error) {
+        errors.push({ filePath, error });
+      }
+    });
+
+    await Promise.all(promises);
+  }
+
+  return { results, errors };
+}
+```
+
+---
+
+## 🔍 常见问题
+
+### Q1: Token过期怎么办？
+
+A: API会自动处理token过期的情况。当收到401响应时，会自动重新登录并重试请求。
+
+### Q2: 如何防止重复提交？
+
+A: 使用`Idempotency-Key`请求头，传入唯一的键值。相同的键值在一定时间内只会处理一次。
+
+### Q3: 月嫂档位什么时候必填？
+
+A: 只有当`jobType`为`yuexin`（月嫂）时，才需要填写`maternityNurseLevel`字段。
+
+### Q4: 如何更新部分字段？
+
+A: 使用PUT请求，只传递需要更新的字段即可，其他字段保持不变。
+
+### Q5: 文件上传失败怎么办？
+
+A: 检查文件大小和格式是否符合要求，确保网络连接正常，可以实现重试机制。
+
+### Q6: 如何处理手机号重复？
+
+A: 创建时如果手机号重复，会返回409状态码和已存在的简历ID，可以引导用户查看或更新已有简历。
+
+---
+
+## 💡 最佳实践
+
+### 1. 文件上传最佳实践
+
+#### 图片预压缩
+```javascript
+// 在上传前压缩图片
+async function compressAndUpload(filePath, type) {
+  try {
+    // 压缩图片
+    const compressRes = await wx.compressImage({
+      src: filePath,
+      quality: 80
+    });
+
+    // 上传压缩后的图片
+    const uploadRes = await wx.uploadFile({
+      url: `${API_BASE_URL}/api/resumes/miniprogram/${resumeId}/upload-file`,
+      filePath: compressRes.tempFilePath,
+      name: 'file',
+      formData: { type: type },
+      header: {
+        'Authorization': `Bearer ${wx.getStorageSync('token')}`
+      }
+    });
+
+    return JSON.parse(uploadRes.data);
+  } catch (error) {
+    console.error('上传失败:', error);
+    throw error;
+  }
+}
+```
+
+#### 批量上传优化
+```javascript
+// 限制并发数的批量上传
+async function uploadBatch(files, concurrency = 3) {
+  const results = [];
+  const errors = [];
+
+  for (let i = 0; i < files.length; i += concurrency) {
+    const batch = files.slice(i, i + concurrency);
+
+    const batchPromises = batch.map(async (file) => {
+      try {
+        const result = await uploadFile(file.path, file.type);
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+
+    batchResults.forEach((result, index) => {
+      if (result.success) {
+        results.push(result.data);
+      } else {
+        errors.push({
+          file: batch[index],
+          error: result.error
+        });
+      }
+    });
+  }
+
+  return { results, errors };
+}
+```
+
+#### 上传进度显示
+```javascript
+// 显示上传进度
+function uploadWithProgress(filePath, type) {
+  return new Promise((resolve, reject) => {
+    const uploadTask = wx.uploadFile({
+      url: `${API_BASE_URL}/api/resumes/miniprogram/${resumeId}/upload-file`,
+      filePath: filePath,
+      name: 'file',
+      formData: { type: type },
+      header: {
+        'Authorization': `Bearer ${wx.getStorageSync('token')}`
+      },
+      success: (res) => {
+        const data = JSON.parse(res.data);
+        if (data.success) {
+          resolve(data);
+        } else {
+          reject(new Error(data.message));
+        }
+      },
+      fail: reject
+    });
+
+    // 监听上传进度
+    uploadTask.onProgressUpdate((res) => {
+      console.log('上传进度', res.progress);
+      console.log('已上传数据长度', res.totalBytesSent);
+      console.log('预期需要上传的数据总长度', res.totalBytesExpectedToSend);
+
+      // 更新UI显示进度
+      this.setData({
+        uploadProgress: res.progress
+      });
+    });
+  });
+}
+```
+
+### 2. 错误处理最佳实践
+
+#### 统一错误处理
+```javascript
+// 封装统一的错误处理
+class APIError extends Error {
+  constructor(code, message, data) {
+    super(message);
+    this.code = code;
+    this.data = data;
+  }
+}
+
+async function handleAPICall(apiFunction) {
+  try {
+    const result = await apiFunction();
+
+    if (!result.success) {
+      throw new APIError(
+        result.code || 'UNKNOWN_ERROR',
+        result.message || '操作失败',
+        result.data
+      );
+    }
+
+    return result.data;
+  } catch (error) {
+    if (error instanceof APIError) {
+      // 根据错误码显示不同的提示
+      switch (error.code) {
+        case 'DUPLICATE':
+          wx.showModal({
+            title: '提示',
+            content: '该手机号已被使用，是否查看已有简历？',
+            success: (res) => {
+              if (res.confirm) {
+                // 跳转到已有简历
+                wx.navigateTo({
+                  url: `/pages/resume/detail?id=${error.data.existingId}`
+                });
+              }
+            }
+          });
+          break;
+
+        case 'VALIDATION_ERROR':
+          wx.showToast({
+            title: error.message,
+            icon: 'none',
+            duration: 2000
+          });
+          break;
+
+        case 'FILE_TOO_LARGE':
+          wx.showModal({
+            title: '文件过大',
+            content: '请选择小于10MB的文件',
+            showCancel: false
+          });
+          break;
+
+        default:
+          wx.showToast({
+            title: error.message || '操作失败',
+            icon: 'none'
+          });
+      }
+    } else {
+      // 网络错误等
+      wx.showToast({
+        title: '网络错误，请重试',
+        icon: 'none'
+      });
+    }
+
+    throw error;
+  }
+}
+```
+
+#### 重试机制
+```javascript
+// 带指数退避的重试机制
+async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i === maxRetries - 1) {
+        throw error;
+      }
+
+      // 指数退避
+      const delay = baseDelay * Math.pow(2, i);
+      console.log(`重试 ${i + 1}/${maxRetries}，等待 ${delay}ms`);
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
+// 使用示例
+try {
+  const result = await retryWithBackoff(async () => {
+    return await uploadFile(filePath, 'cookingPhoto');
+  });
+  console.log('上传成功', result);
+} catch (error) {
+  console.error('上传失败，已重试3次', error);
+}
+```
+
+### 3. 数据验证最佳实践
+
+#### 前端验证
+```javascript
+// 表单验证工具
+const validators = {
+  // 手机号验证
+  phone: (value) => {
+    const pattern = /^1[3-9]\d{9}$/;
+    if (!pattern.test(value)) {
+      return '请输入正确的手机号码';
+    }
+    return null;
+  },
+
+  // 身份证号验证
+  idNumber: (value) => {
+    const pattern = /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/;
+    if (!pattern.test(value)) {
+      return '请输入正确的身份证号码';
+    }
+    return null;
+  },
+
+  // 年龄验证
+  age: (value) => {
+    const age = parseInt(value);
+    if (isNaN(age) || age < 18 || age > 65) {
+      return '年龄必须在18-65岁之间';
+    }
+    return null;
+  },
+
+  // 必填验证
+  required: (value, fieldName) => {
+    if (!value || value.trim() === '') {
+      return `${fieldName}不能为空`;
+    }
+    return null;
+  }
+};
+
+// 验证表单
+function validateForm(formData) {
+  const errors = [];
+
+  // 验证必填字段
+  const requiredFields = [
+    { key: 'name', label: '姓名' },
+    { key: 'phone', label: '手机号' },
+    { key: 'age', label: '年龄' },
+    { key: 'gender', label: '性别' },
+    { key: 'jobType', label: '工种' },
+    { key: 'education', label: '学历' }
+  ];
+
+  requiredFields.forEach(field => {
+    const error = validators.required(formData[field.key], field.label);
+    if (error) errors.push(error);
+  });
+
+  // 验证手机号
+  if (formData.phone) {
+    const error = validators.phone(formData.phone);
+    if (error) errors.push(error);
+  }
+
+  // 验证身份证号
+  if (formData.idNumber) {
+    const error = validators.idNumber(formData.idNumber);
+    if (error) errors.push(error);
+  }
+
+  // 验证年龄
+  if (formData.age) {
+    const error = validators.age(formData.age);
+    if (error) errors.push(error);
+  }
+
+  return errors;
+}
+
+// 使用示例
+const errors = validateForm(formData);
+if (errors.length > 0) {
+  wx.showModal({
+    title: '验证失败',
+    content: errors.join('\n'),
+    showCancel: false
+  });
+  return;
+}
+```
+
+### 4. 性能优化建议
+
+#### 数据缓存
+```javascript
+// 缓存简历数据
+const ResumeCache = {
+  cache: {},
+
+  set(id, data, ttl = 5 * 60 * 1000) { // 默认5分钟过期
+    this.cache[id] = {
+      data: data,
+      expireAt: Date.now() + ttl
+    };
+  },
+
+  get(id) {
+    const item = this.cache[id];
+    if (!item) return null;
+
+    if (Date.now() > item.expireAt) {
+      delete this.cache[id];
+      return null;
+    }
+
+    return item.data;
+  },
+
+  clear(id) {
+    if (id) {
+      delete this.cache[id];
+    } else {
+      this.cache = {};
+    }
+  }
+};
+
+// 使用缓存
+async function getResume(id, forceRefresh = false) {
+  // 如果不强制刷新，先尝试从缓存获取
+  if (!forceRefresh) {
+    const cached = ResumeCache.get(id);
+    if (cached) {
+      console.log('从缓存获取简历');
+      return cached;
+    }
+  }
+
+  // 从服务器获取
+  const res = await wx.request({
+    url: `${API_BASE_URL}/api/resumes/miniprogram/${id}`,
+    method: 'GET',
+    header: {
+      'Authorization': `Bearer ${wx.getStorageSync('token')}`
+    }
+  });
+
+  if (res.data.success) {
+    // 存入缓存
+    ResumeCache.set(id, res.data.data);
+    return res.data.data;
+  }
+
+  throw new Error(res.data.message);
+}
+```
+
+#### 图片懒加载
+```javascript
+// 图片懒加载组件
+Component({
+  properties: {
+    src: String,
+    mode: {
+      type: String,
+      value: 'aspectFill'
+    }
+  },
+
+  data: {
+    loaded: false,
+    showImage: false
+  },
+
+  lifetimes: {
+    attached() {
+      this.observer = wx.createIntersectionObserver(this);
+
+      this.observer
+        .relativeToViewport({ bottom: 100 })
+        .observe('.lazy-image', (res) => {
+          if (res.intersectionRatio > 0 && !this.data.loaded) {
+            this.setData({
+              showImage: true,
+              loaded: true
+            });
+            this.observer.disconnect();
+          }
+        });
+    },
+
+    detached() {
+      if (this.observer) {
+        this.observer.disconnect();
+      }
+    }
+  }
+});
+```
+
+### 5. 安全建议
+
+#### Token管理
+```javascript
+// Token管理工具
+const TokenManager = {
+  // 保存Token
+  saveToken(token) {
+    wx.setStorageSync('token', token);
+    wx.setStorageSync('tokenTime', Date.now());
+  },
+
+  // 获取Token
+  getToken() {
+    return wx.getStorageSync('token');
+  },
+
+  // 检查Token是否过期（假设Token有效期为7天）
+  isTokenExpired() {
+    const tokenTime = wx.getStorageSync('tokenTime');
+    if (!tokenTime) return true;
+
+    const expireTime = 7 * 24 * 60 * 60 * 1000; // 7天
+    return Date.now() - tokenTime > expireTime;
+  },
+
+  // 清除Token
+  clearToken() {
+    wx.removeStorageSync('token');
+    wx.removeStorageSync('tokenTime');
+  },
+
+  // 刷新Token
+  async refreshToken() {
+    try {
+      const res = await wx.request({
+        url: `${API_BASE_URL}/api/auth/refresh`,
+        method: 'POST',
+        header: {
+          'Authorization': `Bearer ${this.getToken()}`
+        }
+      });
+
+      if (res.data.success) {
+        this.saveToken(res.data.data.token);
+        return res.data.data.token;
+      }
+
+      throw new Error('刷新Token失败');
+    } catch (error) {
+      this.clearToken();
+      throw error;
+    }
+  }
+};
+```
+
+#### 请求拦截器
+```javascript
+// 封装请求，自动处理Token
+async function request(options) {
+  // 检查Token是否过期
+  if (TokenManager.isTokenExpired()) {
+    try {
+      await TokenManager.refreshToken();
+    } catch (error) {
+      // Token刷新失败，跳转到登录页
+      wx.redirectTo({
+        url: '/pages/login/login'
+      });
+      throw new Error('登录已过期，请重新登录');
+    }
+  }
+
+  // 添加Token到请求头
+  const token = TokenManager.getToken();
+  if (token) {
+    options.header = options.header || {};
+    options.header['Authorization'] = `Bearer ${token}`;
+  }
+
+  // 发送请求
+  return new Promise((resolve, reject) => {
+    wx.request({
+      ...options,
+      success: (res) => {
+        // 处理401未授权
+        if (res.statusCode === 401) {
+          TokenManager.clearToken();
+          wx.redirectTo({
+            url: '/pages/login/login'
+          });
+          reject(new Error('未授权，请重新登录'));
+          return;
+        }
+
+        resolve(res);
+      },
+      fail: reject
+    });
+  });
+}
+```
+
+---
+
+## 📞 技术支持
+
+如有问题或建议，请联系技术团队。
+
+**文档版本**: v1.3.0
+**最后更新**: 2026-01-05
+**维护团队**: 安得家政技术团队
+

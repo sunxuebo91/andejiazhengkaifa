@@ -19,6 +19,7 @@ import type { Resume } from '../../services/resume.service';
 import { isLoggedIn } from '../../services/auth';
 import { JOB_TYPE_MAP } from '../../constants/jobTypes'; // 引入共享的工种映射
 import SortableImageUpload from '../../components/SortableImageUpload';
+import VideoUpload from '../../components/VideoUpload';
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
 dayjs.extend(isSameOrBefore);
@@ -141,6 +142,10 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'workExperi
   personalPhoto?: { url: string; filename?: string; size?: number; mimetype?: string };
   certificates?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   reports?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
+  confinementMealPhotos?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
+  cookingPhotos?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
+  complementaryFoodPhotos?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
+  positiveReviewPhotos?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
 }
 
 // 添加类型转换辅助函数
@@ -211,10 +216,14 @@ const FILE_UPLOAD_CONFIG = {
   maxSize: 5 * 1024 * 1024, // 5MB
   allowedImageTypes: ['image/jpeg', 'image/jpg', 'image/png'] as ImageType[],
   allowedPdfTypes: ['application/pdf'] as const,
-  maxPhotoCount: 10,
-  maxCertificateCount: 10,
+  maxPhotoCount: 30,
+  maxCertificateCount: 30,
   maxMedicalReportCount: 10,
-  maxMedicalPdfCount: 5
+  maxMedicalPdfCount: 5,
+  maxConfinementMealCount: 30,
+  maxCookingCount: 30,
+  maxComplementaryFoodCount: 30,
+  maxPositiveReviewCount: 30
 } as const;
 
 // 文件上传按钮组件
@@ -237,6 +246,10 @@ interface FileUploadState {
   photo: { files: CustomUploadFile[] };
   certificate: { files: CustomUploadFile[] };
   medical: { files: CustomUploadFile[] };
+  confinementMeal: { files: CustomUploadFile[] };
+  cooking: { files: CustomUploadFile[] };
+  complementaryFood: { files: CustomUploadFile[] };
+  positiveReview: { files: CustomUploadFile[] };
 }
 
 const CreateResume: React.FC = () => {
@@ -254,6 +267,12 @@ const CreateResume: React.FC = () => {
   const [photoFiles, setPhotoFiles] = useState<CustomUploadFile[]>([]);
   const [certificateFiles, setCertificateFiles] = useState<CustomUploadFile[]>([]);
   const [medicalReportFiles, setMedicalReportFiles] = useState<CustomUploadFile[]>([]);
+  const [selfIntroductionVideo, setSelfIntroductionVideo] = useState<{
+    url: string;
+    filename?: string;
+    size?: number;
+    mimetype?: string;
+  } | undefined>(undefined);
   const [previewState, setPreviewState] = useState<PreviewState>({
     visible: false,
     image: '',
@@ -265,11 +284,15 @@ const CreateResume: React.FC = () => {
   const [fileUploadState, setFileUploadState] = useState<FileUploadState>({
     photo: { files: [] },
     certificate: { files: [] },
-    medical: { files: [] }
+    medical: { files: [] },
+    confinementMeal: { files: [] },
+    cooking: { files: [] },
+    complementaryFood: { files: [] },
+    positiveReview: { files: [] }
   });
 
   // 将 validateFile 移到组件内部
-  const validateFile = (file: RcFile, type: 'idCard' | 'photo' | 'certificate' | 'medical'): boolean => {
+  const validateFile = (file: RcFile, type: 'idCard' | 'photo' | 'certificate' | 'medical' | 'confinementMeal' | 'cooking' | 'complementaryFood' | 'positiveReview'): boolean => {
     // 检查文件大小
     if (file.size > FILE_UPLOAD_CONFIG.maxSize) {
       messageApi.error(`文件大小不能超过${FILE_UPLOAD_CONFIG.maxSize / 1024 / 1024}MB`);
@@ -294,7 +317,7 @@ const CreateResume: React.FC = () => {
   };
 
   // 文件上传处理函数
-  const handleFileChange = (type: 'photo' | 'certificate' | 'medical') => 
+  const handleFileChange = (type: 'photo' | 'certificate' | 'medical' | 'confinementMeal' | 'cooking' | 'complementaryFood' | 'positiveReview') =>
     (info: UploadChangeParam<UploadFile<any>>) => {
       const { file, fileList } = info;
       
@@ -372,7 +395,7 @@ const CreateResume: React.FC = () => {
   };
 
   // 修改文件移除处理函数
-  const handleRemoveFile = (type: 'photo' | 'certificate' | 'medical') => async (file: UploadFile) => {
+  const handleRemoveFile = (type: 'photo' | 'certificate' | 'medical' | 'confinementMeal' | 'cooking' | 'complementaryFood' | 'positiveReview') => async (file: UploadFile) => {
     try {
       console.log('🗑️ 开始删除文件:', {
         type,
@@ -484,6 +507,14 @@ const CreateResume: React.FC = () => {
           return currentFiles.length >= FILE_UPLOAD_CONFIG.maxCertificateCount;
         case 'medical':
           return currentFiles.length >= FILE_UPLOAD_CONFIG.maxMedicalReportCount;
+        case 'confinementMeal':
+          return currentFiles.length >= FILE_UPLOAD_CONFIG.maxConfinementMealCount;
+        case 'cooking':
+          return currentFiles.length >= FILE_UPLOAD_CONFIG.maxCookingCount;
+        case 'complementaryFood':
+          return currentFiles.length >= FILE_UPLOAD_CONFIG.maxComplementaryFoodCount;
+        case 'positiveReview':
+          return currentFiles.length >= FILE_UPLOAD_CONFIG.maxPositiveReviewCount;
         default:
           return false;
       }
@@ -505,7 +536,11 @@ const CreateResume: React.FC = () => {
             const compressionTypeMapping = {
               'photo': 'photo',
               'certificate': 'certificate',
-              'medical': 'medicalReport'
+              'medical': 'medicalReport',
+              'confinementMeal': 'photo',
+              'cooking': 'photo',
+              'complementaryFood': 'photo',
+              'positiveReview': 'photo'
             } as const;
 
             const compressionType = compressionTypeMapping[type as keyof typeof compressionTypeMapping];
@@ -525,7 +560,11 @@ const CreateResume: React.FC = () => {
           const fileTypeMapping = {
             'photo': 'personalPhoto',
             'certificate': 'certificate',
-            'medical': 'medicalReport'
+            'medical': 'medicalReport',
+            'confinementMeal': 'confinementMealPhoto',
+            'cooking': 'cookingPhoto',
+            'complementaryFood': 'complementaryFoodPhoto',
+            'positiveReview': 'positiveReviewPhoto'
           } as const;
 
           const mappedType = fileTypeMapping[type as keyof typeof fileTypeMapping];
@@ -736,7 +775,11 @@ const CreateResume: React.FC = () => {
         const updatedFileUploadState = {
           photo: { files: [] as CustomUploadFile[] },
           certificate: { files: [] as CustomUploadFile[] },
-          medical: { files: [] as CustomUploadFile[] }
+          medical: { files: [] as CustomUploadFile[] },
+          confinementMeal: { files: [] as CustomUploadFile[] },
+          cooking: { files: [] as CustomUploadFile[] },
+          complementaryFood: { files: [] as CustomUploadFile[] },
+          positiveReview: { files: [] as CustomUploadFile[] }
         };
         
         // 设置个人照片 - 同时处理新格式和旧格式，避免重复
@@ -883,7 +926,67 @@ const CreateResume: React.FC = () => {
           updatedFileUploadState.medical.files = allMedicalFiles;
           setMedicalReportFiles(allMedicalFiles);
         }
-        
+
+        // 设置月子餐照片
+        if (extendedResume.confinementMealPhotos && extendedResume.confinementMealPhotos.length > 0) {
+          console.log('  🍲 加载月子餐照片:', extendedResume.confinementMealPhotos.length, '张');
+          const confinementMealFiles: CustomUploadFile[] = extendedResume.confinementMealPhotos.map((file: any, index: number) => ({
+            uid: `confinementMeal-${index}-${Date.now()}`,
+            name: file.filename || `月子餐照片${index + 1}`,
+            status: 'done' as const,
+            url: file.url,
+            size: file.size || 0,
+            type: file.mimetype || 'image/jpeg',
+            isExisting: true
+          }));
+          updatedFileUploadState.confinementMeal.files = confinementMealFiles;
+        }
+
+        // 设置烹饪照片
+        if (extendedResume.cookingPhotos && extendedResume.cookingPhotos.length > 0) {
+          console.log('  👨‍🍳 加载烹饪照片:', extendedResume.cookingPhotos.length, '张');
+          const cookingFiles: CustomUploadFile[] = extendedResume.cookingPhotos.map((file: any, index: number) => ({
+            uid: `cooking-${index}-${Date.now()}`,
+            name: file.filename || `烹饪照片${index + 1}`,
+            status: 'done' as const,
+            url: file.url,
+            size: file.size || 0,
+            type: file.mimetype || 'image/jpeg',
+            isExisting: true
+          }));
+          updatedFileUploadState.cooking.files = cookingFiles;
+        }
+
+        // 设置辅食添加照片
+        if (extendedResume.complementaryFoodPhotos && extendedResume.complementaryFoodPhotos.length > 0) {
+          console.log('  🍼 加载辅食添加照片:', extendedResume.complementaryFoodPhotos.length, '张');
+          const complementaryFoodFiles: CustomUploadFile[] = extendedResume.complementaryFoodPhotos.map((file: any, index: number) => ({
+            uid: `complementaryFood-${index}-${Date.now()}`,
+            name: file.filename || `辅食添加照片${index + 1}`,
+            status: 'done' as const,
+            url: file.url,
+            size: file.size || 0,
+            type: file.mimetype || 'image/jpeg',
+            isExisting: true
+          }));
+          updatedFileUploadState.complementaryFood.files = complementaryFoodFiles;
+        }
+
+        // 设置好评展示照片
+        if (extendedResume.positiveReviewPhotos && extendedResume.positiveReviewPhotos.length > 0) {
+          console.log('  ⭐ 加载好评展示照片:', extendedResume.positiveReviewPhotos.length, '张');
+          const positiveReviewFiles: CustomUploadFile[] = extendedResume.positiveReviewPhotos.map((file: any, index: number) => ({
+            uid: `positiveReview-${index}-${Date.now()}`,
+            name: file.filename || `好评展示照片${index + 1}`,
+            status: 'done' as const,
+            url: file.url,
+            size: file.size || 0,
+            type: file.mimetype || 'image/jpeg',
+            isExisting: true
+          }));
+          updatedFileUploadState.positiveReview.files = positiveReviewFiles;
+        }
+
         // 更新统一的文件上传状态
         setFileUploadState(updatedFileUploadState);
         
@@ -1293,9 +1396,16 @@ const CreateResume: React.FC = () => {
       if (editingResume?._id) {
         // 编辑模式：只处理基本信息更新和新文件上传
         console.log('📝 编辑模式：更新基本信息');
-        
-        // 先更新基本信息（不包含文件）
-        const basicInfo = { ...values };
+
+        // 先更新基本信息（不包含文件，但包含视频URL）
+        const basicInfo: Record<string, unknown> = { ...values };
+
+        // 添加自我介绍视频信息
+        if (selfIntroductionVideo && selfIntroductionVideo.url) {
+          basicInfo.selfIntroductionVideo = selfIntroductionVideo;
+          console.log('📹 编辑模式：包含视频信息', selfIntroductionVideo);
+        }
+
         const response = await apiService.patch(`/api/resumes/${editingResume._id}`, basicInfo);
         
         console.log('✅ 基本信息更新响应:', response);
@@ -1530,6 +1640,12 @@ const CreateResume: React.FC = () => {
         compressedPhotoFiles.forEach(file => formData.append('photoFiles', file as File));
         compressedCertificateFiles.forEach(file => formData.append('certificateFiles', file as File));
         compressedMedicalFiles.forEach(file => formData.append('medicalReportFiles', file as File));
+
+        // 添加自我介绍视频
+        if (selfIntroductionVideo && selfIntroductionVideo.url) {
+          // 如果视频已经上传到服务器，只需要传URL
+          formData.append('selfIntroductionVideoUrl', selfIntroductionVideo.url);
+        }
         
         const response = await apiService.upload('/api/resumes', formData, 'POST');
         
@@ -1568,9 +1684,14 @@ const CreateResume: React.FC = () => {
       if (editingResume.idCardFrontUrl) {
         setExistingIdCardFrontUrl(editingResume.idCardFrontUrl);
       }
-      
+
       if (editingResume.idCardBackUrl) {
         setExistingIdCardBackUrl(editingResume.idCardBackUrl);
+      }
+
+      // 设置自我介绍视频
+      if (editingResume.selfIntroductionVideo) {
+        setSelfIntroductionVideo(editingResume.selfIntroductionVideo);
       }
     }
   }, [editingResume]);
@@ -1599,6 +1720,7 @@ const CreateResume: React.FC = () => {
         zodiac: editingResume.zodiac,
         zodiacSign: editingResume.zodiacSign,
         expectedSalary: editingResume.expectedSalary,
+        maternityNurseLevel: (editingResume as any).maternityNurseLevel, // 月嫂档位
         serviceArea: editingResume.serviceArea,
         orderStatus: editingResume.orderStatus,
         skills: editingResume.skills,
@@ -2053,6 +2175,24 @@ const CreateResume: React.FC = () => {
                 </Col>
                 <Col span={8}>
                   <Form.Item
+                    label="月嫂档位"
+                    name="maternityNurseLevel"
+                  >
+                    <Select placeholder="请选择月嫂档位（选填）" allowClear>
+                      <Option value="junior">初级月嫂</Option>
+                      <Option value="silver">银牌月嫂</Option>
+                      <Option value="gold">金牌月嫂</Option>
+                      <Option value="platinum">铂金月嫂</Option>
+                      <Option value="diamond">钻石月嫂</Option>
+                      <Option value="crown">皇冠月嫂</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={24}>
+                <Col span={8}>
+                  <Form.Item
                     label="期望薪资"
                     name="expectedSalary"
                     rules={[
@@ -2107,12 +2247,12 @@ const CreateResume: React.FC = () => {
               <Row gutter={24}>
                 <Col span={24}>
                   <Form.Item
-                    label="技能标签"
+                    label="技能证书"
                     name="skills"
                   >
                     <Select
                       mode="multiple"
-                      placeholder="请选择技能标签"
+                      placeholder="请选择技能证书"
                       style={{ width: '100%' }}
                     >
                       <Option value="muying">母婴护理师</Option>
@@ -2362,7 +2502,7 @@ const CreateResume: React.FC = () => {
               style={{ marginBottom: 24 }}
             >
               <Row gutter={24}>
-                <Col span={8}>
+                <Col span={6}>
                   <Card
                     size="small"
                     title="个人照片"
@@ -2444,25 +2584,108 @@ const CreateResume: React.FC = () => {
                     />
                   </Card>
                 </Col>
-                
-                <Col span={8}>
-                  <Card 
-                    size="small" 
-                    title="技能证书" 
+
+                <Col span={6}>
+                  <Card
+                    size="small"
+                    title="技能证书"
                     style={{ marginBottom: 16 }}
                   >
                     {renderUploadList('certificate')}
                   </Card>
                 </Col>
-                
-                <Col span={8}>
-                  <Card 
-                    size="small" 
-                    title="体检报告" 
+
+                <Col span={6}>
+                  <Card
+                    size="small"
+                    title="体检报告"
                     style={{ marginBottom: 16 }}
                   >
                     {renderDatePicker('medicalExamDate', '体检时间')}
                     {renderUploadList('medical')}
+                  </Card>
+                </Col>
+
+                <Col span={6}>
+                  <Card
+                    size="small"
+                    title="自我介绍视频"
+                    style={{ marginBottom: 16 }}
+                    extra={<span style={{ fontSize: '12px', color: '#999' }}>支持最大50MB，自动转码</span>}
+                  >
+                    <VideoUpload
+                      value={selfIntroductionVideo}
+                      onChange={setSelfIntroductionVideo}
+                      onUpload={async (file: File) => {
+                        // 使用新的视频上传API（自动转码为H.264格式）
+                        const result = await ImageService.uploadVideo(file, 'selfIntroductionVideo');
+
+                        // 更新视频信息（使用转码后的文件信息，包含mimetype）
+                        setSelfIntroductionVideo({
+                          url: result.fileUrl,
+                          filename: result.filename,
+                          size: result.size,
+                          mimetype: result.mimeType || 'video/mp4'
+                        });
+
+                        return result.fileUrl;
+                      }}
+                      disabled={false}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+            </Card>
+          </Form.Item>
+
+          {/* 作品展示区域 */}
+          <Form.Item noStyle>
+            <Card
+              title={<Divider orientation="left">作品展示</Divider>}
+              style={{ marginBottom: 24 }}
+            >
+              <Row gutter={24}>
+                <Col span={6}>
+                  <Card
+                    size="small"
+                    title="月子餐照片"
+                    extra={<span style={{ fontSize: '12px', color: '#999' }}>最多30张</span>}
+                    style={{ marginBottom: 16 }}
+                  >
+                    {renderUploadList('confinementMeal')}
+                  </Card>
+                </Col>
+
+                <Col span={6}>
+                  <Card
+                    size="small"
+                    title="烹饪照片"
+                    extra={<span style={{ fontSize: '12px', color: '#999' }}>最多30张</span>}
+                    style={{ marginBottom: 16 }}
+                  >
+                    {renderUploadList('cooking')}
+                  </Card>
+                </Col>
+
+                <Col span={6}>
+                  <Card
+                    size="small"
+                    title="辅食添加照片"
+                    extra={<span style={{ fontSize: '12px', color: '#999' }}>最多30张</span>}
+                    style={{ marginBottom: 16 }}
+                  >
+                    {renderUploadList('complementaryFood')}
+                  </Card>
+                </Col>
+
+                <Col span={6}>
+                  <Card
+                    size="small"
+                    title="好评展示照片"
+                    extra={<span style={{ fontSize: '12px', color: '#999' }}>最多30张</span>}
+                    style={{ marginBottom: 16 }}
+                  >
+                    {renderUploadList('positiveReview')}
                   </Card>
                 </Col>
               </Row>

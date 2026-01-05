@@ -26,10 +26,27 @@ POST /api/resumes/miniprogram/create
 | `nativePlace` | string | 籍贯，最大20字符 | "河南省郑州市" |
 | `experienceYears` | number | 工作经验年限 | 3 |
 | `expectedSalary` | number | 期望薪资 | 8000 |
+| `maternityNurseLevel` | string | 月嫂档位（仅月嫂工种） | "gold" |
 | `skills` | array | 技能列表 | ["chanhou", "yuying"] |
 | `serviceArea` | array | 服务区域 | ["北京市朝阳区"] |
 | `selfIntroduction` | string | 自我介绍 | "自我介绍" |
 | `workExperiences` | array | 工作经历 | [{"startDate": "2020-01-01", "endDate": "2023-12-31", "description": "工作描述"}] |
+| `wechat` | string | 微信号 | "wechat123" |
+| `currentAddress` | string | 现居地址 | "北京市朝阳区" |
+| `hukouAddress` | string | 户口地址 | "河南省郑州市" |
+| `birthDate` | string | 出生日期 | "1990-01-01" |
+| `idNumber` | string | 身份证号 | "410102199001011234" |
+| `ethnicity` | string | 民族 | "汉族" |
+| `zodiac` | string | 生肖 | "马" |
+| `zodiacSign` | string | 星座 | "摩羯座" |
+| `maritalStatus` | string | 婚姻状况 | "married" |
+| `religion` | string | 宗教信仰 | "无" |
+| `emergencyContactName` | string | 紧急联系人姓名 | "李四" |
+| `emergencyContactPhone` | string | 紧急联系人电话 | "13900139000" |
+| `medicalExamDate` | string | 体检日期 | "2024-01-01" |
+| `orderStatus` | string | 接单状态 | "available" |
+| `learningIntention` | string | 培训意向 | "yes" |
+| `currentStage` | string | 当前阶段 | "training" |
 
 ## 🔧 核心功能
 
@@ -139,6 +156,53 @@ curl -X POST /api/resumes/miniprogram/create \
 | `bachelor` | 本科 |
 | `graduate` | 研究生 |
 
+## 🏅 月嫂档位 (maternityNurseLevel)
+
+**仅当 jobType 为 "yuexin" (月嫂) 时使用**
+
+| 值 | 说明 |
+|---|---|
+| `junior` | 初级月嫂 |
+| `silver` | 银牌月嫂 |
+| `gold` | 金牌月嫂 |
+| `platinum` | 铂金月嫂 |
+| `diamond` | 钻石月嫂 |
+| `crown` | 皇冠月嫂 |
+
+## 💍 婚姻状况 (maritalStatus)
+
+| 值 | 说明 |
+|---|---|
+| `single` | 未婚 |
+| `married` | 已婚 |
+| `divorced` | 离异 |
+| `widowed` | 丧偶 |
+
+## 📋 接单状态 (orderStatus)
+
+| 值 | 说明 |
+|---|---|
+| `available` | 可接单 |
+| `busy` | 忙碌中 |
+| `unavailable` | 暂不接单 |
+
+## 📖 培训意向 (learningIntention)
+
+| 值 | 说明 |
+|---|---|
+| `yes` | 有意向 |
+| `no` | 无意向 |
+| `considering` | 考虑中 |
+
+## 🎓 当前阶段 (currentStage)
+
+| 值 | 说明 |
+|---|---|
+| `training` | 培训中 |
+| `working` | 工作中 |
+| `resting` | 休息中 |
+| `seeking` | 求职中 |
+
 ## 💡 最佳实践
 
 1. **使用幂等性键**：对于可能重复的请求，建议使用 `Idempotency-Key`
@@ -169,16 +233,51 @@ curl -X POST /api/resumes/miniprogram/create \
 // 小程序端创建简历示例
 const createResume = async (formData) => {
   const data = {
+    // 必填字段
     name: formData.name,
     phone: formData.phone,
     gender: formData.gender,
     age: formData.age,
     jobType: formData.jobType,
     education: formData.education,
-    // 可选字段
+
+    // 可选字段 - 基本信息
     nativePlace: formData.nativePlace || undefined,
     experienceYears: formData.experienceYears || 0,
-    expectedSalary: formData.expectedSalary || undefined
+    expectedSalary: formData.expectedSalary || undefined,
+    wechat: formData.wechat || undefined,
+    currentAddress: formData.currentAddress || undefined,
+    hukouAddress: formData.hukouAddress || undefined,
+    birthDate: formData.birthDate || undefined,
+    idNumber: formData.idNumber || undefined,
+
+    // 可选字段 - 月嫂档位（仅月嫂工种）
+    maternityNurseLevel: formData.jobType === 'yuexin' ? formData.maternityNurseLevel : undefined,
+
+    // 可选字段 - 其他信息
+    ethnicity: formData.ethnicity || undefined,
+    zodiac: formData.zodiac || undefined,
+    zodiacSign: formData.zodiacSign || undefined,
+    maritalStatus: formData.maritalStatus || undefined,
+    religion: formData.religion || undefined,
+
+    // 可选字段 - 联系人
+    emergencyContactName: formData.emergencyContactName || undefined,
+    emergencyContactPhone: formData.emergencyContactPhone || undefined,
+
+    // 可选字段 - 工作相关
+    skills: formData.skills || [],
+    serviceArea: formData.serviceArea || [],
+    selfIntroduction: formData.selfIntroduction || undefined,
+    workExperiences: formData.workExperiences || [],
+    orderStatus: formData.orderStatus || undefined,
+
+    // 可选字段 - 培训相关
+    learningIntention: formData.learningIntention || undefined,
+    currentStage: formData.currentStage || undefined,
+
+    // 可选字段 - 体检
+    medicalExamDate: formData.medicalExamDate || undefined
   };
 
   try {
@@ -194,6 +293,9 @@ const createResume = async (formData) => {
 
     if (response.data.success) {
       console.log('简历创建成功:', response.data);
+      // 返回的数据包含完整的简历信息
+      console.log('简历ID:', response.data.data.id);
+      console.log('简历详情:', response.data.data.resume);
     } else {
       console.error('创建失败:', response.data.message);
     }

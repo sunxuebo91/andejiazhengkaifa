@@ -315,8 +315,53 @@ export class ImageService {
         }
       }
     }
-    
+
     return formValues;
+  }
+
+  /**
+   * 上传视频文件（自动转码为H.264格式）
+   */
+  static async uploadVideo(file: File, type: string = 'selfIntroductionVideo'): Promise<{
+    fileUrl: string;
+    filename: string;
+    originalFilename: string;
+    mimeType: string;
+    size: number;
+    originalSize: number;
+  }> {
+    try {
+      console.log('开始上传视频:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        type
+      });
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
+
+      const response = await api.post('/api/upload/video', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 300000, // 5分钟超时，因为转码可能需要较长时间
+      });
+
+      // 注意：api拦截器已经解包response.data，所以这里response就是后端返回的数据
+      console.log('视频上传响应:', response);
+
+      if (!response?.success || !response?.data) {
+        throw new Error(response?.message || '视频上传失败');
+      }
+
+      console.log('视频上传成功:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('上传视频失败:', error);
+      throw new Error(error.response?.data?.message || error.message || '视频上传失败');
+    }
   }
 }
 

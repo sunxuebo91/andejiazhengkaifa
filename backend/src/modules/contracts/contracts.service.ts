@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Contract, ContractDocument } from './models/contract.model';
@@ -6,6 +6,8 @@ import { CustomerContractHistory, CustomerContractHistoryDocument } from './mode
 import { CustomerOperationLog } from '../customers/models/customer-operation-log.model';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
+import { ResumeService } from '../resume/resume.service';
+import { AvailabilityStatus } from '../resume/models/availability-period.schema';
 
 @Injectable()
 export class ContractsService {
@@ -15,6 +17,7 @@ export class ContractsService {
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
     @InjectModel(CustomerContractHistory.name) private customerContractHistoryModel: Model<CustomerContractHistoryDocument>,
     @InjectModel(CustomerOperationLog.name) private operationLogModel: Model<CustomerOperationLog>,
+    @Inject(forwardRef(() => ResumeService)) private resumeService: ResumeService,
   ) {}
 
   /**
@@ -145,6 +148,40 @@ export class ContractsService {
             }
           }
         );
+      }
+
+      // 🗓️ 自动更新月嫂档期
+      if (createContractDto.workerId && createContractDto.workerId !== 'temp') {
+        try {
+          // 检查档期是否可用
+          const isAvailable = await this.resumeService.checkAvailability(
+            createContractDto.workerId,
+            new Date(createContractDto.startDate),
+            new Date(createContractDto.endDate)
+          );
+
+          if (!isAvailable) {
+            this.logger.warn(`月嫂档期冲突: workerId=${createContractDto.workerId}, 合同=${savedContract.contractNumber}`);
+            // 不阻止合同创建，只记录警告
+          }
+
+          // 更新档期为"订单占用"状态
+          await this.resumeService.updateAvailability(
+            createContractDto.workerId,
+            {
+              startDate: new Date(createContractDto.startDate).toISOString().split('T')[0],
+              endDate: new Date(createContractDto.endDate).toISOString().split('T')[0],
+              status: AvailabilityStatus.OCCUPIED,
+              contractId: savedContract._id.toString(),
+              remarks: `合同编号: ${savedContract.contractNumber}`
+            }
+          );
+
+          this.logger.log(`档期更新成功: workerId=${createContractDto.workerId}, 合同=${savedContract.contractNumber}`);
+        } catch (error) {
+          this.logger.error(`更新档期失败: ${error.message}`, error.stack);
+          // 不阻止合同创建，只记录错误
+        }
       }
 
       return savedContract;

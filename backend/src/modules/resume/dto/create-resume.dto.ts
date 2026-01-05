@@ -136,6 +136,16 @@ export enum CurrentStage {
   NOT_LOOKING = 'not-looking'                          // 不找工作
 }
 
+// 月嫂档位枚举
+export enum MaternityNurseLevel {
+  JUNIOR = 'junior',           // 初级月嫂
+  SILVER = 'silver',           // 银牌月嫂
+  GOLD = 'gold',               // 金牌月嫂
+  PLATINUM = 'platinum',       // 铂金月嫂
+  DIAMOND = 'diamond',         // 钻石月嫂
+  CROWN = 'crown'              // 皇冠月嫂
+}
+
 // V2版本的创建简历DTO - 专为小程序设计，支持宽松输入和强校验
 export class CreateResumeV2Dto {
   // 必填字段
@@ -229,6 +239,23 @@ export class CreateResumeV2Dto {
   @IsNumber({}, { message: '期望薪资必须是数字' })
   @Min(0, { message: '期望薪资必须大于等于0' })
   expectedSalary?: number;
+
+  @ApiProperty({
+    description: '月嫂档位',
+    enum: MaternityNurseLevel,
+    required: false,
+    example: 'gold'
+  })
+  @IsOptional()
+  @IsEnum(MaternityNurseLevel, { message: '请选择正确的月嫂档位' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    if (!Object.values(MaternityNurseLevel).includes(value as MaternityNurseLevel)) {
+      return undefined;
+    }
+    return value;
+  })
+  maternityNurseLevel?: MaternityNurseLevel;
 
   @ApiProperty({ description: '籍贯', example: '河南省郑州市', maxLength: 20, required: false })
   @IsOptional()
@@ -704,6 +731,23 @@ export class CreateResumeDto {
   @Min(0, { message: '期望薪资必须大于等于0' })
   expectedSalary?: number;
 
+  @ApiProperty({
+    description: '月嫂档位',
+    enum: MaternityNurseLevel,
+    required: false,
+    example: 'gold'
+  })
+  @IsOptional()
+  @IsEnum(MaternityNurseLevel, { message: '请选择正确的月嫂档位' })
+  @Transform(({ value }) => {
+    if (!value || value === '' || value === null || value === undefined) return undefined;
+    if (!Object.values(MaternityNurseLevel).includes(value as MaternityNurseLevel)) {
+      return undefined;
+    }
+    return value;
+  })
+  maternityNurseLevel?: MaternityNurseLevel;
+
   @ApiProperty({ description: '服务区域', example: ['郑州市金水区'] })
   @IsOptional()
   @Transform(({ value }) => {
@@ -737,7 +781,7 @@ export class CreateResumeDto {
   @ApiProperty({ description: '技能列表', enum: Skill, isArray: true })
   @IsOptional()
   @IsArray()
-  @IsEnum(Skill, { each: true, message: '请选择有效的技能标签' })
+  @IsEnum(Skill, { each: true, message: '请选择有效的技能证书' })
   @Transform(({ value }) => {
     if (!value) return [];
     if (typeof value === 'string') {
@@ -896,4 +940,18 @@ export class CreateResumeDto {
   @IsOptional()
   @Allow()
   fileTypes?: string[];
+
+  @ApiProperty({ description: '自我介绍视频URL', example: 'https://example.com/intro-video.mp4' })
+  @IsOptional()
+  @IsString()
+  selfIntroductionVideoUrl?: string;
+
+  @ApiProperty({ description: '自我介绍视频对象', example: { url: 'https://example.com/intro-video.mp4', filename: 'video.mp4', size: 1024000 } })
+  @IsOptional()
+  @Allow()
+  selfIntroductionVideo?: {
+    url: string;
+    filename?: string;
+    size?: number;
+  };
 }

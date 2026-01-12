@@ -673,6 +673,122 @@ export class ResumeController {
     }
   }
 
+  // ==================== 公开接口（不脱敏，供小程序使用） ====================
+
+  @Get('public/list')
+  @Public()
+  @ApiOperation({ summary: '获取简历列表（公开接口，不脱敏）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async findAllPublic(
+    @Query('page') pageStr: string = '1',
+    @Query('pageSize') pageSizeStr: string = '10',
+    @Query('keyword') keyword?: string,
+    @Query('jobType') jobType?: string,
+    @Query('orderStatus') orderStatus?: string,
+    @Query('maxAge') maxAgeStr?: string,
+    @Query('nativePlace') nativePlace?: string,
+    @Query('ethnicity') ethnicity?: string,
+    @Query('_t') timestamp?: string,
+  ) {
+    try {
+      this.logger.log(`公开接口 - 获取简历列表: page=${pageStr}, pageSize=${pageSizeStr}`);
+
+      // 手动解析数字参数
+      let page = 1;
+      let pageSize = 10;
+      let maxAge: number | undefined = undefined;
+
+      try {
+        const parsedPage = parseInt(pageStr, 10);
+        if (!isNaN(parsedPage) && parsedPage > 0) {
+          page = parsedPage;
+        }
+      } catch (e) {
+        this.logger.warn(`页码解析错误: ${e.message}`);
+      }
+
+      try {
+        const parsedPageSize = parseInt(pageSizeStr, 10);
+        if (!isNaN(parsedPageSize) && parsedPageSize > 0) {
+          pageSize = Math.min(parsedPageSize, 100); // 限制最大100条
+        }
+      } catch (e) {
+        this.logger.warn(`每页数量解析错误: ${e.message}`);
+      }
+
+      try {
+        if (maxAgeStr) {
+          const parsed = parseInt(maxAgeStr, 10);
+          if (!isNaN(parsed)) {
+            maxAge = parsed;
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`最大年龄解析错误: ${e.message}`);
+      }
+
+      // 调用服务获取数据
+      const result = await this.resumeService.findAll(
+        page,
+        pageSize,
+        keyword,
+        jobType,
+        orderStatus,
+        maxAge,
+        nativePlace,
+        ethnicity
+      );
+
+      return {
+        success: true,
+        data: result,
+        message: '获取简历列表成功'
+      };
+    } catch (error) {
+      this.logger.error(`公开接口 - 获取简历列表失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 },
+        message: `获取简历列表失败: ${error.message}`
+      };
+    }
+  }
+
+  @Get('public/:id')
+  @Public()
+  @ApiOperation({ summary: '获取简历详情（公开接口，不脱敏）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async findOnePublicFull(@Param('id') id: string) {
+    try {
+      this.logger.log(`公开接口 - 获取简历详情: id=${id}`);
+      const resume = await this.resumeService.findOne(id);
+
+      if (!resume) {
+        return {
+          success: false,
+          data: null,
+          message: '简历不存在'
+        };
+      }
+
+      return {
+        success: true,
+        data: resume,
+        message: '获取简历详情成功'
+      };
+    } catch (error) {
+      this.logger.error(`公开接口 - 获取简历详情失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `获取简历详情失败: ${error.message}`
+      };
+    }
+  }
+
+  // ==================== 分享相关接口 ====================
+
   @Post(':id/share')
   @ApiOperation({ summary: '生成简历分享链接（返回令牌）' })
   @ApiParam({ name: 'id', description: '简历ID' })

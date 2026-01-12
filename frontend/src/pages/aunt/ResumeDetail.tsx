@@ -27,6 +27,7 @@ import { getCurrentUser } from '@/services/auth';
 import { createFollowUp, getFollowUpsByResumeId, deleteFollowUp, followUpTypeMap, type FollowUpRecord } from '@/services/followUp.service';
 import { isPdfFile } from '../../utils/uploadHelper';
 import AvailabilityCalendar from '@/components/AvailabilityCalendar';
+import { getDistrictLabel } from '../../constants/beijingDistricts';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
@@ -346,6 +347,11 @@ interface WorkExperience {
   startDate: string;
   endDate: string;
   description: string;
+  orderNumber?: string;
+  district?: string;
+  customerName?: string;
+  customerReview?: string;
+  photos?: FileInfo[];
 }
 
 // 添加类型定义
@@ -416,6 +422,7 @@ interface ResumeData {
   medicalExamDate: string;
   learningIntention?: keyof typeof learningIntentionMap;
   currentStage?: keyof typeof currentStageMap;
+  internalEvaluation?: string;
   createdAt: string;
   updatedAt: string;
   userId?: {
@@ -920,23 +927,149 @@ const ResumeDetail = () => {
       const uniqueKey = `${exp.startDate || ''}-${exp.endDate || ''}-${exp.description?.substring(0, 20) || ''}-${index}`;
       
       return (
-        <Card 
+        <Card
           key={uniqueKey}
-          type="inner" 
-          title={`工作经历 ${index + 1}`} 
+          type="inner"
+          title={`工作经历 ${index + 1}`}
           style={{ marginBottom: 16 }}
         >
-          <Descriptions bordered column={2}>
+          {/* 时间和基本信息 */}
+          <Descriptions bordered column={2} size="small">
             <Descriptions.Item label="开始时间">
               {exp.startDate ? formatDateToChinese(exp.startDate) : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="结束时间">
               {exp.endDate ? formatDateToChinese(exp.endDate) : '-'}
             </Descriptions.Item>
-            <Descriptions.Item label="工作简介" span={2}>
-              {exp.description || '-'}
-            </Descriptions.Item>
           </Descriptions>
+
+          {/* 工作简介 */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{
+              fontSize: '14px',
+              fontWeight: 500,
+              color: 'rgba(0, 0, 0, 0.85)',
+              marginBottom: 8,
+              paddingLeft: 12,
+              borderLeft: '3px solid #1890ff'
+            }}>
+              工作简介
+            </div>
+            <div style={{
+              padding: '12px 16px',
+              backgroundColor: '#fafafa',
+              borderRadius: 4,
+              lineHeight: '1.8',
+              color: 'rgba(0, 0, 0, 0.85)'
+            }}>
+              {exp.description || '-'}
+            </div>
+          </div>
+
+          {/* 详细信息（如果有任何一个字段存在才显示） */}
+          {(exp.orderNumber || exp.district || exp.customerName) && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'rgba(0, 0, 0, 0.85)',
+                marginBottom: 8,
+                paddingLeft: 12,
+                borderLeft: '3px solid #52c41a'
+              }}>
+                详细信息
+              </div>
+              <Descriptions bordered column={2} size="small">
+                {exp.orderNumber && (
+                  <Descriptions.Item label="订单号">
+                    <span style={{ fontFamily: 'monospace', color: '#1890ff' }}>
+                      {exp.orderNumber}
+                    </span>
+                  </Descriptions.Item>
+                )}
+                {exp.district && (
+                  <Descriptions.Item label="服务区域">
+                    <Tag color="blue">{getDistrictLabel(exp.district)}</Tag>
+                  </Descriptions.Item>
+                )}
+                {exp.customerName && (
+                  <Descriptions.Item label="客户姓名" span={2}>
+                    {exp.customerName}
+                  </Descriptions.Item>
+                )}
+              </Descriptions>
+            </div>
+          )}
+
+          {/* 客户评价（单独一个区块） */}
+          {exp.customerReview && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'rgba(0, 0, 0, 0.85)',
+                marginBottom: 8,
+                paddingLeft: 12,
+                borderLeft: '3px solid #ff7a45'
+              }}>
+                客户评价
+              </div>
+              <div style={{
+                padding: '12px 16px',
+                backgroundColor: '#fff7e6',
+                border: '1px solid #ffd591',
+                borderRadius: 4,
+                lineHeight: '1.8',
+                color: 'rgba(0, 0, 0, 0.85)',
+                fontSize: '14px'
+              }}>
+                {exp.customerReview}
+              </div>
+            </div>
+          )}
+
+          {/* 工作照片 */}
+          {exp.photos && exp.photos.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'rgba(0, 0, 0, 0.85)',
+                marginBottom: 8,
+                paddingLeft: 12,
+                borderLeft: '3px solid #faad14'
+              }}>
+                工作照片
+              </div>
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 12,
+                padding: '12px',
+                backgroundColor: '#fafafa',
+                borderRadius: 4
+              }}>
+                {exp.photos.map((photo, photoIndex) => (
+                  <Image
+                    key={photoIndex}
+                    src={photo.url}
+                    alt={`工作照片${photoIndex + 1}`}
+                    width={120}
+                    height={120}
+                    style={{
+                      objectFit: 'cover',
+                      borderRadius: 8,
+                      border: '1px solid #d9d9d9',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    preview={{
+                      mask: '查看大图'
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
       );
     });
@@ -1439,6 +1572,27 @@ const ResumeDetail = () => {
               ) : (
                 <Typography.Text type="secondary">
                   暂无自我介绍
+                </Typography.Text>
+              )}
+            </div>
+          </Card>
+
+          {/* 添加内部员工评价卡片 */}
+          <Card title="内部员工评价" style={{ marginBottom: 24 }} extra={<span style={{ color: '#999', fontSize: 12 }}>仅内部可见</span>}>
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#fff7e6',
+              borderRadius: '6px',
+              minHeight: '80px',
+              border: '1px solid #ffd591'
+            }}>
+              {resume?.internalEvaluation ? (
+                <Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {resume.internalEvaluation}
+                </Typography.Paragraph>
+              ) : (
+                <Typography.Text type="secondary">
+                  暂无内部评价
                 </Typography.Text>
               )}
             </div>

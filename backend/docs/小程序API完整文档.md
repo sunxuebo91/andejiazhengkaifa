@@ -3,6 +3,7 @@
 ## 📋 目录
 
 - [认证授权](#认证授权)
+- [Banner轮播图](#banner轮播图)
 - [简历管理](#简历管理)
   - [创建简历](#创建简历)
   - [获取简历详情](#获取简历详情)
@@ -44,6 +45,134 @@ Content-Type: application/json
       "openid": "openid"
     }
   }
+}
+```
+
+---
+
+## 🖼️ Banner轮播图
+
+获取小程序首页展示的Banner轮播图列表。
+
+### 获取活跃Banner列表
+
+获取所有启用状态的Banner，按排序字段升序排列。
+
+#### 请求
+
+```http
+GET /api/banners/miniprogram/active
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "696224b526da74c3b9e0c565",
+      "title": "首页Banner",
+      "imageUrl": "https://housekeeping-1254058915.cos.ap-guangzhou.myqcloud.com/personalPhoto/xxx.jpg",
+      "linkType": "none",
+      "order": 0
+    },
+    {
+      "_id": "696224b526da74c3b9e0c566",
+      "title": "活动Banner",
+      "imageUrl": "https://housekeeping-1254058915.cos.ap-guangzhou.myqcloud.com/personalPhoto/yyy.jpg",
+      "linkType": "none",
+      "order": 1
+    }
+  ],
+  "message": "获取成功"
+}
+```
+
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `_id` | string | Banner唯一ID |
+| `title` | string | Banner标题 |
+| `imageUrl` | string | 图片URL（腾讯云COS） |
+| `linkType` | string | 链接类型：none（无跳转） |
+| `order` | number | 排序值，数字越小越靠前 |
+
+#### 小程序调用示例
+
+```javascript
+// utils/api.js
+const BASE_URL = 'https://crm.andejiazheng.com/api';
+
+/**
+ * 获取首页Banner列表
+ * @returns {Promise<Array>} Banner列表
+ */
+export function getBannerList() {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/banners/miniprogram/active`,
+      method: 'GET',
+      success(res) {
+        if (res.data.success) {
+          resolve(res.data.data);
+        } else {
+          reject(new Error(res.data.message || '获取Banner失败'));
+        }
+      },
+      fail(err) {
+        reject(err);
+      }
+    });
+  });
+}
+```
+
+```javascript
+// pages/index/index.js
+import { getBannerList } from '../../utils/api';
+
+Page({
+  data: {
+    bannerList: []
+  },
+
+  onLoad() {
+    this.loadBanners();
+  },
+
+  async loadBanners() {
+    try {
+      const banners = await getBannerList();
+      this.setData({ bannerList: banners });
+    } catch (err) {
+      console.error('加载Banner失败:', err);
+    }
+  }
+});
+```
+
+```html
+<!-- pages/index/index.wxml -->
+<swiper class="banner-swiper" indicator-dots autoplay circular>
+  <swiper-item wx:for="{{bannerList}}" wx:key="_id">
+    <image src="{{item.imageUrl}}" mode="aspectFill" class="banner-image" />
+  </swiper-item>
+</swiper>
+```
+
+```css
+/* pages/index/index.wxss */
+.banner-swiper {
+  width: 100%;
+  height: 300rpx;
+}
+.banner-image {
+  width: 100%;
+  height: 100%;
 }
 ```
 
@@ -96,10 +225,28 @@ Idempotency-Key: {unique-key}  # 可选，用于防止重复提交
   "workExperiences": [
     {
       "startDate": "2020-01-01",
-      "endDate": "2023-12-31",
-      "description": "工作描述",
-      "company": "某家政公司",
-      "position": "月嫂"
+      "endDate": "2020-03-31",
+      "description": "在北京朝阳区某家庭担任月嫂，负责新生儿护理和产妇月子餐",
+      "orderNumber": "CON12345678901",
+      "district": "chaoyang",
+      "customerName": "张女士",
+      "customerReview": "服务态度好，专业技能强，宝宝护理得很好",
+      "photos": [
+        {
+          "url": "https://cos.example.com/work-photo-1.jpg",
+          "name": "工作照片1.jpg",
+          "size": 102400,
+          "mimeType": "image/jpeg"
+        }
+      ]
+    },
+    {
+      "startDate": "2020-05-01",
+      "endDate": "2020-07-31",
+      "description": "在北京海淀区某家庭担任月嫂",
+      "orderNumber": "CON12345678902",
+      "district": "haidian",
+      "customerName": "李女士"
     }
   ]
 }
@@ -143,18 +290,41 @@ Idempotency-Key: {unique-key}  # 可选，用于防止重复提交
 | `orderStatus` | string | 接单状态，见[接单状态](#接单状态) | "available" |
 | `learningIntention` | string | 培训意向，见[培训意向](#培训意向) | "yes" |
 | `currentStage` | string | 当前阶段，见[当前阶段](#当前阶段) | "working" |
-| `workExperiences` | array | 工作经历数组 | 见下方说明 |
+| `workExperiences` | array | 工作经历数组（详见下方说明） | 见下方说明 |
 
 #### 工作经历对象结构
 
 ```json
 {
-  "startDate": "2020-01-01",      // 必填：开始日期
-  "endDate": "2023-12-31",        // 必填：结束日期
-  "description": "工作描述",       // 必填：工作描述
-  "company": "某家政公司",         // 可选：公司名称
-  "position": "月嫂"              // 可选：职位
+  // 必填字段
+  "startDate": "2020-01-01",      // 必填：开始日期（YYYY-MM-DD）
+  "endDate": "2023-12-31",        // 必填：结束日期（YYYY-MM-DD）
+  "description": "在北京朝阳区某家庭担任月嫂，负责新生儿护理和产妇月子餐",  // 必填：工作描述
+
+  // 可选字段（新增）
+  "orderNumber": "CON12345678901",  // 可选：订单编号（格式：CON{11位数字}）
+  "district": "chaoyang",           // 可选：服务区域（北京市区县代码）
+  "customerName": "张女士",         // 可选：客户姓名
+  "customerReview": "服务态度好，专业技能强，宝宝护理得很好",  // 可选：客户评价
+  "photos": [                       // 可选：工作照片数组
+    {
+      "url": "https://cos.example.com/work-photo-1.jpg",  // 必填：图片URL
+      "name": "工作照片1.jpg",      // 可选：文件名
+      "size": 102400,               // 可选：文件大小（字节）
+      "mimeType": "image/jpeg"      // 可选：MIME类型
+    }
+  ]
 }
+```
+
+**北京市区县代码**：
+```
+dongcheng: 东城区      xicheng: 西城区       chaoyang: 朝阳区
+fengtai: 丰台区        shijingshan: 石景山区  haidian: 海淀区
+mentougou: 门头沟区    fangshan: 房山区      tongzhou: 通州区
+shunyi: 顺义区         changping: 昌平区     daxing: 大兴区
+huairou: 怀柔区        pinggu: 平谷区        miyun: 密云区
+yanqing: 延庆区
 ```
 
 #### 成功响应 (201)
@@ -255,10 +425,34 @@ Authorization: Bearer {token}
     "workExperiences": [
       {
         "startDate": "2020-01-01",
-        "endDate": "2023-12-31",
-        "description": "工作描述",
-        "company": "某家政公司",
-        "position": "月嫂"
+        "endDate": "2020-03-31",
+        "description": "在北京朝阳区某家庭担任月嫂，负责新生儿护理和产妇月子餐",
+        "orderNumber": "CON12345678901",
+        "district": "chaoyang",
+        "customerName": "张女士",
+        "customerReview": "服务态度好，专业技能强，宝宝护理得很好",
+        "photos": [
+          {
+            "url": "https://cos.example.com/work-photo-1.jpg",
+            "name": "工作照片1.jpg",
+            "size": 102400,
+            "mimeType": "image/jpeg"
+          },
+          {
+            "url": "https://cos.example.com/work-photo-2.jpg",
+            "name": "工作照片2.jpg",
+            "size": 98304,
+            "mimeType": "image/jpeg"
+          }
+        ]
+      },
+      {
+        "startDate": "2020-05-01",
+        "endDate": "2020-07-31",
+        "description": "在北京海淀区某家庭担任月嫂",
+        "orderNumber": "CON12345678902",
+        "district": "haidian",
+        "customerName": "李女士"
       }
     ],
     "idCardFront": {
@@ -1845,11 +2039,182 @@ async function request(options) {
 
 ---
 
+## 📝 工作经历字段详细说明
+
+### 工作经历对象完整结构
+
+每个工作经历对象包含以下字段：
+
+#### 必填字段
+
+| 字段 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `startDate` | string | 开始日期（YYYY-MM-DD） | "2020-01-01" |
+| `endDate` | string | 结束日期（YYYY-MM-DD） | "2023-12-31" |
+| `description` | string | 工作描述 | "在北京朝阳区某家庭担任月嫂" |
+
+#### 可选字段（新增）
+
+| 字段 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `orderNumber` | string | 订单编号（格式：CON{11位数字}） | "CON12345678901" |
+| `district` | string | 服务区域（北京市区县代码） | "chaoyang" |
+| `customerName` | string | 客户姓名 | "张女士" |
+| `customerReview` | string | 客户评价 | "服务态度好，专业技能强" |
+| `photos` | array | 工作照片数组 | 见下方照片对象说明 |
+
+### 工作照片对象结构
+
+每个照片对象包含以下字段：
+
+| 字段 | 类型 | 必填 | 说明 | 示例 |
+|------|------|------|------|------|
+| `url` | string | 是 | 图片URL | "https://cos.example.com/photo.jpg" |
+| `name` | string | 否 | 文件名 | "工作照片1.jpg" |
+| `size` | number | 否 | 文件大小（字节） | 102400 |
+| `mimeType` | string | 否 | MIME类型 | "image/jpeg" |
+
+### 北京市区县代码对照表
+
+| 代码 | 区县名称 | 代码 | 区县名称 |
+|------|----------|------|----------|
+| `dongcheng` | 东城区 | `xicheng` | 西城区 |
+| `chaoyang` | 朝阳区 | `fengtai` | 丰台区 |
+| `shijingshan` | 石景山区 | `haidian` | 海淀区 |
+| `mentougou` | 门头沟区 | `fangshan` | 房山区 |
+| `tongzhou` | 通州区 | `shunyi` | 顺义区 |
+| `changping` | 昌平区 | `daxing` | 大兴区 |
+| `huairou` | 怀柔区 | `pinggu` | 平谷区 |
+| `miyun` | 密云区 | `yanqing` | 延庆区 |
+
+### 使用示例
+
+#### 创建包含完整工作经历的简历
+
+```javascript
+// 小程序端示例
+const createResumeWithWorkExperience = async () => {
+  const resumeData = {
+    // 必填字段
+    name: "张三",
+    phone: "13800138000",
+    gender: "female",
+    age: 35,
+    jobType: "yuexin",
+    education: "high",
+
+    // 工作经历（包含新字段）
+    workExperiences: [
+      {
+        startDate: "2020-01-01",
+        endDate: "2020-03-31",
+        description: "在北京朝阳区某家庭担任月嫂，负责新生儿护理和产妇月子餐",
+        orderNumber: "CON12345678901",
+        district: "chaoyang",
+        customerName: "张女士",
+        customerReview: "服务态度好，专业技能强，宝宝护理得很好",
+        photos: [
+          {
+            url: "https://cos.example.com/work-photo-1.jpg",
+            name: "工作照片1.jpg",
+            size: 102400,
+            mimeType: "image/jpeg"
+          }
+        ]
+      },
+      {
+        startDate: "2020-05-01",
+        endDate: "2020-07-31",
+        description: "在北京海淀区某家庭担任月嫂",
+        orderNumber: "CON12345678902",
+        district: "haidian",
+        customerName: "李女士"
+        // 其他字段可选，不填写也可以
+      }
+    ]
+  };
+
+  try {
+    const response = await wx.request({
+      url: 'https://crm.andejiazheng.com/api/resumes/miniprogram/create',
+      method: 'POST',
+      header: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      data: resumeData
+    });
+
+    if (response.data.success) {
+      console.log('简历创建成功:', response.data);
+      return response.data.data;
+    }
+  } catch (error) {
+    console.error('创建失败:', error);
+  }
+};
+```
+
+#### 更新工作经历
+
+```javascript
+// 更新现有简历的工作经历
+const updateWorkExperience = async (resumeId) => {
+  const updateData = {
+    workExperiences: [
+      {
+        startDate: "2020-01-01",
+        endDate: "2020-03-31",
+        description: "工作描述",
+        orderNumber: "CON12345678901",
+        district: "chaoyang",
+        customerName: "张女士",
+        customerReview: "服务很好",
+        photos: [
+          {
+            url: "https://cos.example.com/photo.jpg",
+            name: "照片.jpg"
+          }
+        ]
+      }
+    ]
+  };
+
+  try {
+    const response = await wx.request({
+      url: `https://crm.andejiazheng.com/api/resumes/miniprogram/${resumeId}`,
+      method: 'PUT',
+      header: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      data: updateData
+    });
+
+    if (response.data.success) {
+      console.log('更新成功');
+    }
+  } catch (error) {
+    console.error('更新失败:', error);
+  }
+};
+```
+
+### 注意事项
+
+1. **订单编号格式**：必须是 `CON` 开头 + 11位数字，例如：`CON12345678901`
+2. **服务区域代码**：必须使用北京市区县代码，不能使用中文名称
+3. **日期格式**：必须使用 `YYYY-MM-DD` 格式，例如：`2020-01-01`
+4. **照片URL**：必须是有效的HTTPS URL
+5. **向后兼容**：所有新增字段都是可选的，不影响现有功能
+
+---
+
 ## 📞 技术支持
 
 如有问题或建议，请联系技术团队。
 
-**文档版本**: v1.3.0
-**最后更新**: 2026-01-05
+**文档版本**: v1.4.0
+**最后更新**: 2026-01-07
 **维护团队**: 安得家政技术团队
 

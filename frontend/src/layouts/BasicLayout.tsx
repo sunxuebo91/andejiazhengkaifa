@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined, AppstoreOutlined, PictureOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps, Space } from 'antd';
 import { useMemo, useEffect } from 'react';
@@ -14,6 +14,8 @@ interface MenuRoute {
   name: string;
   icon?: React.ReactNode;
   routes?: MenuRoute[];
+  // 外部/占位菜单：不走 react-router 的 Link
+  placeholder?: boolean;
 }
 
 const BasicLayout = () => {
@@ -222,6 +224,23 @@ const BasicLayout = () => {
     };
     baseMenus.push(interviewMenu);
 
+    // 褓贝后台菜单 - 管理员和经理可见
+    if (hasRole('admin') || hasRole('manager')) {
+      const baobeiMenu: MenuRoute = {
+        path: '/baobei',
+        name: '褓贝后台',
+        icon: <AppstoreOutlined />,
+        routes: [
+          {
+            path: '/baobei/banner',
+            name: 'Banner管理',
+            icon: <PictureOutlined />,
+          },
+        ],
+      };
+      baseMenus.push(baobeiMenu);
+    }
+
     // 用户管理菜单 - 仅管理员可见
     if (hasRole('admin')) {
       baseMenus.push({
@@ -314,6 +333,21 @@ const BasicLayout = () => {
             </a>
           );
         }
+
+        // 占位菜单：先不跳转（后续可改为外链/同域名独立系统）
+        if ((item as any)?.placeholder) {
+          return (
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+              }}
+            >
+              {dom}
+            </a>
+          );
+        }
+
         // 其他菜单项正常跳转
         return <Link to={item.path || '/'}>{dom}</Link>;
       }}

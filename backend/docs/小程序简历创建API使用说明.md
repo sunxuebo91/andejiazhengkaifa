@@ -30,7 +30,7 @@ POST /api/resumes/miniprogram/create
 | `skills` | array | 技能列表 | ["chanhou", "yuying"] |
 | `serviceArea` | array | 服务区域 | ["北京市朝阳区"] |
 | `selfIntroduction` | string | 自我介绍 | "自我介绍" |
-| `workExperiences` | array | 工作经历 | [{"startDate": "2020-01-01", "endDate": "2023-12-31", "description": "工作描述"}] |
+| `workExperiences` | array | 工作经历（详见下方说明） | [{"startDate": "2020-01-01", "endDate": "2023-12-31", "description": "工作描述"}] |
 | `wechat` | string | 微信号 | "wechat123" |
 | `currentAddress` | string | 现居地址 | "北京市朝阳区" |
 | `hukouAddress` | string | 户口地址 | "河南省郑州市" |
@@ -47,6 +47,53 @@ POST /api/resumes/miniprogram/create
 | `orderStatus` | string | 接单状态 | "available" |
 | `learningIntention` | string | 培训意向 | "yes" |
 | `currentStage` | string | 当前阶段 | "training" |
+
+### 工作经历字段说明
+
+`workExperiences` 是一个数组，每个工作经历对象包含以下字段：
+
+| 字段 | 类型 | 必填 | 说明 | 示例 |
+|------|------|------|------|------|
+| `startDate` | string | 是 | 开始日期 | "2020-01-01" |
+| `endDate` | string | 是 | 结束日期 | "2023-12-31" |
+| `description` | string | 是 | 工作描述 | "在北京某家庭担任月嫂" |
+| `orderNumber` | string | 否 | 订单编号（格式：CON{11位数字}） | "CON12345678901" |
+| `district` | string | 否 | 服务区域（北京市区县代码） | "chaoyang" |
+| `customerName` | string | 否 | 客户姓名 | "张女士" |
+| `customerReview` | string | 否 | 客户评价 | "服务态度好，专业技能强" |
+| `photos` | array | 否 | 工作照片（详见下方说明） | [{"url": "https://...", "name": "照片1.jpg"}] |
+
+**工作照片字段说明**
+
+`photos` 是一个数组，每个照片对象包含以下字段：
+
+| 字段 | 类型 | 必填 | 说明 | 示例 |
+|------|------|------|------|------|
+| `url` | string | 是 | 图片URL | "https://cos.example.com/photo.jpg" |
+| `name` | string | 否 | 文件名 | "工作照片1.jpg" |
+| `size` | number | 否 | 文件大小（字节） | 102400 |
+| `mimeType` | string | 否 | MIME类型 | "image/jpeg" |
+
+**北京市区县代码**
+
+| 代码 | 区县名称 |
+|------|----------|
+| `dongcheng` | 东城区 |
+| `xicheng` | 西城区 |
+| `chaoyang` | 朝阳区 |
+| `fengtai` | 丰台区 |
+| `shijingshan` | 石景山区 |
+| `haidian` | 海淀区 |
+| `mentougou` | 门头沟区 |
+| `fangshan` | 房山区 |
+| `tongzhou` | 通州区 |
+| `shunyi` | 顺义区 |
+| `changping` | 昌平区 |
+| `daxing` | 大兴区 |
+| `huairou` | 怀柔区 |
+| `pinggu` | 平谷区 |
+| `miyun` | 密云区 |
+| `yanqing` | 延庆区 |
 
 ## 🔧 核心功能
 
@@ -86,6 +133,58 @@ curl -X POST /api/resumes/miniprogram/create \
     "age": 35,
     "jobType": "yuexin",
     "education": "high"
+  }'
+```
+
+### 包含工作经历的完整请求
+```bash
+curl -X POST /api/resumes/miniprogram/create \
+  -H "Authorization: Bearer your-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "张三",
+    "phone": "13800138000",
+    "gender": "female",
+    "age": 35,
+    "jobType": "yuexin",
+    "education": "high",
+    "nativePlace": "河南省郑州市",
+    "experienceYears": 5,
+    "expectedSalary": 8000,
+    "selfIntroduction": "有5年月嫂经验，擅长新生儿护理和产后康复",
+    "workExperiences": [
+      {
+        "startDate": "2020-01-01",
+        "endDate": "2020-03-31",
+        "description": "在北京朝阳区某家庭担任月嫂，负责新生儿护理和产妇月子餐",
+        "orderNumber": "CON12345678901",
+        "district": "chaoyang",
+        "customerName": "张女士",
+        "customerReview": "服务态度好，专业技能强，宝宝护理得很好",
+        "photos": [
+          {
+            "url": "https://cos.example.com/work-photo-1.jpg",
+            "name": "工作照片1.jpg",
+            "size": 102400,
+            "mimeType": "image/jpeg"
+          },
+          {
+            "url": "https://cos.example.com/work-photo-2.jpg",
+            "name": "工作照片2.jpg",
+            "size": 98304,
+            "mimeType": "image/jpeg"
+          }
+        ]
+      },
+      {
+        "startDate": "2020-05-01",
+        "endDate": "2020-07-31",
+        "description": "在北京海淀区某家庭担任月嫂",
+        "orderNumber": "CON12345678902",
+        "district": "haidian",
+        "customerName": "李女士"
+      }
+    ]
   }'
 ```
 
@@ -269,8 +368,20 @@ const createResume = async (formData) => {
     skills: formData.skills || [],
     serviceArea: formData.serviceArea || [],
     selfIntroduction: formData.selfIntroduction || undefined,
-    workExperiences: formData.workExperiences || [],
     orderStatus: formData.orderStatus || undefined,
+
+    // 可选字段 - 工作经历（包含新增字段）
+    workExperiences: formData.workExperiences ? formData.workExperiences.map(exp => ({
+      startDate: exp.startDate,
+      endDate: exp.endDate,
+      description: exp.description,
+      // 新增字段（可选）
+      orderNumber: exp.orderNumber || undefined,
+      district: exp.district || undefined,
+      customerName: exp.customerName || undefined,
+      customerReview: exp.customerReview || undefined,
+      photos: exp.photos || []
+    })) : [],
 
     // 可选字段 - 培训相关
     learningIntention: formData.learningIntention || undefined,

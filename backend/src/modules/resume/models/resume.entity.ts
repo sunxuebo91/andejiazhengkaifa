@@ -8,19 +8,24 @@ import { WorkExperienceSchema } from './work-experience.schema';
 import { FileInfoSchema } from './file-info.schema';
 import { AvailabilityPeriodSchema } from './availability-period.schema';
 
-// 定义工作经历接口
-interface WorkExperience {
-  startDate: string;
-  endDate: string;
-  description: string;
-}
-
 // 定义文件信息接口
 interface FileInfo {
   url: string;
   filename: string;
   mimetype: string;
   size: number;
+}
+
+// 定义工作经历接口
+interface WorkExperience {
+  startDate: string;
+  endDate: string;
+  description: string;
+  orderNumber?: string;
+  district?: string;
+  customerName?: string;
+  customerReview?: string;
+  photos?: FileInfo[];
 }
 
 // 定义档期接口
@@ -316,6 +321,12 @@ export class Resume extends Document implements IResume {
   @IsArray()
   @IsOptional()
   availabilityCalendar?: AvailabilityPeriodSchema[];
+
+  @ApiProperty({ description: '内部员工评价' })
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  internalEvaluation?: string;
 }
 
 export const ResumeSchema = SchemaFactory.createForClass(Resume);

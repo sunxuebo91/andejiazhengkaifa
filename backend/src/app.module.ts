@@ -23,6 +23,7 @@ import { ZegoModule } from './modules/zego/zego.module';
 import { InterviewModule } from './modules/interview/interview.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { DashubaoModule } from './modules/dashubao/dashubao.module';
+import { BannerModule } from './modules/banner/banner.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { DashubaoModule } from './modules/dashubao/dashubao.module';
     InterviewModule,
     NotificationModule,
     DashubaoModule,
+    BannerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

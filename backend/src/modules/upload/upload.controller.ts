@@ -51,7 +51,7 @@ export class UploadController {
         },
         type: {
           type: 'string',
-          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report'],
+          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report', 'medicalReport', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto', 'workExperiencePhoto', 'banner'],
           description: '文件类型',
         },
       },
@@ -71,7 +71,8 @@ export class UploadController {
     file: Express.Multer.File,
     @Body('type') type: string,
   ) {
-    if (!['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report'].includes(type)) {
+    const validTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report', 'medicalReport', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto', 'workExperiencePhoto', 'banner'];
+    if (!validTypes.includes(type)) {
       throw new BadRequestException('无效的文件类型');
     }
 

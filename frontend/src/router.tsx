@@ -24,6 +24,9 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 // 保险相关页面
 const CreateInsurance = lazy(() => import('./pages/insurance/CreateInsurance'));
 const InsuranceList = lazy(() => import('./pages/insurance/InsuranceList'));
+// 褓贝后台相关页面
+const BannerList = lazy(() => import('./pages/baobei/BannerList'));
+const BannerForm = lazy(() => import('./pages/baobei/BannerForm'));
 
 export interface RouteConfig {
   path: string;
@@ -140,6 +143,34 @@ export const basicLayoutRoutes: RouteConfig[] = [
         meta: {
           title: '保单管理',
           description: '管理所有保险保单'
+        }
+      },
+      // 褓贝后台相关路由
+      {
+        path: 'baobei/banner',
+        name: 'Banner管理',
+        element: <BannerList />,
+        meta: {
+          title: 'Banner轮播图管理',
+          description: '管理小程序Banner轮播图'
+        }
+      },
+      {
+        path: 'baobei/banner/create',
+        name: '新建Banner',
+        element: <BannerForm />,
+        meta: {
+          title: '新建Banner',
+          description: '创建新的Banner轮播图'
+        }
+      },
+      {
+        path: 'baobei/banner/edit/:id',
+        name: '编辑Banner',
+        element: <BannerForm />,
+        meta: {
+          title: '编辑Banner',
+          description: '编辑Banner轮播图'
         }
       },
     ],

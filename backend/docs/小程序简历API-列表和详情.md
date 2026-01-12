@@ -2,65 +2,130 @@
 
 ## 📋 目录
 
-- [认证授权](#认证授权)
-- [获取简历详情](#获取简历详情)
+- [公开接口（推荐）](#公开接口推荐)
+  - [获取简历列表（公开）](#获取简历列表公开)
+  - [获取简历详情（公开）](#获取简历详情公开)
+- [认证接口](#认证接口)
+  - [获取简历详情（需认证）](#获取简历详情需认证)
 - [数据字典](#数据字典)
 
 ---
 
-## 🔐 认证授权
+## 🌟 公开接口（推荐）
 
-### 基础信息
+### ⚠️ 重要说明
 
-- **生产环境**: `https://crm.andejiazheng.com/api`
-- **认证方式**: Bearer Token
-- **请求头**: `Authorization: Bearer {token}`
+**新增公开接口，无需认证，返回完整数据（不脱敏）**
 
-### 获取Token
+这些接口专为小程序端设计，无需登录即可访问，返回完整的简历数据。
+
+---
+
+### 📋 获取简历列表（公开）
+
+获取分页的简历列表，支持多种筛选条件。
+
+#### 请求
 
 ```http
-POST /api/auth/miniprogram/login
-Content-Type: application/json
-
-{
-  "code": "微信登录code"
-}
+GET /api/resumes/public/list
 ```
 
-**响应示例**:
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `page` | number | 否 | 1 | 页码 |
+| `pageSize` | number | 否 | 10 | 每页数量（最大100） |
+| `keyword` | string | 否 | - | 搜索关键词（姓名、手机号、期望职位） |
+| `jobType` | string | 否 | - | 工种筛选 |
+| `orderStatus` | string | 否 | - | 接单状态筛选 |
+| `maxAge` | number | 否 | - | 最大年龄筛选 |
+| `nativePlace` | string | 否 | - | 籍贯筛选 |
+| `ethnicity` | string | 否 | - | 民族筛选 |
+
+#### 成功响应 (200)
+
 ```json
 {
   "success": true,
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "id": "user_id",
-      "openid": "openid"
-    }
-  }
+    "items": [
+      {
+        "id": "66e2f4af8b1234567890abcd",
+        "name": "张三",
+        "phone": "13800138000",
+        "age": 35,
+        "gender": "female",
+        "jobType": "yuexin",
+        "education": "high",
+        "experienceYears": 3,
+        "nativePlace": "河南省郑州市",
+        "skills": ["chanhou", "yuying"],
+        "expectedSalary": 8000,
+        "serviceArea": ["北京市朝阳区"],
+        "photoUrls": ["https://example.com/photo1.jpg"],
+        "selfIntroduction": "自我介绍内容"
+      }
+    ],
+    "total": 100,
+    "page": 1,
+    "pageSize": 10,
+    "totalPages": 10
+  },
+  "message": "获取简历列表成功"
 }
+```
+
+#### 小程序调用示例
+
+```javascript
+// 获取简历列表
+async function getResumeList(params = {}) {
+  const query = new URLSearchParams({
+    page: params.page || 1,
+    pageSize: params.pageSize || 10,
+    ...(params.keyword && { keyword: params.keyword }),
+    ...(params.jobType && { jobType: params.jobType }),
+    ...(params.maxAge && { maxAge: params.maxAge })
+  }).toString();
+
+  const response = await wx.request({
+    url: `https://crm.andejiazheng.com/api/resumes/public/list?${query}`,
+    method: 'GET'
+  });
+
+  return response.data;
+}
+
+// 使用示例
+const result = await getResumeList({
+  page: 1,
+  pageSize: 20,
+  jobType: 'yuexin',
+  maxAge: 45
+});
 ```
 
 ---
 
-## 🔍 获取简历详情
+### 🔍 获取简历详情（公开）
 
-获取指定ID的简历详细信息。
+获取指定ID的简历完整信息，无需认证。
 
-### 请求
+#### 请求
 
 ```http
-GET /api/resumes/miniprogram/{id}
-Authorization: Bearer {token}
+GET /api/resumes/public/:id
 ```
 
-### 路径参数
+#### 路径参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `id` | string | 简历ID |
 
-### 成功响应 (200)
+#### 成功响应 (200)
 
 ```json
 {
@@ -91,9 +156,25 @@ Authorization: Bearer {token}
       {
         "startDate": "2020-01-01",
         "endDate": "2023-12-31",
-        "description": "工作描述",
-        "company": "某家政公司",
-        "position": "月嫂"
+        "description": "在北京朝阳区某家庭担任月嫂，负责新生儿护理和产妇月子餐",
+        "orderNumber": "CON12345678901",
+        "district": "chaoyang",
+        "customerName": "张女士",
+        "customerReview": "服务态度好，专业技能强，宝宝护理得很好",
+        "photos": [
+          {
+            "url": "https://cos.example.com/work-photo-1.jpg",
+            "name": "工作照片1.jpg",
+            "size": 102400,
+            "mimeType": "image/jpeg"
+          },
+          {
+            "url": "https://cos.example.com/work-photo-2.jpg",
+            "name": "工作照片2.jpg",
+            "size": 98304,
+            "mimeType": "image/jpeg"
+          }
+        ]
       }
     ],
     "idCardFront": {
@@ -129,9 +210,58 @@ Authorization: Bearer {token}
     "createdAt": "2025-09-12T10:19:27.671Z",
     "updatedAt": "2025-09-12T10:19:27.671Z"
   },
-  "message": "获取简历成功"
+  "message": "获取简历详情成功"
 }
 ```
+
+#### 小程序调用示例
+
+```javascript
+// 获取简历详情
+async function getResumeDetail(id) {
+  const response = await wx.request({
+    url: `https://crm.andejiazheng.com/api/resumes/public/${id}`,
+    method: 'GET'
+  });
+
+  return response.data;
+}
+
+// 使用示例
+const detail = await getResumeDetail('66e2f4af8b1234567890abcd');
+if (detail.success) {
+  console.log('简历详情:', detail.data);
+}
+```
+
+---
+
+## 🔐 认证接口
+
+### 获取简历详情（需认证）
+
+如果需要通过认证方式访问，可以使用以下接口。
+
+#### 请求
+
+```http
+GET /api/resumes/miniprogram/{id}
+Authorization: Bearer {token}
+```
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 简历ID |
+
+#### 成功响应 (200)
+
+响应格式与公开接口相同。
+
+---
+
+## 📊 数据字典
 
 ### 错误响应
 
@@ -368,6 +498,98 @@ Page({
     }
   }
 });
+```
+
+---
+
+## 📝 工作经历字段详细说明
+
+### 工作经历对象结构
+
+每个工作经历对象包含以下字段：
+
+#### 必填字段
+
+| 字段 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `startDate` | string | 开始日期 | "2020-01-01" |
+| `endDate` | string | 结束日期 | "2023-12-31" |
+| `description` | string | 工作描述 | "在北京朝阳区某家庭担任月嫂" |
+
+#### 可选字段（新增）
+
+| 字段 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `orderNumber` | string | 订单编号（格式：CON{11位数字}） | "CON12345678901" |
+| `district` | string | 服务区域（北京市区县代码） | "chaoyang" |
+| `customerName` | string | 客户姓名 | "张女士" |
+| `customerReview` | string | 客户评价 | "服务态度好，专业技能强" |
+| `photos` | array | 工作照片数组 | 见下方照片对象说明 |
+
+### 工作照片对象结构
+
+每个照片对象包含以下字段：
+
+| 字段 | 类型 | 必填 | 说明 | 示例 |
+|------|------|------|------|------|
+| `url` | string | 是 | 图片URL | "https://cos.example.com/photo.jpg" |
+| `name` | string | 否 | 文件名 | "工作照片1.jpg" |
+| `size` | number | 否 | 文件大小（字节） | 102400 |
+| `mimeType` | string | 否 | MIME类型 | "image/jpeg" |
+
+### 北京市区县代码对照表
+
+| 代码 | 区县名称 | 代码 | 区县名称 |
+|------|----------|------|----------|
+| `dongcheng` | 东城区 | `xicheng` | 西城区 |
+| `chaoyang` | 朝阳区 | `fengtai` | 丰台区 |
+| `shijingshan` | 石景山区 | `haidian` | 海淀区 |
+| `mentougou` | 门头沟区 | `fangshan` | 房山区 |
+| `tongzhou` | 通州区 | `shunyi` | 顺义区 |
+| `changping` | 昌平区 | `daxing` | 大兴区 |
+| `huairou` | 怀柔区 | `pinggu` | 平谷区 |
+| `miyun` | 密云区 | `yanqing` | 延庆区 |
+
+### 使用示例
+
+```javascript
+// 创建包含完整工作经历的简历
+const workExperiences = [
+  {
+    startDate: "2020-01-01",
+    endDate: "2020-03-31",
+    description: "在北京朝阳区某家庭担任月嫂，负责新生儿护理和产妇月子餐",
+    orderNumber: "CON12345678901",
+    district: "chaoyang",
+    customerName: "张女士",
+    customerReview: "服务态度好，专业技能强，宝宝护理得很好",
+    photos: [
+      {
+        url: "https://cos.example.com/work-photo-1.jpg",
+        name: "工作照片1.jpg",
+        size: 102400,
+        mimeType: "image/jpeg"
+      }
+    ]
+  },
+  {
+    startDate: "2020-05-01",
+    endDate: "2020-07-31",
+    description: "在北京海淀区某家庭担任月嫂",
+    orderNumber: "CON12345678902",
+    district: "haidian",
+    customerName: "李女士"
+    // 其他字段可选，不填写也可以
+  }
+];
+
+// 在创建简历时使用
+const resumeData = {
+  name: "张三",
+  phone: "13800138000",
+  // ... 其他必填字段
+  workExperiences: workExperiences
+};
 ```
 
 ---

@@ -472,7 +472,7 @@ export class ResumeService {
       this.logger.debug(`开始处理文件上传: id=${id}, type=${fileType}, filename=${file.originalname}`);
 
       // 验证文件类型参数
-      const validFileTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport', 'selfIntroductionVideo', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto'];
+      const validFileTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'medicalReport', 'selfIntroductionVideo', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto', 'workExperiencePhoto'];
       if (!validFileTypes.includes(fileType)) {
         this.logger.error(`无效的文件类型: ${fileType}, 有效类型: ${validFileTypes.join(', ')}`);
         throw new BadRequestException(`无效的文件类型: ${fileType}`);
@@ -559,6 +559,11 @@ export class ResumeService {
           if (!resumeDoc.positiveReviewPhotos) resumeDoc.positiveReviewPhotos = [];
           resumeDoc.positiveReviewPhotos.push(uploadedFileInfo);
           this.logger.debug(`添加到好评展示照片: ${fileUrl}, 总数: ${resumeDoc.positiveReviewPhotos.length}`);
+          break;
+        case 'workExperiencePhoto':
+          // 工作经历照片暂时不存储在简历顶层，由前端在保存时关联到具体的工作经历
+          // 这里只返回上传成功的文件信息，前端会将其添加到对应的工作经历中
+          this.logger.debug(`工作经历照片上传成功: ${fileUrl}`);
           break;
         default:
           // 移除默认归类，如果到了这里说明验证有问题

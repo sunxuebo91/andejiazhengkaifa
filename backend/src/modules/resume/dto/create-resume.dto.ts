@@ -313,6 +313,17 @@ export class CreateResumeV2Dto {
   })
   selfIntroduction?: string;
 
+  @ApiProperty({ description: '内部员工评价', maxLength: 2000, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    return value;
+  })
+  internalEvaluation?: string;
+
   // 文件上传相关字段（可选）
   @ApiProperty({ description: '身份证正面照片URL', required: false })
   @IsOptional()
@@ -494,7 +505,12 @@ export class CreateResumeV2Dto {
       {
         startDate: '2020-01',
         endDate: '2022-12',
-        description: '在郑州市某家庭担任育儿嫂，负责照顾2岁幼儿的日常生活和早教'
+        description: '在郑州市某家庭担任育儿嫂，负责照顾2岁幼儿的日常生活和早教',
+        orderNumber: 'WO-20200101-1234',
+        district: 'chaoyang',
+        customerName: '张女士',
+        customerReview: '服务态度好，专业能力强',
+        photos: []
       }
     ],
     required: false
@@ -509,7 +525,12 @@ export class CreateResumeV2Dto {
         return Array.isArray(parsed) ? parsed.map(exp => ({
           startDate: exp.startDate || '',
           endDate: exp.endDate || '',
-          description: exp.description || ''
+          description: exp.description || '',
+          orderNumber: exp.orderNumber || undefined,
+          district: exp.district || undefined,
+          customerName: exp.customerName || undefined,
+          customerReview: exp.customerReview || undefined,
+          photos: exp.photos || []
         })) : [];
       } catch {
         return [];
@@ -518,13 +539,28 @@ export class CreateResumeV2Dto {
     return Array.isArray(value) ? value.map(exp => ({
       startDate: exp.startDate || '',
       endDate: exp.endDate || '',
-      description: exp.description || ''
+      description: exp.description || '',
+      orderNumber: exp.orderNumber || undefined,
+      district: exp.district || undefined,
+      customerName: exp.customerName || undefined,
+      customerReview: exp.customerReview || undefined,
+      photos: exp.photos || []
     })) : [];
   })
   workExperiences?: Array<{
     startDate: string;
     endDate: string;
     description: string;
+    orderNumber?: string;
+    district?: string;
+    customerName?: string;
+    customerReview?: string;
+    photos?: Array<{
+      url: string;
+      filename: string;
+      size?: number;
+      mimetype?: string;
+    }>;
   }>;
 
   @ApiProperty({ description: '学习意向', enum: ['yuesao', 'yuersao', 'baomu', 'hulao'], required: false })
@@ -833,13 +869,29 @@ export class CreateResumeDto {
   })
   selfIntroduction?: string;
 
+  @ApiProperty({ description: '内部员工评价', maxLength: 2000, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    return value;
+  })
+  internalEvaluation?: string;
+
   @ApiProperty({
     description: '工作经历',
     example: [
       {
         startDate: '2020-01',
         endDate: '2022-12',
-        description: '在郑州市某家庭担任育儿嫂，负责照顾2岁幼儿的日常生活和早教'
+        description: '在郑州市某家庭担任育儿嫂，负责照顾2岁幼儿的日常生活和早教',
+        orderNumber: 'WO-20200101-1234',
+        district: 'chaoyang',
+        customerName: '张女士',
+        customerReview: '服务态度好，专业能力强',
+        photos: []
       }
     ]
   })
@@ -853,7 +905,12 @@ export class CreateResumeDto {
         return Array.isArray(parsed) ? parsed.map(exp => ({
           startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
           endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined,
-          description: exp.description
+          description: exp.description,
+          orderNumber: exp.orderNumber || undefined,
+          district: exp.district || undefined,
+          customerName: exp.customerName || undefined,
+          customerReview: exp.customerReview || undefined,
+          photos: exp.photos || []
         })) : [];
       } catch {
         return [];
@@ -862,13 +919,28 @@ export class CreateResumeDto {
     return Array.isArray(value) ? value.map(exp => ({
       startDate: exp.startDate ? dayjs(exp.startDate).format('YYYY-MM') : undefined,
       endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined,
-      description: exp.description
+      description: exp.description,
+      orderNumber: exp.orderNumber || undefined,
+      district: exp.district || undefined,
+      customerName: exp.customerName || undefined,
+      customerReview: exp.customerReview || undefined,
+      photos: exp.photos || []
     })) : [];
   })
   workExperiences?: Array<{
     startDate: string;
     endDate: string;
     description: string;
+    orderNumber?: string;
+    district?: string;
+    customerName?: string;
+    customerReview?: string;
+    photos?: Array<{
+      url: string;
+      filename: string;
+      size?: number;
+      mimetype?: string;
+    }>;
   }>;
 
   @ApiProperty({ description: '身份证正面照片URL', example: 'https://example.com/idcard_front.jpg' })

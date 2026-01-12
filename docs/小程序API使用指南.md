@@ -48,9 +48,21 @@ x-request-id: <request-id>     # 可选，请求追踪
   "expectedSalary": 8000,
   "workExperiences": [
     {
-      "startDate": "2020-01",
-      "endDate": "2022-12",
-      "description": "在某家庭担任月嫂，负责产妇和新生儿护理"
+      "startDate": "2020-01-01",
+      "endDate": "2022-12-31",
+      "description": "在某家庭担任月嫂，负责产妇和新生儿护理",
+      "orderNumber": "CON12345678901",
+      "district": "chaoyang",
+      "customerName": "张女士",
+      "customerReview": "服务态度好，专业技能强",
+      "photos": [
+        {
+          "url": "https://cos.example.com/work-photo-1.jpg",
+          "name": "工作照片1.jpg",
+          "size": 102400,
+          "mimeType": "image/jpeg"
+        }
+      ]
     }
   ]
 }
@@ -204,7 +216,37 @@ type: "idCardFront" | "idCardBack" | "personalPhoto" | "certificate" | "medicalR
 - `skills`: 技能标签数组
 - `serviceArea`: 服务区域数组
 - `expectedSalary`: 期望薪资
-- `workExperiences`: 工作经历数组
+- `workExperiences`: 工作经历数组（详见下方说明）
+
+### **工作经历字段说明 (workExperiences)**
+
+每个工作经历对象包含以下字段：
+
+**必填字段**：
+- `startDate`: 开始日期 (YYYY-MM-DD)
+- `endDate`: 结束日期 (YYYY-MM-DD)
+- `description`: 工作描述
+
+**可选字段**：
+- `orderNumber`: 订单编号 (格式：CON{11位数字}，例如：CON12345678901)
+- `district`: 服务区域 (北京市区县代码，例如：chaoyang、haidian)
+- `customerName`: 客户姓名
+- `customerReview`: 客户评价
+- `photos`: 工作照片数组，每个照片对象包含：
+  - `url`: 图片URL (必填)
+  - `name`: 文件名 (可选)
+  - `size`: 文件大小（字节）(可选)
+  - `mimeType`: MIME类型 (可选)
+
+**北京市区县代码**：
+```
+dongcheng: 东城区    xicheng: 西城区      chaoyang: 朝阳区
+fengtai: 丰台区      shijingshan: 石景山区  haidian: 海淀区
+mentougou: 门头沟区  fangshan: 房山区     tongzhou: 通州区
+shunyi: 顺义区       changping: 昌平区    daxing: 大兴区
+huairou: 怀柔区      pinggu: 平谷区       miyun: 密云区
+yanqing: 延庆区
+```
 
 ### **工种枚举 (jobType)**
 ```

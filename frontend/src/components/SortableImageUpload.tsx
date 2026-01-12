@@ -368,6 +368,7 @@ const SortableImageUpload: React.FC<SortableImageUploadProps> = ({
             beforeUpload={beforeUpload}
             customRequest={customRequest}
             disabled={disabled}
+            multiple
           >
             {uploadButton}
           </Upload>

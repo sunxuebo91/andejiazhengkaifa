@@ -1,7 +1,7 @@
 # 安得家政CRM系统 - API完整文档
 
-> **文档版本**: v1.3  
-> **最后更新**: 2026-01-05  
+> **文档版本**: v1.4  
+> **最后更新**: 2026-01-10  
 > **维护团队**: 安得家政技术团队
 
 ---
@@ -10,16 +10,24 @@
 
 - [1. 概述](#1-概述)
 - [2. 通用规范](#2-通用规范)
-- [3. 认证授权](#3-认证授权)
-- [4. 简历管理](#4-简历管理)
-- [5. 客户管理](#5-客户管理)
-- [6. 文件上传](#6-文件上传)
-- [7. 视频面试](#7-视频面试)
-- [8. 百度服务](#8-百度服务)
-- [9. 数据字典](#9-数据字典)
-- [10. 错误码说明](#10-错误码说明)
-- [11. 最佳实践](#11-最佳实践)
-- [12. 代码示例](#12-代码示例)
+- [3. 认证授权（auth）](#3-认证授权auth)
+- [4. 简历管理（resumes）](#4-简历管理resumes)
+- [5. 客户管理（customers）](#5-客户管理customers)
+- [6. 线索流转（lead-transfer）](#6-线索流转lead-transfer)
+- [7. 合同管理（contracts）](#7-合同管理contracts)
+- [8. 保险（大树保 / dashubao）](#8-保险大树保--dashubao)
+- [9. 面试间管理（interview）](#9-面试间管理interview)
+- [10. ZEGO 能力与提词/远程控制（zego）](#10-zego-能力与提词远程控制zego)
+- [11. 通知（notifications）](#11-通知notifications)
+- [12. 跟进记录（follow-ups）](#12-跟进记录follow-ups)
+- [13. 用户与角色（users / roles）](#13-用户与角色users--roles)
+- [14. 文件上传（upload）](#14-文件上传upload)
+- [15. 微信相关（wechat / wechat-openid 等）](#15-微信相关wechat--wechat-openid-等)
+- [16. 第三方与运维（ocr / baidu / trtc / 日志 / 健康检查）](#16-第三方与运维ocr--baidu--trtc--日志--健康检查)
+- [17. 已废弃或未实现接口（旧文档兼容说明）](#17-已废弃或未实现接口旧文档兼容说明)
+- [18. 错误码说明](#18-错误码说明)
+- [19. 最佳实践](#19-最佳实践)
+- [20. 更新日志](#20-更新日志)
 
 ---
 
@@ -27,1138 +35,546 @@
 
 ### 1.1 基础信息
 
-- **生产环境**: `https://crm.andejiazheng.com/api`
-- **开发环境**: `http://localhost:3000/api`
+- **全局前缀**: 后端通过 `app.setGlobalPrefix('api')` 设置统一前缀，因此所有接口默认以 `/api` 开头。
+- **生产环境 API Base**: `https://crm.andejiazheng.com/api`
+- **本地开发 API Base**: `http://localhost:3000/api`（或开发端口）
+- **Swagger（建议以此为准）**: `/api/docs`
 - **认证方式**: Bearer Token
-- **请求头**: `Authorization: Bearer {token}`
+  - 请求头：`Authorization: Bearer {token}`
 
-### 1.2 接口统计
+### 1.2 文档说明
 
-| 模块 | 接口数量 | 说明 |
-|------|---------|------|
-| 认证授权 | 4个 | 登录、获取用户信息、上传头像、登出 |
-| 简历管理 | 13个 | CRUD、重复检查、公开/私有、小程序专用 |
-| 客户管理 | 5个 | CRUD操作 |
-| 文件上传 | 5个 | 上传、删除、小程序专用 |
-| 视频面试 | 8个 | 房间管理、Token获取 |
-| 百度服务 | 2个 | OCR、地图 |
-| **总计** | **37个** | - |
+本文件以 `backend/src/modules/**/**.controller.ts` 为准，补齐并修正了历史文档中与代码不一致的部分。
+
+- 文档中的“是否需要登录”根据控制器是否使用 `JwtAuthGuard` 以及注释说明整理；如有变更，以代码为准。
+- 部分接口为内部测试/调试用途（例如 `test-*`），已明确标注。
 
 ---
 
 ## 2. 通用规范
 
-### 2.1 响应格式
+### 2.1 统一响应格式（推荐处理方式）
 
-所有API响应遵循统一的格式：
+大多数业务接口返回如下结构（部分模块可能略有差异）：
 
 ```json
 {
-  "success": true|false,
+  "success": true,
   "data": {},
   "message": "操作成功/失败的消息",
-  "error": {
-    "code": "错误代码",
-    "details": {}
-  },
+  "error": "错误详情（可选）",
   "timestamp": 1626342025123
 }
 ```
 
-### 2.2 状态码说明
+### 2.2 常见状态码
 
 | 状态码 | 说明 |
-|--------|------|
+|------|------|
 | 200 | 请求成功 |
 | 201 | 创建成功 |
+| 204 | 删除成功（无响应体） |
 | 400 | 请求参数错误 |
-| 401 | 未授权 |
-| 403 | 禁止访问 |
+| 401 | 未授权（Token无效或过期） |
+| 403 | 禁止访问（权限不足/资源不可访问） |
 | 404 | 资源不存在 |
-| 409 | 资源冲突 |
-| 413 | 请求体过大 |
+| 409 | 冲突（重复资源等） |
+| 413 | 上传文件过大 |
 | 500 | 服务器内部错误 |
 
-### 2.3 请求头
+### 2.3 分页查询约定
 
-```http
-Content-Type: application/json
-Authorization: Bearer {token}
-Idempotency-Key: {unique-key}  # 可选，防重复提交
-api-version: {version}          # 可选，API版本
-x-request-id: {request-id}      # 可选，请求ID
-```
+常见分页参数：
+- `page`: 页码，从 1 开始
+- `pageSize` 或 `limit`: 每页条数
 
----
+返回一般为：
 
-## 3. 认证授权
-
-### 3.1 登录
-
-#### CRM端登录
-
-**接口**: `POST /api/auth/login`
-
-**请求体**:
 ```json
 {
-  "username": "用户名",
-  "password": "密码"
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "access_token": "JWT令牌",
-    "user": {
-      "id": "用户ID",
-      "username": "用户名",
-      "name": "真实姓名",
-      "phone": "手机号码",
-      "email": "邮箱地址",
-      "avatar": "头像URL地址",
-      "role": "用户角色",
-      "department": "所属部门",
-      "permissions": ["权限列表"]
-    }
-  },
-  "timestamp": 1626342025123
-}
-```
-
-#### 小程序登录
-
-**接口**: `POST /api/auth/miniprogram/login`
-
-**请求体**:
-```json
-{
-  "code": "微信登录code"
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "id": "user_id",
-      "openid": "openid"
-    }
-  }
-}
-```
-
-### 3.2 获取当前用户信息
-
-**接口**: `GET /api/auth/me`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "用户ID",
-    "username": "登录用户名",
-    "name": "真实姓名",
-    "phone": "手机号码",
-    "email": "邮箱地址",
-    "avatar": "头像URL地址",
-    "role": "用户角色",
-    "department": "所属部门",
-    "permissions": ["权限列表"]
-  }
-}
-```
-
-### 3.3 上传用户头像
-
-**接口**: `POST /api/auth/avatar`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `multipart/form-data`
-- `avatar`: 头像文件（支持jpg、jpeg、png格式，最大5MB）
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "avatar": "头像URL地址"
-  },
-  "message": "头像上传成功"
-}
-```
-
-### 3.4 登出
-
-**接口**: `POST /api/auth/logout`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "message": "登出成功"
+  "total": 100,
+  "page": 1,
+  "pageSize": 10,
+  "list": []
 }
 ```
 
 ---
 
-## 4. 简历管理
+## 3. 认证授权（auth）
 
-### 4.1 CRM端简历接口
+**控制器**: `backend/src/modules/auth/auth.controller.ts`
 
-#### 4.1.1 获取所有简历
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/auth/login` | 否 | CRM 账号密码登录 |
+| POST | `/api/auth/miniprogram-login` | 否 | 小程序登录（code + phone） |
+| POST | `/api/auth/logout` | 是 | 登出 |
+| GET | `/api/auth/session` | 是 | 获取会话信息 |
+| POST | `/api/auth/refresh` | 是 | 刷新 Token（实现依赖服务侧策略） |
+| GET | `/api/auth/me` | 是 | 获取当前用户信息 |
+| POST | `/api/auth/avatar` | 是 | 上传用户头像（multipart） |
 
-**接口**: `GET /api/resumes`
+**登录请求示例**：
 
-**请求头**: `Authorization: Bearer [token]`
-
-**查询参数**:
-- `page`: 页码（默认1）
-- `pageSize`: 每页数量（默认10）
-- `keyword`: 搜索关键词
-- `jobType`: 工种筛选
-- `status`: 状态筛选
-
-**成功响应**:
 ```json
 {
-  "success": true,
-  "data": {
-    "total": 100,
-    "page": 1,
-    "pageSize": 10,
-    "list": [
-      {
-        "id": "简历ID",
-        "name": "姓名",
-        "phone": "手机号",
-        "age": 30,
-        "jobType": "yuexin",
-        "education": "high"
-      }
-    ]
-  }
-}
-```
-
-#### 4.1.2 获取单个简历
-
-**接口**: `GET /api/resumes/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "简历ID",
-    "name": "姓名",
-    "phone": "手机号",
-    "age": 30,
-    "gender": "female",
-    "jobType": "yuexin",
-    "education": "high",
-    "skills": ["chanhou", "yuying"],
-    "photoUrls": ["https://..."],
-    "certificateUrls": ["https://..."]
-  }
-}
-```
-
-#### 4.1.3 创建简历
-
-**接口**: `POST /api/resumes`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `multipart/form-data`
-
-**文本字段**:
-- `name`: 姓名（必填）
-- `phone`: 手机号（必填）
-- `age`: 年龄（必填）
-- `gender`: 性别（必填）
-- `jobType`: 工种（必填）
-- `education`: 学历（必填）
-- 其他可选字段...
-
-**文件字段**:
-- `idCardFront`: 身份证正面
-- `idCardBack`: 身份证背面
-- `photoFiles`: 个人照片（多个）
-- `certificateFiles`: 技能证书（多个）
-- `medicalReportFiles`: 体检报告（多个）
-- `selfIntroductionVideo`: 自我介绍视频
-- `confinementMealPhotos`: 月子餐照片（多个）
-- `cookingPhotos`: 烹饪照片（多个）
-- `complementaryFoodPhotos`: 辅食添加照片（多个）
-- `positiveReviewPhotos`: 好评展示照片（多个）
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "新创建的简历ID",
-    "name": "姓名",
-    "phone": "手机号"
-  },
-  "message": "创建简历成功"
-}
-```
-
-#### 4.1.4 更新简历
-
-**接口**: `PUT /api/resumes/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `multipart/form-data`（同创建简历）
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "更新的简历ID",
-    "name": "姓名",
-    "phone": "手机号"
-  },
-  "message": "更新简历成功"
-}
-```
-
-#### 4.1.5 删除简历
-
-**接口**: `DELETE /api/resumes/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "message": "简历删除成功"
-}
-```
-
-#### 4.1.6 检查简历是否重复
-
-**接口**: `GET /api/resumes/check-duplicate`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**查询参数**:
-- `phone`: 手机号（必填）
-- `idNumber`: 身份证号（可选）
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "duplicate": true,
-    "existingResume": {
-      "id": "已存在的简历ID",
-      "name": "姓名",
-      "phone": "手机号"
-    }
-  }
-}
-```
-
-### 4.2 小程序简历接口
-
-#### 4.2.1 创建简历（小程序）
-
-**接口**: `POST /api/resumes/miniprogram/create`
-
-**功能特性**:
-- ✅ 支持幂等性操作（防重复提交）
-- ✅ 自动数据清理和格式化
-- ✅ 手机号唯一性验证
-- ✅ 详细的错误信息返回
-
-**请求头**:
-- `Authorization: Bearer [token]` (必需)
-- `Idempotency-Key: [唯一键]` (可选，防重复提交)
-
-**必填字段**:
-- `name` (string): 姓名，2-20字符
-- `phone` (string): 手机号码，11位数字
-- `gender` (string): 性别，"female" 或 "male"
-- `age` (number): 年龄，18-65岁
-- `jobType` (string): 工种
-- `education` (string): 学历
-
-**请求体**: `application/json`
-```json
-{
-  "name": "张三",
-  "phone": "13800138000",
-  "gender": "female",
-  "age": 35,
-  "jobType": "yuexin",
-  "education": "high",
-  "maternityNurseLevel": "gold",
-  "experienceYears": 3,
-  "expectedSalary": 8000,
-  "skills": ["chanhou", "yuying"],
-  "serviceArea": ["北京市朝阳区"],
-  "selfIntroduction": "自我介绍",
-  "workExperiences": [
-    {
-      "startDate": "2020-01-01",
-      "endDate": "2023-12-31",
-      "description": "工作描述"
-    }
-  ]
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "66e2f4af8b1234567890abcd",
-    "createdAt": "2025-09-12T10:19:27.671Z",
-    "action": "CREATED"
-  },
-  "message": "创建简历成功"
-}
-```
-
-**错误响应**:
-
-重复手机号 (409):
-```json
-{
-  "success": false,
-  "code": "DUPLICATE",
-  "data": {
-    "existingId": "66e2f4af8b1234567890abcd"
-  },
-  "message": "该手机号已被使用"
-}
-```
-
-验证错误 (400):
-```json
-{
-  "success": false,
-  "code": "VALIDATION_ERROR",
-  "data": {
-    "errors": ["姓名不能为空", "手机号码格式不正确"]
-  },
-  "message": "数据验证失败"
-}
-```
-
-#### 4.2.2 获取简历详情（小程序）
-
-**接口**: `GET /api/resumes/miniprogram/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "简历ID",
-    "name": "姓名",
-    "phone": "手机号",
-    "age": 35,
-    "gender": "female",
-    "jobType": "yuexin",
-    "education": "high",
-    "skills": ["chanhou", "yuying"],
-    "photoUrls": ["https://..."],
-    "certificateUrls": ["https://..."],
-    "createdAt": "2025-09-12T10:19:27.671Z"
-  },
-  "message": "获取简历成功"
-}
-```
-
-#### 4.2.3 更新简历（小程序）
-
-**接口**: `PATCH /api/resumes/miniprogram/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `application/json`
-```json
-{
-  "expectedSalary": 9000,
-  "selfIntroduction": "更新后的自我介绍",
-  "skills": ["muying", "cuiru", "yuezican"]
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "简历ID",
-    "expectedSalary": 9000,
-    "updatedAt": "2025-09-12T10:19:39.842Z"
-  },
-  "message": "更新简历成功"
-}
-```
-
-#### 4.2.4 上传文件（小程序）
-
-**接口**: `POST /api/resumes/miniprogram/:id/upload-file`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `multipart/form-data`
-- `file`: 文件
-- `type`: 文件类型
-
-**文件类型**:
-- `idCardFront`: 身份证正面
-- `idCardBack`: 身份证背面
-- `personalPhoto`: 个人照片
-- `certificate`: 技能证书
-- `medicalReport`: 体检报告
-- `selfIntroductionVideo`: 自我介绍视频
-- `confinementMealPhoto`: 月子餐照片
-- `cookingPhoto`: 烹饪照片
-- `complementaryFoodPhoto`: 辅食添加照片
-- `positiveReviewPhoto`: 好评展示照片
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "fileUrl": "https://example.com/file.jpg",
-    "fileType": "personalPhoto",
-    "fileName": "photo.jpg",
-    "fileSize": 1024,
-    "resumeId": "简历ID"
-  },
-  "message": "文件上传成功"
-}
-```
-
-#### 4.2.5 删除文件（小程序）
-
-**接口**: `DELETE /api/resumes/miniprogram/:id/delete-file`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `application/json`
-```json
-{
-  "fileUrl": "https://example.com/file.jpg",
-  "fileType": "personalPhoto"
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "resumeId": "简历ID",
-    "deletedFileUrl": "https://example.com/file.jpg",
-    "fileType": "personalPhoto"
-  },
-  "message": "文件删除成功"
+  "username": "admin",
+  "password": "******"
 }
 ```
 
 ---
 
-## 5. 视频面试管理
+## 4. 简历管理（resumes）
 
-### 5.1 创建视频面试
+**控制器**: `backend/src/modules/resume/resume.controller.ts`
 
-**接口**: `POST /api/video-interviews`
+### 4.1 CRM 端简历
 
-**请求头**: `Authorization: Bearer [token]`
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/resumes` | 是 | 创建简历（multipart，多文件字段） |
+| POST | `/api/resumes/json` | 是 | 创建简历（JSON 版本，用于部分场景） |
+| GET | `/api/resumes` | 是 | 获取简历列表（分页/筛选） |
+| GET | `/api/resumes/options` | 是 | 获取下拉选项/枚举（用于表单） |
+| GET | `/api/resumes/enums` | 是 | 获取枚举（用于前端映射） |
+| GET | `/api/resumes/search-workers` | 是 | 搜索服务人员（用于合同/保险等） |
+| GET | `/api/resumes/test-search-workers` | 是 | 测试搜索（调试用） |
+| GET | `/api/resumes/:id` | 是 | 获取简历详情 |
+| PATCH | `/api/resumes/:id` | 是 | 更新简历 |
+| DELETE | `/api/resumes/:id` | 是 | 删除简历 |
 
-**请求体**: `application/json`
-```json
-{
-  "resumeId": "简历ID",
-  "scheduledTime": "2025-09-15T14:00:00.000Z",
-  "interviewerName": "面试官姓名",
-  "notes": "面试备注"
-}
-```
+### 4.2 简历公开/分享
 
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "面试ID",
-    "resumeId": "简历ID",
-    "status": "scheduled",
-    "scheduledTime": "2025-09-15T14:00:00.000Z",
-    "roomId": "room_abc123",
-    "createdAt": "2025-09-12T10:19:27.671Z"
-  },
-  "message": "创建视频面试成功"
-}
-```
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/resumes/public/list` | 否/部分实现可能公开 | 公共简历列表（用于外部展示） |
+| GET | `/api/resumes/public/:id` | 否/部分实现可能公开 | 公共简历详情 |
+| GET | `/api/resumes/:id/public` | 是 | 获取公开简历信息（内部用途） |
+| POST | `/api/resumes/:id/share` | 是 | 生成分享 Token |
+| GET | `/api/resumes/shared/:token` | 否 | 根据分享 Token 获取简历 |
 
-### 5.2 获取视频面试列表
+### 4.3 小程序简历（含自助注册）
 
-**接口**: `GET /api/video-interviews`
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/resumes/miniprogram/self-register` | 否/以实现为准 | 小程序端自助注册（历史兼容） |
+| POST | `/api/resumes/miniprogram/create` | 是 | 小程序创建简历（幂等/校验等） |
+| GET | `/api/resumes/miniprogram/:id` | 是 | 小程序获取简历详情 |
+| PATCH | `/api/resumes/miniprogram/:id` | 是 | 小程序更新简历 |
+| POST | `/api/resumes/miniprogram/:id/upload-file` | 是 | 小程序上传单文件 |
+| POST | `/api/resumes/miniprogram/:id/upload-files` | 是 | 小程序上传多文件 |
+| DELETE | `/api/resumes/miniprogram/:id/delete-file` | 是 | 小程序删除文件 |
+| POST | `/api/resumes/miniprogram/validate` | 是 | 小程序数据校验（防重复/格式检查） |
+| GET | `/api/resumes/miniprogram/stats` | 是 | 小程序统计信息 |
 
-**请求头**: `Authorization: Bearer [token]`
+### 4.4 简历文件管理（CRM）
 
-**查询参数**:
-- `page`: 页码（默认1）
-- `pageSize`: 每页数量（默认10）
-- `status`: 状态筛选（scheduled/in_progress/completed/cancelled）
-- `resumeId`: 简历ID筛选
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/resumes/:id/upload` | 是 | 给简历追加上传（单入口） |
+| POST | `/api/resumes/:id/files` | 是 | 批量追加文件（按实现） |
+| DELETE | `/api/resumes/:id/files/:fileId` | 是 | 删除指定文件（按 fileId） |
+| POST | `/api/resumes/:id/files/delete` | 是 | 删除文件（兼容旧实现） |
+| PATCH | `/api/resumes/:id/personal-photos` | 是 | 更新个人照片集合（按实现） |
 
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "total": 50,
-    "page": 1,
-    "pageSize": 10,
-    "list": [
-      {
-        "id": "面试ID",
-        "resumeId": "简历ID",
-        "resumeName": "应聘者姓名",
-        "status": "scheduled",
-        "scheduledTime": "2025-09-15T14:00:00.000Z",
-        "roomId": "room_abc123",
-        "createdAt": "2025-09-12T10:19:27.671Z"
-      }
-    ]
-  }
-}
-```
+### 4.5 档期/可用性（availability）
 
-### 5.3 获取单个视频面试
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/resumes/:id/availability` | 是 | 获取档期 |
+| POST | `/api/resumes/:id/availability` | 是 | 更新档期 |
+| POST | `/api/resumes/:id/availability/batch` | 是 | 批量更新档期 |
+| DELETE | `/api/resumes/:id/availability` | 是 | 删除档期 |
+| GET | `/api/resumes/:id/availability/check` | 是 | 校验档期（是否冲突等） |
 
-**接口**: `GET /api/video-interviews/:id`
+### 4.6 导入
 
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "面试ID",
-    "resumeId": "简历ID",
-    "resumeName": "应聘者姓名",
-    "resumePhone": "13800138000",
-    "status": "scheduled",
-    "scheduledTime": "2025-09-15T14:00:00.000Z",
-    "roomId": "room_abc123",
-    "interviewerName": "面试官姓名",
-    "notes": "面试备注",
-    "recordingUrl": "https://...",
-    "duration": 1800,
-    "createdAt": "2025-09-12T10:19:27.671Z"
-  }
-}
-```
-
-### 5.4 更新视频面试状态
-
-**接口**: `PATCH /api/video-interviews/:id/status`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `application/json`
-```json
-{
-  "status": "completed",
-  "notes": "面试完成备注",
-  "recordingUrl": "https://...",
-  "duration": 1800
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "面试ID",
-    "status": "completed",
-    "updatedAt": "2025-09-12T10:19:39.842Z"
-  },
-  "message": "更新面试状态成功"
-}
-```
-
-### 5.5 取消视频面试
-
-**接口**: `DELETE /api/video-interviews/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "message": "取消面试成功"
-}
-```
-
-### 5.6 获取面试房间Token
-
-**接口**: `GET /api/video-interviews/:id/token`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "roomId": "room_abc123",
-    "userId": "user_123",
-    "expiresAt": "2025-09-15T15:00:00.000Z"
-  }
-}
-```
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/resumes/import-excel` | 是 | Excel 导入简历（按实现） |
 
 ---
 
-## 6. 订单管理
+## 5. 客户管理（customers）
 
-### 6.1 创建订单
+**控制器**: `backend/src/modules/customers/customers.controller.ts`
 
-**接口**: `POST /api/orders`
+### 5.1 CRM 客户基础接口
 
-**请求头**: `Authorization: Bearer [token]`
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/customers` | 是 | 创建客户 |
+| GET | `/api/customers` | 是 | 获取客户列表（查询参数较多） |
+| GET | `/api/customers/statistics` | 是 | 客户统计 |
+| GET | `/api/customers/customer-id/:customerId` | 是 | 通过业务 customerId 获取客户 |
+| GET | `/api/customers/address-by-phone/:phone` | 是 | 通过手机号获取服务地址（合同页用） |
+| GET | `/api/customers/assignable-users` | 是 | 获取可分配员工列表 |
+| POST | `/api/customers/batch-assign` | 是 | 批量分配客户 |
+| GET | `/api/customers/my-customer-count` | 是 | 我的客户数量 |
+| GET | `/api/customers/:id` | 是 | 获取客户详情 |
+| PATCH | `/api/customers/:id` | 是 | 更新客户 |
+| DELETE | `/api/customers/:id` | 是 | 删除客户 |
 
-**请求体**: `application/json`
-```json
-{
-  "resumeId": "简历ID",
-  "customerName": "客户姓名",
-  "customerPhone": "13800138000",
-  "serviceType": "yuexin",
-  "serviceStartDate": "2025-10-01",
-  "serviceEndDate": "2025-10-26",
-  "serviceDays": 26,
-  "totalAmount": 20800,
-  "depositAmount": 5000,
-  "serviceAddress": "北京市朝阳区xxx小区",
-  "notes": "订单备注"
-}
-```
+### 5.2 线索公海（public-pool）
 
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "订单ID",
-    "orderNumber": "ORD20250912001",
-    "status": "pending",
-    "createdAt": "2025-09-12T10:19:27.671Z"
-  },
-  "message": "创建订单成功"
-}
-```
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/customers/public-pool` | 是 | 获取公海线索列表 |
+| GET | `/api/customers/public-pool/statistics` | 是 | 公海统计 |
+| POST | `/api/customers/public-pool/claim` | 是 | 认领公海线索 |
+| POST | `/api/customers/public-pool/assign` | 是 | 从公海分配线索 |
+| POST | `/api/customers/batch-release-to-pool` | 是 | 批量释放到公海 |
+| POST | `/api/customers/:id/release-to-pool` | 是 | 单条释放到公海 |
+| GET | `/api/customers/:id/public-pool-logs` | 是 | 公海操作日志 |
 
-### 6.2 获取订单列表
+### 5.3 客户跟进（customer follow-ups）
 
-**接口**: `GET /api/orders`
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/customers/:id/follow-ups` | 是 | 新增客户跟进 |
+| GET | `/api/customers/:id/follow-ups` | 是 | 获取客户跟进列表 |
 
-**请求头**: `Authorization: Bearer [token]`
+### 5.4 分配与日志
 
-**查询参数**:
-- `page`: 页码（默认1）
-- `pageSize`: 每页数量（默认10）
-- `status`: 状态筛选
-- `serviceType`: 服务类型筛选
-- `keyword`: 搜索关键词
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| PATCH | `/api/customers/:id/assign` | 是 | 分配/改派负责人 |
+| GET | `/api/customers/:id/assignment-logs` | 是 | 分配日志 |
+| GET | `/api/customers/:id/operation-logs` | 是 | 操作日志 |
 
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "total": 100,
-    "page": 1,
-    "pageSize": 10,
-    "list": [
-      {
-        "id": "订单ID",
-        "orderNumber": "ORD20250912001",
-        "customerName": "客户姓名",
-        "serviceType": "yuexin",
-        "status": "pending",
-        "totalAmount": 20800,
-        "createdAt": "2025-09-12T10:19:27.671Z"
-      }
-    ]
-  }
-}
-```
+### 5.5 小程序客户接口
 
-### 6.3 获取单个订单
-
-**接口**: `GET /api/orders/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "订单ID",
-    "orderNumber": "ORD20250912001",
-    "resumeId": "简历ID",
-    "resumeName": "阿姨姓名",
-    "customerName": "客户姓名",
-    "customerPhone": "13800138000",
-    "serviceType": "yuexin",
-    "serviceStartDate": "2025-10-01",
-    "serviceEndDate": "2025-10-26",
-    "serviceDays": 26,
-    "totalAmount": 20800,
-    "depositAmount": 5000,
-    "paidAmount": 5000,
-    "remainingAmount": 15800,
-    "serviceAddress": "北京市朝阳区xxx小区",
-    "status": "pending",
-    "notes": "订单备注",
-    "createdAt": "2025-09-12T10:19:27.671Z"
-  }
-}
-```
-
-### 6.4 更新订单
-
-**接口**: `PUT /api/orders/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `application/json`
-```json
-{
-  "customerName": "更新后的客户姓名",
-  "serviceAddress": "更新后的服务地址",
-  "notes": "更新后的备注"
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "订单ID",
-    "updatedAt": "2025-09-12T10:19:39.842Z"
-  },
-  "message": "更新订单成功"
-}
-```
-
-### 6.5 更新订单状态
-
-**接口**: `PATCH /api/orders/:id/status`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `application/json`
-```json
-{
-  "status": "confirmed",
-  "notes": "状态更新备注"
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "订单ID",
-    "status": "confirmed",
-    "updatedAt": "2025-09-12T10:19:39.842Z"
-  },
-  "message": "更新订单状态成功"
-}
-```
-
-### 6.6 删除订单
-
-**接口**: `DELETE /api/orders/:id`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "message": "订单删除成功"
-}
-```
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/customers/miniprogram/statistics` | 是 | 小程序客户统计 |
+| GET | `/api/customers/miniprogram/list` | 是 | 小程序客户列表 |
+| POST | `/api/customers/miniprogram/create` | 是 | 小程序创建客户 |
+| GET | `/api/customers/miniprogram/:id` | 是 | 小程序客户详情 |
+| PATCH | `/api/customers/miniprogram/:id` | 是 | 小程序更新客户 |
+| PATCH | `/api/customers/miniprogram/:id/assign` | 是 | 小程序分配客户 |
+| POST | `/api/customers/miniprogram/:id/follow-ups` | 是 | 小程序新增客户跟进 |
+| GET | `/api/customers/miniprogram/:id/follow-ups` | 是 | 小程序客户跟进列表 |
+| GET | `/api/customers/miniprogram/:id/assignment-logs` | 是 | 小程序分配日志 |
+| GET | `/api/customers/miniprogram/employees/list` | 是 | 小程序端员工列表（用于分配） |
+| POST | `/api/customers/import-excel` | 是 | 客户 Excel 导入 |
 
 ---
 
-## 7. 文件上传
+## 6. 线索流转（lead-transfer）
 
-### 7.1 通用文件上传
+**控制器**: `backend/src/modules/customers/controllers/lead-transfer.controller.ts`
 
-**接口**: `POST /api/upload`
+> 该模块通常需要管理员/经理权限（RolesGuard）。
 
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `multipart/form-data`
-- `file`: 文件（必填）
-- `type`: 文件类型（可选）
-
-**文件限制**:
-- 图片: jpg, jpeg, png, gif, webp (最大10MB)
-- 视频: mp4, mov, avi (最大100MB)
-- 文档: pdf, doc, docx (最大20MB)
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "url": "https://example.com/uploads/file.jpg",
-    "fileName": "file.jpg",
-    "fileSize": 1024,
-    "mimeType": "image/jpeg",
-    "uploadedAt": "2025-09-12T10:19:27.671Z"
-  },
-  "message": "文件上传成功"
-}
-```
-
-### 7.2 批量文件上传
-
-**接口**: `POST /api/upload/batch`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `multipart/form-data`
-- `files`: 多个文件
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "files": [
-      {
-        "url": "https://example.com/uploads/file1.jpg",
-        "fileName": "file1.jpg",
-        "fileSize": 1024
-      },
-      {
-        "url": "https://example.com/uploads/file2.jpg",
-        "fileName": "file2.jpg",
-        "fileSize": 2048
-      }
-    ],
-    "totalCount": 2,
-    "successCount": 2,
-    "failedCount": 0
-  },
-  "message": "批量上传成功"
-}
-```
-
-### 7.3 删除文件
-
-**接口**: `DELETE /api/upload`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**请求体**: `application/json`
-```json
-{
-  "url": "https://example.com/uploads/file.jpg"
-}
-```
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "message": "文件删除成功"
-}
-```
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/lead-transfer/rules` | 是 | 创建流转规则 |
+| GET | `/api/lead-transfer/rules` | 是 | 获取规则列表 |
+| GET | `/api/lead-transfer/rules/:id` | 是 | 获取规则详情 |
+| GET | `/api/lead-transfer/rules/:id/predict` | 是 | 预测下次流转 |
+| PATCH | `/api/lead-transfer/rules/:id` | 是 | 更新规则 |
+| PATCH | `/api/lead-transfer/rules/:id/toggle` | 是 | 启用/禁用规则 |
+| DELETE | `/api/lead-transfer/rules/:id` | 是 | 删除规则 |
+| GET | `/api/lead-transfer/records` | 是 | 获取流转记录 |
+| GET | `/api/lead-transfer/statistics` | 是 | 流转统计 |
+| GET | `/api/lead-transfer/user-statistics/:userId` | 是 | 用户流转统计 |
+| POST | `/api/lead-transfer/execute-now` | 是 | 手动执行流转任务 |
 
 ---
 
-## 8. 数据字典
+## 7. 合同管理（contracts）
 
-### 8.1 获取所有数据字典
+**控制器**: `backend/src/modules/contracts/contracts.controller.ts`
 
-**接口**: `GET /api/dictionaries`
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/contracts` | 是 | 创建合同 |
+| GET | `/api/contracts` | 是 | 合同列表（page/limit/search/showAll） |
+| GET | `/api/contracts/statistics` | 是 | 合同统计 |
+| GET | `/api/contracts/customer/:customerId` | 是 | 根据客户ID查询合同 |
+| GET | `/api/contracts/worker/:workerId` | 是 | 根据服务人员ID查询合同 |
+| GET | `/api/contracts/number/:contractNumber` | 是 | 根据合同号查询合同 |
+| GET | `/api/contracts/search-by-worker` | 否（公开） | 通过服务人员信息查询合同（保险投保页自动填充） |
+| GET | `/api/contracts/:id` | 是 | 合同详情 |
+| PUT | `/api/contracts/:id` | 是 | 更新合同 |
+| DELETE | `/api/contracts/:id` | 是 | 删除合同 |
+| GET | `/api/contracts/test-no-auth` | 否（公开） | 测试端点 |
+| GET | `/api/contracts/:id/esign-info` | 是 | 获取合同爱签信息（含实时状态/预览） |
+| POST | `/api/contracts/:id/download-contract` | 是 | 下载合同（按实现） |
+| POST | `/api/contracts/esign/test-get-contract` | 是 | 爱签调试接口 |
+| GET | `/api/contracts/check-customer/:customerPhone` | 是 | 检查客户（按实现） |
+| POST | `/api/contracts/change-worker/:originalContractId` | 是 | 更换阿姨/服务人员 |
+| GET | `/api/contracts/history/:customerPhone` | 是 | 客户合同历史 |
+| GET | `/api/contracts/latest/list` | 是 | 最新合同列表（按实现） |
+| POST | `/api/contracts/signed-callback/:contractId` | 是/按实现 | 签署回调（按实现） |
 
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "jobTypes": [
-      { "value": "yuexin", "label": "月嫂", "description": "产后护理" }
-    ],
-    "educationLevels": [
-      { "value": "primary", "label": "小学", "order": 1 }
-    ],
-    "skills": [
-      { "value": "chanhou", "label": "产后护理", "category": "yuexin" }
-    ]
-  }
-}
-```
-
-### 8.2 获取特定类型的数据字典
-
-**接口**: `GET /api/dictionaries/:type`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**路径参数**:
-- `type`: 字典类型（jobTypes/educationLevels/skills等）
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": [
-    { "value": "yuexin", "label": "月嫂", "description": "产后护理" }
-  ]
-}
-```
+> 说明：该控制器文件存在重复声明的历史代码片段，最终以运行时路由为准；建议以 Swagger `/api/docs` 或实际请求验证为权威。
 
 ---
 
-## 9. 统计分析
+## 8. 保险（大树保 / dashubao）
 
-### 9.1 获取仪表盘统计
+**控制器**: `backend/src/modules/dashubao/dashubao.controller.ts`
 
-**接口**: `GET /api/statistics/dashboard`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "totalResumes": 1000,
-    "totalOrders": 500,
-    "totalInterviews": 200,
-    "activeOrders": 50,
-    "pendingInterviews": 10,
-    "monthlyRevenue": 500000,
-    "monthlyNewResumes": 100,
-    "monthlyNewOrders": 50
-  }
-}
-```
-
-### 9.2 获取简历统计
-
-**接口**: `GET /api/statistics/resumes`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**查询参数**:
-- `startDate`: 开始日期
-- `endDate`: 结束日期
-- `groupBy`: 分组方式（day/week/month）
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "byJobType": [
-      { "jobType": "yuexin", "count": 500 }
-    ],
-    "byEducation": [
-      { "education": "high", "count": 300 }
-    ],
-    "byStatus": [
-      { "status": "active", "count": 800 }
-    ],
-    "timeline": [
-      { "date": "2025-09-01", "count": 10 }
-    ]
-  }
-}
-```
-
-### 9.3 获取订单统计
-
-**接口**: `GET /api/statistics/orders`
-
-**请求头**: `Authorization: Bearer [token]`
-
-**查询参数**:
-- `startDate`: 开始日期
-- `endDate`: 结束日期
-- `groupBy`: 分组方式（day/week/month）
-
-**成功响应**:
-```json
-{
-  "success": true,
-  "data": {
-    "byStatus": [
-      { "status": "pending", "count": 50, "amount": 100000 }
-    ],
-    "byServiceType": [
-      { "serviceType": "yuexin", "count": 300, "amount": 600000 }
-    ],
-    "revenue": {
-      "total": 1000000,
-      "paid": 800000,
-      "pending": 200000
-    },
-    "timeline": [
-      { "date": "2025-09-01", "count": 5, "amount": 10000 }
-    ]
-  }
-}
-```
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/dashubao/policy` | 是 | 投保确认-创建保单 |
+| POST | `/api/dashubao/policy/query` | 是 | 从大树保查询保单 |
+| POST | `/api/dashubao/policy/cancel` | 是 | 注销未生效保单 |
+| POST | `/api/dashubao/policy/print` | 是 | 获取电子保单 PDF |
+| POST | `/api/dashubao/policy/invoice` | 是 | 申请电子发票 |
+| POST | `/api/dashubao/policy/payment/:policyRef` | 是 | 获取微信支付信息 |
+| POST | `/api/dashubao/payment/callback` | 否（回调） | 支付回调（XML 原文） |
+| POST | `/api/dashubao/policy/amend` | 是 | 批改-替换被保险人 |
+| POST | `/api/dashubao/policy/add-insured` | 是 | 批增-增加被保险人 |
+| POST | `/api/dashubao/policy/surrender` | 是 | 退保 |
+| GET | `/api/dashubao/policy/rebate/:policyNo` | 是 | 返佣查询 |
+| GET | `/api/dashubao/policies` | 是 | 本地保单列表 |
+| GET | `/api/dashubao/policy/:id` | 是 | 根据ID获取保单 |
+| GET | `/api/dashubao/policy/by-policy-no/:policyNo` | 是 | 根据保单号获取保单 |
+| GET | `/api/dashubao/policy/by-policy-ref/:policyRef` | 是 | 根据商户单号获取保单 |
+| POST | `/api/dashubao/policy/sync/:policyNo` | 是 | 同步保单状态 |
 
 ---
 
-## 10. 错误码说明
+## 9. 面试间管理（interview）
 
-### 10.1 HTTP状态码
+**控制器**: `backend/src/modules/interview/interview.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/interview/rooms` | 是 | 创建面试间 |
+| GET | `/api/interview/active-room` | 是 | 获取当前活跃面试间 |
+| GET | `/api/interview/rooms` | 是 | 面试间列表 |
+| GET | `/api/interview/rooms/:roomId` | 是 | 面试间详情 |
+| POST | `/api/interview/rooms/:roomId/end` | 是 | 结束面试间 |
+| GET | `/api/interview/rooms/:roomId/status` | 是 | 检查面试间状态 |
+| POST | `/api/interview/create-room` | 是 | 简化版创建面试间（小程序H5用） |
+| GET | `/api/interview/latest-room` | 是 | 获取最新活跃面试间 |
+
+---
+
+## 10. ZEGO 能力与提词/远程控制（zego）
+
+**控制器**: `backend/src/modules/zego/zego.controller.ts`
+
+### 10.1 Token 与配置
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/zego/generate-token` | 是 | 生成主持人 Token |
+| GET | `/api/zego/config` | 是 | 获取 ZEGO 配置 |
+| POST | `/api/zego/generate-guest-token` | 否 | 生成访客 Token（客户/阿姨加入） |
+
+### 10.2 房间控制
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/zego/kick-user` | 是 | 踢出用户（主持人） |
+| POST | `/api/zego/dismiss-room` | 是 | 解散房间（主持人） |
+| POST | `/api/zego/check-room` | 否 | 检查房间状态 |
+| POST | `/api/zego/leave-room` | 否 | 用户离开房间（支持 sendBeacon） |
+
+### 10.3 提词器
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/zego/push-teleprompter` | 是 | 推送提词内容 |
+| POST | `/api/zego/control-teleprompter` | 是 | 控制提词器（播放/暂停等） |
+| POST | `/api/zego/get-teleprompter` | 否 | 拉取提词器消息（轮询） |
+| POST | `/api/zego/quick-start-teleprompter` | 是 | 一键推送并启动 |
+
+### 10.4 远程控制（摄像头/麦克风等）
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/zego/remote-control` | 是 | 主持人下发远控 |
+| POST | `/api/zego/get-remote-control` | 否 | 拉取远控消息（轮询） |
+
+---
+
+## 11. 通知（notifications）
+
+**控制器**: `backend/src/modules/notification/notification.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/notifications` | 是 | 获取通知列表 |
+| GET | `/api/notifications/unread-count` | 是 | 未读数量 |
+| PUT | `/api/notifications/mark-read` | 是 | 标记已读（批量） |
+| PUT | `/api/notifications/mark-all-read` | 是 | 全部标记已读 |
+
+---
+
+## 12. 跟进记录（follow-ups）
+
+**控制器**: `backend/src/modules/follow-up/follow-up.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/follow-ups` | 是 | 创建跟进记录 |
+| GET | `/api/follow-ups/test-populate` | 是 | 测试 populate（调试） |
+| GET | `/api/follow-ups/resume/:resumeId` | 是 | 获取某简历跟进记录 |
+| GET | `/api/follow-ups/user` | 是 | 当前用户跟进记录 |
+| GET | `/api/follow-ups/recent` | 是 | 最近跟进记录 |
+| GET | `/api/follow-ups/all` | 是 | 获取所有跟进记录 |
+| DELETE | `/api/follow-ups/:id` | 是 | 删除跟进记录 |
+
+---
+
+## 13. 用户与角色（users / roles）
+
+### 13.1 用户（users）
+
+**控制器**: `backend/src/modules/users/users.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/users` | 是 | 创建用户 |
+| GET | `/api/users` | 是 | 用户列表 |
+| GET | `/api/users/:id` | 是 | 用户详情 |
+| PATCH | `/api/users/:id` | 是 | 更新用户 |
+| DELETE | `/api/users/:id` | 是 | 删除用户 |
+
+### 13.2 角色（roles）
+
+**控制器**: `backend/src/modules/roles/roles.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/roles` | 是 | 创建角色 |
+| GET | `/api/roles` | 是 | 角色列表 |
+| GET | `/api/roles/:id` | 是 | 角色详情 |
+| PATCH | `/api/roles/:id` | 是 | 更新角色 |
+| DELETE | `/api/roles/:id` | 是 | 删除角色 |
+
+---
+
+## 14. 文件上传（upload）
+
+**控制器**: `backend/src/modules/upload/upload.controller.ts`
+
+> 注意：当前实现的路径与历史文档不同，接口为 `upload/file` 与 `upload/video`，并非 `/api/upload` 与 `/api/upload/batch`。
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/upload/file` | 否/按实现 | 上传文件到 COS（multipart，含 type） |
+| GET | `/api/upload/file/:fileUrl` | 否/按实现 | 获取文件（重定向到签名 URL） |
+| DELETE | `/api/upload/file/:fileUrl` | 否/按实现 | 删除文件 |
+| POST | `/api/upload/video` | 否/按实现 | 上传视频并转码（multipart） |
+
+---
+
+## 15. 微信相关（wechat / wechat-openid 等）
+
+### 15.1 CRM 微信服务（wechat）
+
+**控制器**: `backend/src/modules/wechat/wechat.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/wechat/bind-qrcode/:userId` | 否/按实现 | 生成员工绑定二维码 |
+| GET | `/api/wechat/event` | 否 | 微信服务器验证（返回 echostr） |
+| POST | `/api/wechat/event` | 否 | 微信事件处理（关注/扫码） |
+| POST | `/api/wechat/test-message` | 否/按实现 | 测试发送消息 |
+
+### 15.2 小程序侧微信能力（weixin controller 内定义的路径）
+
+**控制器**: `backend/src/modules/weixin/weixin.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/wechat/openid` | 否 | 通过 code 获取 openid |
+| POST | `/api/advisor/subscribe` | 否 | 保存顾问订阅状态 |
+| POST | `/api/customer/action` | 否 | 记录客户行为（可触发线索/通知链路） |
+| POST | `/api/message/send` | 否 | 发送订阅消息 |
+
+---
+
+## 16. 第三方与运维（ocr / baidu / trtc / 日志 / 健康检查）
+
+### 16.1 OCR（ocr）
+
+**控制器**: `backend/src/modules/ocr/ocr.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/ocr/idcard` | 否 | 身份证 OCR（multipart，file） |
+| GET | `/api/ocr/health` | 否 | OCR 健康检查 |
+| GET | `/api/ocr/metrics` | 否 | OCR 指标 |
+
+### 16.2 百度地图地点联想（baidu/place）
+
+**控制器**: `backend/src/modules/baidu/baidu.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/baidu/place/suggestion` | 否 | 地点联想（query 必填） |
+
+### 16.3 TRTC（trtc）
+
+**控制器**: `backend/src/modules/trtc/trtc.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/trtc/getUserSig` | 是 | 获取 UserSig |
+| GET | `/api/trtc/config` | 是 | 获取 SDK 配置 |
+
+### 16.4 小程序访问日志（miniprogram-access-log）
+
+**控制器**: `backend/src/modules/miniprogram-log/miniprogram-log.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| POST | `/api/miniprogram-access-log` | 否 | 记录小程序 H5 页面访问日志 |
+
+### 16.5 健康检查（health）
+
+**控制器**:
+- `backend/src/modules/health/health.controller.ts`
+- `backend/src/app.controller.ts`（存在同名 health 路由实现）
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/health` | 否 | 服务健康检查 |
+
+### 16.6 驾驶舱（dashboard）
+
+**控制器**: `backend/src/modules/dashboard/dashboard.controller.ts`
+
+| 方法 | 路径 | 是否需要登录 | 说明 |
+|---|---|---|---|
+| GET | `/api/dashboard/stats` | 否/按实现 | 获取驾驶舱统计（可带日期范围） |
+| GET | `/api/dashboard/customer-business` | 否/按实现 | 客户业务指标 |
+| GET | `/api/dashboard/financial` | 否/按实现 | 财务指标 |
+| GET | `/api/dashboard/efficiency` | 否/按实现 | 运营效率指标 |
+| GET | `/api/dashboard/health` | 否/按实现 | dashboard 模块健康检查 |
+
+---
+
+## 17. 已废弃或未实现接口（旧文档兼容说明）
+
+历史版本文档与 `api-interfaces-list.txt` 中曾出现如下接口，但当前在 `backend/src` 目录下未找到对应 `@Controller()` 实现（或已被新的模块替代）：
+
+- **视频面试（旧）**：`/api/video-interviews/**`  
+  - 已由 **面试间模块** `/api/interview/**` + **ZEGO 模块** `/api/zego/**` 取代。
+
+- **订单管理（旧）**：`/api/orders/**`
+
+- **数据字典（旧）**：`/api/dictionaries/**`
+
+- **统计分析（旧）**：`/api/statistics/**`  
+  - 当前统计相关集中在 `/api/dashboard/**`、`/api/customers/statistics`、`/api/contracts/statistics`、`/api/lead-transfer/statistics` 等。
+
+如果前端或小程序仍在调用旧接口，请先在调用侧统一切换到上述新接口；确需兼容时再评估是否需要补一层兼容路由。
+
+---
+
+## 18. 错误码说明
+
+### 18.1 HTTP 状态码
 
 | 状态码 | 说明 | 示例场景 |
 |--------|------|----------|
@@ -1172,7 +588,7 @@ x-request-id: {request-id}      # 可选，请求ID
 | 422 | 无法处理的实体 | 数据格式正确但业务逻辑错误 |
 | 500 | 服务器错误 | 服务器内部错误 |
 
-### 10.2 业务错误码
+### 18.2 业务错误码（示例）
 
 | 错误码 | 说明 | HTTP状态码 |
 |--------|------|------------|
@@ -1181,298 +597,35 @@ x-request-id: {request-id}      # 可选，请求ID
 | FORBIDDEN | 禁止访问 | 403 |
 | NOT_FOUND | 资源不存在 | 404 |
 | DUPLICATE | 资源重复 | 409 |
-| INVALID_TOKEN | Token无效 | 401 |
-| TOKEN_EXPIRED | Token过期 | 401 |
-| INVALID_CREDENTIALS | 登录凭证无效 | 401 |
-| PHONE_EXISTS | 手机号已存在 | 409 |
-| FILE_TOO_LARGE | 文件过大 | 400 |
+| FILE_TOO_LARGE | 文件过大 | 413 |
 | INVALID_FILE_TYPE | 文件类型不支持 | 400 |
-| UPLOAD_FAILED | 文件上传失败 | 500 |
-| DATABASE_ERROR | 数据库错误 | 500 |
-| INTERNAL_ERROR | 内部错误 | 500 |
-
-### 10.3 错误响应格式
-
-```json
-{
-  "success": false,
-  "code": "VALIDATION_ERROR",
-  "message": "数据验证失败",
-  "data": {
-    "errors": ["姓名不能为空", "手机号码格式不正确"]
-  }
-}
-```
 
 ---
 
-## 11. 最佳实践
+## 19. 最佳实践
 
-### 11.1 认证与授权
+### 19.1 认证与授权
 
-1. **Token管理**
-   - 将Token存储在安全的地方（如localStorage或sessionStorage）
-   - 每次请求都在请求头中携带Token
-   - Token过期后及时刷新或重新登录
+- 前端应在 Axios 拦截器统一注入 `Authorization` 头，并对 401 做统一跳转处理。
+- 对于“公共接口/回调接口”（如支付回调、访客 token）请确保仅暴露必要能力。
 
-2. **权限控制**
-   - 根据用户角色显示不同的功能
-   - 在调用API前检查用户权限
-   - 处理403错误，提示用户权限不足
+### 19.2 分页与搜索
 
-### 11.2 错误处理
+- 避免一次性拉取全量数据；列表类接口优先分页。
+- 搜索建议带防抖，避免高频请求。
 
-1. **统一错误处理**
-```javascript
-// 示例：Axios拦截器
-axios.interceptors.response.use(
-  response => response,
-  error => {
-    if (error.response) {
-      switch (error.response.status) {
-        case 401:
-          // 跳转到登录页
-          router.push('/login');
-          break;
-        case 403:
-          // 提示权限不足
-          message.error('权限不足');
-          break;
-        case 404:
-          // 提示资源不存在
-          message.error('资源不存在');
-          break;
-        default:
-          // 其他错误
-          message.error(error.response.data.message || '请求失败');
-      }
-    }
-    return Promise.reject(error);
-  }
-);
-```
+### 19.3 上传
 
-2. **业务错误处理**
-```javascript
-try {
-  const response = await api.createResume(data);
-  if (response.success) {
-    message.success('创建成功');
-  }
-} catch (error) {
-  if (error.response?.data?.code === 'DUPLICATE') {
-    message.error('该手机号已被使用');
-  } else {
-    message.error(error.response?.data?.message || '创建失败');
-  }
-}
-```
-
-### 11.3 文件上传
-
-1. **文件大小限制**
-   - 上传前检查文件大小
-   - 显示上传进度
-   - 处理上传失败的情况
-
-2. **文件类型验证**
-```javascript
-const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-if (!allowedTypes.includes(file.type)) {
-  message.error('不支持的文件类型');
-  return false;
-}
-```
-
-3. **批量上传**
-```javascript
-const uploadFiles = async (files) => {
-  const formData = new FormData();
-  files.forEach(file => {
-    formData.append('files', file);
-  });
-
-  try {
-    const response = await api.uploadBatch(formData);
-    message.success(`成功上传${response.data.successCount}个文件`);
-  } catch (error) {
-    message.error('上传失败');
-  }
-};
-```
-
-### 11.4 分页查询
-
-1. **分页参数**
-```javascript
-const fetchResumes = async (page = 1, pageSize = 10) => {
-  const response = await api.getResumes({
-    page,
-    pageSize,
-    keyword: searchKeyword,
-    jobType: selectedJobType
-  });
-  return response.data;
-};
-```
-
-2. **无限滚动**
-```javascript
-const loadMore = async () => {
-  if (loading || !hasMore) return;
-
-  setLoading(true);
-  const nextPage = currentPage + 1;
-  const response = await fetchResumes(nextPage);
-
-  setResumes([...resumes, ...response.list]);
-  setCurrentPage(nextPage);
-  setHasMore(response.list.length === pageSize);
-  setLoading(false);
-};
-```
-
-### 11.5 数据缓存
-
-1. **使用React Query**
-```javascript
-import { useQuery } from 'react-query';
-
-const useResume = (id) => {
-  return useQuery(['resume', id], () => api.getResume(id), {
-    staleTime: 5 * 60 * 1000, // 5分钟
-    cacheTime: 10 * 60 * 1000, // 10分钟
-  });
-};
-```
-
-2. **本地缓存**
-```javascript
-const getCachedData = (key) => {
-  const cached = localStorage.getItem(key);
-  if (cached) {
-    const { data, timestamp } = JSON.parse(cached);
-    if (Date.now() - timestamp < 5 * 60 * 1000) {
-      return data;
-    }
-  }
-  return null;
-};
-
-const setCachedData = (key, data) => {
-  localStorage.setItem(key, JSON.stringify({
-    data,
-    timestamp: Date.now()
-  }));
-};
-```
-
-### 11.6 防抖与节流
-
-1. **搜索防抖**
-```javascript
-import { debounce } from 'lodash';
-
-const handleSearch = debounce((keyword) => {
-  fetchResumes(1, 10, keyword);
-}, 500);
-```
-
-2. **滚动节流**
-```javascript
-import { throttle } from 'lodash';
-
-const handleScroll = throttle(() => {
-  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 100) {
-    loadMore();
-  }
-}, 200);
-```
+- 上传前校验文件大小与 MIME 类型。
+- 对视频上传建议提示“转码耗时”，并对失败提供可重试。
 
 ---
 
-## 12. 附录
+## 20. 更新日志
 
-### 12.1 数据字典完整列表
+### v1.4 (2026-01-10)
 
-#### 工种类型 (jobTypes)
-```json
-[
-  { "value": "yuexin", "label": "月嫂", "description": "产后护理" },
-  { "value": "yuesao", "label": "育儿嫂", "description": "婴幼儿护理" },
-  { "value": "baomu", "label": "保姆", "description": "家庭服务" },
-  { "value": "huli", "label": "护理", "description": "老人护理" },
-  { "value": "zuofan", "label": "做饭", "description": "家庭烹饪" },
-  { "value": "baojie", "label": "保洁", "description": "家庭清洁" }
-]
-```
-
-#### 学历水平 (educationLevels)
-```json
-[
-  { "value": "primary", "label": "小学", "order": 1 },
-  { "value": "middle", "label": "初中", "order": 2 },
-  { "value": "high", "label": "高中", "order": 3 },
-  { "value": "technical", "label": "中专/技校", "order": 4 },
-  { "value": "college", "label": "大专", "order": 5 },
-  { "value": "bachelor", "label": "本科", "order": 6 },
-  { "value": "master", "label": "硕士及以上", "order": 7 }
-]
-```
-
-#### 技能列表 (skills)
-```json
-[
-  { "value": "chanhou", "label": "产后护理", "category": "yuexin" },
-  { "value": "yuying", "label": "育婴", "category": "yuexin" },
-  { "value": "cuiru", "label": "催乳", "category": "yuexin" },
-  { "value": "yuezican", "label": "月子餐", "category": "yuexin" },
-  { "value": "muying", "label": "母婴护理", "category": "yuexin" },
-  { "value": "zaojiao", "label": "早教", "category": "yuesao" },
-  { "value": "fushi", "label": "辅食添加", "category": "yuesao" }
-]
-```
-
-### 12.2 常见问题
-
-**Q: Token过期后如何处理？**
-A: 当收到401错误且错误码为TOKEN_EXPIRED时，应该清除本地Token并跳转到登录页面。
-
-**Q: 如何实现文件上传进度显示？**
-A: 使用Axios的onUploadProgress配置项监听上传进度。
-
-**Q: 如何处理并发请求？**
-A: 使用Promise.all()或axios.all()处理多个并发请求。
-
-**Q: 如何实现请求重试？**
-A: 使用axios-retry库或自定义拦截器实现请求重试逻辑。
-
----
-
-## 13. 更新日志
-
-### v1.0.0 (2025-09-12)
-- ✅ 初始版本发布
-- ✅ 完成用户认证模块
-- ✅ 完成简历管理模块
-- ✅ 完成视频面试模块
-- ✅ 完成订单管理模块
-- ✅ 完成文件上传模块
-- ✅ 完成数据字典模块
-- ✅ 完成统计分析模块
-
----
-
-## 14. 联系方式
-
-如有问题或建议，请联系：
-- 技术支持邮箱: support@example.com
-- 开发团队: dev@example.com
-
----
-
-**文档版本**: v1.0.0
-**最后更新**: 2025-09-12
-**维护团队**: 安德家政CRM开发团队
-
-
+- 按后端源码补齐并修正 `API完整文档.md`。
+- 将旧接口（`/api/video-interviews`、`/api/orders`、`/api/dictionaries`、`/api/statistics`）标注为已废弃/未实现，并指向当前替代模块。
+- 更新文件上传接口路径为 `/api/upload/file` 与 `/api/upload/video`。
+- 补充合同、保险（大树保）、线索流转、通知、跟进、用户/角色、微信相关、OCR/TRTC/日志/健康检查等模块。

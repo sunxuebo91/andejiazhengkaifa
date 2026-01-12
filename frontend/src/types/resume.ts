@@ -58,6 +58,14 @@ export const EDUCATION_MAP = {
   [Education.GRADUATE]: '研究生'
 } as const;
 
+// 文件信息接口
+export interface FileInfo {
+  url: string;
+  filename: string;
+  size?: number;
+  mimetype?: string;
+}
+
 // 工作经历接口
 export interface WorkExperience {
   startDate: string;
@@ -65,6 +73,12 @@ export interface WorkExperience {
   description: string;
   company?: string;
   position?: string;
+  // 新增字段（全部选填）
+  orderNumber?: string;      // 订单号
+  district?: string;         // 北京XX区
+  customerName?: string;     // 客户姓名
+  customerReview?: string;   // 客户评价
+  photos?: FileInfo[];       // 工作照片
 }
 
 // 表单值接口

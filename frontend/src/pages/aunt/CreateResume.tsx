@@ -20,6 +20,8 @@ import { isLoggedIn } from '../../services/auth';
 import { JOB_TYPE_MAP } from '../../constants/jobTypes'; // 引入共享的工种映射
 import SortableImageUpload from '../../components/SortableImageUpload';
 import VideoUpload from '../../components/VideoUpload';
+import { generateOrderNumber } from '../../utils/orderNumberGenerator';
+import { BEIJING_DISTRICTS } from '../../constants/beijingDistricts';
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
 dayjs.extend(isSameOrBefore);
@@ -130,6 +132,7 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'workExperi
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   selfIntroduction?: string;
+  internalEvaluation?: string;
   // 文件相关字段 - 旧格式
   idCardFront?: { url: string };
   idCardBack?: { url: string };
@@ -195,7 +198,12 @@ const convertToExtendedResume = (resume: Resume): ExtendedResume => {
       endDate: exp.endDate || '',
       description: exp.description || '',
       company: exp.company || undefined,
-      position: exp.position || undefined
+      position: exp.position || undefined,
+      orderNumber: exp.orderNumber || undefined,
+      district: exp.district || undefined,
+      customerName: exp.customerName || undefined,
+      customerReview: exp.customerReview || undefined,
+      photos: exp.photos || []
     }));
 
   return {
@@ -755,7 +763,12 @@ const CreateResume: React.FC = () => {
             endDate: exp.endDate || '',
             description: exp.description || '',
             company: exp.company || undefined,
-            position: exp.position || undefined
+            position: exp.position || undefined,
+            orderNumber: exp.orderNumber || undefined,
+            district: exp.district || undefined,
+            customerName: exp.customerName || undefined,
+            customerReview: exp.customerReview || undefined,
+            photos: exp.photos || []
           })) || [{ startDate: '', endDate: '', description: '' }] // 确保至少有一条工作经历
         };
         
@@ -1717,6 +1730,7 @@ const CreateResume: React.FC = () => {
         medicalExamDate: editingResume.medicalExamDate ? dayjs(editingResume.medicalExamDate).format('YYYY-MM-DD') : undefined,
         ethnicity: editingResume.ethnicity,
         selfIntroduction: editingResume.selfIntroduction,
+        internalEvaluation: (editingResume as any).internalEvaluation,
         zodiac: editingResume.zodiac,
         zodiacSign: editingResume.zodiacSign,
         expectedSalary: editingResume.expectedSalary,
@@ -1740,7 +1754,12 @@ const CreateResume: React.FC = () => {
             endDate: exp.endDate || '',
             description: exp.description || '',
             company: exp.company || undefined,
-            position: exp.position || undefined
+            position: exp.position || undefined,
+            orderNumber: exp.orderNumber || undefined,
+            district: exp.district || undefined,
+            customerName: exp.customerName || undefined,
+            customerReview: exp.customerReview || undefined,
+            photos: exp.photos || []
           }))
       };
 
@@ -2298,6 +2317,25 @@ const CreateResume: React.FC = () => {
                   </Form.Item>
                 </Col>
               </Row>
+
+              {/* 🔥 添加内部员工评价字段 */}
+              <Row gutter={24}>
+                <Col span={24}>
+                  <Form.Item
+                    label="内部员工评价"
+                    name="internalEvaluation"
+                    extra="公司内部对该阿姨的评价（选填，最多2000字，仅内部可见）"
+                  >
+                    <Input.TextArea
+                      placeholder="请输入公司内部对该阿姨的评价，如工作态度、专业能力、客户反馈等..."
+                      rows={4}
+                      maxLength={2000}
+                      showCount
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
             </Card>
           </Form.Item>
 
@@ -2457,12 +2495,190 @@ const CreateResume: React.FC = () => {
                                   name={[name, 'description']}
                                   label="工作描述"
                                   rules={[{ required: true, message: '请输入工作描述' }]}
-                                  style={{ marginBottom: 0 }}
                                 >
-                                  <Input.TextArea 
-                                    rows={4} 
+                                  <Input.TextArea
+                                    rows={4}
                                     placeholder="请描述工作内容和职责"
                                     style={{ resize: 'none' }}
+                                  />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+
+                            {/* 详细信息（选填） */}
+                            <Divider orientation="left" style={{ fontSize: '14px', margin: '16px 0', color: 'red', fontWeight: 'bold' }}>
+                              详细信息（选填）- 测试版本
+                            </Divider>
+
+                            <Row gutter={24}>
+                              <Col span={12}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'orderNumber']}
+                                  label="订单号"
+                                  tooltip="自动生成，可修改"
+                                >
+                                  <Input
+                                    placeholder="CON12345678901"
+                                    suffix={
+                                      <Button
+                                        type="link"
+                                        size="small"
+                                        onClick={() => {
+                                          const orderNumber = generateOrderNumber();
+                                          const experiences = form.getFieldValue('workExperiences');
+                                          experiences[name] = {
+                                            ...experiences[name],
+                                            orderNumber
+                                          };
+                                          form.setFieldsValue({ workExperiences: experiences });
+                                        }}
+                                      >
+                                        生成
+                                      </Button>
+                                    }
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col span={12}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'district']}
+                                  label="服务区域"
+                                >
+                                  <Select placeholder="请选择北京市区域">
+                                    {BEIJING_DISTRICTS.map(district => (
+                                      <Option key={district.value} value={district.value}>
+                                        {district.label}
+                                      </Option>
+                                    ))}
+                                  </Select>
+                                </Form.Item>
+                              </Col>
+                            </Row>
+
+                            <Row gutter={24}>
+                              <Col span={12}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'customerName']}
+                                  label="客户姓名"
+                                >
+                                  <Input placeholder="请输入客户姓名" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={12}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'customerReview']}
+                                  label="客户评价"
+                                >
+                                  <Input.TextArea
+                                    rows={2}
+                                    placeholder="请输入客户评价"
+                                    style={{ resize: 'none' }}
+                                  />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+
+                            {/* 工作照片上传 */}
+                            <Row gutter={24}>
+                              <Col span={24}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'photos']}
+                                  label="工作照片"
+                                  tooltip="可上传多张工作现场照片"
+                                >
+                                  <SortableImageUpload
+                                    fileList={(() => {
+                                      const photos = form.getFieldValue(['workExperiences', name, 'photos']) || [];
+                                      return photos.map((photo: any, index: number) => ({
+                                        uid: photo.uid || `work-photo-${name}-${index}`,
+                                        name: photo.filename || `工作照片${index + 1}`,
+                                        status: 'done' as const,
+                                        url: photo.url,
+                                        size: photo.size || 0,
+                                        isExisting: true
+                                      }));
+                                    })()}
+                                    onChange={(newFileList) => {
+                                      const photos = newFileList.map(file => ({
+                                        url: file.url || '',
+                                        filename: file.name,
+                                        size: file.size || 0,
+                                        mimetype: file.type || 'image/jpeg'
+                                      }));
+                                      const experiences = form.getFieldValue('workExperiences');
+                                      experiences[name] = {
+                                        ...experiences[name],
+                                        photos
+                                      };
+                                      form.setFieldsValue({ workExperiences: experiences });
+                                    }}
+                                    onPreview={handlePreview}
+                                    maxCount={9}
+                                    beforeUpload={async (file) => {
+                                      // 压缩图片
+                                      let processedFile: File = file;
+                                      try {
+                                        console.log(`🗜️ 开始压缩工作照片: ${file.name}`);
+                                        processedFile = await ImageService.compressImage(file, 'photo');
+                                        console.log(`✅ 压缩完成: ${processedFile.name}`);
+                                      } catch (error) {
+                                        console.warn('⚠️ 压缩失败，使用原文件:', error);
+                                        processedFile = file;
+                                      }
+
+                                      const formData = new FormData();
+                                      formData.append('file', processedFile);
+                                      formData.append('type', 'workExperiencePhoto');
+                                      const tempPreviewUrl = URL.createObjectURL(processedFile);
+
+                                      if (editingResume?._id) {
+                                        try {
+                                          const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
+                                          if (response.success) {
+                                            const newPhoto = {
+                                              url: response.data?.fileUrl,
+                                              filename: file.name,
+                                              size: processedFile.size,
+                                              mimetype: file.type
+                                            };
+                                            const experiences = form.getFieldValue('workExperiences');
+                                            const currentPhotos = experiences[name]?.photos || [];
+                                            experiences[name] = {
+                                              ...experiences[name],
+                                              photos: [...currentPhotos, newPhoto]
+                                            };
+                                            form.setFieldsValue({ workExperiences: experiences });
+                                            messageApi.success(`${file.name} 上传成功`);
+                                          } else {
+                                            messageApi.error(response.message || '上传失败');
+                                          }
+                                        } catch (err) {
+                                          console.error('上传文件时出错', err);
+                                          messageApi.error('上传文件时出错');
+                                        }
+                                      } else {
+                                        const newPhoto = {
+                                          url: tempPreviewUrl,
+                                          filename: file.name,
+                                          size: processedFile.size,
+                                          mimetype: file.type
+                                        };
+                                        const experiences = form.getFieldValue('workExperiences');
+                                        const currentPhotos = experiences[name]?.photos || [];
+                                        experiences[name] = {
+                                          ...experiences[name],
+                                          photos: [...currentPhotos, newPhoto]
+                                        };
+                                        form.setFieldsValue({ workExperiences: experiences });
+                                      }
+                                      return false;
+                                    }}
+                                    disabled={false}
                                   />
                                 </Form.Item>
                               </Col>

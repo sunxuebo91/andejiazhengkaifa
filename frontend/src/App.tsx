@@ -47,6 +47,9 @@ const InterviewRoomList = React.lazy(() => import('./pages/interview/InterviewRo
 // 保险相关组件
 const CreateInsurance = React.lazy(() => import('./pages/insurance/CreateInsurance'));
 const InsuranceList = React.lazy(() => import('./pages/insurance/InsuranceList'));
+// 褓贝后台相关组件
+const BannerList = React.lazy(() => import('./pages/baobei/BannerList'));
+const BannerForm = React.lazy(() => import('./pages/baobei/BannerForm'));
 
 interface AppProps {
   children?: ReactNode;
@@ -277,6 +280,22 @@ export default function App({ children }: AppProps) {
                     />
                     {/* 重定向 /insurance 到 /insurance/list */}
                     <Route index element={<Navigate to="list" replace />} />
+                  </Route>
+
+                  {/* 褓贝后台模块 - 管理员和经理可访问 */}
+                  <Route path="baobei">
+                    <Route
+                      path="banner"
+                      element={<AuthorizedRoute element={<BannerList />} role="admin" />}
+                    />
+                    <Route
+                      path="banner/create"
+                      element={<AuthorizedRoute element={<BannerForm />} role="admin" />}
+                    />
+                    <Route
+                      path="banner/edit/:id"
+                      element={<AuthorizedRoute element={<BannerForm />} role="admin" />}
+                    />
                   </Route>
 
                   {/* 404页面 */}

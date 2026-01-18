@@ -140,22 +140,22 @@ export class EmployeeEvaluationService {
 
       const serviceAttitudeRatings = evaluations.filter(e => e.serviceAttitudeRating);
       const averageServiceAttitude = serviceAttitudeRatings.length > 0
-        ? (serviceAttitudeRatings.reduce((sum, e) => sum + e.serviceAttitudeRating, 0) / serviceAttitudeRatings.length).toFixed(2)
+        ? parseFloat((serviceAttitudeRatings.reduce((sum, e) => sum + e.serviceAttitudeRating, 0) / serviceAttitudeRatings.length).toFixed(2))
         : 0;
 
       const professionalSkillRatings = evaluations.filter(e => e.professionalSkillRating);
       const averageProfessionalSkill = professionalSkillRatings.length > 0
-        ? (professionalSkillRatings.reduce((sum, e) => sum + e.professionalSkillRating, 0) / professionalSkillRatings.length).toFixed(2)
+        ? parseFloat((professionalSkillRatings.reduce((sum, e) => sum + e.professionalSkillRating, 0) / professionalSkillRatings.length).toFixed(2))
         : 0;
 
       const workEfficiencyRatings = evaluations.filter(e => e.workEfficiencyRating);
       const averageWorkEfficiency = workEfficiencyRatings.length > 0
-        ? (workEfficiencyRatings.reduce((sum, e) => sum + e.workEfficiencyRating, 0) / workEfficiencyRatings.length).toFixed(2)
+        ? parseFloat((workEfficiencyRatings.reduce((sum, e) => sum + e.workEfficiencyRating, 0) / workEfficiencyRatings.length).toFixed(2))
         : 0;
 
       const communicationRatings = evaluations.filter(e => e.communicationRating);
       const averageCommunication = communicationRatings.length > 0
-        ? (communicationRatings.reduce((sum, e) => sum + e.communicationRating, 0) / communicationRatings.length).toFixed(2)
+        ? parseFloat((communicationRatings.reduce((sum, e) => sum + e.communicationRating, 0) / communicationRatings.length).toFixed(2))
         : 0;
 
       // 评分分布
@@ -173,11 +173,11 @@ export class EmployeeEvaluationService {
       return {
         employeeId,
         totalEvaluations: evaluations.length,
-        averageRating: parseFloat(averageRating),
-        averageServiceAttitude: parseFloat(averageServiceAttitude),
-        averageProfessionalSkill: parseFloat(averageProfessionalSkill),
-        averageWorkEfficiency: parseFloat(averageWorkEfficiency),
-        averageCommunication: parseFloat(averageCommunication),
+        averageRating: parseFloat(averageRating.toString()),
+        averageServiceAttitude,
+        averageProfessionalSkill,
+        averageWorkEfficiency,
+        averageCommunication,
         ratingDistribution,
         recentEvaluations,
       };

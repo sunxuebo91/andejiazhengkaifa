@@ -4,10 +4,17 @@
 
 - [认证授权](#认证授权)
 - [Banner轮播图](#banner轮播图)
+- [文章内容](#文章内容)
+  - [获取文章列表](#获取文章列表)
+  - [获取文章详情](#获取文章详情)
 - [简历管理](#简历管理)
   - [创建简历](#创建简历)
   - [获取简历详情](#获取简历详情)
   - [更新简历](#更新简历)
+- [员工评价](#员工评价)
+  - [创建员工评价](#创建员工评价)
+  - [获取评价列表](#获取评价列表)
+  - [获取评价统计](#获取评价统计)
 - [文件上传](#文件上传)
 - [数据字典](#数据字典)
 - [错误码说明](#错误码说明)
@@ -174,6 +181,371 @@ Page({
   width: 100%;
   height: 100%;
 }
+```
+
+---
+
+## 📰 文章内容
+
+小程序可以获取和展示褓贝后台发布的文章内容，用于育儿知识、家政技巧等内容展示。
+
+### 📱 一句话总结
+
+**小程序调用文章接口非常简单：使用 `GET https://crm.andejiazheng.com/api/articles/miniprogram/list?page=1&pageSize=10` 获取文章列表，使用 `GET https://crm.andejiazheng.com/api/articles/miniprogram/:id` 获取文章详情。两个接口都是公开接口（无需传 token），自动只返回已发布文章。列表返回文章数组和分页信息，详情返回完整内容（包括 contentHtml 富文本和 imageUrls 图片数组）。使用 `<rich-text nodes="{{article.contentHtml}}">` 渲染富文本，使用 `<image wx:for="{{article.imageUrls}}">` 展示图片。支持搜索、分页、上拉加载更多等功能。**
+
+### 获取文章列表
+
+获取已发布的文章列表，支持分页和搜索。
+
+#### 请求
+
+```http
+GET /api/articles/miniprogram/list?page=1&pageSize=10&keyword=育儿
+```
+
+**认证**: ❌ 无需登录（公开接口，自动只返回已发布文章）
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `keyword` | string | 否 | 搜索关键词（标题/正文/作者/来源） |
+| `page` | number | 否 | 页码，默认 1 |
+| `pageSize` | number | 否 | 每页数量，默认 10 |
+
+**注意**：小程序接口自动只返回 `status='published'` 的文章，无需传 status 参数。
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "list": [
+      {
+        "_id": "6967700ebaf1a7bfe723665c",
+        "title": "新生儿护理要点",
+        "author": "新华社",
+        "source": "人民日报",
+        "status": "published",
+        "createdAt": "2026-01-15T10:00:00.000Z",
+        "updatedAt": "2026-01-15T10:00:00.000Z",
+        "createdBy": {
+          "_id": "user123",
+          "name": "管理员",
+          "username": "admin"
+        }
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "pageSize": 10,
+    "totalPages": 5
+  },
+  "message": "获取成功"
+}
+```
+
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `_id` | string | 文章唯一ID |
+| `title` | string | 文章标题 |
+| `author` | string | 作者 |
+| `source` | string | 来源/出处 |
+| `status` | string | 状态：`draft`（草稿）、`published`（已发布） |
+| `createdAt` | string | 创建时间（ISO 8601格式） |
+| `updatedAt` | string | 更新时间（ISO 8601格式） |
+| `createdBy` | object | 创建人信息 |
+| `total` | number | 总记录数 |
+| `page` | number | 当前页码 |
+| `pageSize` | number | 每页数量 |
+| `totalPages` | number | 总页数 |
+
+---
+
+### 获取文章详情
+
+获取单篇文章的完整内容，包括正文和图片。
+
+#### 请求
+
+```http
+GET /api/articles/miniprogram/:id
+```
+
+**认证**: ❌ 无需登录（公开接口，自动只返回已发布文章）
+
+#### 路径参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 文章ID |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "6967700ebaf1a7bfe723665c",
+    "title": "新生儿护理要点",
+    "author": "新华社",
+    "source": "人民日报",
+    "contentRaw": "新生儿护理是每个新手父母都需要掌握的技能...\n\n## 一、温度控制\n\n新生儿体温调节能力较弱...",
+    "contentHtml": "<p>新生儿护理是每个新手父母都需要掌握的技能...</p><h2>一、温度控制</h2><p>新生儿体温调节能力较弱...</p>",
+    "imageUrls": [
+      "https://housekeeping-1254058915.cos.ap-guangzhou.myqcloud.com/article/image1.jpg",
+      "https://housekeeping-1254058915.cos.ap-guangzhou.myqcloud.com/article/image2.jpg"
+    ],
+    "status": "published",
+    "createdAt": "2026-01-15T10:00:00.000Z",
+    "updatedAt": "2026-01-15T10:00:00.000Z",
+    "createdBy": {
+      "_id": "user123",
+      "name": "管理员",
+      "username": "admin"
+    },
+    "updatedBy": {
+      "_id": "user123",
+      "name": "管理员",
+      "username": "admin"
+    }
+  },
+  "message": "获取成功"
+}
+```
+
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `_id` | string | 文章唯一ID |
+| `title` | string | 文章标题 |
+| `author` | string | 作者 |
+| `source` | string | 来源/出处 |
+| `contentRaw` | string | 原始正文内容（支持简易Markdown格式） |
+| `contentHtml` | string | HTML格式的正文内容（已处理格式） |
+| `imageUrls` | array | 图片URL列表（腾讯云COS） |
+| `status` | string | 状态：`draft`（草稿）、`published`（已发布） |
+| `createdAt` | string | 创建时间（ISO 8601格式） |
+| `updatedAt` | string | 更新时间（ISO 8601格式） |
+| `createdBy` | object | 创建人信息 |
+| `updatedBy` | object | 最后更新人信息 |
+
+#### 小程序调用示例
+
+```javascript
+// utils/api.js
+const BASE_URL = 'https://crm.andejiazheng.com/api';
+
+/**
+ * 获取文章列表（小程序专用公开接口）
+ * @param {Object} params - 查询参数
+ * @param {string} params.keyword - 搜索关键词
+ * @param {number} params.page - 页码
+ * @param {number} params.pageSize - 每页数量
+ * @returns {Promise<Object>} 文章列表数据
+ */
+export function getArticleList(params = {}) {
+  const { keyword = '', page = 1, pageSize = 10 } = params;
+
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/articles/miniprogram/list`,
+      method: 'GET',
+      data: {
+        keyword,
+        page,
+        pageSize
+      },
+      success(res) {
+        if (res.data.success) {
+          resolve(res.data.data);
+        } else {
+          reject(new Error(res.data.message || '获取文章列表失败'));
+        }
+      },
+      fail(err) {
+        reject(err);
+      }
+    });
+  });
+}
+
+/**
+ * 获取文章详情（小程序专用公开接口）
+ * @param {string} id - 文章ID
+ * @returns {Promise<Object>} 文章详情数据
+ */
+export function getArticleDetail(id) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/articles/miniprogram/${id}`,
+      method: 'GET',
+      success(res) {
+        if (res.data.success) {
+          resolve(res.data.data);
+        } else {
+          reject(new Error(res.data.message || '获取文章详情失败'));
+        }
+      },
+      fail(err) {
+        reject(err);
+      }
+    });
+  });
+}
+```
+
+```javascript
+// pages/article/list/list.js
+import { getArticleList } from '../../../utils/api';
+
+Page({
+  data: {
+    articleList: [],
+    page: 1,
+    pageSize: 10,
+    total: 0,
+    loading: false,
+    hasMore: true
+  },
+
+  onLoad() {
+    this.loadArticles();
+  },
+
+  async loadArticles() {
+    if (this.data.loading || !this.data.hasMore) return;
+
+    this.setData({ loading: true });
+
+    try {
+      const result = await getArticleList({
+        page: this.data.page,
+        pageSize: this.data.pageSize
+      });
+
+      this.setData({
+        articleList: [...this.data.articleList, ...result.list],
+        total: result.total,
+        page: this.data.page + 1,
+        hasMore: this.data.articleList.length + result.list.length < result.total,
+        loading: false
+      });
+    } catch (err) {
+      console.error('加载文章失败:', err);
+      wx.showToast({
+        title: '加载失败',
+        icon: 'none'
+      });
+      this.setData({ loading: false });
+    }
+  },
+
+  // 下拉刷新
+  onPullDownRefresh() {
+    this.setData({
+      articleList: [],
+      page: 1,
+      hasMore: true
+    });
+    this.loadArticles().then(() => {
+      wx.stopPullDownRefresh();
+    });
+  },
+
+  // 上拉加载更多
+  onReachBottom() {
+    this.loadArticles();
+  },
+
+  // 跳转到文章详情
+  goToDetail(e) {
+    const { id } = e.currentTarget.dataset;
+    wx.navigateTo({
+      url: `/pages/article/detail/detail?id=${id}`
+    });
+  }
+});
+```
+
+```javascript
+// pages/article/detail/detail.js
+import { getArticleDetail } from '../../../utils/api';
+
+Page({
+  data: {
+    article: null,
+    loading: true
+  },
+
+  onLoad(options) {
+    const { id } = options;
+    if (id) {
+      this.loadArticle(id);
+    }
+  },
+
+  async loadArticle(id) {
+    try {
+      const article = await getArticleDetail(id);
+      this.setData({
+        article,
+        loading: false
+      });
+    } catch (err) {
+      console.error('加载文章详情失败:', err);
+      wx.showToast({
+        title: '加载失败',
+        icon: 'none'
+      });
+      this.setData({ loading: false });
+    }
+  }
+});
+```
+
+```html
+<!-- pages/article/list/list.wxml -->
+<view class="article-list">
+  <view class="article-item" wx:for="{{articleList}}" wx:key="_id"
+        bindtap="goToDetail" data-id="{{item._id}}">
+    <view class="article-title">{{item.title}}</view>
+    <view class="article-meta">
+      <text class="author">{{item.author}}</text>
+      <text class="date">{{item.createdAt}}</text>
+    </view>
+  </view>
+
+  <view class="loading" wx:if="{{loading}}">加载中...</view>
+  <view class="no-more" wx:if="{{!hasMore && articleList.length > 0}}">没有更多了</view>
+</view>
+```
+
+```html
+<!-- pages/article/detail/detail.wxml -->
+<view class="article-detail" wx:if="{{article}}">
+  <view class="article-header">
+    <view class="article-title">{{article.title}}</view>
+    <view class="article-meta">
+      <text class="author">作者：{{article.author}}</text>
+      <text class="source" wx:if="{{article.source}}">来源：{{article.source}}</text>
+      <text class="date">{{article.createdAt}}</text>
+    </view>
+  </view>
+
+  <view class="article-content">
+    <rich-text nodes="{{article.contentHtml}}"></rich-text>
+  </view>
+
+  <view class="article-images" wx:if="{{article.imageUrls.length > 0}}">
+    <image wx:for="{{article.imageUrls}}" wx:key="index"
+           src="{{item}}" mode="widthFix" class="article-image" />
+  </view>
+</view>
 ```
 
 ---
@@ -2210,11 +2582,324 @@ const updateWorkExperience = async (resumeId) => {
 
 ---
 
+---
+
+## 📊 员工评价
+
+内部员工评价管理，支持创建评价、查询评价列表和统计分析。
+
+### 创建员工评价
+
+创建对员工的内部评价记录。
+
+#### 请求
+
+```http
+POST /api/employee-evaluations/miniprogram/create
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**认证**: ✅ 需要登录
+
+#### 请求体
+
+```json
+{
+  "employeeId": "507f1f77bcf86cd799439011",
+  "employeeName": "张三",
+  "contractId": "507f1f77bcf86cd799439012",
+  "contractNo": "CON20240101001",
+  "evaluationType": "daily",
+  "overallRating": 4.5,
+  "serviceAttitudeRating": 5,
+  "professionalSkillRating": 4,
+  "workEfficiencyRating": 4.5,
+  "communicationRating": 5,
+  "comment": "工作认真负责，专业技能强，服务态度好",
+  "strengths": "服务态度好，技能熟练，沟通能力强",
+  "improvements": "工作效率可以进一步提升",
+  "tags": ["认真负责", "技能熟练", "沟通良好"],
+  "isPublic": false,
+  "status": "published"
+}
+```
+
+#### 请求字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `employeeId` | string | ✅ | 被评价员工ID（简历ID） |
+| `employeeName` | string | ✅ | 被评价员工姓名 |
+| `contractId` | string | ❌ | 关联合同ID |
+| `contractNo` | string | ❌ | 订单编号 |
+| `evaluationType` | string | ✅ | 评价类型：daily/monthly/contract_end/special |
+| `overallRating` | number | ✅ | 综合评分（1-5分） |
+| `serviceAttitudeRating` | number | ❌ | 服务态度评分（1-5分） |
+| `professionalSkillRating` | number | ❌ | 专业技能评分（1-5分） |
+| `workEfficiencyRating` | number | ❌ | 工作效率评分（1-5分） |
+| `communicationRating` | number | ❌ | 沟通能力评分（1-5分） |
+| `comment` | string | ✅ | 评价内容 |
+| `strengths` | string | ❌ | 优点 |
+| `improvements` | string | ❌ | 待改进项 |
+| `tags` | array | ❌ | 评价标签 |
+| `isPublic` | boolean | ❌ | 是否公开（默认false） |
+| `status` | string | ❌ | 状态：draft/published/archived（默认published） |
+
+#### 响应示例
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "678a1b2c3d4e5f6789012345",
+    "employeeId": "507f1f77bcf86cd799439011",
+    "employeeName": "张三",
+    "evaluatorId": "507f1f77bcf86cd799439013",
+    "evaluatorName": "李经理",
+    "contractId": "507f1f77bcf86cd799439012",
+    "contractNo": "CON20240101001",
+    "evaluationType": "daily",
+    "overallRating": 4.5,
+    "serviceAttitudeRating": 5,
+    "professionalSkillRating": 4,
+    "workEfficiencyRating": 4.5,
+    "communicationRating": 5,
+    "comment": "工作认真负责，专业技能强，服务态度好",
+    "strengths": "服务态度好，技能熟练，沟通能力强",
+    "improvements": "工作效率可以进一步提升",
+    "tags": ["认真负责", "技能熟练", "沟通良好"],
+    "isPublic": false,
+    "status": "published",
+    "evaluationDate": "2026-01-18T10:30:00.000Z",
+    "createdAt": "2026-01-18T10:30:00.000Z",
+    "updatedAt": "2026-01-18T10:30:00.000Z"
+  },
+  "message": "员工评价创建成功"
+}
+```
+
+#### 小程序调用示例
+
+```javascript
+// 创建员工评价
+wx.request({
+  url: 'https://crm.andejiazheng.com/api/employee-evaluations/miniprogram/create',
+  method: 'POST',
+  header: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  data: {
+    employeeId: '507f1f77bcf86cd799439011',
+    employeeName: '张三',
+    evaluationType: 'daily',
+    overallRating: 4.5,
+    serviceAttitudeRating: 5,
+    professionalSkillRating: 4,
+    comment: '工作认真负责，专业技能强',
+    tags: ['认真负责', '技能熟练']
+  },
+  success(res) {
+    if (res.data.success) {
+      wx.showToast({ title: '评价成功', icon: 'success' });
+    }
+  }
+});
+```
+
+---
+
+### 获取评价列表
+
+获取员工评价列表，支持筛选和分页。
+
+#### 请求
+
+```http
+GET /api/employee-evaluations/miniprogram/list?employeeId={employeeId}&page=1&pageSize=10
+```
+
+**认证**: ❌ 无需登录（公开接口）
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `employeeId` | string | ❌ | 员工ID筛选 |
+| `evaluatorId` | string | ❌ | 评价人ID筛选 |
+| `evaluationType` | string | ❌ | 评价类型筛选 |
+| `status` | string | ❌ | 状态筛选 |
+| `page` | number | ❌ | 页码（默认1） |
+| `pageSize` | number | ❌ | 每页数量（默认10） |
+
+#### 响应示例
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "_id": "678a1b2c3d4e5f6789012345",
+        "employeeId": {
+          "_id": "507f1f77bcf86cd799439011",
+          "name": "张三",
+          "phone": "13800138000",
+          "jobType": "yuexin"
+        },
+        "employeeName": "张三",
+        "evaluatorId": {
+          "_id": "507f1f77bcf86cd799439013",
+          "username": "manager01",
+          "name": "李经理"
+        },
+        "evaluatorName": "李经理",
+        "overallRating": 4.5,
+        "comment": "工作认真负责，专业技能强",
+        "evaluationType": "daily",
+        "status": "published",
+        "evaluationDate": "2026-01-18T10:30:00.000Z"
+      }
+    ],
+    "total": 25,
+    "page": 1,
+    "pageSize": 10,
+    "totalPages": 3
+  },
+  "message": "获取员工评价列表成功"
+}
+```
+
+#### 小程序调用示例
+
+```javascript
+// 获取某个员工的评价列表
+wx.request({
+  url: 'https://crm.andejiazheng.com/api/employee-evaluations/miniprogram/list',
+  method: 'GET',
+  data: {
+    employeeId: '507f1f77bcf86cd799439011',
+    page: 1,
+    pageSize: 20
+  },
+  success(res) {
+    if (res.data.success) {
+      const evaluations = res.data.data.items;
+      console.log('评价列表:', evaluations);
+    }
+  }
+});
+```
+
+---
+
+### 获取评价统计
+
+获取员工的评价统计数据，包括平均分、评分分布等。
+
+#### 请求
+
+```http
+GET /api/employee-evaluations/miniprogram/statistics/{employeeId}
+```
+
+**认证**: ❌ 无需登录（公开接口）
+
+#### 路径参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `employeeId` | string | ✅ | 员工ID（简历ID） |
+
+#### 响应示例
+
+```json
+{
+  "success": true,
+  "data": {
+    "employeeId": "507f1f77bcf86cd799439011",
+    "totalEvaluations": 25,
+    "averageRating": 4.52,
+    "averageServiceAttitude": 4.8,
+    "averageProfessionalSkill": 4.5,
+    "averageWorkEfficiency": 4.3,
+    "averageCommunication": 4.7,
+    "ratingDistribution": {
+      "5": 12,
+      "4": 10,
+      "3": 3,
+      "2": 0,
+      "1": 0
+    },
+    "recentEvaluations": [
+      {
+        "_id": "678a1b2c3d4e5f6789012345",
+        "evaluatorName": "李经理",
+        "overallRating": 4.5,
+        "comment": "工作认真负责，专业技能强",
+        "evaluationDate": "2026-01-18T10:30:00.000Z"
+      }
+    ]
+  },
+  "message": "获取员工评价统计成功"
+}
+```
+
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `totalEvaluations` | number | 总评价数 |
+| `averageRating` | number | 综合平均分 |
+| `averageServiceAttitude` | number | 服务态度平均分 |
+| `averageProfessionalSkill` | number | 专业技能平均分 |
+| `averageWorkEfficiency` | number | 工作效率平均分 |
+| `averageCommunication` | number | 沟通能力平均分 |
+| `ratingDistribution` | object | 评分分布（5分制） |
+| `recentEvaluations` | array | 最近5条评价 |
+
+#### 小程序调用示例
+
+```javascript
+// 获取员工评价统计
+wx.request({
+  url: `https://crm.andejiazheng.com/api/employee-evaluations/miniprogram/statistics/507f1f77bcf86cd799439011`,
+  method: 'GET',
+  success(res) {
+    if (res.data.success) {
+      const stats = res.data.data;
+      console.log('平均评分:', stats.averageRating);
+      console.log('总评价数:', stats.totalEvaluations);
+      console.log('评分分布:', stats.ratingDistribution);
+    }
+  }
+});
+```
+
+---
+
 ## 📞 技术支持
 
 如有问题或建议，请联系技术团队。
 
-**文档版本**: v1.4.0
-**最后更新**: 2026-01-07
+**文档版本**: v1.6.0
+**最后更新**: 2026-01-18
 **维护团队**: 安得家政技术团队
+
+**v1.6.0 更新内容**:
+- ✅ 新增员工评价管理API（创建评价、获取评价列表、获取评价统计）
+- ✅ 支持多维度评分（服务态度、专业技能、工作效率、沟通能力）
+- ✅ 支持评价标签和详细评语
+- ✅ 提供评价统计和分析功能
+- ✅ 查询接口为公开接口，无需认证
+- ✅ 已上线生产环境，可直接使用
+
+**v1.5.0 更新内容**:
+- ✅ 新增文章内容管理API（获取文章列表、获取文章详情）
+- ✅ 公开接口，无需认证，自动只返回已发布文章
+- ✅ 提供完整的小程序调用示例和页面代码
+- ✅ 支持文章搜索、分页和状态筛选
+- ✅ 支持富文本渲染和图片展示
+- ✅ 已上线生产环境，可直接使用
 

@@ -24,6 +24,8 @@ import { InterviewModule } from './modules/interview/interview.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { DashubaoModule } from './modules/dashubao/dashubao.module';
 import { BannerModule } from './modules/banner/banner.module';
+import { ArticleModule } from './modules/article/article.module';
+import { EmployeeEvaluationModule } from './modules/employee-evaluation/employee-evaluation.module';
 
 @Module({
   imports: [
@@ -65,6 +67,8 @@ import { BannerModule } from './modules/banner/banner.module';
     NotificationModule,
     DashubaoModule,
     BannerModule,
+    ArticleModule,
+    EmployeeEvaluationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

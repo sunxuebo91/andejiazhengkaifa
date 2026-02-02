@@ -109,6 +109,16 @@ const LoginPage: React.FC = () => {
         </LoginForm>
         </div>
       </div>
+      <div className={styles.footer}>
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.icpLink}
+        >
+          津ICP备2025030189号-1
+        </a>
+      </div>
     </div>
   );
 };

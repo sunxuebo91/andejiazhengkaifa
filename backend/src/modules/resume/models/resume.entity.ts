@@ -92,6 +92,7 @@ export interface IResume extends Document {
   medicalExamDate?: string;
   learningIntention?: LearningIntention;
   currentStage?: CurrentStage;
+  internalEvaluation?: string;
   availabilityCalendar?: AvailabilityPeriod[];
 }
 

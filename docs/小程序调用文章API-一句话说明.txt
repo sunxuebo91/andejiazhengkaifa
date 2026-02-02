@@ -1,0 +1,42 @@
+✅ 文章API接口已测试正常，小程序调用方法如下：
+
+【一句话总结】
+小程序调用文章接口：使用 wx.request 调用 GET https://crm.andejiazheng.com/api/articles/miniprogram/list?page=1&pageSize=10 获取文章列表，调用 GET https://crm.andejiazheng.com/api/articles/miniprogram/:id 获取文章详情，两个接口都无需传 token（公开接口），列表返回 {list: [], total, page, pageSize, totalPages}，详情返回 {title, author, source, contentHtml, imageUrls, status}，使用 <rich-text nodes="{{contentHtml}}"> 渲染富文本，使用 <image wx:for="{{imageUrls}}"> 展示图片。
+
+【快速代码】
+// 1. 获取文章列表
+wx.request({
+  url: 'https://crm.andejiazheng.com/api/articles/miniprogram/list',
+  method: 'GET',
+  data: { page: 1, pageSize: 10 },
+  success: (res) => {
+    console.log(res.data.data.list); // 文章数组
+    console.log(res.data.data.total); // 总数：4
+  }
+});
+
+// 2. 获取文章详情
+wx.request({
+  url: 'https://crm.andejiazheng.com/api/articles/miniprogram/6967700ebaf1a7bfe723665c',
+  method: 'GET',
+  success: (res) => {
+    console.log(res.data.data.title); // 标题
+    console.log(res.data.data.contentHtml); // 富文本HTML
+    console.log(res.data.data.imageUrls); // 图片数组
+  }
+});
+
+【关键点】
+1. 无需 Authorization token（公开接口）
+2. 自动只返回已发布文章（status='published'）
+3. 目前有 4 篇文章可用
+4. 使用 <rich-text> 渲染 contentHtml
+5. 使用 <image> 循环展示 imageUrls
+
+【测试结果】
+✅ 列表接口：https://crm.andejiazheng.com/api/articles/miniprogram/list - 正常，返回4篇文章
+✅ 详情接口：https://crm.andejiazheng.com/api/articles/miniprogram/6967700ebaf1a7bfe723665c - 正常，返回完整内容
+
+【完整文档】
+backend/docs/小程序API完整文档.md（第184-551行）
+

@@ -27,6 +27,9 @@ const InsuranceList = lazy(() => import('./pages/insurance/InsuranceList'));
 // 褓贝后台相关页面
 const BannerList = lazy(() => import('./pages/baobei/BannerList'));
 const BannerForm = lazy(() => import('./pages/baobei/BannerForm'));
+const ArticleList = lazy(() => import('./pages/baobei/ArticleList'));
+const ArticleForm = lazy(() => import('./pages/baobei/ArticleForm'));
+const MiniProgramUserList = lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
 
 export interface RouteConfig {
   path: string;
@@ -156,6 +159,33 @@ export const basicLayoutRoutes: RouteConfig[] = [
         }
       },
       {
+        path: 'baobei/articles',
+        name: '文章内容管理',
+        element: <ArticleList />,
+        meta: {
+          title: '文章内容管理',
+          description: '管理文章内容（作者/来源/文字/图片）'
+        }
+      },
+      {
+        path: 'baobei/articles/create',
+        name: '新增文章',
+        element: <ArticleForm />,
+        meta: {
+          title: '新增文章',
+          description: '创建新的文章内容'
+        }
+      },
+      {
+        path: 'baobei/articles/edit/:id',
+        name: '编辑文章',
+        element: <ArticleForm />,
+        meta: {
+          title: '编辑文章',
+          description: '编辑文章内容'
+        }
+      },
+      {
         path: 'baobei/banner/create',
         name: '新建Banner',
         element: <BannerForm />,
@@ -171,6 +201,16 @@ export const basicLayoutRoutes: RouteConfig[] = [
         meta: {
           title: '编辑Banner',
           description: '编辑Banner轮播图'
+        }
+      },
+      // 小程序用户管理
+      {
+        path: 'miniprogram-users',
+        name: '小程序用户管理',
+        element: <MiniProgramUserList />,
+        meta: {
+          title: '小程序用户管理',
+          description: '管理小程序端注册的用户信息'
         }
       },
     ],

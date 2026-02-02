@@ -50,6 +50,9 @@ const InsuranceList = React.lazy(() => import('./pages/insurance/InsuranceList')
 // 褓贝后台相关组件
 const BannerList = React.lazy(() => import('./pages/baobei/BannerList'));
 const BannerForm = React.lazy(() => import('./pages/baobei/BannerForm'));
+const ArticleList = React.lazy(() => import('./pages/baobei/ArticleList'));
+const ArticleForm = React.lazy(() => import('./pages/baobei/ArticleForm'));
+	const MiniProgramUserList = React.lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
 
 interface AppProps {
   children?: ReactNode;
@@ -282,19 +285,38 @@ export default function App({ children }: AppProps) {
                     <Route index element={<Navigate to="list" replace />} />
                   </Route>
 
+					{/* 兼容旧地址：/miniprogram-users -> /baobei/miniprogram-users */}
+					<Route path="miniprogram-users" element={<Navigate to="/baobei/miniprogram-users" replace />} />
+
                   {/* 褓贝后台模块 - 管理员和经理可访问 */}
                   <Route path="baobei">
                     <Route
                       path="banner"
-                      element={<AuthorizedRoute element={<BannerList />} role="admin" />}
+                      element={<AuthorizedRoute element={<BannerList />} role={["admin", "manager"]} />}
                     />
                     <Route
+                      path="articles"
+                      element={<AuthorizedRoute element={<ArticleList />} role={["admin", "manager"]} />}
+                    />
+                    <Route
+                      path="articles/create"
+                      element={<AuthorizedRoute element={<ArticleForm />} role={["admin", "manager"]} />}
+                    />
+                    <Route
+                      path="articles/edit/:id"
+                      element={<AuthorizedRoute element={<ArticleForm />} role={["admin", "manager"]} />}
+                    />
+						<Route
+							path="miniprogram-users"
+							element={<AuthorizedRoute element={<MiniProgramUserList />} role={["admin", "manager"]} />}
+						/>
+                    <Route
                       path="banner/create"
-                      element={<AuthorizedRoute element={<BannerForm />} role="admin" />}
+                      element={<AuthorizedRoute element={<BannerForm />} role={["admin", "manager"]} />}
                     />
                     <Route
                       path="banner/edit/:id"
-                      element={<AuthorizedRoute element={<BannerForm />} role="admin" />}
+                      element={<AuthorizedRoute element={<BannerForm />} role={["admin", "manager"]} />}
                     />
                   </Route>
 

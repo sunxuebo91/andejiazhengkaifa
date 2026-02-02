@@ -21,6 +21,7 @@ import { ReorderBannerDto } from './dto/reorder-banner.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Banner轮播图管理')
 @Controller('banners')
@@ -62,6 +63,7 @@ export class BannerController {
   // ==================== 小程序端公开接口（必须在 :id 路由之前） ====================
 
   @Get('miniprogram/active')
+  @Public()
   @ApiOperation({ summary: '小程序获取活跃的Banner列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getActiveBannersForMiniprogram() {
@@ -162,6 +164,7 @@ export class BannerController {
   // ==================== 小程序端公开接口（统计） ====================
 
   @Post(':id/view')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '记录Banner浏览' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -175,6 +178,7 @@ export class BannerController {
   }
 
   @Post(':id/click')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '记录Banner点击' })
   @ApiParam({ name: 'id', description: 'Banner ID' })

@@ -244,4 +244,25 @@
 .loginCard :global(.ant-btn) {
   margin-left: 0 !important;
   margin-right: 0 !important;
-} 
+}
+
+/* ICP备案号底部样式 */
+.footer {
+  position: fixed;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+.icpLink {
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.icpLink:hover {
+  color: rgba(0, 0, 0, 0.65);
+  text-decoration: underline;
+}

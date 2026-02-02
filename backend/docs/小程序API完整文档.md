@@ -3,6 +3,10 @@
 ## 📋 目录
 
 - [认证授权](#认证授权)
+- [👤 用户注册与登录](#用户注册与登录)
+  - [用户注册或更新](#用户注册或更新)
+  - [记录用户登录](#记录用户登录)
+  - [账号密码登录](#账号密码登录)
 - [Banner轮播图](#banner轮播图)
 - [文章内容](#文章内容)
   - [获取文章列表](#获取文章列表)
@@ -11,6 +15,7 @@
   - [创建简历](#创建简历)
   - [获取简历详情](#获取简历详情)
   - [更新简历](#更新简历)
+  - [推荐理由标签说明](#推荐理由标签说明)
 - [员工评价](#员工评价)
   - [创建员工评价](#创建员工评价)
   - [获取评价列表](#获取评价列表)
@@ -54,6 +59,869 @@ Content-Type: application/json
   }
 }
 ```
+
+---
+
+## 👤 用户注册与登录
+
+小程序用户注册与登录管理，用于记录用户信息和登录行为。
+
+### 📱 一句话总结
+
+**小程序端用户管理提供三种登录方式：（1）OpenID 自动登录（推荐）：在 `app.js` 的 `onLaunch` 中调用 `POST /api/miniprogram-users/login` 传入 `{openid}` 自动创建匿名用户并返回 `hasPhone` 字段提示是否需要授权手机号；（2）手机号注册/更新：用户授权手机号后调用 `POST /api/miniprogram-users/register` 传入 `{openid, phone, username?, password?, nickname?, avatar?, avatarFile?, gender?, city?, province?}` 绑定手机号和完善信息（支持设置账号密码）；（3）账号密码登录：用户设置账号密码后可调用 `POST /api/miniprogram-users/login-with-password` 传入 `{username, password}` 直接登录。所有接口都无需 token，密码使用 bcrypt 加密存储且响应中不返回，系统自动记录注册时间、登录时间、登录次数和 IP 地址，后台管理员可在"褓贝后台-小程序用户管理"查看所有用户数据、统计信息和完整的用户列表（包括账号、OpenID、手机号、头像、地区、登录次数等）。**
+
+---
+
+### 📋 接口列表
+
+| 接口 | 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|------|
+| 用户注册或更新 | POST | `/api/miniprogram-users/register` | ❌ 无需认证 | 注册新用户或更新现有用户信息（支持设置账号密码） |
+| 记录用户登录 | POST | `/api/miniprogram-users/login` | ❌ 无需认证 | 使用 OpenID 或手机号登录，自动创建用户（支持传递用户信息） |
+| 账号密码登录 | POST | `/api/miniprogram-users/login-with-password` | ❌ 无需认证 | 使用账号和密码登录，验证密码并返回用户信息 |
+
+**注意**：以上三个接口都是公开接口，无需 token 认证，适合小程序端直接调用。
+
+---
+
+### 用户注册或更新
+
+用户首次使用小程序时注册，或更新用户信息。如果手机号已存在则更新信息，不存在则创建新用户。
+
+#### 请求
+
+```http
+POST /api/miniprogram-users/register
+Content-Type: application/json
+
+{
+  "openid": "oXXXX_xxxxxxxxxxxxx",
+  "phone": "13800138000",
+  "username": "user123",
+  "password": "password123",
+  "nickname": "微信用户",
+  "avatar": "https://thirdwx.qlogo.cn/xxx.jpg",
+  "avatarFile": "/uploads/avatars/user123.jpg",
+  "unionid": "oXXXX_xxxxxxxxxxxxx",
+  "gender": 1,
+  "city": "北京",
+  "province": "北京",
+  "country": "中国",
+  "language": "zh_CN"
+}
+```
+
+**认证**: ❌ 无需登录（公开接口）
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `openid` | string | 是 | 微信openid（用户唯一标识） |
+| `phone` | string | 是 | 手机号（11位中国大陆手机号） |
+| `username` | string | 否 | 账号（用户自定义账号，唯一） |
+| `password` | string | 否 | 密码（明文传输，后端自动加密存储） |
+| `nickname` | string | 否 | 昵称 |
+| `avatar` | string | 否 | 头像URL（微信头像或图片URL） |
+| `avatarFile` | string | 否 | 头像文件路径（用户上传的图片文件） |
+| `unionid` | string | 否 | 微信unionid |
+| `gender` | number | 否 | 性别：0-未知, 1-男, 2-女 |
+| `city` | string | 否 | 城市 |
+| `province` | string | 否 | 省份 |
+| `country` | string | 否 | 国家 |
+| `language` | string | 否 | 语言（如：zh_CN） |
+
+#### 成功响应 (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "679abcdef1234567890abcde",
+    "phone": "13800138000",
+    "username": "user123",
+    "nickname": "微信用户",
+    "avatar": "https://thirdwx.qlogo.cn/xxx.jpg",
+    "avatarFile": "/uploads/avatars/user123.jpg",
+    "openid": "oXXXX_xxxxxxxxxxxxx",
+    "unionid": "oXXXX_xxxxxxxxxxxxx",
+    "gender": 1,
+    "city": "北京",
+    "province": "北京",
+    "country": "中国",
+    "language": "zh_CN",
+    "status": "active",
+    "loginCount": 1,
+    "lastLoginAt": "2026-01-21T10:00:00.000Z",
+    "lastLoginIp": "192.168.1.100",
+    "createdAt": "2026-01-21T10:00:00.000Z",
+    "updatedAt": "2026-01-21T10:00:00.000Z"
+  },
+  "message": "注册成功"
+}
+```
+
+**注意**：响应中不会返回 `password` 字段（密码已加密存储，不会返回给客户端）。
+
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `_id` | string | 用户唯一ID |
+| `phone` | string | 手机号 |
+| `nickname` | string | 昵称 |
+| `avatar` | string | 头像URL |
+| `openid` | string | 微信openid |
+| `unionid` | string | 微信unionid |
+| `gender` | number | 性别：0-未知, 1-男, 2-女 |
+| `city` | string | 城市 |
+| `province` | string | 省份 |
+| `country` | string | 国家 |
+| `language` | string | 语言 |
+| `status` | string | 状态：active-活跃, inactive-不活跃, blocked-已封禁 |
+| `loginCount` | number | 登录次数 |
+| `lastLoginAt` | string | 最近登录时间（ISO 8601格式） |
+| `lastLoginIp` | string | 最近登录IP |
+| `createdAt` | string | 注册时间（ISO 8601格式） |
+| `updatedAt` | string | 更新时间（ISO 8601格式） |
+
+#### 错误响应
+
+**验证错误 (400)**:
+```json
+{
+  "success": false,
+  "message": "请输入有效的中国大陆手机号"
+}
+```
+
+#### 小程序调用示例
+
+**最简单的调用方式（直接使用 wx.request）：**
+
+```javascript
+// 1. 记录登录（在小程序启动时调用，使用 openid，推荐同时传递用户信息）
+// 获取用户信息
+wx.getUserProfile({
+  desc: '用于完善用户资料',
+  success: (profileRes) => {
+    const userInfo = profileRes.userInfo;
+
+    // 调用登录接口，传递完整的用户信息
+    wx.request({
+      url: 'https://crm.andejiazheng.com/api/miniprogram-users/login',
+      method: 'POST',
+      data: {
+        openid: 'oXXXX_xxxxxxxxxxxxx',   // 必填：微信openid
+        nickname: userInfo.nickName,      // 推荐：昵称
+        avatar: userInfo.avatarUrl,       // 推荐：头像URL
+        gender: userInfo.gender,          // 推荐：性别
+        city: userInfo.city,              // 可选：城市
+        province: userInfo.province,      // 可选：省份
+        country: userInfo.country,        // 可选：国家
+        language: userInfo.language       // 可选：语言
+      },
+      success(res) {
+        if (res.data.success) {
+          console.log('登录成功', res.data.data);
+          console.log('是否已授权手机号:', res.data.data.hasPhone);
+
+          // 如果用户还没授权手机号，引导用户授权
+          if (!res.data.data.hasPhone) {
+            // 显示授权手机号按钮
+          }
+        }
+      }
+    });
+  }
+});
+
+// 2. 用户注册（在获取手机号后调用）
+wx.request({
+  url: 'https://crm.andejiazheng.com/api/miniprogram-users/register',
+  method: 'POST',
+  data: {
+    openid: 'oXXXX_xxxxxxxxxxxxx',  // 必填：微信openid
+    phone: '13800138000',           // 必填：手机号
+    username: 'user123',            // 可选：账号（用户自定义）
+    password: 'password123',        // 可选：密码（明文，后端自动加密）
+    nickname: '微信用户',            // 可选：昵称
+    avatar: 'https://xxx.jpg',      // 可选：头像URL
+    avatarFile: '/uploads/xxx.jpg', // 可选：头像文件路径
+    gender: 1,                      // 可选：性别 0-未知 1-男 2-女
+    city: '北京',                   // 可选：城市
+    province: '北京'                // 可选：省份
+  },
+  success(res) {
+    if (res.data.success) {
+      console.log('注册成功', res.data.data);
+      // 保存用户信息
+      wx.setStorageSync('userInfo', res.data.data);
+    } else {
+      console.error('注册失败', res.data.message);
+    }
+  }
+});
+```
+
+**完整的集成示例：**
+
+```javascript
+// app.js - 小程序启动时记录登录
+App({
+  globalData: {
+    openid: '',
+    userInfo: null
+  },
+
+  onLaunch() {
+    // 1. 先登录获取 openid
+    wx.login({
+      success: (res) => {
+        if (res.code) {
+          // 调用后端接口，用 code 换取 openid
+          // 这里假设你有一个接口 /api/auth/wx-login
+          wx.request({
+            url: 'https://crm.andejiazheng.com/api/auth/wx-login',
+            method: 'POST',
+            data: { code: res.code },
+            success: (loginRes) => {
+              if (loginRes.data.success) {
+                const openid = loginRes.data.data.openid;
+                this.globalData.openid = openid;
+
+                // 2. 记录登录
+                this.recordLogin(openid);
+              }
+            }
+          });
+        }
+      }
+    });
+  },
+
+  // 记录登录
+  recordLogin(openid) {
+    wx.request({
+      url: 'https://crm.andejiazheng.com/api/miniprogram-users/login',
+      method: 'POST',
+      data: { openid },
+      success: (res) => {
+        if (res.data.success) {
+          console.log('登录成功');
+          this.globalData.userInfo = res.data.data;
+
+          // 如果用户还没授权手机号，引导用户授权
+          if (!res.data.data.hasPhone) {
+            console.log('用户还未授权手机号');
+            // 可以在首页显示授权提示
+          }
+        }
+      }
+    });
+  }
+});
+```
+
+---
+
+### 账号密码登录
+
+使用账号和密码登录，适用于用户设置了账号密码的场景。
+
+#### 请求
+
+```http
+POST /api/miniprogram-users/login-with-password
+Content-Type: application/json
+
+{
+  "username": "user123",
+  "password": "password123"
+}
+```
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `username` | string | 是 | 账号（用户注册时设置的账号） |
+| `password` | string | 是 | 密码（明文传输，后端会验证加密后的密码） |
+
+#### 响应
+
+**成功响应**:
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "user_id",
+    "phone": "13800138000",
+    "username": "user123",
+    "nickname": "测试用户",
+    "avatar": "https://example.com/avatar.jpg",
+    "avatarFile": "/uploads/avatars/user123.jpg",
+    "openid": "oXXXX_xxxxxxxxxxxxx",
+    "status": "active",
+    "lastLoginAt": "2024-01-20T10:30:00.000Z",
+    "lastLoginIp": "127.0.0.1",
+    "loginCount": 5,
+    "gender": 1,
+    "city": "北京",
+    "province": "北京",
+    "createdAt": "2024-01-15T08:00:00.000Z",
+    "updatedAt": "2024-01-20T10:30:00.000Z",
+    "hasPhone": true,
+    "isNewUser": false
+  },
+  "message": "登录成功"
+}
+```
+
+**错误响应**:
+```json
+{
+  "success": false,
+  "message": "密码错误"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "用户不存在"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "该用户未设置密码，请使用其他方式登录"
+}
+```
+
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `success` | boolean | 是否成功 |
+| `data` | object | 用户信息（不包含密码） |
+| `data.hasPhone` | boolean | 是否已绑定手机号 |
+| `data.isNewUser` | boolean | 是否为新用户（账号密码登录时始终为 false） |
+| `data.loginCount` | number | 登录次数（自动+1） |
+| `data.lastLoginAt` | string | 最近登录时间（自动更新） |
+| `data.lastLoginIp` | string | 最近登录IP（自动记录） |
+| `message` | string | 提示信息 |
+
+#### 小程序端调用示例
+
+**最简单的调用方式：**
+
+```javascript
+// 账号密码登录
+wx.request({
+  url: 'https://crm.andejiazheng.com/api/miniprogram-users/login-with-password',
+  method: 'POST',
+  data: {
+    username: 'user123',
+    password: 'password123'
+  },
+  success(res) {
+    if (res.data.success) {
+      console.log('登录成功', res.data.data);
+      // 保存用户信息
+      wx.setStorageSync('userInfo', res.data.data);
+      // 跳转到首页
+      wx.switchTab({ url: '/pages/index/index' });
+    } else {
+      wx.showToast({
+        title: res.data.message,
+        icon: 'none'
+      });
+    }
+  }
+});
+```
+
+**完整的登录页面示例：**
+
+```javascript
+// pages/login/login.js - 用户授权手机号后注册
+const app = getApp();
+
+Page({
+  data: {
+    userInfo: null
+  },
+
+  onLoad() {
+    // 获取用户信息
+    wx.getUserProfile({
+      desc: '用于完善用户资料',
+      success: (res) => {
+        this.setData({ userInfo: res.userInfo });
+      }
+    });
+  },
+
+  // 获取手机号按钮点击事件
+  getPhoneNumber(e) {
+    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
+      wx.showToast({ title: '获取手机号失败', icon: 'none' });
+      return;
+    }
+
+    const openid = app.globalData.openid;
+    if (!openid) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+
+    // 注册用户（绑定手机号）
+    wx.request({
+      url: 'https://crm.andejiazheng.com/api/miniprogram-users/register',
+      method: 'POST',
+      data: {
+        openid: openid,                      // 必填：微信openid
+        phone: e.detail.phoneNumber,         // 必填：手机号
+        username: 'user_' + openid.slice(-8), // 可选：自动生成账号
+        password: 'default123',              // 可选：默认密码（建议引导用户修改）
+        nickname: this.data.userInfo.nickName,
+        avatar: this.data.userInfo.avatarUrl,
+        gender: this.data.userInfo.gender,
+        city: this.data.userInfo.city,
+        province: this.data.userInfo.province
+      },
+      success(res) {
+        if (res.data.success) {
+          wx.showToast({ title: '授权成功', icon: 'success' });
+          // 保存用户信息
+          app.globalData.userInfo = res.data.data;
+          wx.setStorageSync('userInfo', res.data.data);
+          // 跳转到首页
+          wx.switchTab({ url: '/pages/index/index' });
+        } else {
+          wx.showToast({ title: res.data.message, icon: 'none' });
+        }
+      }
+    });
+  }
+});
+```
+
+```html
+<!-- pages/login/login.wxml - 获取手机号按钮 -->
+<button open-type="getPhoneNumber" bindgetphonenumber="getPhoneNumber">
+  授权手机号
+</button>
+```
+
+---
+
+### 记录用户登录
+
+记录用户登录行为，更新最近登录时间、IP和登录次数。**如果用户不存在，会自动创建新用户（支持传递用户信息如昵称、头像等）。**
+
+#### 请求
+
+```http
+POST /api/miniprogram-users/login
+Content-Type: application/json
+
+{
+  "openid": "oXXXX_xxxxxxxxxxxxx",
+  "phone": "13800138000",
+  "nickname": "微信用户",
+  "avatar": "https://thirdwx.qlogo.cn/xxx.jpg",
+  "avatarFile": "/uploads/avatars/user123.jpg",
+  "gender": 1,
+  "city": "北京",
+  "province": "北京",
+  "country": "中国",
+  "language": "zh_CN"
+}
+```
+
+**认证**: ❌ 无需登录（公开接口）
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `openid` | string | 是（二选一） | 微信openid（推荐使用） |
+| `phone` | string | 是（二选一） | 手机号（兼容旧版本） |
+| `nickname` | string | 否 | 昵称（推荐传递，用于首次登录时创建用户） |
+| `avatar` | string | 否 | 头像URL（推荐传递，用于首次登录时创建用户） |
+| `avatarFile` | string | 否 | 头像文件路径（用户上传的图片文件） |
+| `gender` | number | 否 | 性别：0-未知, 1-男, 2-女 |
+| `city` | string | 否 | 城市 |
+| `province` | string | 否 | 省份 |
+| `country` | string | 否 | 国家 |
+| `language` | string | 否 | 语言（如：zh_CN） |
+
+**注意**：
+1. 优先使用 `openid`，因为小程序启动时可以直接获取，无需用户授权
+2. **强烈推荐传递 `nickname` 和 `avatar`**，这样CRM后台的用户列表会显示用户头像和昵称
+3. 如果用户已存在，只会更新登录信息；如果用户不存在，会创建新用户并保存传递的所有信息
+
+#### 成功响应 (200)
+
+**已注册用户登录：**
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "679abcdef1234567890abcde",
+    "openid": "oXXXX_xxxxxxxxxxxxx",
+    "phone": "13800138000",
+    "nickname": "微信用户",
+    "avatar": "https://thirdwx.qlogo.cn/xxx.jpg",
+    "status": "active",
+    "loginCount": 5,
+    "lastLoginAt": "2026-01-21T10:30:00.000Z",
+    "lastLoginIp": "192.168.1.100",
+    "createdAt": "2026-01-21T10:00:00.000Z",
+    "updatedAt": "2026-01-21T10:30:00.000Z",
+    "hasPhone": true,
+    "isNewUser": false
+  },
+  "message": "登录成功"
+}
+```
+
+**首次登录（自动创建匿名用户）：**
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "679abcdef1234567890abcde",
+    "openid": "oXXXX_xxxxxxxxxxxxx",
+    "status": "active",
+    "loginCount": 1,
+    "lastLoginAt": "2026-01-21T10:30:00.000Z",
+    "lastLoginIp": "192.168.1.100",
+    "createdAt": "2026-01-21T10:30:00.000Z",
+    "updatedAt": "2026-01-21T10:30:00.000Z",
+    "hasPhone": false,
+    "isNewUser": true
+  },
+  "message": "首次登录，已创建用户"
+}
+```
+
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `hasPhone` | boolean | 是否已授权手机号（true-已授权，false-未授权） |
+| `isNewUser` | boolean | 是否为新用户（true-首次登录，false-老用户） |
+
+**重要**：根据 `hasPhone` 字段判断是否需要引导用户授权手机号。
+
+#### 小程序调用示例
+
+**最简单的调用方式（直接使用 wx.request）：**
+
+```javascript
+// 记录用户登录（使用 openid）
+wx.request({
+  url: 'https://crm.andejiazheng.com/api/miniprogram-users/login',
+  method: 'POST',
+  data: {
+    openid: 'oXXXX_xxxxxxxxxxxxx'  // 必填：微信openid
+  },
+  success(res) {
+    if (res.data.success) {
+      console.log('登录成功', res.data.data);
+      console.log('是否已授权手机号:', res.data.data.hasPhone);
+      console.log('是否为新用户:', res.data.data.isNewUser);
+      console.log('登录次数:', res.data.data.loginCount);
+
+      // 如果用户还没授权手机号，引导用户授权
+      if (!res.data.data.hasPhone) {
+        // 显示授权手机号按钮或弹窗
+        wx.showModal({
+          title: '提示',
+          content: '为了更好的服务，请授权您的手机号',
+          confirmText: '去授权',
+          success(modalRes) {
+            if (modalRes.confirm) {
+              wx.navigateTo({ url: '/pages/login/login' });
+            }
+          }
+        });
+      }
+    }
+  }
+});
+```
+
+**推荐的使用场景：**
+
+```javascript
+// 场景1: 在 app.js 中，小程序启动时记录登录
+App({
+  globalData: {
+    openid: ''
+  },
+
+  onLaunch() {
+    // 1. 先调用 wx.login 获取 code
+    wx.login({
+      success: (res) => {
+        if (res.code) {
+          // 2. 用 code 换取 openid（需要后端接口）
+          wx.request({
+            url: 'https://crm.andejiazheng.com/api/auth/wx-login',
+            method: 'POST',
+            data: { code: res.code },
+            success: (loginRes) => {
+              if (loginRes.data.success) {
+                const openid = loginRes.data.data.openid;
+                this.globalData.openid = openid;
+
+                // 3. 记录登录
+                wx.request({
+                  url: 'https://crm.andejiazheng.com/api/miniprogram-users/login',
+                  method: 'POST',
+                  data: { openid },
+                  success: (userRes) => {
+                    if (userRes.data.success) {
+                      console.log('登录成功');
+
+                      // 如果用户还没授权手机号，引导授权
+                      if (!userRes.data.data.hasPhone) {
+                        // 可以在首页显示授权提示
+                      }
+                    }
+                  }
+                });
+              }
+            }
+          });
+        }
+      }
+    });
+  }
+});
+
+// 场景2: 在关键页面，用户进入时记录活跃度
+const app = getApp();
+
+Page({
+  onShow() {
+    const openid = app.globalData.openid;
+    if (openid) {
+      wx.request({
+        url: 'https://crm.andejiazheng.com/api/miniprogram-users/login',
+        method: 'POST',
+        data: { openid }
+      });
+    }
+  }
+});
+```
+
+---
+
+### 🎯 完整使用流程和最佳实践
+
+#### 📱 推荐的集成流程
+
+**流程图：**
+```
+小程序启动
+    ↓
+wx.login() 获取 code
+    ↓
+调用后端接口用 code 换取 openid
+    ↓
+调用 POST /api/miniprogram-users/login 传入 {openid}
+    ↓
+检查响应中的 hasPhone 字段
+    ↓
+├─ hasPhone = true  → 用户已完成注册，直接进入首页
+└─ hasPhone = false → 引导用户授权手机号
+        ↓
+    用户点击授权按钮
+        ↓
+    调用 POST /api/miniprogram-users/register 传入 {openid, phone, ...}
+        ↓
+    注册成功，进入首页
+```
+
+#### 🔐 三种登录方式的使用场景
+
+| 登录方式 | 使用场景 | 优点 | 缺点 |
+|---------|---------|------|------|
+| **OpenID 自动登录** | 小程序启动时 | 无需用户操作，体验最好 | 无法获取手机号等敏感信息 |
+| **手机号注册/更新** | 需要用户手机号时 | 可获取真实手机号，便于联系 | 需要用户授权 |
+| **账号密码登录** | 用户设置了账号密码后 | 可跨设备登录，不依赖微信 | 需要用户记住账号密码 |
+
+#### 💡 最佳实践建议
+
+**1. 小程序启动时（app.js）**
+```javascript
+App({
+  globalData: {
+    openid: '',
+    userInfo: null
+  },
+
+  onLaunch() {
+    // 第一步：获取 openid
+    wx.login({
+      success: (res) => {
+        if (res.code) {
+          // 调用后端接口换取 openid
+          wx.request({
+            url: 'https://crm.andejiazheng.com/api/auth/wx-login',
+            method: 'POST',
+            data: { code: res.code },
+            success: (loginRes) => {
+              if (loginRes.data.success) {
+                const openid = loginRes.data.data.openid;
+                this.globalData.openid = openid;
+
+                // 第二步：记录登录
+                this.recordLogin(openid);
+              }
+            }
+          });
+        }
+      }
+    });
+  },
+
+  recordLogin(openid) {
+    wx.request({
+      url: 'https://crm.andejiazheng.com/api/miniprogram-users/login',
+      method: 'POST',
+      data: { openid },
+      success: (res) => {
+        if (res.data.success) {
+          this.globalData.userInfo = res.data.data;
+
+          // 检查是否需要引导用户授权手机号
+          if (!res.data.data.hasPhone) {
+            // 可以设置一个标志，在首页显示授权提示
+            wx.setStorageSync('needPhoneAuth', true);
+          }
+        }
+      }
+    });
+  }
+});
+```
+
+**2. 首页引导授权（pages/index/index.js）**
+```javascript
+Page({
+  data: {
+    showAuthModal: false
+  },
+
+  onShow() {
+    // 检查是否需要引导授权
+    const needPhoneAuth = wx.getStorageSync('needPhoneAuth');
+    if (needPhoneAuth) {
+      this.setData({ showAuthModal: true });
+    }
+  },
+
+  // 用户点击授权按钮
+  getPhoneNumber(e) {
+    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
+      return;
+    }
+
+    const app = getApp();
+    wx.request({
+      url: 'https://crm.andejiazheng.com/api/miniprogram-users/register',
+      method: 'POST',
+      data: {
+        openid: app.globalData.openid,
+        phone: e.detail.phoneNumber,
+        nickname: app.globalData.userInfo?.nickname,
+        avatar: app.globalData.userInfo?.avatar
+      },
+      success: (res) => {
+        if (res.data.success) {
+          wx.removeStorageSync('needPhoneAuth');
+          this.setData({ showAuthModal: false });
+          wx.showToast({ title: '授权成功', icon: 'success' });
+        }
+      }
+    });
+  }
+});
+```
+
+**3. 账号密码登录页面（pages/login/login.js）**
+```javascript
+Page({
+  data: {
+    username: '',
+    password: ''
+  },
+
+  onUsernameInput(e) {
+    this.setData({ username: e.detail.value });
+  },
+
+  onPasswordInput(e) {
+    this.setData({ password: e.detail.value });
+  },
+
+  handleLogin() {
+    const { username, password } = this.data;
+
+    if (!username || !password) {
+      wx.showToast({ title: '请输入账号和密码', icon: 'none' });
+      return;
+    }
+
+    wx.request({
+      url: 'https://crm.andejiazheng.com/api/miniprogram-users/login-with-password',
+      method: 'POST',
+      data: { username, password },
+      success: (res) => {
+        if (res.data.success) {
+          // 保存用户信息
+          const app = getApp();
+          app.globalData.userInfo = res.data.data;
+          app.globalData.openid = res.data.data.openid;
+          wx.setStorageSync('userInfo', res.data.data);
+
+          // 跳转到首页
+          wx.switchTab({ url: '/pages/index/index' });
+        } else {
+          wx.showToast({ title: res.data.message, icon: 'none' });
+        }
+      }
+    });
+  }
+});
+```
+
+#### 🔒 安全注意事项
+
+1. **密码传输**：生产环境必须使用 HTTPS，密码在传输过程中会被加密
+2. **密码存储**：后端使用 bcrypt 加密存储，saltRounds=10
+3. **密码响应**：所有 API 响应中都不会返回密码字段
+4. **OpenID 保护**：OpenID 是用户的唯一标识，不要泄露给第三方
+5. **手机号授权**：只在必要时请求手机号授权，避免过度打扰用户
+
+#### 📊 后台管理功能
+
+管理员可以在"褓贝后台 - 小程序用户管理"中查看：
+
+- **用户列表**：显示所有用户的账号、OpenID、手机号、昵称、头像、地区等信息
+- **统计信息**：总用户数、今日新增、今日活跃
+- **用户详情**：登录次数、最近登录时间、最近登录IP、注册时间等
+- **搜索功能**：支持按手机号、昵称、账号搜索用户
+
+**注意**：密码字段不会在后台显示，确保用户隐私安全。
 
 ---
 
@@ -857,6 +1725,46 @@ Authorization: Bearer {token}
       "url": "https://example.com/video.mp4",
       "key": "uploads/video/video.mp4"
     },
+    "employeeEvaluations": [
+      {
+        "_id": "694e0a9a8878020d398b7f61",
+        "employeeId": "66e2f4af8b1234567890abcd",
+        "employeeName": "张三",
+        "evaluationType": "daily",
+        "overallRating": 4.5,
+        "serviceAttitudeRating": 5,
+        "professionalSkillRating": 4,
+        "workEfficiencyRating": 4.5,
+        "communicationRating": 4.5,
+        "comment": "工作认真负责，技能熟练，沟通良好",
+        "tags": ["认真负责", "技能熟练"],
+        "isPublic": true,
+        "status": "published",
+        "createdAt": "2025-01-15T10:00:00.000Z"
+      }
+    ],
+    "recommendationTags": [
+      {
+        "tag": "形象气质好",
+        "count": 3
+      },
+      {
+        "tag": "好沟通",
+        "count": 3
+      },
+      {
+        "tag": "相处愉快",
+        "count": 3
+      },
+      {
+        "tag": "认真负责",
+        "count": 2
+      },
+      {
+        "tag": "技能熟练",
+        "count": 1
+      }
+    ],
     "createdAt": "2025-09-12T10:19:27.671Z",
     "updatedAt": "2025-09-12T10:19:27.671Z"
   },
@@ -954,6 +1862,119 @@ Content-Type: application/json
   "message": "数据验证失败"
 }
 ```
+
+---
+
+### 推荐理由标签说明
+
+#### 📌 功能说明
+
+推荐理由标签（`recommendationTags`）是系统自动从**客户评价**和**内部员工评价**中提取的关键词标签，用于快速展示员工的优势特点。
+
+#### 🎯 数据来源
+
+推荐理由标签从以下3个渠道自动提取：
+
+1. **内部员工评价的tags字段**
+   - 直接从员工评价表的 `tags` 数组提取
+   - 条件：评价状态为 `published`（已发布）
+   - 只统计长度在2-6个字之间的标签
+
+2. **内部员工评价的comment内容**
+   - 从评价内容中智能提取关键词
+   - 使用内置的30+个正面评价关键词库进行匹配
+   - 关键词示例：形象气质好、好沟通、相处愉快、做事认真、专业知识丰富等
+
+3. **工作经历中的客户评价**
+   - 从 `workHistory` 数组中的 `customerReview` 字段提取
+   - 同样使用关键词库进行匹配
+
+#### 📊 统计规则
+
+- **标签聚合**：将3个来源的标签合并统计
+- **计数累加**：相同标签的出现次数累加
+- **排序规则**：按出现次数从高到低排序
+- **返回格式**：`[{tag: "标签名", count: 次数}, ...]`
+
+#### 💡 使用示例
+
+```javascript
+// 小程序端调用
+wx.request({
+  url: 'https://crm.andejiazheng.com/api/resumes/miniprogram/694e0a9a8878020d398b7f60',
+  method: 'GET',
+  success: (res) => {
+    const { recommendationTags } = res.data.data;
+
+    // 显示推荐理由标签
+    // recommendationTags = [
+    //   { tag: "形象气质好", count: 3 },
+    //   { tag: "好沟通", count: 3 },
+    //   { tag: "相处愉快", count: 3 },
+    //   { tag: "认真负责", count: 2 },
+    //   { tag: "技能熟练", count: 1 }
+    // ]
+
+    // 渲染标签
+    recommendationTags.forEach(item => {
+      console.log(`${item.tag}(${item.count})`);
+    });
+  }
+});
+```
+
+#### 🎨 UI展示建议
+
+```html
+<!-- 推荐理由标签展示 -->
+<view class="recommendation-tags">
+  <view class="tag-title">推荐理由</view>
+  <view class="tag-list">
+    <view
+      class="tag-item"
+      wx:for="{{recommendationTags}}"
+      wx:key="tag"
+    >
+      {{item.tag}}({{item.count}})
+    </view>
+  </view>
+</view>
+```
+
+```css
+.recommendation-tags {
+  padding: 20rpx;
+  background: #f5f5f5;
+  border-radius: 10rpx;
+}
+
+.tag-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-bottom: 20rpx;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.tag-item {
+  padding: 12rpx 24rpx;
+  background: #1890ff;
+  color: white;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+}
+```
+
+#### ⚠️ 注意事项
+
+1. **自动生成**：标签由系统自动提取，无需手动维护
+2. **实时更新**：每次添加新评价后，标签会自动更新
+3. **可能为空**：如果没有评价数据，`recommendationTags` 将返回空数组 `[]`
+4. **无需认证**：获取简历详情接口无需登录即可访问
 
 ---
 

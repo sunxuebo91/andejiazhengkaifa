@@ -1,14 +1,10 @@
-// @ts-expect-error
 import React, { useState, ChangeEvent } from 'react';
-// @ts-expect-error
+// @ts-ignore
 import { Card, Button } from '@/components/ui';
-// @ts-expect-error
+// @ts-ignore
 import { UploadCloud, CheckCircle, AlertCircle, FileText } from 'lucide-react';
-// @ts-expect-error Upload 组件类型暂时兼容问题
 import { Upload } from 'antd';
-// @ts-expect-error UploadFile 类型暂时兼容问题  
 import type { UploadFile } from 'antd/es/upload/interface';
-// @ts-expect-error RcFile 类型暂时兼容问题
 import type { RcFile } from 'antd/es/upload';
 
 type IdCardSide = 'front' | 'back';

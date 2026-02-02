@@ -236,6 +236,16 @@ const BasicLayout = () => {
             name: 'Banner管理',
             icon: <PictureOutlined />,
           },
+          {
+            path: '/baobei/articles',
+            name: '文章管理',
+            icon: <FileTextOutlined />,
+          },
+          {
+            path: '/baobei/miniprogram-users',
+            name: '小程序用户管理',
+            icon: <UserOutlined />,
+          },
         ],
       };
       baseMenus.push(baobeiMenu);

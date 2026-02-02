@@ -1,7 +1,7 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App, message } from 'antd';
+import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App, message, Rate, List, Space, Tag } from 'antd';
 import { useState, useEffect } from 'react';
-import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined, StarFilled } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { UploadFile, RcFile } from 'antd/es/upload/interface';
 import type { UploadChangeParam } from 'antd/es/upload';
@@ -260,6 +260,19 @@ interface FileUploadState {
   positiveReview: { files: CustomUploadFile[] };
 }
 
+// 定义员工评价接口
+interface EmployeeEvaluation {
+  id: string;
+  overallRating: number;
+  comment: string;
+  evaluatorName: string;
+  evaluationDate: string;
+  evaluationType?: string;
+  tags?: string[];
+  strengths?: string;
+  improvements?: string;
+}
+
 const CreateResume: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
@@ -298,6 +311,12 @@ const CreateResume: React.FC = () => {
     complementaryFood: { files: [] },
     positiveReview: { files: [] }
   });
+
+  // 员工评价相关状态
+  const [employeeEvaluations, setEmployeeEvaluations] = useState<EmployeeEvaluation[]>([]);
+  const [isAddEvaluationVisible, setIsAddEvaluationVisible] = useState(false);
+  const [evaluationForm] = Form.useForm();
+  const [evaluationLoading, setEvaluationLoading] = useState(false);
 
   // 将 validateFile 移到组件内部
   const validateFile = (file: RcFile, type: 'idCard' | 'photo' | 'certificate' | 'medical' | 'confinementMeal' | 'cooking' | 'complementaryFood' | 'positiveReview'): boolean => {
@@ -1002,7 +1021,12 @@ const CreateResume: React.FC = () => {
 
         // 更新统一的文件上传状态
         setFileUploadState(updatedFileUploadState);
-        
+
+        // 加载员工评价数据
+        if ((response.data as any).employeeEvaluations) {
+          setEmployeeEvaluations((response.data as any).employeeEvaluations);
+        }
+
       } else {
         setMessageState({ type: 'error', content: response.message || '加载简历失败' });
       }
@@ -1094,6 +1118,56 @@ const CreateResume: React.FC = () => {
       const apiError = error as ApiErrorResponse;
       console.error(`连接后端失败: ${apiError.response?.status || apiError.message || '未知错误'}`);
       throw error;
+    }
+  };
+
+  // 添加员工评价
+  const handleAddEvaluation = async (values: any) => {
+    try {
+      setEvaluationLoading(true);
+
+      if (!editingResume?._id) {
+        messageApi.error('简历ID不存在');
+        return;
+      }
+
+      console.log('准备创建员工评价:', {
+        employeeId: editingResume._id,
+        employeeName: editingResume.name,
+        ...values
+      });
+
+      // 调用API创建员工评价
+      const response = await apiService.post('/api/employee-evaluations', {
+        employeeId: editingResume._id,
+        employeeName: editingResume.name,
+        evaluationType: values.evaluationType,
+        overallRating: values.overallRating,
+        serviceAttitudeRating: values.overallRating,
+        professionalSkillRating: values.overallRating,
+        workEfficiencyRating: values.overallRating,
+        communicationRating: values.overallRating,
+        comment: values.comment,
+        isPublic: false,
+        status: 'published'
+      });
+
+      console.log('员工评价创建成功:', response);
+
+      messageApi.success('添加评价成功');
+      setIsAddEvaluationVisible(false);
+      evaluationForm.resetFields();
+
+      // 重新加载简历数据以获取最新的评价列表
+      if (editingResume._id) {
+        await loadResumeData(editingResume._id);
+      }
+
+    } catch (error) {
+      console.error('添加员工评价失败:', error);
+      messageApi.error(error instanceof Error ? error.message : '添加评价失败');
+    } finally {
+      setEvaluationLoading(false);
     }
   };
 
@@ -2318,22 +2392,105 @@ const CreateResume: React.FC = () => {
                 </Col>
               </Row>
 
-              {/* 🔥 添加内部员工评价字段 */}
+              {/* 内部员工评价 - 只读展示 */}
               <Row gutter={24}>
                 <Col span={24}>
-                  <Form.Item
-                    label="内部员工评价"
-                    name="internalEvaluation"
-                    extra="公司内部对该阿姨的评价（选填，最多2000字，仅内部可见）"
-                  >
-                    <Input.TextArea
-                      placeholder="请输入公司内部对该阿姨的评价，如工作态度、专业能力、客户反馈等..."
-                      rows={4}
-                      maxLength={2000}
-                      showCount
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 16
+                    }}>
+                      <span style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: 'rgba(0, 0, 0, 0.85)'
+                      }}>
+                        内部员工评价
+                      </span>
+                      <Space>
+                        <span style={{ color: '#999', fontSize: 12 }}>仅内部可见</span>
+                        {editingResume && (
+                          <Button
+                            type="primary"
+                            size="small"
+                            icon={<PlusOutlined />}
+                            onClick={() => setIsAddEvaluationVisible(true)}
+                          >
+                            添加评价
+                          </Button>
+                        )}
+                      </Space>
+                    </div>
+
+                    {employeeEvaluations && employeeEvaluations.length > 0 ? (
+                      <List
+                        dataSource={employeeEvaluations}
+                        renderItem={(evaluation: EmployeeEvaluation, index: number) => (
+                          <List.Item key={evaluation.id || index}>
+                            <Card
+                              style={{ width: '100%' }}
+                              bodyStyle={{ padding: '16px' }}
+                            >
+                              <Space direction="vertical" style={{ width: '100%' }} size="small">
+                                {/* 评分和评价人 */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Space>
+                                    <Rate disabled value={evaluation.overallRating} allowHalf style={{ fontSize: 16 }} />
+                                    <span style={{ color: '#faad14', fontWeight: 'bold' }}>
+                                      {evaluation.overallRating.toFixed(1)}
+                                    </span>
+                                  </Space>
+                                  <Space>
+                                    <Typography.Text type="secondary">评价人：</Typography.Text>
+                                    <Typography.Text strong>{evaluation.evaluatorName}</Typography.Text>
+                                  </Space>
+                                </div>
+
+                                {/* 评价内容 */}
+                                <div>
+                                  <Typography.Paragraph
+                                    style={{
+                                      margin: '8px 0',
+                                      whiteSpace: 'pre-wrap',
+                                      backgroundColor: '#fafafa',
+                                      padding: '12px',
+                                      borderRadius: '4px'
+                                    }}
+                                  >
+                                    {evaluation.comment}
+                                  </Typography.Paragraph>
+                                </div>
+
+                                {/*
+                                  注意：不显示评价标签 (evaluation.tags)
+                                */}
+
+                                {/* 评价时间 */}
+                                <div style={{ textAlign: 'right' }}>
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    {dayjs(evaluation.evaluationDate).format('YYYY-MM-DD HH:mm')}
+                                  </Typography.Text>
+                                </div>
+                              </Space>
+                            </Card>
+                          </List.Item>
+                        )}
+                      />
+                    ) : (
+                      <div style={{
+                        padding: '40px',
+                        textAlign: 'center',
+                        backgroundColor: '#fafafa',
+                        borderRadius: '6px'
+                      }}>
+                        <Typography.Text type="secondary">
+                          {editingResume ? '暂无内部评价' : '保存简历后可添加评价'}
+                        </Typography.Text>
+                      </div>
+                    )}
+                  </div>
                 </Col>
               </Row>
             </Card>
@@ -2938,6 +3095,78 @@ const CreateResume: React.FC = () => {
         onCancel={() => setPreviewState(prev => ({ ...prev, visible: false }))}
       >
         <img alt="预览图片" style={{ width: '100%' }} src={previewState.image} />
+      </Modal>
+
+      {/* 添加员工评价弹窗 */}
+      <Modal
+        title="添加员工评价"
+        open={isAddEvaluationVisible}
+        onCancel={() => setIsAddEvaluationVisible(false)}
+        width={600}
+        footer={[
+          <Button key="cancel" onClick={() => setIsAddEvaluationVisible(false)}>
+            取消
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={evaluationLoading}
+            onClick={() => {
+              evaluationForm
+                .validateFields()
+                .then(values => {
+                  handleAddEvaluation(values);
+                })
+                .catch(info => {
+                  console.log('表单验证失败:', info);
+                });
+            }}
+          >
+            提交
+          </Button>,
+        ]}
+      >
+        <Form
+          form={evaluationForm}
+          layout="vertical"
+          initialValues={{
+            evaluationType: 'daily',
+            overallRating: 5
+          }}
+        >
+          <Form.Item
+            name="evaluationType"
+            label="评价类型"
+            rules={[{ required: true, message: '请选择评价类型' }]}
+          >
+            <Select>
+              <Select.Option value="daily">日常评价</Select.Option>
+              <Select.Option value="monthly">月度评价</Select.Option>
+              <Select.Option value="annual">年度评价</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="overallRating"
+            label="综合评分"
+            rules={[{ required: true, message: '请选择评分' }]}
+          >
+            <Rate allowHalf />
+          </Form.Item>
+
+          <Form.Item
+            name="comment"
+            label="评价内容"
+            rules={[{ required: true, message: '请输入评价内容' }]}
+          >
+            <Input.TextArea
+              rows={6}
+              placeholder="请输入对该员工的评价..."
+              maxLength={500}
+              showCount
+            />
+          </Form.Item>
+        </Form>
       </Modal>
     </PageContainer>
   );

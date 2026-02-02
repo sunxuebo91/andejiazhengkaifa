@@ -772,9 +772,23 @@ export class ResumeController {
         };
       }
 
+      // 获取员工评价数据
+      const employeeEvaluations = await this.resumeService.getEmployeeEvaluations(id);
+
+      // 获取推荐理由标签
+      const recommendationTags = await this.resumeService.getRecommendationTags(id);
+
+      // 添加员工评价和推荐理由到响应数据
+      const resumeData = resume.toObject ? resume.toObject() : resume;
+      const enhancedData = {
+        ...resumeData,
+        employeeEvaluations: employeeEvaluations || [],
+        recommendationTags: recommendationTags || []
+      };
+
       return {
         success: true,
-        data: resume,
+        data: enhancedData,
         message: '获取简历详情成功'
       };
     } catch (error) {
@@ -1000,7 +1014,8 @@ export class ResumeController {
   }
 
   @Post('miniprogram/create')
-  @ApiOperation({ summary: '小程序创建简历（支持幂等性和去重）' })
+  @Public()
+  @ApiOperation({ summary: '小程序创建简历（支持幂等性和去重，无需认证）' })
   @ApiBody({ type: CreateResumeV2Dto })
   async createForMiniprogram(
     @Body() dto: CreateResumeV2Dto,
@@ -1021,8 +1036,11 @@ export class ResumeController {
         this.logger.log(`⚠️ 未包含自我介绍字段`);
       }
 
+      // 获取用户ID（如果已登录）或使用null
+      const userId = req.user?.userId || null;
+
       // 调用服务层的创建方法
-      const result = await this.resumeService.createV2(dto, idempotencyKey, req.user.userId);
+      const result = await this.resumeService.createV2(dto, idempotencyKey, userId);
 
       this.logger.log(`✅ 小程序创建简历成功: ${result.id}, 操作类型: ${result.action}`);
 
@@ -1107,7 +1125,8 @@ export class ResumeController {
   }
 
   @Get('miniprogram/:id')
-  @ApiOperation({ summary: '小程序获取简历详情' })
+  @Public()
+  @ApiOperation({ summary: '小程序获取简历详情（无需认证）' })
   @ApiParam({ name: 'id', description: '简历ID' })
   async getForMiniprogram(
     @Param('id') id: string,
@@ -1117,6 +1136,12 @@ export class ResumeController {
       this.logger.log(`🔍 小程序获取简历详情: ${id}`);
 
       const resume = await this.resumeService.findOne(id);
+
+      // 获取员工评价数据
+      const employeeEvaluations = await this.resumeService.getEmployeeEvaluations(id);
+
+      // 获取推荐理由标签
+      const recommendationTags = await this.resumeService.getRecommendationTags(id);
 
       if (!resume) {
         return {
@@ -1138,6 +1163,7 @@ export class ResumeController {
         experienceYears: resume.experienceYears,
         nativePlace: resume.nativePlace,
         selfIntroduction: resume.selfIntroduction, // 🔥 重要字段
+        internalEvaluation: resume.internalEvaluation, // 📝 内部员工评价
         wechat: resume.wechat,
         currentAddress: resume.currentAddress,
         hukouAddress: resume.hukouAddress,
@@ -1173,11 +1199,17 @@ export class ResumeController {
         positiveReviewPhotoUrls: (resume.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean),
         // 时间戳
         createdAt: (resume as any).createdAt || new Date(),
-        updatedAt: (resume as any).updatedAt || new Date()
+        updatedAt: (resume as any).updatedAt || new Date(),
+        // 员工评价数据
+        employeeEvaluations: employeeEvaluations || [],
+        // 推荐理由标签
+        recommendationTags: recommendationTags || []
       };
 
       this.logger.log(`✅ 小程序获取简历详情成功: ${id}`);
       this.logger.log(`📋 自我介绍字段: ${responseData.selfIntroduction ? '有内容(' + responseData.selfIntroduction.length + '字符)' : '无内容'}`);
+      this.logger.log(`📊 员工评价数量: ${employeeEvaluations?.length || 0}`);
+      this.logger.log(`🏷️ 推荐理由标签数量: ${recommendationTags?.length || 0}`);
 
       return {
         success: true,
@@ -1673,6 +1705,12 @@ export class ResumeController {
       this.logger.log(`🔧 ResumeService.findOne执行完成，结果类型: ${typeof resume}`);
       this.logger.log(`🔧 返回的lastUpdatedBy类型: ${typeof resume?.lastUpdatedBy}`);
 
+      // 获取员工评价数据
+      const employeeEvaluations = await this.resumeService.getEmployeeEvaluations(id);
+
+      // 获取推荐理由标签
+      const recommendationTags = await this.resumeService.getRecommendationTags(id);
+
       // 🆕 添加URL数组格式的字段（兼容小程序）
       const resumeData = resume.toObject ? resume.toObject() : resume;
       const enhancedData = {
@@ -1681,7 +1719,11 @@ export class ResumeController {
         confinementMealPhotoUrls: (resumeData.confinementMealPhotos || []).map((photo: any) => photo.url).filter(Boolean),
         cookingPhotoUrls: (resumeData.cookingPhotos || []).map((photo: any) => photo.url).filter(Boolean),
         complementaryFoodPhotoUrls: (resumeData.complementaryFoodPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-        positiveReviewPhotoUrls: (resumeData.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean)
+        positiveReviewPhotoUrls: (resumeData.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean),
+        // 员工评价数据
+        employeeEvaluations: employeeEvaluations || [],
+        // 推荐理由标签
+        recommendationTags: recommendationTags || []
       };
 
       return {

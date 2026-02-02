@@ -1,0 +1,19 @@
+/* 强制显示 textarea 光标 */
+.ant-input,
+.ant-input-textarea,
+.ant-input-textarea textarea {
+  caret-color: #1890ff !important;
+}
+
+/* 确保 textarea 可以聚焦 */
+.ant-input-textarea textarea:focus {
+  caret-color: #1890ff !important;
+  outline: none;
+}
+
+/* 移除可能隐藏光标的样式 */
+.ant-input-textarea textarea {
+  color: #000 !important;
+  opacity: 1 !important;
+}
+

@@ -51,7 +51,7 @@ export class UploadController {
         },
         type: {
           type: 'string',
-          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report', 'medicalReport', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto', 'workExperiencePhoto', 'banner'],
+          enum: ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report', 'medicalReport', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto', 'workExperiencePhoto', 'banner', 'article'],
           description: '文件类型',
         },
       },
@@ -64,14 +64,14 @@ export class UploadController {
       new ParseFilePipe({
         validators: [
           new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: /(jpg|jpeg|png|pdf)$/ }),
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp|pdf)$/ }),
         ],
       }),
     )
     file: Express.Multer.File,
     @Body('type') type: string,
   ) {
-    const validTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report', 'medicalReport', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto', 'workExperiencePhoto', 'banner'];
+    const validTypes = ['idCardFront', 'idCardBack', 'personalPhoto', 'certificate', 'report', 'medicalReport', 'confinementMealPhoto', 'cookingPhoto', 'complementaryFoodPhoto', 'positiveReviewPhoto', 'workExperiencePhoto', 'banner', 'article'];
     if (!validTypes.includes(type)) {
       throw new BadRequestException('无效的文件类型');
     }

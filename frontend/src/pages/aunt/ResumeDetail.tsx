@@ -14,11 +14,17 @@ import {
   App,
   Tooltip,
   Select,
-  Spin
+  Spin,
+  Rate,
+  List,
+  Space,
+  Divider
 } from 'antd';
 import {
   EditOutlined,
-  FilePdfOutlined
+  FilePdfOutlined,
+  PlusOutlined,
+  StarFilled
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
@@ -373,6 +379,23 @@ type FileInfo = {
 //   timestamp: string;
 // }
 
+interface EmployeeEvaluation {
+  id: string;
+  overallRating: number;
+  comment: string;
+  evaluatorName: string;
+  evaluationDate: string;
+  evaluationType?: string;
+  tags?: string[];
+  strengths?: string;
+  improvements?: string;
+}
+
+interface RecommendationTag {
+  tag: string;
+  count: number;
+}
+
 interface ResumeData {
   _id: string;
   name: string;
@@ -423,6 +446,8 @@ interface ResumeData {
   learningIntention?: keyof typeof learningIntentionMap;
   currentStage?: keyof typeof currentStageMap;
   internalEvaluation?: string;
+  employeeEvaluations?: EmployeeEvaluation[];
+  recommendationTags?: RecommendationTag[];
   createdAt: string;
   updatedAt: string;
   userId?: {
@@ -457,6 +482,11 @@ const ResumeDetail = () => {
   const [isAddFollowUpVisible, setIsAddFollowUpVisible] = useState(false);
   const [followUpForm] = Form.useForm();
   const [followUpLoading, setFollowUpLoading] = useState(false);
+
+  // 员工评价相关状态
+  const [isAddEvaluationVisible, setIsAddEvaluationVisible] = useState(false);
+  const [evaluationForm] = Form.useForm();
+  const [evaluationLoading, setEvaluationLoading] = useState(false);
 
   // 更新日期格式化函数
   const formatDateToChinese = (dateStr: string): string => {
@@ -1168,7 +1198,55 @@ const ResumeDetail = () => {
       setFollowUpLoading(false);
     }
   };
-  
+
+  // 添加员工评价
+  const handleAddEvaluation = async (values: any) => {
+    try {
+      setEvaluationLoading(true);
+
+      if (!resume?._id) {
+        messageApi.error('简历ID不存在');
+        return;
+      }
+
+      console.log('准备创建员工评价:', {
+        employeeId: resume._id,
+        employeeName: resume.name,
+        ...values
+      });
+
+      // 调用API创建员工评价（evaluatorId和evaluatorName由后端从认证信息中获取）
+      const response = await apiService.post('/api/employee-evaluations', {
+        employeeId: resume._id,
+        employeeName: resume.name,
+        evaluationType: values.evaluationType,
+        overallRating: values.overallRating,
+        serviceAttitudeRating: values.overallRating,
+        professionalSkillRating: values.overallRating,
+        workEfficiencyRating: values.overallRating,
+        communicationRating: values.overallRating,
+        comment: values.comment,
+        isPublic: false,
+        status: 'published'
+      });
+
+      console.log('员工评价创建成功:', response);
+
+      messageApi.success('添加评价成功');
+      setIsAddEvaluationVisible(false);
+      evaluationForm.resetFields();
+
+      // 刷新简历详情以获取最新的评价列表
+      await fetchResumeDetail();
+
+    } catch (error) {
+      console.error('添加员工评价失败:', error);
+      messageApi.error(error instanceof Error ? error.message : '添加评价失败');
+    } finally {
+      setEvaluationLoading(false);
+    }
+  };
+
   // 跟进记录表格列定义
   const followUpColumns = [
     {
@@ -1292,6 +1370,80 @@ const ResumeDetail = () => {
           rules={[{ required: true, message: '请输入跟进内容' }]}
         >
           <Input.TextArea rows={4} placeholder="请输入跟进内容" maxLength={500} showCount />
+        </Form.Item>
+      </Form>
+    </Modal>
+  );
+
+  // 添加员工评价表单
+  const AddEvaluationModal = () => (
+    <Modal
+      title="添加员工评价"
+      open={isAddEvaluationVisible}
+      onCancel={() => setIsAddEvaluationVisible(false)}
+      width={600}
+      footer={[
+        <Button key="cancel" onClick={() => setIsAddEvaluationVisible(false)}>
+          取消
+        </Button>,
+        <Button
+          key="submit"
+          type="primary"
+          loading={evaluationLoading}
+          onClick={() => {
+            evaluationForm
+              .validateFields()
+              .then(values => {
+                handleAddEvaluation(values);
+              })
+              .catch(info => {
+                console.log('表单验证失败:', info);
+              });
+          }}
+        >
+          提交
+        </Button>,
+      ]}
+    >
+      <Form
+        form={evaluationForm}
+        layout="vertical"
+        initialValues={{
+          evaluationType: 'daily',
+          overallRating: 5
+        }}
+      >
+        <Form.Item
+          name="evaluationType"
+          label="评价类型"
+          rules={[{ required: true, message: '请选择评价类型' }]}
+        >
+          <Select>
+            <Select.Option value="daily">日常评价</Select.Option>
+            <Select.Option value="monthly">月度评价</Select.Option>
+            <Select.Option value="annual">年度评价</Select.Option>
+          </Select>
+        </Form.Item>
+
+        <Form.Item
+          name="overallRating"
+          label="综合评分"
+          rules={[{ required: true, message: '请选择评分' }]}
+        >
+          <Rate allowHalf />
+        </Form.Item>
+
+        <Form.Item
+          name="comment"
+          label="评价内容"
+          rules={[{ required: true, message: '请输入评价内容' }]}
+        >
+          <Input.TextArea
+            rows={6}
+            placeholder="请输入对该员工的评价..."
+            maxLength={500}
+            showCount
+          />
         </Form.Item>
       </Form>
     </Modal>
@@ -1577,25 +1729,125 @@ const ResumeDetail = () => {
             </div>
           </Card>
 
-          {/* 添加内部员工评价卡片 */}
-          <Card title="内部员工评价" style={{ marginBottom: 24 }} extra={<span style={{ color: '#999', fontSize: 12 }}>仅内部可见</span>}>
+          {/* 推荐理由卡片 */}
+          <Card title="推荐理由" style={{ marginBottom: 24 }}>
             <div style={{
               padding: '16px',
-              backgroundColor: '#fff7e6',
+              backgroundColor: '#fafafa',
               borderRadius: '6px',
-              minHeight: '80px',
-              border: '1px solid #ffd591'
+              minHeight: '60px'
             }}>
-              {resume?.internalEvaluation ? (
-                <Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {resume.internalEvaluation}
-                </Typography.Paragraph>
+              {resume?.recommendationTags && resume.recommendationTags.length > 0 ? (
+                <Space size={[8, 12]} wrap>
+                  {resume.recommendationTags.map((item: RecommendationTag, index: number) => (
+                    <Tag
+                      key={index}
+                      color="blue"
+                      style={{
+                        fontSize: '14px',
+                        padding: '6px 12px',
+                        borderRadius: '4px',
+                        margin: 0
+                      }}
+                    >
+                      {item.tag}({item.count})
+                    </Tag>
+                  ))}
+                </Space>
               ) : (
                 <Typography.Text type="secondary">
-                  暂无内部评价
+                  暂无推荐理由标签
                 </Typography.Text>
               )}
             </div>
+          </Card>
+
+          {/* 添加内部员工评价卡片 */}
+          <Card
+            title="内部员工评价"
+            style={{ marginBottom: 24 }}
+            extra={
+              <Space>
+                <span style={{ color: '#999', fontSize: 12 }}>仅内部可见</span>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    setIsAddEvaluationVisible(true);
+                  }}
+                >
+                  添加评价
+                </Button>
+              </Space>
+            }
+          >
+            {resume?.employeeEvaluations && resume.employeeEvaluations.length > 0 ? (
+              <List
+                dataSource={resume.employeeEvaluations}
+                renderItem={(evaluation: EmployeeEvaluation, index: number) => (
+                  <List.Item key={evaluation.id || index}>
+                    <Card
+                      style={{ width: '100%' }}
+                      bodyStyle={{ padding: '16px' }}
+                    >
+                      <Space direction="vertical" style={{ width: '100%' }} size="small">
+                        {/* 评分和评价人 */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Space>
+                            <Rate disabled value={evaluation.overallRating} allowHalf style={{ fontSize: 16 }} />
+                            <span style={{ color: '#faad14', fontWeight: 'bold' }}>
+                              {evaluation.overallRating.toFixed(1)}
+                            </span>
+                          </Space>
+                          <Space>
+                            <Typography.Text type="secondary">评价人：</Typography.Text>
+                            <Typography.Text strong>{evaluation.evaluatorName}</Typography.Text>
+                          </Space>
+                        </div>
+
+                        {/* 评价内容 */}
+                        <div>
+                          <Typography.Paragraph
+                            style={{
+                              margin: '8px 0',
+                              whiteSpace: 'pre-wrap',
+                              backgroundColor: '#fafafa',
+                              padding: '12px',
+                              borderRadius: '4px'
+                            }}
+                          >
+                            {evaluation.comment}
+                          </Typography.Paragraph>
+                        </div>
+
+                        {/*
+                          注意：不显示评价标签 (evaluation.tags)
+                        */}
+
+                        {/* 评价时间 */}
+                        <div style={{ textAlign: 'right' }}>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {dayjs(evaluation.evaluationDate).format('YYYY-MM-DD HH:mm')}
+                          </Typography.Text>
+                        </div>
+                      </Space>
+                    </Card>
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <div style={{
+                padding: '40px',
+                textAlign: 'center',
+                backgroundColor: '#fafafa',
+                borderRadius: '6px'
+              }}>
+                <Typography.Text type="secondary">
+                  暂无内部评价
+                </Typography.Text>
+              </div>
+            )}
           </Card>
 
           <Card title="身份证照片" style={{ marginBottom: 24 }}>
@@ -2037,6 +2289,9 @@ const ResumeDetail = () => {
 
         {/* 添加跟进记录弹窗 */}
         <AddFollowUpModal />
+
+        {/* 添加员工评价弹窗 */}
+        <AddEvaluationModal />
       </div>
     </>
   );

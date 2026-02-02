@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { UpdateAvailabilityDto, BatchUpdateAvailabilityDto, QueryAvailabilityDto } from './dto/availability.dto';
 import { AvailabilityStatus } from './models/availability-period.schema';
+import { EmployeeEvaluation } from '../employee-evaluation/models/employee-evaluation.entity';
 
 @Injectable()
 export class ResumeService {
@@ -25,6 +26,8 @@ export class ResumeService {
     private readonly resumeModel: Model<IResume>,
     private uploadService: UploadService,
     private readonly jwtService: JwtService,
+    @InjectModel(EmployeeEvaluation.name)
+    private readonly employeeEvaluationModel: Model<EmployeeEvaluation>,
   ) {}
 
   async createWithFiles(
@@ -326,6 +329,25 @@ export class ResumeService {
       }
     } else {
       this.logger.log(`🔍 lastUpdatedBy为空，跳过用户信息获取`);
+    }
+
+    // 获取员工评价
+    try {
+      const evaluations = await this.employeeEvaluationModel
+        .find({
+          employeeId: new Types.ObjectId(id),
+          status: 'published'
+        })
+        .sort({ evaluationDate: -1 })
+        .limit(10)
+        .lean()
+        .exec();
+
+      (resume as any).employeeEvaluations = evaluations;
+      this.logger.log(`✅ 获取到 ${evaluations.length} 条员工评价`);
+    } catch (error) {
+      this.logger.error(`获取员工评价失败: ${error.message}`, error.stack);
+      (resume as any).employeeEvaluations = [];
     }
 
     return resume;
@@ -2084,6 +2106,132 @@ export class ResumeService {
       deleted: deletedCount,
       message: `成功删除${deletedCount}天的档期`
     };
+  }
+
+  /**
+   * 获取员工评价数据
+   */
+  async getEmployeeEvaluations(resumeId: string) {
+    try {
+      // 直接查询 employee_evaluations 集合
+      const EmployeeEvaluation = this.resumeModel.db.collection('employee_evaluations');
+
+      const evaluations = await EmployeeEvaluation
+        .find({
+          employeeId: new Types.ObjectId(resumeId),
+          status: 'published'
+        })
+        .sort({ evaluationDate: -1 })
+        .limit(10)
+        .toArray();
+
+      return evaluations.map(evaluation => ({
+        id: evaluation._id.toString(),
+        overallRating: evaluation.overallRating,
+        comment: evaluation.comment,
+        evaluatorName: evaluation.evaluatorName,
+        evaluationDate: evaluation.evaluationDate,
+        evaluationType: evaluation.evaluationType,
+        tags: evaluation.tags || [],
+        strengths: evaluation.strengths,
+        improvements: evaluation.improvements
+      }));
+    } catch (error) {
+      this.logger.error(`获取员工评价失败: ${error.message}`, error.stack);
+      return [];
+    }
+  }
+
+  /**
+   * 从评价内容中提取标签（4-6个字）
+   */
+  private extractTagsFromComment(comment: string): string[] {
+    if (!comment) return [];
+
+    // 常见的正面评价关键词（4-6个字）
+    const positiveKeywords = [
+      '形象气质好', '好沟通', '相处愉快', '有亲和力', '做事仔细认真',
+      '个人形象好', '干净整洁', '沟通顺畅', '做事认真心', '做饭好吃',
+      '月子餐好吃', '个人卫生好', '不计较', '有爱任性', '诚实轻经',
+      '和蔼可亲', '对产妇耐心', '活不空实', '对宝宝有爱心', '专业知识丰富',
+      '责任心强', '服务态度好', '工作效率高', '技能熟练', '经验丰富',
+      '认真负责', '细心周到', '温柔体贴', '勤快麻利', '手脚麻利',
+      '喜欢孩子', '形象气质佳', '乐观开朗', '信任度高', '执行力强',
+      '产后恢复好', '产专专业', '开朗爱笑', '信性度高', '热心力强',
+      '爱快头方', '沟通能力强', '开朗爱笑', '执行力强', '热心助人'
+    ];
+
+    const foundTags: string[] = [];
+
+    // 在评价内容中查找匹配的关键词
+    for (const keyword of positiveKeywords) {
+      if (comment.includes(keyword)) {
+        foundTags.push(keyword);
+      }
+    }
+
+    return foundTags;
+  }
+
+  /**
+   * 计算推荐理由标签（从客户评价和员工评价中提取）
+   */
+  async getRecommendationTags(resumeId: string) {
+    try {
+      const tagCountMap = new Map<string, number>();
+
+      // 1. 从员工评价中提取标签
+      const EmployeeEvaluation = this.resumeModel.db.collection('employee_evaluations');
+      const employeeEvaluations = await EmployeeEvaluation
+        .find({
+          employeeId: new Types.ObjectId(resumeId),
+          status: 'published'
+        })
+        .toArray();
+
+      // 统计员工评价中的标签
+      for (const evaluation of employeeEvaluations) {
+        // 从tags字段获取标签
+        if (evaluation.tags && Array.isArray(evaluation.tags)) {
+          for (const tag of evaluation.tags) {
+            if (tag && tag.length >= 2 && tag.length <= 6) {
+              tagCountMap.set(tag, (tagCountMap.get(tag) || 0) + 1);
+            }
+          }
+        }
+
+        // 从评价内容中提取标签
+        if (evaluation.comment) {
+          const extractedTags = this.extractTagsFromComment(evaluation.comment);
+          for (const tag of extractedTags) {
+            tagCountMap.set(tag, (tagCountMap.get(tag) || 0) + 1);
+          }
+        }
+      }
+
+      // 2. 从工作经历中的客户评价提取标签
+      const resume = await this.resumeModel.findById(resumeId);
+      if (resume && resume.workHistory && Array.isArray(resume.workHistory)) {
+        for (const workExp of resume.workHistory) {
+          if (workExp.customerReview) {
+            const extractedTags = this.extractTagsFromComment(workExp.customerReview);
+            for (const tag of extractedTags) {
+              tagCountMap.set(tag, (tagCountMap.get(tag) || 0) + 1);
+            }
+          }
+        }
+      }
+
+      // 3. 转换为数组并按出现次数排序
+      const sortedTags = Array.from(tagCountMap.entries())
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count);
+
+      return sortedTags;
+    } catch (error) {
+      this.logger.error(`计算推荐理由标签失败: ${error.message}`, error.stack);
+      return [];
+    }
   }
 
 }

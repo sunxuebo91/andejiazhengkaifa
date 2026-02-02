@@ -8,13 +8,15 @@ import { FileInfoSchema, FileInfoSchemaFactory } from './models/file-info.schema
 import { ResumeController } from './resume.controller';
 import { ResumeService } from './resume.service';
 import { UploadModule } from '../upload/upload.module';
+import { EmployeeEvaluation, EmployeeEvaluationSchema } from '../employee-evaluation/models/employee-evaluation.entity';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Resume.name, schema: ResumeSchema },
       { name: WorkExperienceSchema.name, schema: WorkExperienceSchemaFactory },
-      { name: FileInfoSchema.name, schema: FileInfoSchemaFactory }
+      { name: FileInfoSchema.name, schema: FileInfoSchemaFactory },
+      { name: EmployeeEvaluation.name, schema: EmployeeEvaluationSchema }
     ]),
     UploadModule,
     // 为分享令牌签发/验证提供 JwtService

@@ -116,17 +116,53 @@ export class ImageService {
     }
   }
 
+  /**
+   * 上传普通图片到 COS
+   */
+  static async uploadImage(file: File): Promise<string> {
+    try {
+      console.log('开始上传图片到COS:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      });
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'article'); // 添加必需的 type 参数
+
+      const response = await api.post('/api/upload/file', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 60000, // 60秒超时
+      });
+
+      console.log('图片上传响应:', response);
+
+      if (!response?.success || !response?.data?.fileUrl) {
+        throw new Error(response?.message || '图片上传失败');
+      }
+
+      console.log('图片上传成功:', response.data.fileUrl);
+      return response.data.fileUrl;
+    } catch (error: any) {
+      console.error('上传图片失败:', error);
+      throw new Error(error.response?.data?.message || error.message || '图片上传失败');
+    }
+  }
+
   static async uploadIdCard(file: File, type: 'front' | 'back') {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const response = await apiService.upload(`/upload/id-card/${type}`, formData);
-      
+
       if (!response.data.success) {
         throw new Error(response.data.message || '图片上传失败');
       }
-      
+
       return response.data.data.url;
     } catch (error) {
       console.error('上传身份证图片失败:', error);

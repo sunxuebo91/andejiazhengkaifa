@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { APP_GUARD } from '@nestjs/core';
 import { ResumeModule } from './modules/resume/resume.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { OcrModule } from './modules/ocr/ocr.module';
@@ -26,6 +27,8 @@ import { DashubaoModule } from './modules/dashubao/dashubao.module';
 import { BannerModule } from './modules/banner/banner.module';
 import { ArticleModule } from './modules/article/article.module';
 import { EmployeeEvaluationModule } from './modules/employee-evaluation/employee-evaluation.module';
+import { MiniProgramUserModule } from './modules/miniprogram-user/miniprogram-user.module';
+import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -69,8 +72,15 @@ import { EmployeeEvaluationModule } from './modules/employee-evaluation/employee
     BannerModule,
     ArticleModule,
     EmployeeEvaluationModule,
+    MiniProgramUserModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+  ],
 })
 export class AppModule {}

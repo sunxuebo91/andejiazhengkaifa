@@ -4,6 +4,7 @@ import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { Public } from './decorators/public.decorator';
 
 // Multer 配置 - 头像上传专用
 const avatarMulterConfig: MulterOptions = {
@@ -17,6 +18,7 @@ const avatarMulterConfig: MulterOptions = {
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -29,6 +31,7 @@ export class AuthController {
     return this.authService.login(username, password, ip, userAgent);
   }
 
+  @Public()
   @Post('miniprogram-login')
   @HttpCode(HttpStatus.OK)
   async miniprogramLogin(

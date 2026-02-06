@@ -5,6 +5,8 @@ import { Model, Types } from 'mongoose';
 import axios from 'axios';
 import * as xml2js from 'xml2js';
 import { InsurancePolicy, InsurancePolicyDocument, PolicyStatus } from './models/insurance-policy.model';
+import { InsuranceSyncLog, InsuranceSyncLogDocument, SyncStatus } from './models/insurance-sync-log.model';
+import { Contract, ContractDocument } from '../contracts/models/contract.model';
 import {
   CreatePolicyDto,
   QueryPolicyDto,
@@ -36,6 +38,7 @@ interface DashubaoResponse {
   TotalPremium?: string;
   AuthUrl?: string;
   SurrenderPremium?: string;
+  Status?: string; // 保单状态：1-已生效, 0-待支付/处理中
   // 微信支付相关
   WeChatAppId?: string;
   WeChatTimeStamp?: string;
@@ -54,6 +57,8 @@ export class DashubaoService {
   constructor(
     private configService: ConfigService,
     @InjectModel(InsurancePolicy.name) private policyModel: Model<InsurancePolicyDocument>,
+    @InjectModel(InsuranceSyncLog.name) private syncLogModel: Model<InsuranceSyncLogDocument>,
+    @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
   ) {
     // 从环境变量或使用提供的凭证
     this.config = {
@@ -316,7 +321,45 @@ export class DashubaoService {
     await policy.save();
     this.logger.log(`保单创建成功: ${policy.agencyPolicyRef}`);
 
+    // 🔥 保单创建后，自动用被保险人身份证号匹配合同并绑定 contractId
+    // 注意：不管大树保返回 Success 是否为 true（可能需要先支付），都尝试绑定
+    if (dto.insuredList?.length > 0) {
+      await this.tryBindPolicyToContract(policy._id, policy.agencyPolicyRef, dto.insuredList[0].idNumber);
+    }
+
     return policy;
+  }
+
+  /**
+   * 尝试将保单绑定到合同（通过被保险人身份证号匹配）
+   */
+  private async tryBindPolicyToContract(policyId: any, agencyPolicyRef: string, insuredIdCard?: string): Promise<void> {
+    if (!insuredIdCard) return;
+    try {
+      // 检查是否已经绑定
+      const existingPolicy = await this.policyModel.findById(policyId).exec();
+      if (existingPolicy?.contractId) {
+        this.logger.log(`ℹ️ 保单 ${agencyPolicyRef} 已绑定合同，跳过`);
+        return;
+      }
+
+      const matchedContract = await this.contractModel.findOne({
+        workerIdCard: insuredIdCard,
+        contractStatus: 'active',
+      }).sort({ createdAt: -1 }).exec();
+
+      if (matchedContract) {
+        await this.policyModel.findByIdAndUpdate(policyId, {
+          contractId: matchedContract._id,
+          bindToContractAt: new Date(),
+        });
+        this.logger.log(`✅ 保单 ${agencyPolicyRef} 已自动绑定到合同 ${matchedContract.contractNumber}（身份证号匹配: ${insuredIdCard}）`);
+      } else {
+        this.logger.log(`ℹ️ 未找到身份证号 ${insuredIdCard} 对应的生效合同，保单暂不绑定`);
+      }
+    } catch (bindError) {
+      this.logger.warn(`⚠️ 保单自动绑定合同失败（不影响主流程）: ${bindError.message}`);
+    }
   }
 
   /**
@@ -502,48 +545,76 @@ export class DashubaoService {
   async handlePaymentCallback(body: any): Promise<any> {
     this.logger.log('='.repeat(80));
     this.logger.log('📥 收到支付回调通知:');
-    this.logger.log(JSON.stringify(body, null, 2));
+    this.logger.log('原始body类型:', typeof body);
+    this.logger.log('原始body内容:', body);
     this.logger.log('='.repeat(80));
 
     try {
-      // 解析XML回调数据
-      const xml2js = require('xml2js');
-      const parser = new xml2js.Parser({ explicitArray: false });
-      const result = await parser.parseStringPromise(body);
+      // 如果body已经是对象，直接使用；否则解析XML
+      let resultInfo;
+      if (typeof body === 'string') {
+        // 解析XML回调数据
+        const xml2js = require('xml2js');
+        const parser = new xml2js.Parser({ explicitArray: false, ignoreAttrs: true });
+        const result = await parser.parseStringPromise(body);
+        resultInfo = result.ResultInfo;
+      } else if (body.ResultInfo) {
+        resultInfo = body.ResultInfo;
+      } else {
+        resultInfo = body;
+      }
 
-      const resultInfo = result.ResultInfo;
       const orderId = resultInfo.OrderId;
       const agencyPolicyRef = resultInfo.AgencyPolicyRef;
       const policyList = resultInfo.PolicyList?.Policy;
 
-      this.logger.log(`订单号: ${orderId}`);
-      this.logger.log(`流水号: ${agencyPolicyRef}`);
+      this.logger.log(`📋 解析结果:`);
+      this.logger.log(`  订单号: ${orderId}`);
+      this.logger.log(`  流水号: ${agencyPolicyRef}`);
+      this.logger.log(`  保单列表:`, JSON.stringify(policyList, null, 2));
 
       // 更新保单状态
       if (policyList) {
         const policies = Array.isArray(policyList) ? policyList : [policyList];
 
-        for (const policy of policies) {
-          if (policy.Success === 'true') {
-            await this.policyModel.updateOne(
+        for (const policyData of policies) {
+          this.logger.log(`处理保单:`, JSON.stringify(policyData, null, 2));
+
+          if (policyData.Success === 'true' || policyData.Success === true) {
+            const updateResult = await this.policyModel.updateOne(
               { agencyPolicyRef: agencyPolicyRef },
               {
-                status: 'active',
-                policyNo: policy.PolicyNo,
-                orderId: policy.OrderId,
-                effectiveDate: policy.EffectiveDate,
-                expireDate: policy.ExpireDate,
+                status: PolicyStatus.ACTIVE,
+                policyNo: policyData.PolicyNo,
+                orderId: policyData.OrderId || orderId,
+                effectiveDate: policyData.EffectiveDate,
+                expireDate: policyData.ExpireDate,
+                policyPdfUrl: policyData.PolicyPdfUrl,
+                // 清除错误信息（支付成功后，之前的错误信息不再有效）
+                errorMessage: null,
               }
             );
-            this.logger.log(`✅ 保单 ${policy.PolicyNo} 支付成功，状态已更新`);
+            this.logger.log(`✅ 保单 ${policyData.PolicyNo} 支付成功，状态已更新为active，已清除错误信息`);
+            this.logger.log(`   更新结果: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);
+
+            // 🔥 支付成功后，尝试自动绑定合同（创建时可能因未支付而未绑定）
+            const paidPolicy = await this.policyModel.findOne({ agencyPolicyRef }).exec();
+            if (paidPolicy && !paidPolicy.contractId && paidPolicy.insuredList?.length > 0) {
+              await this.tryBindPolicyToContract(paidPolicy._id, agencyPolicyRef, paidPolicy.insuredList[0].idNumber);
+            }
+          } else {
+            this.logger.warn(`⚠️  保单处理失败: Success=${policyData.Success}`);
           }
         }
+      } else {
+        this.logger.warn(`⚠️  回调中没有PolicyList数据`);
       }
 
       // 返回成功响应给大树保
       return { success: true, message: '回调处理成功' };
     } catch (error) {
-      this.logger.error('处理支付回调失败:', error);
+      this.logger.error('❌ 处理支付回调失败:', error);
+      this.logger.error('错误堆栈:', error.stack);
       throw error;
     }
   }
@@ -552,24 +623,63 @@ export class DashubaoService {
    * 批改接口 (0007) - 替换被保险人
    */
   async amendPolicy(dto: AmendPolicyDto): Promise<DashubaoResponse> {
+    // 根据大树保API文档，批改接口需要使用PolicyRef，并且被保人信息需要type属性
     const bodyContent = `
-    <PolicyNo>${dto.policyNo}</PolicyNo>
-    <OldInsured>
+    <Policy>
+      <PolicyRef>${dto.policyNo}</PolicyRef>
+    </Policy>
+    <Insured type="old">
       <InsuredName>${dto.oldInsured.insuredName}</InsuredName>
       <IdType>${dto.oldInsured.idType}</IdType>
       <IdNumber>${dto.oldInsured.idNumber}</IdNumber>
-    </OldInsured>
-    <NewInsured>
+      <BirthDate>${dto.oldInsured.birthDate}</BirthDate>
+      <Gender>${dto.oldInsured.gender}</Gender>
+    </Insured>
+    <Insured type="new">
       <InsuredName>${dto.newInsured.insuredName}</InsuredName>
       <IdType>${dto.newInsured.idType}</IdType>
       <IdNumber>${dto.newInsured.idNumber}</IdNumber>
       <BirthDate>${dto.newInsured.birthDate}</BirthDate>
       <Gender>${dto.newInsured.gender}</Gender>
       ${dto.newInsured.mobile ? `<Mobile>${dto.newInsured.mobile}</Mobile>` : ''}
-    </NewInsured>`;
+    </Insured>`;
 
     const xmlRequest = this.buildXmlRequest('0007', bodyContent);
-    return await this.sendRequest(xmlRequest);
+
+    // 记录完整的入参（供调试）
+    this.logger.log('='.repeat(80));
+    this.logger.log('📤 大树保批改API入参（完整XML请求）:');
+    this.logger.log(xmlRequest);
+    this.logger.log('='.repeat(80));
+
+    const response = await this.sendRequest(xmlRequest);
+
+    // 记录响应
+    this.logger.log('='.repeat(80));
+    this.logger.log('📥 大树保批改API响应:');
+    this.logger.log(JSON.stringify(response, null, 2));
+    this.logger.log('='.repeat(80));
+
+    // 如果批改成功，更新本地保单的被保险人信息
+    if (response.Success === 'true') {
+      await this.policyModel.updateOne(
+        { policyNo: dto.policyNo },
+        {
+          $set: {
+            'insuredList.0': {
+              insuredName: dto.newInsured.insuredName,
+              idType: dto.newInsured.idType,
+              idNumber: dto.newInsured.idNumber,
+              birthDate: dto.newInsured.birthDate,
+              gender: dto.newInsured.gender,
+              mobile: dto.newInsured.mobile,
+            }
+          }
+        }
+      );
+    }
+
+    return response;
   }
 
   /**
@@ -601,7 +711,7 @@ export class DashubaoService {
    * 退保接口 (0014)
    */
   async surrenderPolicy(dto: SurrenderPolicyDto): Promise<DashubaoResponse> {
-    // 不使用 Policy 标签包裹（尝试直接放在 Body 下）
+    // 不使用 Policy 标签包裹（直接放在 Body 下）
     const bodyContent = `
     <PolicyNo>${dto.policyNo}</PolicyNo>
     <RemoveReason>${dto.removeReason}</RemoveReason>`;
@@ -643,6 +753,16 @@ export class DashubaoService {
     </Policy>`;
     const xmlRequest = this.buildXmlRequest('R001', bodyContent);
     return await this.sendRequest(xmlRequest);
+  }
+
+  /**
+   * 删除本地保单
+   */
+  async deletePolicy(id: string): Promise<void> {
+    const result = await this.policyModel.findByIdAndDelete(id).exec();
+    if (!result) {
+      throw new BadRequestException('保单不存在');
+    }
   }
 
   /**
@@ -747,12 +867,22 @@ export class DashubaoService {
         updateData.policyPdfUrl = response.PolicyPdfUrl;
       }
 
-      // 如果保单已支付，更新状态为已生效
-      // 根据大树保文档，查询接口会返回保单的完整信息
-      // 如果有PolicyPdfUrl，说明保单已生效
-      if (response.PolicyPdfUrl) {
+      // 根据大树保文档，查询接口会返回Status字段和PolicyPdfUrl
+      // Status: 1-已生效, 0-待支付/处理中
+      // 优先使用Status字段判断，其次使用PolicyPdfUrl
+      if (response.Status === '1') {
         updateData.status = PolicyStatus.ACTIVE;
-        this.logger.log(`✅ 保单 ${identifier} 已生效（有PDF链接）`);
+        // 清除错误信息（保单已生效，之前的错误信息不再有效）
+        updateData.errorMessage = null;
+        this.logger.log(`✅ 保单 ${identifier} 已生效（Status=1），已清除错误信息`);
+      } else if (response.PolicyPdfUrl) {
+        updateData.status = PolicyStatus.ACTIVE;
+        // 清除错误信息（保单已生效，之前的错误信息不再有效）
+        updateData.errorMessage = null;
+        this.logger.log(`✅ 保单 ${identifier} 已生效（有PDF链接），已清除错误信息`);
+      } else {
+        // 如果既没有Status=1，也没有PDF链接，保持pending状态
+        this.logger.log(`⏳ 保单 ${identifier} 仍在待支付状态`);
       }
 
       return this.policyModel.findOneAndUpdate(
@@ -764,6 +894,226 @@ export class DashubaoService {
 
     this.logger.warn(`⚠️  同步保单状态失败: ${identifier}, 原因: ${response.Message}`);
     return null;
+  }
+
+  /**
+   * 根据被保险人身份证号查询保单列表
+   */
+  async getPoliciesByIdCard(idCard: string): Promise<InsurancePolicy[]> {
+    this.logger.log(`🔍 根据身份证号查询保单: ${idCard}`);
+
+    // 查询被保险人列表中包含该身份证号的所有保单
+    const policies = await this.policyModel.find({
+      'insuredList.idNumber': idCard
+    }).sort({ createdAt: -1 }).exec();
+
+    this.logger.log(`📥 查询结果: 找到 ${policies.length} 个保单`);
+    return policies;
+  }
+
+  /**
+   * 从身份证号提取出生日期
+   * @param idCard 身份证号（15位或18位）
+   * @returns 格式化的出生日期 yyyyMMddHHmmss
+   */
+  private extractBirthDateFromIdCard(idCard: string): string {
+    if (!idCard) {
+      throw new BadRequestException('身份证号不能为空');
+    }
+
+    if (idCard.length === 18) {
+      const year = idCard.substring(6, 10);
+      const month = idCard.substring(10, 12);
+      const day = idCard.substring(12, 14);
+      return `${year}${month}${day}000000`;
+    } else if (idCard.length === 15) {
+      const year = '19' + idCard.substring(6, 8);
+      const month = idCard.substring(8, 10);
+      const day = idCard.substring(10, 12);
+      return `${year}${month}${day}000000`;
+    }
+
+    throw new BadRequestException('身份证号格式不正确，应为15位或18位');
+  }
+
+  /**
+   * 从身份证号提取性别
+   * @param idCard 身份证号（15位或18位）
+   * @returns 性别代码 M-男, F-女
+   */
+  private extractGenderFromIdCard(idCard: string): string {
+    if (!idCard) {
+      throw new BadRequestException('身份证号不能为空');
+    }
+
+    let genderCode: number;
+    if (idCard.length === 18) {
+      genderCode = parseInt(idCard.charAt(16));
+    } else if (idCard.length === 15) {
+      genderCode = parseInt(idCard.charAt(14));
+    } else {
+      throw new BadRequestException('身份证号格式不正确，应为15位或18位');
+    }
+
+    return genderCode % 2 === 0 ? 'F' : 'M';
+  }
+
+  /**
+   * 保险换人自动同步
+   * 当合同换人并签约完成后，自动调用此方法同步保险
+   */
+  async syncInsuranceAmendment(params: {
+    contractId: Types.ObjectId | string;
+    policyIds: (Types.ObjectId | string)[];
+    oldWorker: { name: string; idCard: string };
+    newWorker: { name: string; idCard: string; phone?: string };
+  }): Promise<{ success: boolean; results: any[] }> {
+    this.logger.log('🔄 开始保险换人自动同步');
+    this.logger.log(`合同ID: ${params.contractId}`);
+    this.logger.log(`保单数量: ${params.policyIds.length}`);
+    this.logger.log(`原服务人员: ${params.oldWorker.name} (${params.oldWorker.idCard})`);
+    this.logger.log(`新服务人员: ${params.newWorker.name} (${params.newWorker.idCard})`);
+
+    const results = [];
+
+    for (const policyId of params.policyIds) {
+      const policy = await this.policyModel.findById(policyId).exec();
+
+      if (!policy) {
+        this.logger.warn(`⚠️  保单 ${policyId} 不存在，跳过`);
+        results.push({
+          policyId,
+          success: false,
+          error: '保单不存在'
+        });
+        continue;
+      }
+
+      if (!policy.policyNo) {
+        this.logger.warn(`⚠️  保单 ${policyId} 无保单号，跳过`);
+        results.push({
+          policyId,
+          success: false,
+          error: '保单号不存在'
+        });
+        continue;
+      }
+
+      // 创建同步日志
+      const syncLog = new this.syncLogModel({
+        contractId: params.contractId,
+        policyId: policy._id,
+        policyNo: policy.policyNo,
+        oldWorkerName: params.oldWorker.name,
+        oldWorkerIdCard: params.oldWorker.idCard,
+        newWorkerName: params.newWorker.name,
+        newWorkerIdCard: params.newWorker.idCard,
+        newWorkerPhone: params.newWorker.phone,
+        status: SyncStatus.PENDING,
+      });
+
+      try {
+        this.logger.log(`📝 处理保单: ${policy.policyNo}`);
+
+        // 提取新服务人员的出生日期和性别
+        const birthDate = this.extractBirthDateFromIdCard(params.newWorker.idCard);
+        const gender = this.extractGenderFromIdCard(params.newWorker.idCard);
+
+        // 调用大树保换人API
+        const oldBirthDate = this.extractBirthDateFromIdCard(params.oldWorker.idCard);
+        const oldGender = this.extractGenderFromIdCard(params.oldWorker.idCard);
+
+        const response = await this.amendPolicy({
+          policyNo: policy.policyNo,
+          oldInsured: {
+            insuredName: params.oldWorker.name,
+            idType: '1', // 1-身份证
+            idNumber: params.oldWorker.idCard,
+            birthDate: oldBirthDate,
+            gender: oldGender,
+          },
+          newInsured: {
+            insuredName: params.newWorker.name,
+            idType: '1',
+            idNumber: params.newWorker.idCard,
+            birthDate: birthDate,
+            gender: gender,
+            mobile: params.newWorker.phone,
+          },
+        });
+
+        // 更新同步日志
+        if (response.Success === 'true') {
+          syncLog.status = SyncStatus.SUCCESS;
+          syncLog.syncedAt = new Date();
+          this.logger.log(`✅ 保单 ${policy.policyNo} 换人成功`);
+
+          // 更新保单的被保险人信息 + 绑定到新合同
+          await this.policyModel.findByIdAndUpdate(policy._id, {
+            'insuredList.0.insuredName': params.newWorker.name,
+            'insuredList.0.idNumber': params.newWorker.idCard,
+            'insuredList.0.birthDate': birthDate,
+            'insuredList.0.gender': gender,
+            'insuredList.0.mobile': params.newWorker.phone,
+            // 🆕 更新保单绑定的合同ID为新合同
+            contractId: params.contractId,
+            bindToContractAt: new Date(),
+          });
+
+          this.logger.log(`✅ 保单 ${policy.policyNo} 已重新绑定到新合同 ${params.contractId}`);
+
+          results.push({
+            policyId: policy._id,
+            policyNo: policy.policyNo,
+            success: true,
+          });
+        } else {
+          syncLog.status = SyncStatus.FAILED;
+          syncLog.errorMessage = response.Message || '换人失败';
+          this.logger.error(`❌ 保单 ${policy.policyNo} 换人失败: ${response.Message}`);
+
+          results.push({
+            policyId: policy._id,
+            policyNo: policy.policyNo,
+            success: false,
+            error: response.Message,
+          });
+        }
+
+        syncLog.dashubaoResponse = response;
+      } catch (error) {
+        syncLog.status = SyncStatus.FAILED;
+        syncLog.errorMessage = error.message;
+        this.logger.error(`❌ 保单 ${policy.policyNo} 换人异常:`, error);
+
+        results.push({
+          policyId: policy._id,
+          policyNo: policy.policyNo,
+          success: false,
+          error: error.message,
+        });
+      }
+
+      await syncLog.save();
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    this.logger.log(`🎉 保险同步完成: 成功 ${successCount}/${results.length}`);
+
+    return {
+      success: successCount > 0,
+      results,
+    };
+  }
+
+  /**
+   * 查询保险同步日志
+   */
+  async getSyncLogs(contractId: string): Promise<InsuranceSyncLog[]> {
+    return this.syncLogModel
+      .find({ contractId })
+      .sort({ createdAt: -1 })
+      .exec();
   }
 }
 

@@ -9,6 +9,7 @@ import { ResumeController } from './resume.controller';
 import { ResumeService } from './resume.service';
 import { UploadModule } from '../upload/upload.module';
 import { EmployeeEvaluation, EmployeeEvaluationSchema } from '../employee-evaluation/models/employee-evaluation.entity';
+import { Contract, ContractSchema } from '../contracts/models/contract.model';
 
 @Module({
   imports: [
@@ -16,7 +17,8 @@ import { EmployeeEvaluation, EmployeeEvaluationSchema } from '../employee-evalua
       { name: Resume.name, schema: ResumeSchema },
       { name: WorkExperienceSchema.name, schema: WorkExperienceSchemaFactory },
       { name: FileInfoSchema.name, schema: FileInfoSchemaFactory },
-      { name: EmployeeEvaluation.name, schema: EmployeeEvaluationSchema }
+      { name: EmployeeEvaluation.name, schema: EmployeeEvaluationSchema },
+      { name: Contract.name, schema: ContractSchema }
     ]),
     UploadModule,
     // 为分享令牌签发/验证提供 JwtService

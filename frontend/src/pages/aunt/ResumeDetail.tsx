@@ -161,6 +161,7 @@ type OrderStatusMapType = {
   [key: string]: string;
   accepting: string;
   'not-accepting': string;
+  signed: string;
   'on-service': string;
 };
 
@@ -283,6 +284,7 @@ const jobTypeMap: JobTypeMapType = {
 const orderStatusMap: OrderStatusMapType = {
   accepting: '想接单',
   'not-accepting': '不接单',
+  signed: '已签约',
   'on-service': '已上户'
 };
 

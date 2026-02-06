@@ -145,4 +145,9 @@ export const customerService = {
     const response = await apiService.get(`/api/customers/${customerId}/operation-logs`);
     return response.data;
   },
+
+  // 🆕 同步客户线索等级为O类（当合同签约时调用）
+  async syncLeadLevelToO(customerId: string): Promise<void> {
+    await apiService.patch(`/api/customers/${customerId}/sync-lead-level-o`, {});
+  },
 };

@@ -58,11 +58,6 @@ export const contractService = {
     return response.data;
   },
 
-  // 删除合同
-  async deleteContract(id: string): Promise<void> {
-    await apiService.delete(`/api/contracts/${id}`);
-  },
-
   // 获取统计信息
   async getStatistics(): Promise<{
     total: number;
@@ -117,6 +112,13 @@ export const contractService = {
   } = {}): Promise<any> {
     const response = await apiService.post(`/api/contracts/${contractId}/download-contract`, options);
     // 返回完整的响应对象，包含success、data、message字段
+    return response;
+  },
+
+  // 重新获取签署链接
+  async resendSignUrls(contractId: string): Promise<any> {
+    const response = await apiService.post(`/api/contracts/${contractId}/resend-sign-urls`);
+    // 响应拦截器已经返回了 response.data，所以这里直接返回 response
     return response;
   },
 
@@ -282,5 +284,60 @@ export const contractService = {
       return response.data;
     }
     return [];
+  },
+
+  // 撤销合同
+  async withdrawContract(contractNo: string, withdrawReason?: string, isNoticeSignUser?: boolean): Promise<{
+    success: boolean;
+    message: string;
+    data?: any;
+  }> {
+    const response = await apiService.post(`/api/esign/withdraw-contract/${contractNo}`, {
+      withdrawReason,
+      isNoticeSignUser
+    });
+    return response.data || response;
+  },
+
+  // 作废合同（仅管理员）
+  async invalidateContract(contractNo: string, validityTime: number = 15): Promise<any> {
+    const response = await apiService.post(`/api/esign/invalidate-contract/${contractNo}`, {
+      validityTime // 作废签署剩余天数
+    });
+    return response;
+  },
+
+  // 删除合同（管理员直接删除，员工创建审批请求）
+  async deleteContract(contractId: string, reason?: string, isAdmin: boolean = false): Promise<{
+    success: boolean;
+    message: string;
+    data?: any;
+  }> {
+    if (isAdmin) {
+      // 管理员直接删除
+      const response = await apiService.delete(`/api/contracts/${contractId}`);
+      return response.data || response;
+    } else {
+      // 员工创建删除审批请求
+      const response = await apiService.post(`/api/contracts/${contractId}/request-deletion`, {
+        reason
+      });
+      return response.data || response;
+    }
+  },
+
+  // 手动触发保险同步
+  async syncInsurance(contractId: string): Promise<{
+    success: boolean;
+    message: string;
+    data?: {
+      contractStatus: string;
+      esignStatus: string;
+      insuranceSyncStatus?: string;
+      insuranceSyncError?: string;
+    };
+  }> {
+    const response = await apiService.post(`/api/contracts/${contractId}/sync-insurance`);
+    return response.data || response;
   },
 };

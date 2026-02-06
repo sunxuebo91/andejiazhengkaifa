@@ -28,6 +28,10 @@ import { BannerModule } from './modules/banner/banner.module';
 import { ArticleModule } from './modules/article/article.module';
 import { EmployeeEvaluationModule } from './modules/employee-evaluation/employee-evaluation.module';
 import { MiniProgramUserModule } from './modules/miniprogram-user/miniprogram-user.module';
+import { TrainingLeadsModule } from './modules/training-leads/training-leads.module';
+import { FormModule } from './modules/form/form.module';
+import { ShortUrlModule } from './modules/short-url/short-url.module';
+import { ContractApprovalsModule } from './modules/contract-approvals/contract-approvals.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 
 @Module({
@@ -73,6 +77,10 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
     ArticleModule,
     EmployeeEvaluationModule,
     MiniProgramUserModule,
+    TrainingLeadsModule,
+    FormModule,
+    ShortUrlModule,
+    ContractApprovalsModule,
   ],
   controllers: [AppController],
   providers: [

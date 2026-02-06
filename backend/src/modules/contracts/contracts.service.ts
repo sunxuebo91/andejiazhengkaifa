@@ -8,6 +8,9 @@ import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { ResumeService } from '../resume/resume.service';
 import { AvailabilityStatus } from '../resume/models/availability-period.schema';
+import { DashubaoService } from '../dashubao/dashubao.service';
+import { InsurancePolicy, InsurancePolicyDocument } from '../dashubao/models/insurance-policy.model';
+import { ESignService } from '../esign/esign.service';
 
 @Injectable()
 export class ContractsService {
@@ -18,6 +21,8 @@ export class ContractsService {
     @InjectModel(CustomerContractHistory.name) private customerContractHistoryModel: Model<CustomerContractHistoryDocument>,
     @InjectModel(CustomerOperationLog.name) private operationLogModel: Model<CustomerOperationLog>,
     @Inject(forwardRef(() => ResumeService)) private resumeService: ResumeService,
+    private dashubaoService: DashubaoService,
+    private esignService: ESignService,
   ) {}
 
   /**
@@ -255,23 +260,23 @@ export class ContractsService {
   }
 
   // 根据ID获取合同详情
-  async findOne(id: string): Promise<Contract> {
+  async findOne(id: string): Promise<any> {
     console.log('🚨🚨🚨 [CONTRACTS SERVICE] 开始查询合同详情, ID:', id);
     console.log('🚨🚨🚨 [CONTRACTS SERVICE] 当前时间:', new Date().toISOString());
-    
+
     const contract = await this.contractModel
       .findById(id)
       .populate('customerId', 'name phone customerId address')
-      .populate('workerId', 'name phone idCardNumber')
+      .populate('workerId', 'name phone idCardNumber currentAddress')
       .populate('createdBy', 'name username')
       .populate('lastUpdatedBy', 'name username')
       .exec();
-      
+
     if (!contract) {
       console.log('🚨🚨🚨 [CONTRACTS SERVICE] 合同不存在, ID:', id);
       throw new NotFoundException('合同不存在');
     }
-    
+
     console.log('🚨🚨🚨 [CONTRACTS SERVICE] 合同详情查询结果:');
     console.log('🚨🚨🚨   - 合同ID:', contract._id);
     console.log('🚨🚨🚨   - 合同编号:', contract.contractNumber);
@@ -279,8 +284,59 @@ export class ContractsService {
     console.log('🚨🚨🚨   - 最后更新人:', contract.lastUpdatedBy);
     console.log('🚨🚨🚨   - lastUpdatedBy类型:', typeof contract.lastUpdatedBy);
     console.log('🚨🚨🚨   - 原始合同数据的lastUpdatedBy字段:', contract.toObject().lastUpdatedBy);
-    
-    return contract;
+
+    // 查询劳动者的保险信息（根据身份证号）
+    let insuranceInfo = null;
+    if (contract.workerIdCard) {
+      try {
+        console.log('🔍 [CONTRACTS SERVICE] 查询劳动者保险信息, 身份证号:', contract.workerIdCard);
+        const policies = await this.dashubaoService.getPoliciesByIdCard(contract.workerIdCard);
+
+        if (policies && policies.length > 0) {
+          // 只返回有效的保险信息（未过期、未注销、未退保）
+          const activePolicies = policies.filter(p =>
+            p.status === 'active' || p.status === 'processing' || p.status === 'pending'
+          );
+
+          insuranceInfo = {
+            hasInsurance: activePolicies.length > 0,
+            policies: activePolicies.map(p => ({
+              policyNo: p.policyNo,
+              agencyPolicyRef: p.agencyPolicyRef,
+              planCode: p.planCode,
+              effectiveDate: p.effectiveDate,
+              expireDate: p.expireDate,
+              totalPremium: p.totalPremium,
+              status: p.status,
+              policyPdfUrl: p.policyPdfUrl,
+            })),
+            totalPolicies: activePolicies.length,
+          };
+          console.log('✅ [CONTRACTS SERVICE] 找到保险信息:', insuranceInfo);
+        } else {
+          insuranceInfo = {
+            hasInsurance: false,
+            policies: [],
+            totalPolicies: 0,
+          };
+          console.log('ℹ️ [CONTRACTS SERVICE] 未找到保险信息');
+        }
+      } catch (error) {
+        console.error('❌ [CONTRACTS SERVICE] 查询保险信息失败:', error);
+        insuranceInfo = {
+          hasInsurance: false,
+          policies: [],
+          totalPolicies: 0,
+          error: error.message,
+        };
+      }
+    }
+
+    // 将合同对象转换为普通对象并添加保险信息
+    const contractObj: any = contract.toObject();
+    contractObj.insuranceInfo = insuranceInfo;
+
+    return contractObj;
   }
 
   // 根据合同编号获取合同
@@ -288,14 +344,14 @@ export class ContractsService {
     const contract = await this.contractModel
       .findOne({ contractNumber })
       .populate('customerId', 'name phone customerId address')
-      .populate('workerId', 'name phone idCardNumber')
+      .populate('workerId', 'name phone idCardNumber currentAddress')
       .populate('createdBy', 'name username')
       .exec();
-      
+
     if (!contract) {
       throw new NotFoundException('合同不存在');
     }
-    
+
     return contract;
   }
 
@@ -319,8 +375,14 @@ export class ContractsService {
 
   // 更新合同
   async update(id: string, updateContractDto: UpdateContractDto, userId?: string): Promise<Contract> {
+    // 先获取原合同状态
+    const originalContract = await this.contractModel.findById(id).exec();
+    if (!originalContract) {
+      throw new NotFoundException('合同不存在');
+    }
+
     const updateData: any = { ...updateContractDto };
-    
+
     // 处理日期字段
     if (updateContractDto.startDate) {
       updateData.startDate = new Date(updateContractDto.startDate);
@@ -340,24 +402,85 @@ export class ContractsService {
     const contract = await this.contractModel
       .findByIdAndUpdate(id, updateData, { new: true })
       .populate('customerId', 'name phone customerId address')
-      .populate('workerId', 'name phone idCardNumber')
+      .populate('workerId', 'name phone idCardNumber currentAddress')
       .populate('createdBy', 'name username')
       .populate('lastUpdatedBy', 'name username')
       .exec();
-      
+
     if (!contract) {
       throw new NotFoundException('合同不存在');
     }
-    
+
+    // 🆕 检查合同状态是否变为 active，如果是则触发保险同步
+    const statusChanged = originalContract.contractStatus !== contract.contractStatus;
+    const isNowActive = contract.contractStatus === 'active';
+
+    if (statusChanged && isNowActive) {
+      this.logger.log(`🔔 合同状态变为 active，触发保险同步检查: ${contract._id}`);
+      // 异步触发保险同步，不阻塞合同更新
+      this.syncInsuranceOnContractActive(contract._id.toString()).catch(error => {
+        this.logger.error(`保险同步失败（异步）:`, error);
+      });
+    }
+
     return contract;
   }
 
   // 删除合同
   async remove(id: string): Promise<void> {
-    const result = await this.contractModel.findByIdAndDelete(id).exec();
-    if (!result) {
+    // 先查询要删除的合同
+    const contractToDelete = await this.contractModel.findById(id).exec();
+    if (!contractToDelete) {
       throw new NotFoundException('合同不存在');
     }
+
+    this.logger.log(`🗑️ 准备删除合同: ${contractToDelete.contractNumber}`);
+
+    // 🔧 如果这是一个换人合同，同时删除被替换的旧合同
+    if (contractToDelete.replacesContractId) {
+      this.logger.log(`检测到换人合同，同时删除被替换的旧合同: ${contractToDelete.replacesContractId}`);
+
+      try {
+        const oldContract = await this.contractModel.findById(contractToDelete.replacesContractId).exec();
+
+        if (oldContract) {
+          await this.contractModel.findByIdAndDelete(contractToDelete.replacesContractId).exec();
+          this.logger.log(`✅ 已删除旧合同: ${oldContract.contractNumber}`);
+        } else {
+          this.logger.warn(`⚠️ 被替换的旧合同不存在: ${contractToDelete.replacesContractId}`);
+        }
+      } catch (error) {
+        this.logger.error(`删除旧合同失败: ${error.message}`);
+        // 不抛出错误，继续删除当前合同
+      }
+    }
+
+    // 🔧 如果这是一个被替换的旧合同，同时删除替换它的新合同
+    if (contractToDelete.replacedByContractId) {
+      this.logger.log(`检测到被替换的旧合同，同时删除替换它的新合同: ${contractToDelete.replacedByContractId}`);
+
+      try {
+        const newContract = await this.contractModel.findById(contractToDelete.replacedByContractId).exec();
+
+        if (newContract) {
+          await this.contractModel.findByIdAndDelete(contractToDelete.replacedByContractId).exec();
+          this.logger.log(`✅ 已删除新合同: ${newContract.contractNumber}`);
+        } else {
+          this.logger.warn(`⚠️ 替换的新合同不存在: ${contractToDelete.replacedByContractId}`);
+        }
+      } catch (error) {
+        this.logger.error(`删除新合同失败: ${error.message}`);
+        // 不抛出错误，继续删除当前合同
+      }
+    }
+
+    // 执行删除当前合同
+    const result = await this.contractModel.findByIdAndDelete(id).exec();
+    if (!result) {
+      throw new NotFoundException('合同删除失败');
+    }
+
+    this.logger.log(`✅ 合同已删除: ${result.contractNumber}`);
   }
 
   // 获取统计信息
@@ -655,7 +778,7 @@ export class ContractsService {
       const contracts = await this.contractModel
         .find(query)
         .populate('customerId', 'name phone customerId address')
-        .populate('workerId', 'name phone idNumber')
+        .populate('workerId', 'name phone idNumber currentAddress')
         .sort({ createdAt: -1 })
         .limit(10) // 限制返回数量
         .exec();
@@ -782,7 +905,7 @@ export class ContractsService {
 
       console.log('✅ 换人合并完成，新合同ID:', (newContract as any)._id);
       console.log('📋 客户合同已自动合并，换人历史已记录');
-      
+
       return newContract;
 
     } catch (error) {
@@ -790,4 +913,317 @@ export class ContractsService {
       throw new BadRequestException(`创建换人合同失败: ${error.message}`);
     }
   }
-} 
+
+  /**
+   * 当合同状态变为 active 时，自动触发保险同步
+   * 场景1：首次签约 - 绑定保单到合同
+   * 场景2：换人签约 - 自动换人保单
+   * 此方法会在合同状态更新时被调用
+   */
+  /**
+   * 手动触发保险同步（增强版）
+   * 1. 先查询爱签API确认合同真实状态
+   * 2. 如果爱签显示已签约，更新本地状态
+   * 3. 触发保险同步逻辑
+   */
+  async manualSyncInsurance(contractId: string): Promise<any> {
+    try {
+      this.logger.log(`🔄 手动触发保险同步: ${contractId}`);
+
+      const contract = await this.contractModel.findById(contractId).exec();
+
+      if (!contract) {
+        throw new NotFoundException('合同不存在');
+      }
+
+      this.logger.log(`📋 合同信息: ${contract.contractNumber}, 当前状态: ${contract.contractStatus}, 爱签状态: ${contract.esignStatus}`);
+
+      // 步骤1：查询爱签API获取合同真实状态
+      let esignStatus = contract.esignStatus;
+      let needUpdateStatus = false;
+
+      if (contract.esignContractNo) {
+        try {
+          this.logger.log(`🔍 查询爱签API获取合同真实状态...`);
+          const esignResponse = await this.esignService.getContractStatus(contract.esignContractNo);
+
+          if (esignResponse && esignResponse.data) {
+            esignStatus = esignResponse.data.status?.toString();
+            this.logger.log(`✅ 爱签API返回状态: ${esignStatus} (${this.getEsignStatusText(esignStatus)})`);
+
+            // 如果爱签显示已签约，但本地状态不是 active，需要更新
+            if (esignStatus === '2' && contract.contractStatus !== 'active') {
+              needUpdateStatus = true;
+              this.logger.log(`⚠️  爱签显示已签约，但本地状态是 ${contract.contractStatus}，需要更新`);
+            }
+          }
+        } catch (esignError) {
+          this.logger.warn(`⚠️  查询爱签API失败: ${esignError.message}，使用本地状态继续`);
+        }
+      }
+
+      // 步骤2：如果需要，更新本地合同状态
+      if (needUpdateStatus) {
+        this.logger.log(`🔧 更新本地合同状态为 active...`);
+        await this.contractModel.findByIdAndUpdate(contractId, {
+          contractStatus: 'active',
+          esignStatus: '2',
+          esignSignedAt: new Date(),
+          updatedAt: new Date(),
+        });
+        this.logger.log(`✅ 合同状态已更新`);
+      }
+
+      // 步骤3：检查合同是否已签约
+      if (esignStatus !== '2') {
+        const statusText = this.getEsignStatusText(esignStatus);
+        throw new BadRequestException(`合同还未签约完成，当前状态: ${statusText}`);
+      }
+
+      // 步骤4：触发保险同步
+      this.logger.log(`🔄 开始保险同步...`);
+      await this.syncInsuranceOnContractActive(contractId);
+
+      // 步骤5：查询最终状态
+      const updatedContract = await this.contractModel.findById(contractId).exec();
+
+      return {
+        success: true,
+        message: '保险同步完成',
+        data: {
+          contractStatus: updatedContract.contractStatus,
+          esignStatus: updatedContract.esignStatus,
+          insuranceSyncStatus: updatedContract.insuranceSyncStatus,
+          insuranceSyncError: updatedContract.insuranceSyncError,
+        },
+      };
+
+    } catch (error) {
+      this.logger.error(`❌ 手动保险同步失败:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取爱签状态文本描述
+   */
+  private getEsignStatusText(status: string): string {
+    const statusMap = {
+      '0': '等待签约',
+      '1': '签约中',
+      '2': '已签约',
+      '3': '过期',
+      '4': '拒签',
+      '6': '作废',
+      '7': '撤销',
+    };
+    return statusMap[status] || '未知状态';
+  }
+
+  async syncInsuranceOnContractActive(contractId: string): Promise<void> {
+    try {
+      this.logger.log(`🔍 检查合同 ${contractId} 是否需要同步保险`);
+
+      const contract = await this.contractModel.findById(contractId).exec();
+
+      if (!contract) {
+        throw new NotFoundException('合同不存在');
+      }
+
+      // 🔒 幂等性保护：如果已经同步成功或正在同步中，跳过
+      if (contract.insuranceSyncStatus === 'success') {
+        this.logger.log(`⏭️ 合同 ${contractId} 保险已同步成功，跳过重复同步`);
+        return;
+      }
+      if (contract.insuranceSyncStatus === 'pending' && contract.insuranceSyncPending) {
+        this.logger.log(`⏭️ 合同 ${contractId} 保险正在同步中，跳过重复同步`);
+        return;
+      }
+
+      // 🆕 场景判断：是首次签约还是换人签约
+      const isChangeWorkerContract = !!contract.replacesContractId;
+
+      if (isChangeWorkerContract) {
+        // ========== 场景2：换人合同 - 自动换人保单 ==========
+        this.logger.log(`✅ 这是一个换人合同，原合同ID: ${contract.replacesContractId}`);
+        await this.handleChangeWorkerInsurance(contract);
+      } else {
+        // ========== 场景1：首次签约 - 绑定保单到合同 ==========
+        this.logger.log(`✅ 这是首次签约合同，检查是否需要绑定保单`);
+        await this.handleFirstContractInsurance(contract);
+      }
+
+    } catch (error) {
+      this.logger.error(`❌ 保险同步失败:`, error);
+
+      // 更新合同同步状态为失败
+      await this.contractModel.findByIdAndUpdate(contractId, {
+        insuranceSyncPending: false,
+        insuranceSyncStatus: 'failed',
+        insuranceSyncError: error.message,
+      });
+
+      // 不抛出异常，避免影响合同流程
+    }
+  }
+
+  /**
+   * 场景1：首次签约 - 绑定保单到合同
+   */
+  private async handleFirstContractInsurance(contract: any): Promise<void> {
+    this.logger.log(`📋 首次签约合同信息: ${contract.workerName} (${contract.workerIdCard})`);
+
+    if (!contract.workerIdCard) {
+      this.logger.warn('⚠️ 合同缺少服务人员身份证号，无法匹配保单');
+      await this.contractModel.findByIdAndUpdate(contract._id, {
+        insuranceSyncStatus: 'failed',
+        insuranceSyncError: '合同缺少服务人员身份证号',
+        insuranceSyncedAt: new Date(),
+      });
+      return;
+    }
+
+    // 🔥 修复：用身份证号匹配保单的被保险人，而不是用随机的 workerId
+    const policies = await this.dashubaoService['policyModel'].find({
+      'insuredList.idNumber': contract.workerIdCard,
+      status: 'active'
+    }).exec();
+
+    this.logger.log(`🔍 通过身份证号 ${contract.workerIdCard} 查找保单，找到 ${policies.length} 个`);
+
+    if (policies.length === 0) {
+      this.logger.log('未找到该服务人员的保单，无需绑定');
+      await this.contractModel.findByIdAndUpdate(contract._id, {
+        insuranceSyncStatus: 'success',
+        insuranceSyncError: '无需绑定（未找到关联保险）',
+        insuranceSyncedAt: new Date(),
+      });
+      return;
+    }
+
+    this.logger.log(`📦 找到 ${policies.length} 个保单，开始绑定到合同`);
+
+    // 将保单绑定到合同（更新保单的 contractId 字段）
+    const bindResults = [];
+    for (const policy of policies) {
+      try {
+        await this.dashubaoService['policyModel'].findByIdAndUpdate(policy._id, {
+          contractId: contract._id,
+          bindToContractAt: new Date(),
+        });
+        bindResults.push({ success: true, policyNo: policy.policyNo });
+        this.logger.log(`✅ 保单 ${policy.policyNo} 已绑定到合同 ${contract.contractNumber}`);
+      } catch (error) {
+        bindResults.push({ success: false, policyNo: policy.policyNo, error: error.message });
+        this.logger.error(`❌ 保单 ${policy.policyNo} 绑定失败:`, error);
+      }
+    }
+
+    const successCount = bindResults.filter(r => r.success).length;
+    const failedResults = bindResults.filter(r => !r.success);
+
+    await this.contractModel.findByIdAndUpdate(contract._id, {
+      insuranceSyncStatus: successCount > 0 ? 'success' : 'failed',
+      insuranceSyncError: failedResults.length > 0
+        ? `部分失败: ${failedResults.map(r => r.error).join('; ')}`
+        : null,
+      insuranceSyncedAt: new Date(),
+    });
+
+    this.logger.log(`🎉 保单绑定完成: 成功 ${successCount}/${policies.length}`);
+  }
+
+  /**
+   * 场景2：换人合同 - 自动换人保单
+   */
+  private async handleChangeWorkerInsurance(contract: any): Promise<void> {
+    // 查找原合同
+    const originalContract = await this.contractModel.findById(contract.replacesContractId).exec();
+    if (!originalContract) {
+      this.logger.warn('原合同不存在，无法同步保险');
+      await this.contractModel.findByIdAndUpdate(contract._id, {
+        insuranceSyncStatus: 'failed',
+        insuranceSyncError: '原合同不存在',
+      });
+      return;
+    }
+
+    this.logger.log(`📋 原合同信息: ${originalContract.workerName} (${originalContract.workerIdCard})`);
+    this.logger.log(`📋 新合同信息: ${contract.workerName} (${contract.workerIdCard})`);
+
+    if (!originalContract.workerIdCard) {
+      this.logger.warn('⚠️ 原合同缺少服务人员身份证号，无法匹配保单');
+      await this.contractModel.findByIdAndUpdate(contract._id, {
+        insuranceSyncStatus: 'failed',
+        insuranceSyncError: '原合同缺少服务人员身份证号',
+      });
+      return;
+    }
+
+    // 🆕 查找绑定到原合同的保单（优先）
+    let policies = await this.dashubaoService['policyModel'].find({
+      contractId: originalContract._id,
+      status: 'active'
+    }).exec();
+
+    this.logger.log(`🔍 通过 contractId 查找保单，找到 ${policies.length} 个`);
+
+    // 🔥 修复：如果没有找到绑定的保单，用身份证号匹配（而不是随机的 workerId）
+    if (policies.length === 0) {
+      this.logger.log(`未找到绑定到原合同的保单，尝试通过身份证号 ${originalContract.workerIdCard} 查找`);
+      policies = await this.dashubaoService['policyModel'].find({
+        'insuredList.idNumber': originalContract.workerIdCard,
+        status: 'active'
+      }).exec();
+      this.logger.log(`🔍 通过身份证号查找保单，找到 ${policies.length} 个`);
+    }
+
+    if (policies.length === 0) {
+      this.logger.log('未找到需要同步的保险，可能该服务人员没有购买保险');
+      await this.contractModel.findByIdAndUpdate(contract._id, {
+        insuranceSyncStatus: 'success',
+        insuranceSyncError: '无需同步（未找到关联保险）',
+        insuranceSyncedAt: new Date(),
+      });
+      return;
+    }
+
+    this.logger.log(`📦 找到 ${policies.length} 个需要换人的保单`);
+
+    // 标记合同为待同步状态
+    await this.contractModel.findByIdAndUpdate(contract._id, {
+      insuranceSyncPending: true,
+      insuranceSyncStatus: 'pending',
+    });
+
+    // 调用保险换人服务
+    const result = await this.dashubaoService.syncInsuranceAmendment({
+      contractId: contract._id as Types.ObjectId,
+      policyIds: policies.map(p => p._id as Types.ObjectId),
+      oldWorker: {
+        name: originalContract.workerName,
+        idCard: originalContract.workerIdCard,
+      },
+      newWorker: {
+        name: contract.workerName,
+        idCard: contract.workerIdCard,
+        phone: contract.workerPhone,
+      },
+    });
+
+    // 更新合同同步状态
+    const successCount = result.results.filter(r => r.success).length;
+    const failedResults = result.results.filter(r => !r.success);
+
+    await this.contractModel.findByIdAndUpdate(contract._id, {
+      insuranceSyncPending: false,
+      insuranceSyncStatus: result.success ? 'success' : 'failed',
+      insuranceSyncError: failedResults.length > 0
+        ? `部分失败: ${failedResults.map(r => r.error).join('; ')}`
+        : null,
+      insuranceSyncedAt: new Date(),
+    });
+
+    this.logger.log(`🎉 保险换人完成: 成功 ${successCount}/${policies.length}`);
+  }
+}

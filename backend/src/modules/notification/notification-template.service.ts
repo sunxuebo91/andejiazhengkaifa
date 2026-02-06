@@ -153,6 +153,20 @@ export class NotificationTemplateService implements OnModuleInit {
         actionText: '查看详情',
       },
 
+      // ========== 表单相关 ==========
+      {
+        type: NotificationType.FORM_SUBMISSION_RECEIVED,
+        name: '表单提交通知',
+        description: '有新的表单提交时通知归属人',
+        title: '新表单提交',
+        content: '您分享的表单【{{formTitle}}】收到新提交{{submitterName}}{{submitterPhone}}',
+        priority: NotificationPriority.HIGH,
+        icon: 'FormOutlined',
+        color: '#1890ff',
+        actionUrl: '/forms/{{formId}}/submissions',
+        actionText: '查看详情',
+      },
+
       // ========== 合同相关 ==========
       {
         type: NotificationType.CONTRACT_CREATED,

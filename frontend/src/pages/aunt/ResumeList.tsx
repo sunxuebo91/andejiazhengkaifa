@@ -15,6 +15,7 @@ const { Option } = Select;
 const orderStatusMap: Record<string, { text: string; color: string; icon: string }> = {
   accepting: { text: '想接单', color: '#52c41a', icon: '🟢' },
   'not-accepting': { text: '不接单', color: '#ff4d4f', icon: '🔴' },
+  signed: { text: '已签约', color: '#fa8c16', icon: '🟠' },
   'on-service': { text: '已上户', color: '#1890ff', icon: '🔵' }
 };
 
@@ -525,7 +526,7 @@ const ResumeList = () => {
                 messageApi.warning('简历ID不存在');
                 return;
               }
-              navigate(`/aunt/resumes/detail/${id}`);
+              window.open(`/standalone/aunt/resumes/detail/${id}`, '_blank');
             }}>
               {text || '未知ID'}
             </a>

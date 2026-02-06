@@ -31,13 +31,16 @@ export enum NotificationType {
   CONTRACT_WORKER_CHANGED = 'CONTRACT_WORKER_CHANGED', // 合同换人
   CONTRACT_EXPIRING_SOON = 'CONTRACT_EXPIRING_SOON',  // 合同即将到期
   CONTRACT_STATUS_CHANGED = 'CONTRACT_STATUS_CHANGED', // 合同状态变更
-  
+
+  // 表单相关
+  FORM_SUBMISSION_RECEIVED = 'FORM_SUBMISSION_RECEIVED', // 表单提交通知
+
   // 日报相关
   DAILY_REPORT_PERSONAL = 'DAILY_REPORT_PERSONAL',     // 个人日报
   DAILY_REPORT_TEAM = 'DAILY_REPORT_TEAM',            // 团队日报
   WEEKLY_REPORT = 'WEEKLY_REPORT',                     // 周报
   MONTHLY_REPORT = 'MONTHLY_REPORT',                   // 月报
-  
+
   // 系统相关
   SYSTEM_ANNOUNCEMENT = 'SYSTEM_ANNOUNCEMENT',         // 系统公告
   PERMISSION_CHANGED = 'PERMISSION_CHANGED',           // 权限变更

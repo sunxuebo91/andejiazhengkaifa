@@ -194,5 +194,20 @@ export class NotificationHelperService {
   }) {
     return this.sendAndPush(userIds, NotificationType.CONTRACT_WORKER_CHANGED, data);
   }
+
+  // ========== 表单相关通知 ==========
+
+  /**
+   * 表单提交通知
+   */
+  async notifyFormSubmission(userId: string, data: {
+    formId: string;
+    formTitle: string;
+    submissionId: string;
+    submitterName?: string;
+    submitterPhone?: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.FORM_SUBMISSION_RECEIVED, data);
+  }
 }
 

@@ -17,6 +17,8 @@ import {
   Spin,
   Tag,
   Modal,
+  Collapse,
+  Divider,
 } from 'antd';
 import { PageContainer } from '@ant-design/pro-components';
 import {
@@ -47,7 +49,7 @@ import { contractService } from '../../services/contractService';
 import { customerService } from '../../services/customerService';
 import WechatPayModal from '../../components/WechatPayModal';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
 
 // 格式化日期为大树保格式 (yyyyMMddHHmmss)
@@ -68,6 +70,113 @@ const extractInfoFromIdCard = (idCard: string): { birthDate: string; gender: str
   const gender = genderCode % 2 === 1 ? 'M' : 'F';
   
   return { birthDate, gender };
+};
+
+const productDetails: Record<string, {
+  badge?: string;
+  tagline: string;
+  highlights: string[];
+  coverages: string[];
+  notices: string[];
+  rules?: string[];
+  extras?: string[];
+}> = {
+  'pingan-dashubao': {
+    badge: '热门推荐',
+    tagline: '大树保平台热销雇主险，保障全面、价格灵活（月/年缴）',
+    highlights: [
+      '雇主责任：身故伤残 10-40万，医疗 1-4万',
+      '第三者责任年累计 100-400万',
+      '含误工费、住院津贴、救护车津贴、法律费用',
+      '突发急性病身故保障，覆盖上下班途中',
+    ],
+    coverages: [
+      '雇主责任：身故及伤残、医疗费用、误工费、住院津贴、救护车津贴、突发急性病身故、法律费用',
+      '第三者责任：年累计赔偿限额 100万/200万/300万/400万，含身故伤残、医疗、财产损失',
+      '医疗扩展自费药（赔付不超过合理医疗费用10%）',
+    ],
+    notices: [
+      '被保险人员工年龄 16-65 周岁，超出范围合同自始无效',
+      '仅承保 1-3 类职业（不含 4 类及以上职业/拒保职业）',
+      '承保区域：全国范围（港澳台除外）',
+      '认可全国二级及二级以上公立医院（北京平谷/密云/怀柔、天津滨海/静海除外）',
+      '被保险人需在事故发生后 48 小时内报案',
+      '同一保险期间同一雇员限投保 1 份，多保无效',
+      '突发急性病身故仅限工作时间（含上下班途中）或工作岗位且 48 小时内抢救无效',
+    ],
+    rules: [
+      '雇员工种：限 1-2 类',
+      '投保人/被保险人：家政服务企业、个体工商户等',
+      '缴费方式：月/年交；默认次日零时生效，可选择生效日期',
+      '退保：生效前退保收取保费 5% 或 50 元（取高者）手续费，生效后不可退保',
+      '批改：一年期按需求申请变更，只增不减，可线上批改人员信息',
+      '新增人员：线上操作，次日凌晨生效，保费按天折算',
+    ],
+    extras: [
+      '附加条款：扩展就餐时间、扩展紧急运输（每位雇员 5000）、扩展境内公出',
+      '伤残等级赔付比例：一级 100%…十级 3%',
+    ],
+  },
+  'pingan-jiazheng': {
+    badge: '性价比方案',
+    tagline: '家政无忧雇主责任险，覆盖雇主责任与第三者责任',
+    highlights: [
+      '计划一/二双档可选，月缴 10/12 元，年缴 100/120 元',
+      '雇主责任含身故伤残、医疗、误工费、住院津贴、救护车津贴',
+      '第三者责任最高 100 万年累计',
+    ],
+    coverages: [
+      '雇主责任：身故及伤残、医疗费用、误工费、住院津贴、救护车津贴、突发急性病身故、法律费用',
+      '第三者责任：身故伤残、医疗费用、财产损失',
+    ],
+    notices: [
+      '雇用人员不含直系亲属，年龄 16-65 周岁',
+      '被保险人仅限 1-3 类职业，4 类及以上不在承保范围',
+      '仅承保中国大陆区域（不含港澳台）',
+      '认可全国二级及二级以上公立医院（北京平谷/密云/怀柔、天津滨海/静海除外）',
+      '雇员过失导致客户财产损失按折旧赔付，古董字画金银首饰等除外',
+      '上下班途中合理路线意外伤残死亡属于责任范围',
+      '同一保险期间雇员最多投保一份，多保无效',
+      '突发急性病身故仅限工作时间（含上下班途中）或工作岗位且 48 小时内抢救无效',
+    ],
+  },
+  'huatai-yuesao': {
+    badge: '月嫂专属',
+    tagline: '月嫂专享意外与第三者责任保障，覆盖新生儿与产妇住院津贴',
+    highlights: [
+      '个人意外：身故残疾 40 万，意外医疗 4 万（0 免赔）',
+      '工作时间猝死 40 万，意外住院津贴 100 元/天起',
+      '第三者责任：雇主家庭成员人身伤害累计 80 万',
+      '雇主家庭财产损失 6 万（每次免赔 10%）',
+    ],
+    coverages: [
+      '月嫂个人意外：意外身故残疾 40 万、意外医疗 4 万（0 免赔）、工作时间猝死 40 万、意外住院津贴 100 元/天（免赔 3 天游、180 天为限）',
+      '第三者责任：雇主家庭成员人身伤害累计 80 万；每人每次限额 40 万（新生儿 0-28 天限额 20 万）',
+      '雇主家庭财产损失 6 万（每次事故免赔 10%）',
+      '其他第三者伤害（雇主家庭成员外）累计限额 2 万（医疗部分为保额 10% 为限）',
+      '其他保障：法律费用 10 万；住院津贴（婴幼儿黄疸/肺炎/脐炎或产妇乳腺炎）80/100/150/300 元/天（最高 30 天，免赔 0 天）',
+    ],
+    notices: [
+      '被保人员年龄 18-65 周岁，超出范围合同自始无效',
+      '同一家政人员保险期内仅限一份，多投无效',
+      '新生儿为出生 0-28 天婴儿',
+      '认可医院：全国二级及二级以上公立医院',
+      '48 小时内报案，逾期影响查勘定损可能不赔',
+      '家政人员与雇主及其家庭成员为直系亲属不承保',
+      '2 米及以上高空作业导致事故不赔',
+      '猝死为病发 48 小时内死亡',
+      '本产品不支持人员替换',
+    ],
+    rules: [
+      '第三者责任对雇主家庭成员外人身伤害限额：累计/每次 2 万（医疗部分为保额 10%）',
+      '雇主家庭成员每人每次限额 40 万；新生儿每次限额 20 万',
+      '住院津贴理赔需二级以上公立医院病历或建休证明',
+    ],
+    extras: [
+      '不赔责任包括：传染病/精神病不宜从事家政服务人员、贵重或难以鉴价财产、罚款罚金、间接损失等',
+      '擦玻器造成玻璃划痕不赔，玻璃破损可赔',
+    ],
+  },
 };
 
 const CreateInsurance: React.FC = () => {
@@ -452,63 +561,307 @@ const CreateInsurance: React.FC = () => {
     setCurrentStep(1);
   };
 
-  // 渲染保险产品卡片列表
-  const renderProductCards = () => (
-    <div>
-      <Row gutter={[24, 24]}>
-        {insuranceProducts.map((product) => (
-          <Col xs={24} lg={12} xl={8} key={product.id}>
-            <Card
-              hoverable
-              style={{ height: '100%' }}
-              title={
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <SafetyCertificateOutlined style={{ color: '#1890ff', fontSize: 20 }} />
-                  <span>{product.name}</span>
-                </div>
-              }
-              extra={<Tag color="blue">{product.company}</Tag>}
-            >
-              <div style={{ marginBottom: 16 }}>
-                <Text type="secondary">选择保障计划：</Text>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {product.plans.map((plan) => (
-                  <Card
-                    key={plan.planCode}
-                    size="small"
-                    hoverable
+  // 渲染保险产品卡片列表（新版：按险种分组，按年月展示）
+  const renderProductCards = () => {
+    // 过滤掉家政无忧，将常用险种（大树保）放在第一位
+    const sortedProducts = [...insuranceProducts]
+      .filter(p => p.id !== 'pingan-jiazheng') // 隐藏家政无忧
+      .sort((a, b) => {
+        if (a.id === 'pingan-dashubao') return -1;
+        if (b.id === 'pingan-dashubao') return 1;
+        return 0;
+      });
+
+    return (
+      <div>
+        <Row gutter={[24, 24]}>
+          {sortedProducts.map((product) => {
+            const detail = productDetails[product.id];
+            const isPopular = product.id === 'pingan-dashubao'; // 常用险种
+
+            // 按年月分组套餐，大树保只显示计划二
+            let yearPlans = product.plans.filter(p => p.period === 'year');
+            let monthPlans = product.plans.filter(p => p.period === 'month');
+
+            if (isPopular) {
+              // 大树保只显示计划二
+              yearPlans = yearPlans.filter(p => p.name.includes('计划二'));
+              monthPlans = monthPlans.filter(p => p.name.includes('计划二'));
+            }
+
+            // 其他产品正常显示
+            return (
+              <Col xs={24} lg={12} xl={8} key={product.id}>
+                <Card
+                  hoverable
+                  style={{
+                    height: '100%',
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    border: isPopular ? '2px solid #52c41a' : '1px solid #f0f0f0',
+                  }}
+                  bodyStyle={{ padding: 0 }}
+                >
+                  {/* 卡片头部 */}
+                  <div
                     style={{
-                      cursor: 'pointer',
-                      border: selectedPlan?.planCode === plan.planCode ? '2px solid #1890ff' : '1px solid #f0f0f0',
-                      background: selectedPlan?.planCode === plan.planCode ? '#e6f7ff' : '#fafafa',
+                      padding: 20,
+                      background: isPopular
+                        ? 'linear-gradient(135deg, #f6ffed 0%, #ffffff 70%)'
+                        : 'linear-gradient(135deg, #f0f5ff 0%, #ffffff 70%)',
+                      borderBottom: '1px solid #f0f0f0',
                     }}
-                    onClick={() => handleSelectPlan(product, plan)}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <Text strong>{plan.name}</Text>
-                        <br />
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {plan.period === 'year' ? '年缴' : '月缴'}
-                        </Text>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <Text style={{ fontSize: 24, color: '#f5222d', fontWeight: 'bold' }}>
-                          ¥{plan.price}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>/人</Text>
-                      </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Space>
+                        <SafetyCertificateOutlined
+                          style={{
+                            color: isPopular ? '#52c41a' : '#2f54eb',
+                            fontSize: 22
+                          }}
+                        />
+                        <div>
+                          <Title level={5} style={{ marginBottom: 0 }}>{product.name}</Title>
+                          <Text type="secondary">{product.company}</Text>
+                        </div>
+                      </Space>
+                      {isPopular && <Tag color="success">常用</Tag>}
+                      {detail?.badge && !isPopular && <Tag color="gold">{detail.badge}</Tag>}
                     </div>
-                  </Card>
-                ))}
-              </div>
-            </Card>
-          </Col>
-        ))}
-      </Row>
-    </div>
-  );
+                    {detail?.tagline && (
+                      <Paragraph style={{ marginTop: 12, marginBottom: 0 }} type="secondary">
+                        {detail.tagline}
+                      </Paragraph>
+                    )}
+                  </div>
+
+                  {/* 卡片内容 */}
+                  <div style={{ padding: 20 }}>
+                    {detail?.highlights && (
+                      <div style={{ marginBottom: 16 }}>
+                        <Space wrap size={[8, 8]}>
+                          {detail.highlights.map((item, idx) => (
+                            <Tag key={`${product.id}-hl-${idx}`} color="blue">{item}</Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    )}
+
+                    {/* 大树保：年缴和月缴并列显示 */}
+                    {isPopular ? (
+                      <Row gutter={[12, 12]}>
+                        {yearPlans.map((plan) => (
+                          <Col span={12} key={plan.planCode}>
+                            <Card
+                              size="small"
+                              hoverable
+                              style={{
+                                border: selectedPlan?.planCode === plan.planCode ? '2px solid #2f54eb' : '1px solid #f0f0f0',
+                                boxShadow: selectedPlan?.planCode === plan.planCode ? '0 4px 12px rgba(47,84,235,0.15)' : 'none',
+                                cursor: 'pointer',
+                              }}
+                              onClick={() => handleSelectPlan(product, plan)}
+                            >
+                              <div style={{ textAlign: 'center' }}>
+                                <Tag color="geekblue" style={{ marginBottom: 8 }}>年缴</Tag>
+                                <div>
+                                  <Text strong style={{ fontSize: 12 }}>{plan.name.replace('（年）', '')}</Text>
+                                </div>
+                                <div style={{ marginTop: 8 }}>
+                                  <Text style={{ fontSize: 20, color: '#f5222d', fontWeight: 600 }}>¥{plan.price}</Text>
+                                  <Text type="secondary" style={{ fontSize: 12 }}>/年</Text>
+                                </div>
+                                {selectedPlan?.planCode === plan.planCode && (
+                                  <CheckCircleOutlined style={{ color: '#52c41a', marginTop: 4 }} />
+                                )}
+                              </div>
+                            </Card>
+                          </Col>
+                        ))}
+                        {monthPlans.map((plan) => (
+                          <Col span={12} key={plan.planCode}>
+                            <Card
+                              size="small"
+                              hoverable
+                              style={{
+                                border: selectedPlan?.planCode === plan.planCode ? '2px solid #2f54eb' : '1px solid #f0f0f0',
+                                boxShadow: selectedPlan?.planCode === plan.planCode ? '0 4px 12px rgba(47,84,235,0.15)' : 'none',
+                                cursor: 'pointer',
+                              }}
+                              onClick={() => handleSelectPlan(product, plan)}
+                            >
+                              <div style={{ textAlign: 'center' }}>
+                                <Tag color="green" style={{ marginBottom: 8 }}>月缴</Tag>
+                                <div>
+                                  <Text strong style={{ fontSize: 12 }}>{plan.name.replace('（月）', '')}</Text>
+                                </div>
+                                <div style={{ marginTop: 8 }}>
+                                  <Text style={{ fontSize: 20, color: '#f5222d', fontWeight: 600 }}>¥{plan.price}</Text>
+                                  <Text type="secondary" style={{ fontSize: 12 }}>/月</Text>
+                                </div>
+                                {selectedPlan?.planCode === plan.planCode && (
+                                  <CheckCircleOutlined style={{ color: '#52c41a', marginTop: 4 }} />
+                                )}
+                              </div>
+                            </Card>
+                          </Col>
+                        ))}
+                      </Row>
+                    ) : (
+                      <>
+                        {/* 其他产品：年缴套餐 */}
+                        {yearPlans.length > 0 && (
+                          <div style={{ marginBottom: 16 }}>
+                            <Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+                              <Tag color="geekblue">年缴</Tag>
+                            </Title>
+                            <Row gutter={[12, 12]}>
+                              {yearPlans.map((plan) => (
+                                <Col span={12} key={plan.planCode}>
+                                  <Card
+                                    size="small"
+                                    hoverable
+                                    style={{
+                                      border: selectedPlan?.planCode === plan.planCode ? '2px solid #2f54eb' : '1px solid #f0f0f0',
+                                      boxShadow: selectedPlan?.planCode === plan.planCode ? '0 4px 12px rgba(47,84,235,0.15)' : 'none',
+                                      cursor: 'pointer',
+                                    }}
+                                    onClick={() => handleSelectPlan(product, plan)}
+                                  >
+                                    <div style={{ textAlign: 'center' }}>
+                                      <Text strong style={{ fontSize: 12 }}>{plan.name.replace('（年）', '')}</Text>
+                                      <div style={{ marginTop: 8 }}>
+                                        <Text style={{ fontSize: 20, color: '#f5222d', fontWeight: 600 }}>¥{plan.price}</Text>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>/年</Text>
+                                      </div>
+                                      {selectedPlan?.planCode === plan.planCode && (
+                                        <CheckCircleOutlined style={{ color: '#52c41a', marginTop: 4 }} />
+                                      )}
+                                    </div>
+                                  </Card>
+                                </Col>
+                              ))}
+                            </Row>
+                          </div>
+                        )}
+
+                        {/* 其他产品：月缴套餐 */}
+                        {monthPlans.length > 0 && (
+                          <div>
+                            <Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+                              <Tag color="green">月缴</Tag>
+                            </Title>
+                            <Row gutter={[12, 12]}>
+                              {monthPlans.map((plan) => (
+                                <Col span={12} key={plan.planCode}>
+                                  <Card
+                                    size="small"
+                                    hoverable
+                                    style={{
+                                      border: selectedPlan?.planCode === plan.planCode ? '2px solid #2f54eb' : '1px solid #f0f0f0',
+                                      boxShadow: selectedPlan?.planCode === plan.planCode ? '0 4px 12px rgba(47,84,235,0.15)' : 'none',
+                                      cursor: 'pointer',
+                                    }}
+                                    onClick={() => handleSelectPlan(product, plan)}
+                                  >
+                                    <div style={{ textAlign: 'center' }}>
+                                      <Text strong style={{ fontSize: 12 }}>{plan.name.replace('（月）', '').replace('- 个人', '').replace('- 企业', '')}</Text>
+                                      {plan.insuranceType && (
+                                        <div>
+                                          <Tag color={plan.insuranceType === 'personal' ? 'blue' : 'orange'} style={{ fontSize: 10, marginTop: 4 }}>
+                                            {plan.insuranceType === 'personal' ? '个人' : '企业'}
+                                          </Tag>
+                                        </div>
+                                      )}
+                                      <div style={{ marginTop: 8 }}>
+                                        <Text style={{ fontSize: 20, color: '#f5222d', fontWeight: 600 }}>¥{plan.price}</Text>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>/月</Text>
+                                      </div>
+                                      {selectedPlan?.planCode === plan.planCode && (
+                                        <CheckCircleOutlined style={{ color: '#52c41a', marginTop: 4 }} />
+                                      )}
+                                    </div>
+                                  </Card>
+                                </Col>
+                              ))}
+                            </Row>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* 产品详情折叠面板 */}
+                    {detail && (
+                      <>
+                        <Divider style={{ margin: '20px 0 12px' }} />
+                        <Collapse
+                          size="small"
+                          items={[
+                            {
+                              key: 'coverage',
+                              label: '产品说明（保障责任）',
+                              children: (
+                                <div>
+                                  {detail.coverages.map((item, idx) => (
+                                    <Paragraph key={`${product.id}-cov-${idx}`} style={{ marginBottom: 8 }}>
+                                      {item}
+                                    </Paragraph>
+                                  ))}
+                                </div>
+                              ),
+                            },
+                            {
+                              key: 'notice',
+                              label: '投保须知/特别约定',
+                              children: (
+                                <div>
+                                  <ol style={{ paddingLeft: 20, marginBottom: 0 }}>
+                                    {detail.notices.map((item, idx) => (
+                                      <li key={`${product.id}-notice-${idx}`} style={{ marginBottom: 6 }}>{item}</li>
+                                    ))}
+                                  </ol>
+                                </div>
+                              ),
+                            },
+                            ...(detail.rules ? [{
+                              key: 'rules',
+                              label: '投保规则',
+                              children: (
+                                <div>
+                                  <ol style={{ paddingLeft: 20, marginBottom: 0 }}>
+                                    {detail.rules.map((item, idx) => (
+                                      <li key={`${product.id}-rules-${idx}`} style={{ marginBottom: 6 }}>{item}</li>
+                                    ))}
+                                  </ol>
+                                </div>
+                              ),
+                            }] : []),
+                            ...(detail.extras ? [{
+                              key: 'extras',
+                              label: '附加条款与说明',
+                              children: (
+                                <div>
+                                  {detail.extras.map((item, idx) => (
+                                    <Paragraph key={`${product.id}-extra-${idx}`} style={{ marginBottom: 8 }}>
+                                      {item}
+                                    </Paragraph>
+                                  ))}
+                                </div>
+                              ),
+                            }] : []),
+                          ]}
+                        />
+                      </>
+                    )}
+                  </div>
+                </Card>
+              </Col>
+            );
+          })}
+        </Row>
+      </div>
+    );
+  };
 
   // 渲染投保人表单（固定为企业信息，不可编辑）
   const renderPolicyHolderForm = () => (

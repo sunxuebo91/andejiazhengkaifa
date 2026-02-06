@@ -64,8 +64,9 @@ async function bootstrap() {
     // 设置静态资源和文件上传配置
     app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));
 
-    // 为支付回调接口配置原始文本解析器（接收XML）
-    app.use('/api/dashubao/payment/callback', express.text({ type: '*/*' }));
+    // 为支付回调接口配置原始文本解析器（接收XML）- 必须在JSON解析器之前
+    app.use('/api/dashubao/payment/callback', express.text({ type: 'application/xml' }));
+    app.use('/api/dashubao/payment/callback', express.text({ type: 'text/xml' }));
 
     // 其他接口使用JSON解析器
     app.use(express.json({ limit: '50mb' }));

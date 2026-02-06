@@ -5,6 +5,7 @@ import { PageContainer } from '@ant-design/pro-components';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile } from 'antd/es/upload';
 import bannerService, { Banner } from '../../services/banner.service';
+import apiService from '../../services/api';
 import dayjs from 'dayjs';
 
 const BannerList: React.FC = () => {
@@ -111,12 +112,8 @@ const BannerList: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('type', 'personalPhoto'); // 使用已有的类型
-      const response = await fetch('/api/upload/file', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: formData,
-      });
-      const result = await response.json();
+
+      const result = await apiService.upload<{ fileUrl: string }>('/api/upload/file', formData);
       if (result.success && result.data?.fileUrl) {
         setImageUrl(result.data.fileUrl);
         setFileList([{

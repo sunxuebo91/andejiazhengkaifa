@@ -143,6 +143,10 @@ export class CreateContractDto {
   @IsString()
   esignPreviewUrl?: string;
 
+  // 🔥 爱签模板参数（用于换人时复制）
+  @IsOptional()
+  templateParams?: Record<string, any>;
+
   // 前端发送的附加字段
   @IsOptional()
   @IsString()
@@ -200,4 +204,8 @@ export class CreateContractDto {
   @IsOptional()
   @IsNumber()
   serviceDays?: number;
-} 
+
+  @IsOptional()
+  @IsString()
+  esignSignUrls?: string;
+}

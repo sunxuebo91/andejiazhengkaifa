@@ -83,7 +83,8 @@ export enum JobType {
 export enum OrderStatus {
   ACCEPTING = 'accepting',
   NOT_ACCEPTING = 'not-accepting',
-  ON_SERVICE = 'on-service'
+  ON_SERVICE = 'on-service',
+  SIGNED = 'signed'
 }
 
 export enum Skill {
@@ -489,9 +490,9 @@ export class CreateResumeV2Dto {
   @IsEnum(['none', 'buddhism', 'taoism', 'christianity', 'catholicism', 'islam', 'other'], { message: '请选择正确的宗教信仰' })
   religion?: string;
 
-  @ApiProperty({ description: '接单状态', enum: ['accepting', 'not-accepting', 'on-service'], required: false })
+  @ApiProperty({ description: '接单状态', enum: ['accepting', 'not-accepting', 'on-service', 'signed'], required: false })
   @IsOptional()
-  @IsEnum(['accepting', 'not-accepting', 'on-service'], { message: '请选择正确的接单状态' })
+  @IsEnum(['accepting', 'not-accepting', 'on-service', 'signed'], { message: '请选择正确的接单状态' })
   orderStatus?: string;
 
   @ApiProperty({ description: '线索来源', enum: ['referral', 'paid-lead', 'community', 'door-to-door', 'shared-order', 'other'], required: false })

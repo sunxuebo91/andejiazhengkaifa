@@ -2313,6 +2313,7 @@ const CreateResume: React.FC = () => {
                     <Select placeholder="请选择接单状态">
                       <Option value="accepting">想接单</Option>
                       <Option value="not-accepting">不接单</Option>
+                      <Option value="signed">已签约</Option>
                       <Option value="on-service">已上户</Option>
                     </Select>
                   </Form.Item>

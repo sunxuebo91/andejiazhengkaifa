@@ -1,3 +1,20 @@
+// 保险信息接口
+export interface InsuranceInfo {
+  hasInsurance: boolean;
+  policies: Array<{
+    policyNo?: string;
+    agencyPolicyRef: string;
+    planCode: string;
+    effectiveDate: string;
+    expireDate: string;
+    totalPremium: number;
+    status: string;
+    policyPdfUrl?: string;
+  }>;
+  totalPolicies: number;
+  error?: string;
+}
+
 export interface Contract {
   _id?: string;
   contractNumber: string;
@@ -20,7 +37,7 @@ export interface Contract {
   remarks?: string;
   monthlyWorkDays?: number;
   customerId: string | { _id: string; name?: string; phone?: string; customerId?: string; address?: string; };
-  workerId: string | { _id: string; name?: string; phone?: string; idNumber?: string; };
+  workerId: string | { _id: string; name?: string; phone?: string; idNumber?: string; currentAddress?: string; };
   createdBy: string | { _id: string; name?: string; username?: string; };
   lastUpdatedBy?: string | { _id: string; name?: string; username?: string; };
   createdAt: string;
@@ -33,6 +50,9 @@ export interface Contract {
   esignTemplateNo?: string;
   esignPreviewUrl?: string;
   esignSignUrls?: string; // JSON字符串，存储真实的签署链接
+
+  // 保险信息
+  insuranceInfo?: InsuranceInfo;
 }
 
 export enum ContractType {

@@ -8,6 +8,8 @@ import { CustomerOperationLog, CustomerOperationLogSchema } from '../customers/m
 import { ESignModule } from '../esign/esign.module';
 import { TestController } from './test.controller';
 import { ResumeModule } from '../resume/resume.module';
+import { ContractApprovalsModule } from '../contract-approvals/contract-approvals.module';
+import { DashubaoModule } from '../dashubao/dashubao.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { ResumeModule } from '../resume/resume.module';
     ]),
     ESignModule,
     forwardRef(() => ResumeModule),
+    ContractApprovalsModule,
+    DashubaoModule,
   ],
   controllers: [ContractsController, TestController],
   providers: [ContractsService],

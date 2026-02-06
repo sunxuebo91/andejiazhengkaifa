@@ -13,11 +13,14 @@ import {
   Row,
   Col,
   Statistic,
+  Modal,
+  Badge,
 } from 'antd';
-import { SearchOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
+import { SearchOutlined, EyeOutlined, PlusOutlined, DeleteOutlined, AuditOutlined } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { Contract, ContractType, CONTRACT_TYPES } from '../../types/contract.types';
 import ContractStatusMini from '../../components/ContractStatusMini';
+import { useAuth } from '../../contexts/AuthContext';
 import dayjs from 'dayjs';
 
 const { Option } = Select;
@@ -25,6 +28,7 @@ const { RangePicker } = DatePicker;
 
 const ContractList: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({
@@ -44,6 +48,9 @@ const ContractList: React.FC = () => {
     completed: 0,
     cancelled: 0,
   });
+
+  // 权限检查 - 支持多种管理员角色标识
+  const isAdmin = user?.role === '系统管理员' || user?.role === 'admin' || user?.role === '管理员';
 
   useEffect(() => {
     fetchContracts();
@@ -107,6 +114,52 @@ const ContractList: React.FC = () => {
       current: paginationConfig.current,
       pageSize: paginationConfig.pageSize,
       total: pagination.total,
+    });
+  };
+
+  // 删除合同处理
+  const handleDeleteContract = (record: Contract) => {
+    Modal.confirm({
+      title: isAdmin ? '确认删除合同' : '申请删除合同',
+      content: (
+        <div>
+          <p>合同编号：{record.contractNumber}</p>
+          <p>客户姓名：{record.customerName}</p>
+          <p>服务人员：{record.workerName}</p>
+          {isAdmin ? (
+            <p style={{ color: 'red', marginTop: 16 }}>
+              <strong>警告：</strong>删除后无法恢复，请谨慎操作！
+            </p>
+          ) : (
+            <p style={{ marginTop: 16 }}>
+              提交后需要等待管理员审批
+            </p>
+          )}
+        </div>
+      ),
+      okText: isAdmin ? '确认删除' : '提交申请',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const response = await contractService.deleteContract(
+            record._id!,
+            '从合同列表申请删除',
+            isAdmin // 传递管理员标识
+          );
+
+          if (response.success) {
+            message.success(
+              isAdmin ? '合同删除成功' : '删除申请已提交，等待审批'
+            );
+            fetchContracts(); // 刷新列表
+          } else {
+            message.error(response.message || '操作失败');
+          }
+        } catch (error: any) {
+          message.error(error.message || '操作失败');
+        }
+      },
     });
   };
 
@@ -235,7 +288,7 @@ const ContractList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 120,
+      width: 180,
       fixed: 'right' as const,
       render: (_: any, record: Contract) => (
         <Space>
@@ -243,9 +296,17 @@ const ContractList: React.FC = () => {
             type="primary"
             size="small"
             icon={<EyeOutlined />}
-            onClick={() => navigate(`/contracts/${record._id}`)}
+            onClick={() => window.open(`/standalone/contracts/${record._id}`, '_blank')}
           >
             查看
+          </Button>
+          <Button
+            danger
+            size="small"
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteContract(record)}
+          >
+            {isAdmin ? '删除' : '申请删除'}
           </Button>
         </Space>
       ),
@@ -297,13 +358,23 @@ const ContractList: React.FC = () => {
       <Card
         title="合同管理"
         extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => navigate('/contracts/create')}
-          >
-            新建合同
-          </Button>
+          <Space>
+            {isAdmin && (
+              <Button
+                icon={<AuditOutlined />}
+                onClick={() => navigate('/contracts/approvals')}
+              >
+                审批管理
+              </Button>
+            )}
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => navigate('/contracts/create')}
+            >
+              新建合同
+            </Button>
+          </Space>
         }
       >
         {/* 搜索筛选 */}

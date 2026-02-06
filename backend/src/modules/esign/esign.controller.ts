@@ -8,9 +8,15 @@ import {
   BadRequestException,
   Logger,
   Query,
+  Inject,
+  forwardRef,
+  Res,
+  Header,
 } from '@nestjs/common';
 import { ESignService } from './esign.service';
+import { ContractsService } from '../contracts/contracts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
 
 // 预览请求DTO
 interface PreviewRequestDto {
@@ -22,8 +28,12 @@ interface PreviewRequestDto {
 // @UseGuards(JwtAuthGuard) // Temporarily disabled for testing
 export class ESignController {
   private readonly logger = new Logger(ESignController.name);
-  
-  constructor(private readonly esignService: ESignService) {
+
+  constructor(
+    private readonly esignService: ESignService,
+    @Inject(forwardRef(() => ContractsService))
+    private readonly contractsService: ContractsService,
+  ) {
     this.logger.log('ESignController 已初始化');
   }
 
@@ -1060,24 +1070,26 @@ export class ESignController {
   @Post('invalidate-contract/:contractNo')
   async invalidateContract(
     @Param('contractNo') contractNo: string,
-    @Body() body: { 
-      invalidReason?: string;
-      isNoticeSignUser?: boolean;
+    @Body() body: {
+      validityTime?: number;
+      notifyUrl?: string;
+      redirectUrl?: string;
     }
   ) {
     this.logger.log('调用 invalidate-contract 端点');
-    
+
     try {
       const result = await this.esignService.invalidateContract(
-        contractNo, 
-        body.invalidReason,
-        body.isNoticeSignUser || false
+        contractNo,
+        body.validityTime || 15, // 默认15天
+        body.notifyUrl,
+        body.redirectUrl
       );
-      
+
       return result;
     } catch (error) {
       this.logger.error('作废合同失败', error.stack);
-      
+
       return {
         success: false,
         message: error.message || '作废合同失败',
@@ -1091,28 +1103,72 @@ export class ESignController {
   @Post('cancel-contract/:contractNo')
   async cancelContract(
     @Param('contractNo') contractNo: string,
-    @Body() body: { 
+    @Body() body: {
       reason?: string;
       isNoticeSignUser?: boolean;
     }
   ) {
     this.logger.log('调用 cancel-contract 端点');
-    
+
     try {
       const result = await this.esignService.cancelContract(
-        contractNo, 
+        contractNo,
         body.reason,
         body.isNoticeSignUser || false
       );
-      
+
       return result;
     } catch (error) {
       this.logger.error('智能撤销/作废合同失败', error.stack);
-      
+
       return {
         success: false,
         message: error.message || '撤销/作废合同失败',
       };
+    }
+  }
+
+  /**
+   * 爱签合同状态回调
+   * 当合同状态变化时，爱签会调用这个接口
+   */
+  @Public() // 爱签回调不需要认证
+  @Post('callback')
+  @Header('Content-Type', 'text/plain') // 返回纯文本
+  async handleEsignCallback(@Body() callbackData: any, @Res() res: any) {
+    this.logger.log('🔔 收到爱签回调:', JSON.stringify(callbackData));
+
+    try {
+      // 1. 处理爱签回调，更新合同状态
+      await this.esignService.handleContractCallback(callbackData);
+
+      // 2. 如果合同状态变为"已签约"，触发保险同步
+      const { contractNo, status } = callbackData;
+
+      if (status === 2 || status === '2') {
+        this.logger.log(`🎉 合同 ${contractNo} 已签约，触发保险同步`);
+
+        // 查找合同ID
+        const contract = await this.esignService['contractModel'].findOne({
+          esignContractNo: contractNo
+        }).exec();
+
+        if (contract) {
+          // 异步触发保险同步，不阻塞回调响应
+          this.contractsService.syncInsuranceOnContractActive(contract._id.toString())
+            .catch(error => {
+              this.logger.error(`保险同步失败（异步）:`, error);
+            });
+        }
+      }
+
+      // 🔥 重要：爱签要求回调响应必须是字符串 "ok"
+      return res.status(200).send('ok');
+    } catch (error) {
+      this.logger.error('处理爱签回调失败', error.stack);
+
+      // 即使失败也返回 "ok"，避免爱签重试
+      return res.status(200).send('ok');
     }
   }
 

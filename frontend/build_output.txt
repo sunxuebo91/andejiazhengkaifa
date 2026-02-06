@@ -1,0 +1,104 @@
+
+> frontend@0.0.0 build
+> tsc --project tsconfig.json && vite build
+
+NODE_ENV=production is not supported in the .env file. Only NODE_ENV=development is supported to create a development build of your project. If you need to set process.env.NODE_ENV, you can set it in the Vite config instead.
+vite v4.5.14 building for production...
+transforming...
+node_modules/@zegocloud/zego-uikit-prebuilt/zego-uikit-prebuilt.js (2:127334) Use of eval in "node_modules/@zegocloud/zego-uikit-prebuilt/zego-uikit-prebuilt.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+✓ 4255 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                        1.09 kB │ gzip:     0.58 kB
+dist/assets/ArticleForm-80234558.css                   0.24 kB │ gzip:     0.12 kB
+dist/assets/InterviewRoomList-af1c947f.css             0.29 kB │ gzip:     0.20 kB
+dist/assets/MiniProgramConfig-edd8f816.css             0.40 kB │ gzip:     0.21 kB
+dist/assets/PublicForm-12b96294.css                    2.34 kB │ gzip:     0.71 kB
+dist/assets/FormEditor-8bb02fee.css                    2.63 kB │ gzip:     0.86 kB
+dist/assets/H5Login-1346c638.css                       2.87 kB │ gzip:     0.96 kB
+dist/assets/Login-f47821cc.css                         4.00 kB │ gzip:     1.11 kB
+dist/assets/JoinInterviewMobile-f414b795.css           6.63 kB │ gzip:     1.80 kB
+dist/assets/index-d09c4875.css                        28.25 kB │ gzip:     5.11 kB
+dist/assets/contract.types-ba1c3bfa.js                 0.24 kB │ gzip:     0.25 kB
+dist/assets/miniprogramUtils-9da302c7.js               0.24 kB │ gzip:     0.24 kB
+dist/assets/NotFound-4f4b216a.js                       0.36 kB │ gzip:     0.33 kB
+dist/assets/Unauthorized-84220ebd.js                   0.36 kB │ gzip:     0.34 kB
+dist/assets/customer.types-c6fea9ad.js                 0.38 kB │ gzip:     0.48 kB
+dist/assets/MiniProgramHost-ebc01f6e.js                0.45 kB │ gzip:     0.41 kB
+dist/assets/BannerForm-65ef8e0d.js                     0.50 kB │ gzip:     0.43 kB
+dist/assets/Authorized-c03c2d79.js                     0.68 kB │ gzip:     0.47 kB
+dist/assets/resume-465fd253.js                         0.70 kB │ gzip:     0.50 kB
+dist/assets/followUp.service-cbb82528.js               0.83 kB │ gzip:     0.55 kB
+dist/assets/beijingDistricts-1164f7e7.js               1.09 kB │ gzip:     0.55 kB
+dist/assets/errorHandler-3c8698db.js                   1.17 kB │ gzip:     0.58 kB
+dist/assets/form.service-9ab44d21.js                   1.33 kB │ gzip:     0.45 kB
+dist/assets/TrainingLeadFollowUpModal-f063a826.js      2.01 kB │ gzip:     1.25 kB
+dist/assets/AvatarUpload-2f251ed9.js                   2.11 kB │ gzip:     1.25 kB
+dist/assets/ProfilePage-c1f8f5ca.js                    2.12 kB │ gzip:     1.02 kB
+dist/assets/leadTransfer-5c513555.js                   2.13 kB │ gzip:     0.85 kB
+dist/assets/H5Login-ad3ac547.js                        2.15 kB │ gzip:     1.19 kB
+dist/assets/training-lead.types-641aeb8d.js            2.54 kB │ gzip:     1.05 kB
+dist/assets/TestSortableUpload-b0f99a8f.js             2.57 kB │ gzip:     1.29 kB
+dist/assets/contractService-9634003f.js                2.65 kB │ gzip:     0.96 kB
+dist/assets/customerService-4c8f6052.js                2.82 kB │ gzip:     0.64 kB
+dist/assets/UserList-76e05e0c.js                       3.00 kB │ gzip:     1.65 kB
+dist/assets/RoleList-5791bcc1.js                       3.01 kB │ gzip:     1.62 kB
+dist/assets/CreateUser-2050190e.js                     3.24 kB │ gzip:     1.69 kB
+dist/assets/EditUser-da3a93f9.js                       3.41 kB │ gzip:     1.75 kB
+dist/assets/ArticleList-0bbf0c1a.js                    3.54 kB │ gzip:     1.88 kB
+dist/assets/MiniProgramUserList-37f41a02.js            3.72 kB │ gzip:     1.92 kB
+dist/assets/AssignCustomerModal-09daca5d.js            3.74 kB │ gzip:     1.94 kB
+dist/assets/PaymentGuide-41b35971.js                   3.93 kB │ gzip:     1.73 kB
+dist/assets/EditRole-e4529b4d.js                       4.10 kB │ gzip:     1.99 kB
+dist/assets/TrainingLeadDetail-4263ab57.js             4.28 kB │ gzip:     1.94 kB
+dist/assets/PublicTrainingLeadForm-3ecf9bc9.js         4.37 kB │ gzip:     2.00 kB
+dist/assets/CreateTrainingLead-5a0f533f.js             4.53 kB │ gzip:     1.96 kB
+dist/assets/LeadTransferRecords-d4701d70.js            4.86 kB │ gzip:     2.19 kB
+dist/assets/BannerList-3658496e.js                     4.91 kB │ gzip:     2.35 kB
+dist/assets/EditTrainingLead-226c5ac9.js               5.02 kB │ gzip:     2.11 kB
+dist/assets/WechatPayModal-d105c2cd.js                 5.04 kB │ gzip:     2.32 kB
+dist/assets/SignContractPage-8421a1b1.js               5.21 kB │ gzip:     2.86 kB
+dist/assets/FormSubmissions-8552b263.js                5.22 kB │ gzip:     2.37 kB
+dist/assets/FormList-ec74bea7.js                       5.39 kB │ gzip:     2.50 kB
+dist/assets/FormSubmissionList-91185cdb.js             5.40 kB │ gzip:     2.58 kB
+dist/assets/AccountSettings-579e8a40.js                5.42 kB │ gzip:     2.23 kB
+dist/assets/PublicForm-4e1f0be4.js                     5.59 kB │ gzip:     2.53 kB
+dist/assets/InterviewRoomList-0e83b6d9.js              6.21 kB │ gzip:     2.99 kB
+dist/assets/MiniProgramConfig-99dd280c.js              6.51 kB │ gzip:     2.60 kB
+dist/assets/PublicPool-42cd8a74.js                     6.95 kB │ gzip:     3.08 kB
+dist/assets/ContractList-854f102e.js                   7.52 kB │ gzip:     3.19 kB
+dist/assets/CreateCustomer-183d4e87.js                 8.17 kB │ gzip:     2.99 kB
+dist/assets/esignService-0aca8a3b.js                   8.24 kB │ gzip:     2.70 kB
+dist/assets/EditCustomer-5887ee98.js                   8.49 kB │ gzip:     2.98 kB
+dist/assets/JoinInterviewMobile-8212534c.js           10.64 kB │ gzip:     4.96 kB
+dist/assets/TrainingLeadList-c1d493c8.js              10.68 kB │ gzip:     4.74 kB
+dist/assets/InsuranceList-fe2336c7.js                 11.45 kB │ gzip:     4.24 kB
+dist/assets/ResumeList-7cb18295.js                    12.73 kB │ gzip:     5.79 kB
+dist/assets/_baseIsEqual-ad4323d7.js                  13.26 kB │ gzip:     5.36 kB
+dist/assets/FormEditor-c2b81771.js                    13.27 kB │ gzip:     5.04 kB
+dist/assets/LeadTransferRules-6a9243a1.js             13.70 kB │ gzip:     4.59 kB
+dist/assets/CustomerList-899b1693.js                  16.18 kB │ gzip:     6.85 kB
+dist/assets/CustomerDetail-bfad14ca.js                18.11 kB │ gzip:     6.40 kB
+dist/assets/CreateInsurance-31165dc2.js               18.68 kB │ gzip:     6.46 kB
+dist/assets/Dashboard-8dfa1500.js                     19.43 kB │ gzip:     4.97 kB
+dist/assets/Payment-dd433111.js                       22.09 kB │ gzip:     8.83 kB
+dist/assets/ContractDetail-53d46e56.js                35.43 kB │ gzip:    11.31 kB
+dist/assets/index-e0ac130d.js                         36.40 kB │ gzip:    12.11 kB
+dist/assets/utils-vendor-0441473c.js                  37.77 kB │ gzip:    15.02 kB
+dist/assets/ESignaturePage-b2cbe655.js                39.50 kB │ gzip:    13.19 kB
+dist/assets/ResumeDetail-eeb1be07.js                  40.53 kB │ gzip:    13.03 kB
+dist/assets/SortableImageUpload-10f50102.js           52.12 kB │ gzip:    18.05 kB
+dist/assets/CreateResume-8ac95a64.js                  55.78 kB │ gzip:    18.76 kB
+dist/assets/imageService-b24524b0.js                  59.99 kB │ gzip:    23.95 kB
+dist/assets/react-vendor-bbf02805.js                 164.17 kB │ gzip:    53.51 kB
+dist/assets/Login-67fb2ee4.js                        213.02 kB │ gzip:    65.17 kB
+dist/assets/ArticleForm-73a398c8.js                  237.06 kB │ gzip:    63.96 kB
+dist/assets/index-33648bc8.js                        286.66 kB │ gzip:    92.02 kB
+dist/assets/antd-vendor-02edeb04.js                1,463.95 kB │ gzip:   461.18 kB
+dist/assets/zego-vendor-c25c2d9d.js                5,180.17 kB │ gzip: 1,779.81 kB
+
+(!) Some chunks are larger than 2000 kBs after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 40.98s

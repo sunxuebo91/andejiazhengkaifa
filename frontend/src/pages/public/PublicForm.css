@@ -1,0 +1,170 @@
+.public-form-container {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding: 0;
+  margin: 0;
+}
+
+.public-form-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.public-form-wrapper {
+  max-width: 600px;
+  margin: 0 auto;
+  background: #fff;
+  min-height: 100vh;
+}
+
+.public-form-banner {
+  width: 100%;
+  overflow: hidden;
+}
+
+.public-form-banner img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.public-form-card {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.public-form-header {
+  text-align: center;
+  margin-bottom: 32px;
+  padding: 24px 0;
+}
+
+.public-form-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.public-form-description {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.public-form {
+  padding: 0 16px 24px;
+}
+
+.public-form .ant-form-item-label > label {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.public-form .ant-input,
+.public-form .ant-input-number,
+.public-form .ant-picker,
+.public-form .ant-select-selector {
+  border-radius: 8px;
+  font-size: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e8e8e8;
+  transition: all 0.3s ease;
+}
+
+.public-form .ant-input:hover,
+.public-form .ant-input-number:hover,
+.public-form .ant-picker:hover,
+.public-form .ant-select-selector:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border-color: #1890ff;
+}
+
+.public-form .ant-input:focus,
+.public-form .ant-input-number:focus,
+.public-form .ant-picker:focus,
+.public-form .ant-select-focused .ant-select-selector {
+  box-shadow: 0 4px 16px rgba(24, 144, 255, 0.2);
+  border-color: #1890ff;
+}
+
+.public-form .ant-radio-wrapper,
+.public-form .ant-checkbox-wrapper {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.public-form-submit {
+  margin-top: 16px;
+  height: 48px;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 8px;
+  background: #1890ff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.public-form-submit:hover {
+  background: #40a9ff;
+  box-shadow: 0 6px 16px rgba(24, 144, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .public-form-wrapper {
+    max-width: 100%;
+  }
+
+  .public-form-title {
+    font-size: 20px;
+  }
+
+  .public-form-description {
+    font-size: 13px;
+  }
+
+  .public-form {
+    padding: 0 12px 20px;
+  }
+
+  .public-form .ant-form-item-label > label {
+    font-size: 14px;
+  }
+
+  .public-form .ant-input,
+  .public-form .ant-input-number,
+  .public-form .ant-picker {
+    font-size: 14px;
+  }
+
+  .public-form .ant-radio-wrapper,
+  .public-form .ant-checkbox-wrapper {
+    font-size: 14px;
+  }
+
+  .public-form-submit {
+    height: 44px;
+    font-size: 15px;
+  }
+}
+
+/* 微信浏览器适配 */
+@media screen and (max-width: 414px) {
+  .public-form-header {
+    padding: 16px 0;
+    margin-bottom: 24px;
+  }
+
+  .public-form-title {
+    font-size: 18px;
+  }
+}
+

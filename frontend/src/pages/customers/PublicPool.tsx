@@ -189,7 +189,7 @@ const PublicPool: React.FC = () => {
       key: 'name',
       width: 100,
       render: (text: string, record: Customer) => (
-        <a onClick={() => navigate(`/customers/${record._id}`)}>{text}</a>
+        <a onClick={() => window.open(`/standalone/customers/${record._id}`, '_blank')}>{text}</a>
       ),
     },
     {

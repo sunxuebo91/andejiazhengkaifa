@@ -1,58 +1,100 @@
 #!/bin/bash
 
 # 生产环境快速更新脚本
-# 用法: ./update-production.sh [backend|frontend|all]
+# 用法: ./update-production.sh [backend|frontend|all] [--skip-deps] [--skip-backup] [--skip-git]
 
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 配置
 TARGET=${1:-all}  # 默认更新全部
-BACKUP_DIR="./backups/$(date +%Y%m%d_%H%M%S)"
+BACKUP_DIR="./backups/$(date +%Y%m%d_%H%M%S)_prod"
+SKIP_DEPS=false
+SKIP_BACKUP=false
+SKIP_GIT=false
+
+# 解析命令行参数
+for arg in "$@"; do
+    case $arg in
+        --skip-deps)
+            SKIP_DEPS=true
+            shift
+            ;;
+        --skip-backup)
+            SKIP_BACKUP=true
+            shift
+            ;;
+        --skip-git)
+            SKIP_GIT=true
+            shift
+            ;;
+    esac
+done
 
 # 日志函数
 log() {
-    echo -e "${GREEN}[$(date +'%H:%M:%S')] $1${NC}"
+    echo -e "${GREEN}[$(date +'%H:%M:%S')] ✓ $1${NC}"
 }
 
 error() {
-    echo -e "${RED}[$(date +'%H:%M:%S')] ERROR: $1${NC}"
+    echo -e "${RED}[$(date +'%H:%M:%S')] ✗ ERROR: $1${NC}"
     exit 1
 }
 
 warn() {
-    echo -e "${YELLOW}[$(date +'%H:%M:%S')] WARNING: $1${NC}"
+    echo -e "${YELLOW}[$(date +'%H:%M:%S')] ⚠ WARNING: $1${NC}"
 }
 
 info() {
-    echo -e "${BLUE}[$(date +'%H:%M:%S')] INFO: $1${NC}"
+    echo -e "${BLUE}[$(date +'%H:%M:%S')] ℹ INFO: $1${NC}"
+}
+
+step() {
+    echo -e "${CYAN}[$(date +'%H:%M:%S')] ▶ $1${NC}"
 }
 
 # 显示使用帮助
 show_usage() {
-    echo "生产环境快速更新脚本"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  生产环境快速更新脚本"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "用法: ./update-production.sh [backend|frontend|all]"
+    echo "用法: ./update-production.sh [TARGET] [OPTIONS]"
     echo ""
-    echo "选项:"
+    echo "目标 (TARGET):"
     echo "  backend   只更新后端"
     echo "  frontend  只更新前端"
     echo "  all       更新前后端 (默认)"
     echo ""
+    echo "选项 (OPTIONS):"
+    echo "  --skip-deps     跳过依赖安装"
+    echo "  --skip-backup   跳过备份创建"
+    echo "  --skip-git      跳过Git拉取"
+    echo ""
     echo "示例:"
-    echo "  ./update-production.sh          # 更新全部"
-    echo "  ./update-production.sh backend  # 只更新后端"
-    echo "  ./update-production.sh frontend # 只更新前端"
+    echo "  ./update-production.sh                    # 更新全部"
+    echo "  ./update-production.sh backend            # 只更新后端"
+    echo "  ./update-production.sh frontend           # 只更新前端"
+    echo "  ./update-production.sh all --skip-deps    # 更新全部但跳过依赖安装"
+    echo "  ./update-production.sh backend --skip-git # 更新后端但跳过Git拉取"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
 # 检查Git状态
 check_git_status() {
-    log "检查Git状态..."
-    
+    if [ "$SKIP_GIT" = true ]; then
+        warn "跳过Git状态检查"
+        return
+    fi
+
+    step "检查Git状态..."
+
     # 检查是否有未提交的更改
     if ! git diff-index --quiet HEAD --; then
         warn "检测到未提交的更改，建议先提交或暂存"
@@ -63,22 +105,40 @@ check_git_status() {
             exit 1
         fi
     fi
+    log "Git状态检查完成"
 }
 
 # 拉取最新代码
 pull_latest_code() {
-    log "拉取最新代码..."
-    
+    if [ "$SKIP_GIT" = true ]; then
+        warn "跳过Git代码拉取"
+        return
+    fi
+
+    step "拉取最新代码..."
+
     # 获取当前分支
     CURRENT_BRANCH=$(git branch --show-current)
     info "当前分支: $CURRENT_BRANCH"
-    
+
+    # 保存当前commit
+    BEFORE_COMMIT=$(git rev-parse HEAD)
+
     # 拉取最新代码
     git pull origin $CURRENT_BRANCH || error "代码拉取失败"
-    
+
+    # 检查是否有更新
+    AFTER_COMMIT=$(git rev-parse HEAD)
+    if [ "$BEFORE_COMMIT" = "$AFTER_COMMIT" ]; then
+        info "代码已是最新版本"
+    else
+        info "代码已更新: $BEFORE_COMMIT -> $AFTER_COMMIT"
+    fi
+
     # 显示最新的几个提交
     info "最新提交:"
     git log --oneline -5
+    log "代码拉取完成"
 }
 
 # 创建备份

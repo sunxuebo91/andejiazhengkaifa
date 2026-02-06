@@ -414,21 +414,23 @@ class ESignService {
     }
   }
 
-  // 获取模板控件信息
+  // 🔥 获取模板控件信息（从爱签API获取真实字段）
   async getTemplateData(templateIdent: string): Promise<TemplateField[]> {
     try {
       const response = await api.post('/api/esign/template/data', {
         templateIdent
       });
-      
-      // 处理嵌套的响应结构
-      if (response.data?.success && response.data?.data?.code === 100000) {
-        return response.data.data.data; // 返回实际的模板字段数组
+
+      console.log('🔍 getTemplateData 原始响应:', response.data);
+
+      // 🔥 后端直接返回 { code: 100000, data: [...], msg: '成功' }
+      if (response.data?.code === 100000) {
+        return response.data.data; // 返回实际的模板字段数组
       } else {
-        throw new Error(response.data?.data?.msg || response.data?.message || '获取模板控件信息失败');
+        throw new Error(response.data?.msg || '获取模板控件信息失败');
       }
     } catch (error) {
-      console.error('获取模板控件信息失败:', error);
+      console.error('❌ 获取模板控件信息失败:', error);
       throw new Error('获取模板控件信息失败');
     }
   }

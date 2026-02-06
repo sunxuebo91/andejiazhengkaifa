@@ -189,6 +189,22 @@ export class CustomersController {
     }
   }
 
+  @Get('search')
+  @ApiOperation({ summary: '搜索客户（用于电子签名等场景，包含所有状态客户）' })
+  async searchCustomers(
+    @Query('search') search: string,
+    @Query('limit') limit: string = '10',
+  ): Promise<ApiResponse> {
+    try {
+      const limitNum = parseInt(limit) || 10;
+      // 🔥 电子签名搜索：包含所有状态的客户（包括流失客户）
+      const result = await this.customersService.searchForESign(search, limitNum);
+      return this.createResponse(true, '客户搜索成功', result);
+    } catch (error) {
+      return this.createResponse(false, '客户搜索失败', null, error.message);
+    }
+  }
+
   @Get('customer-id/:customerId')
   async findByCustomerId(@Param('customerId') customerId: string): Promise<ApiResponse> {
     try {
@@ -942,6 +958,24 @@ export class CustomersController {
       return this.createResponse(true, '获取员工列表成功', formattedEmployees);
     } catch (error) {
       return this.createResponse(false, '获取员工列表失败', null, error.message);
+    }
+  }
+
+  /**
+   * 🆕 同步客户线索等级为O类（当合同签约时调用）
+   * 此接口由前端在检测到合同签约时调用
+   */
+  @Patch(':id/sync-lead-level-o')
+  @ApiOperation({ summary: '同步客户线索等级为O类（合同签约时自动调用）' })
+  @ApiParam({ name: 'id', description: '客户ID' })
+  @UseGuards(JwtAuthGuard)
+  async syncLeadLevelToO(@Param('id') id: string): Promise<ApiResponse> {
+    try {
+      await this.customersService.updateLeadLevelToOOnContractSigned(id);
+      return this.createResponse(true, '线索等级已同步为O类', null);
+    } catch (error) {
+      this.logger.error(`同步线索等级失败: ${error.message}`);
+      return this.createResponse(false, '同步线索等级失败', null, error.message);
     }
   }
 

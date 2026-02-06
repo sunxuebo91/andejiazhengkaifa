@@ -2,12 +2,13 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Resume, IResume } from './models/resume.entity';
-import { CreateResumeDto, CreateResumeV2Dto } from './dto/create-resume.dto';
+import { CreateResumeDto, CreateResumeV2Dto, OrderStatus } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Logger } from '@nestjs/common';
 import { UploadService } from '../upload/upload.service';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
+import { Contract, ContractDocument } from '../contracts/models/contract.model';
 
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
@@ -24,6 +25,8 @@ export class ResumeService {
   constructor(
     @InjectModel(Resume.name)
     private readonly resumeModel: Model<IResume>,
+    @InjectModel(Contract.name)
+    private readonly contractModel: Model<ContractDocument>,
     private uploadService: UploadService,
     private readonly jwtService: JwtService,
     @InjectModel(EmployeeEvaluation.name)
@@ -179,6 +182,31 @@ export class ResumeService {
 
   private hasCheckedUpdatedAt = false; // 标记是否已检查过updatedAt字段
 
+  private async syncSignedOrderStatus(resumeId: Types.ObjectId | string, currentStatus?: string) {
+    if (currentStatus === OrderStatus.ON_SERVICE || currentStatus === OrderStatus.SIGNED) {
+      return currentStatus;
+    }
+
+    const signedContract = await this.contractModel.findOne({
+      workerId: resumeId,
+      $or: [
+        { esignStatus: { $in: ['1', '2'] } },
+        { contractStatus: 'active' },
+      ],
+    }).select('_id').lean().exec();
+
+    if (!signedContract) {
+      return currentStatus;
+    }
+
+    await this.resumeModel.updateOne(
+      { _id: resumeId },
+      { orderStatus: OrderStatus.SIGNED },
+    ).exec();
+
+    return OrderStatus.SIGNED;
+  }
+
   async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string) {
     try {
       this.logger.log(`🔥 [SORT-FIX-FINAL] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
@@ -251,6 +279,37 @@ export class ResumeService {
         const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
         return bTime - aTime; // 最新的在前面
       });
+
+      // 🆕 自动同步“已签约”接单状态
+      if (items.length > 0) {
+        const resumeIds = items.map((item: any) => item._id);
+        const signedContracts = await this.contractModel.find({
+          workerId: { $in: resumeIds },
+          $or: [
+            { esignStatus: { $in: ['1', '2'] } },
+            { contractStatus: 'active' },
+          ],
+        }).select('workerId').lean().exec();
+
+        const signedWorkerIds = new Set(signedContracts.map((contract: any) => contract.workerId?.toString()));
+        const needUpdateIds = items
+          .filter((item: any) => signedWorkerIds.has(item._id?.toString()))
+          .filter((item: any) => item.orderStatus !== OrderStatus.ON_SERVICE && item.orderStatus !== OrderStatus.SIGNED)
+          .map((item: any) => item._id);
+
+        if (needUpdateIds.length > 0) {
+          await this.resumeModel.updateMany(
+            { _id: { $in: needUpdateIds } },
+            { orderStatus: OrderStatus.SIGNED }
+          ).exec();
+        }
+
+        items = items.map((item: any) => (
+          signedWorkerIds.has(item._id?.toString()) && item.orderStatus !== OrderStatus.ON_SERVICE
+            ? { ...item, orderStatus: OrderStatus.SIGNED }
+            : item
+        ));
+      }
 
       this.logger.log(`🔥 [SORT-FIX-FINAL] 查询完成 - 返回 ${items.length} 条记录`);
 
@@ -348,6 +407,16 @@ export class ResumeService {
     } catch (error) {
       this.logger.error(`获取员工评价失败: ${error.message}`, error.stack);
       (resume as any).employeeEvaluations = [];
+    }
+
+    // 🆕 检测已签约合同，自动同步接单状态
+    try {
+      const syncedStatus = await this.syncSignedOrderStatus(resume._id.toString(), resume.orderStatus);
+      if (syncedStatus && syncedStatus !== resume.orderStatus) {
+        (resume as any).orderStatus = syncedStatus;
+      }
+    } catch (error) {
+      this.logger.error(`同步已签约状态失败: ${error.message}`, error.stack);
     }
 
     return resume;
@@ -1569,6 +1638,7 @@ export class ResumeService {
       const statusMap: Record<string, string> = {
         '想接单': 'accepting',
         '不接单': 'not-accepting',
+        '已签约': 'signed',
         '已上户': 'on-service'
       };
       dto.orderStatus = statusMap[rowData['接单状态']?.toString().trim()] || 'accepting';

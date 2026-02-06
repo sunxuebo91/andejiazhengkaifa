@@ -20,6 +20,7 @@ const LeadTransferRules = React.lazy(() => import('./pages/customers/LeadTransfe
 const LeadTransferRecords = React.lazy(() => import('./pages/customers/LeadTransferRecords'));
 const ContractList = React.lazy(() => import('./pages/contracts/ContractList'));
 const ContractDetail = React.lazy(() => import('./pages/contracts/ContractDetail'));
+const ContractDeletionApprovals = React.lazy(() => import('./pages/contracts/ContractDeletionApprovals'));
 const UserList = React.lazy(() => import('./pages/users/UserList'));
 const CreateUser = React.lazy(() => import('./pages/users/CreateUser'));
 const EditUser = React.lazy(() => import('./pages/users/EditUser'));
@@ -53,6 +54,18 @@ const BannerForm = React.lazy(() => import('./pages/baobei/BannerForm'));
 const ArticleList = React.lazy(() => import('./pages/baobei/ArticleList'));
 const ArticleForm = React.lazy(() => import('./pages/baobei/ArticleForm'));
 	const MiniProgramUserList = React.lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
+// 培训线索相关组件
+const TrainingLeadList = React.lazy(() => import('./pages/training-leads/TrainingLeadList'));
+const CreateTrainingLead = React.lazy(() => import('./pages/training-leads/CreateTrainingLead'));
+const EditTrainingLead = React.lazy(() => import('./pages/training-leads/EditTrainingLead'));
+const TrainingLeadDetail = React.lazy(() => import('./pages/training-leads/TrainingLeadDetail'));
+// 表单管理相关组件
+const FormList = React.lazy(() => import('./pages/forms/FormList'));
+const FormEditor = React.lazy(() => import('./pages/forms/FormEditor'));
+const FormSubmissions = React.lazy(() => import('./pages/forms/FormSubmissions'));
+const FormSubmissionList = React.lazy(() => import('./pages/forms/FormSubmissionList'));
+const PublicForm = React.lazy(() => import('./pages/public/PublicForm'));
+const PublicTrainingLeadForm = React.lazy(() => import('./pages/public/PublicTrainingLeadForm'));
 
 interface AppProps {
   children?: ReactNode;
@@ -99,6 +112,10 @@ export default function App({ children }: AppProps) {
                 {/* 公开访问页面 - 不需要登录 */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
+                {/* 公开表单页面 - 不需要登录，不显示导航栏 */}
+                <Route path="/public/form/:id" element={<PublicForm />} />
+                {/* 公开培训线索表单 - 不需要登录 */}
+                <Route path="/public/training-lead" element={<PublicTrainingLeadForm />} />
                 {/* 🔴 PC端视频面试路由（已注释，使用小程序H5代替） */}
                 {/* <Route path="/interview/join/:roomId" element={<JoinInterview />} /> */}
                 {/* <Route path="/interview/video" element={<VideoInterview />} /> */}
@@ -108,6 +125,12 @@ export default function App({ children }: AppProps) {
                 <Route path="/interview/h5-login" element={<H5Login />} />
                 <Route path="/interview/miniprogram" element={<MiniProgramHost />} />
                 <Route path="/interview/miniprogram-config" element={<MiniProgramConfig />} />
+
+                {/* 独立详情页路由 - 不显示左侧导航栏 */}
+                <Route path="/standalone/customers/:id" element={<AuthorizedRoute element={<CustomerDetail />} />} />
+                <Route path="/standalone/contracts/:id" element={<AuthorizedRoute element={<ContractDetail />} />} />
+                <Route path="/standalone/training-leads/:id" element={<AuthorizedRoute element={<TrainingLeadDetail />} />} />
+                <Route path="/standalone/aunt/resumes/detail/:id" element={<AuthorizedRoute element={<ResumeDetail />} authority="resume:view" />} />
 
                 {/* 需要登录的路由 */}
                 <Route
@@ -184,6 +207,10 @@ export default function App({ children }: AppProps) {
                       element={<AuthorizedRoute element={<ESignaturePage />} />}
                     />
                     <Route
+                      path="approvals"
+                      element={<AuthorizedRoute element={<ContractDeletionApprovals />} role={["admin", "系统管理员", "管理员"]} />}
+                    />
+                    <Route
                       path="detail/:id"
                       element={<AuthorizedRoute element={<ContractDetail />} />}
                     />
@@ -197,20 +224,64 @@ export default function App({ children }: AppProps) {
 
                   {/* 电子签约模块 - 需要esign相关权限 */}
                   <Route path="esign">
-                    <Route 
-                      index 
-                      element={<AuthorizedRoute element={<ESignaturePage />} />} 
+                    <Route
+                      index
+                      element={<AuthorizedRoute element={<ESignaturePage />} />}
                     />
-                    <Route 
-                      path="contracts" 
-                      element={<AuthorizedRoute element={<ESignaturePage />} />} 
+                    <Route
+                      path="contracts"
+                      element={<AuthorizedRoute element={<ESignaturePage />} />}
                     />
-                    <Route 
-                      path="sign/:contractId" 
-                      element={<AuthorizedRoute element={<SignContractPage />} />} 
+                    <Route
+                      path="sign/:contractId"
+                      element={<AuthorizedRoute element={<SignContractPage />} />}
                     />
                   </Route>
-                  
+
+                  {/* 培训线索管理模块 - 所有登录用户可访问 */}
+                  <Route path="training-leads">
+                    <Route
+                      index
+                      element={<AuthorizedRoute element={<TrainingLeadList />} />}
+                    />
+                    <Route
+                      path="create"
+                      element={<AuthorizedRoute element={<CreateTrainingLead />} />}
+                    />
+                    <Route
+                      path="edit/:id"
+                      element={<AuthorizedRoute element={<EditTrainingLead />} />}
+                    />
+                    <Route
+                      path=":id"
+                      element={<AuthorizedRoute element={<TrainingLeadDetail />} />}
+                    />
+                  </Route>
+
+                  {/* 表单管理模块 - 所有登录用户可访问 */}
+                  <Route path="forms">
+                    <Route
+                      index
+                      element={<AuthorizedRoute element={<FormList />} />}
+                    />
+                    <Route
+                      path="create"
+                      element={<AuthorizedRoute element={<FormEditor />} />}
+                    />
+                    <Route
+                      path="edit/:id"
+                      element={<AuthorizedRoute element={<FormEditor />} />}
+                    />
+                    <Route
+                      path=":id/submissions"
+                      element={<AuthorizedRoute element={<FormSubmissions />} />}
+                    />
+                    <Route
+                      path="submissions"
+                      element={<AuthorizedRoute element={<FormSubmissionList />} />}
+                    />
+                  </Route>
+
                   {/* 用户管理模块 - 需要管理员权限 */}
                   <Route path="users">
                     <Route 

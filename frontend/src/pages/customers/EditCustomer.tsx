@@ -29,6 +29,7 @@ import {
 } from '../../types/customer.types';
 import dayjs from 'dayjs';
 import { extractErrorMessage } from '../../utils/errorHandler';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -40,6 +41,7 @@ const EditCustomer: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const { user } = useAuth(); // 获取当前用户信息
 
   // 获取客户信息
   useEffect(() => {
@@ -262,7 +264,13 @@ const EditCustomer: React.FC = () => {
               >
                 <Select placeholder="请选择客户状态" style={{ width: '100%' }}>
                   {CONTRACT_STATUSES.map(status => (
-                    <Option key={status} value={status}>{status}</Option>
+                    <Option
+                      key={status}
+                      value={status}
+                      disabled={status === '已签约' && user?.role !== 'admin'}
+                    >
+                      {status}{status === '已签约' && user?.role !== 'admin' ? ' (系统自动设置)' : ''}
+                    </Option>
                   ))}
                 </Select>
               </Form.Item>
@@ -295,7 +303,13 @@ const EditCustomer: React.FC = () => {
               >
                 <Select placeholder="请选择线索等级" style={{ width: '100%' }}>
                   {LEAD_LEVELS.map(level => (
-                    <Option key={level} value={level}>{level}</Option>
+                    <Option
+                      key={level}
+                      value={level}
+                      disabled={level === 'O类' && user?.role !== 'admin'}
+                    >
+                      {level}{level === 'O类' && user?.role !== 'admin' ? ' (仅管理员可设置)' : ''}
+                    </Option>
                   ))}
                 </Select>
               </Form.Item>

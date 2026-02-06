@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   Query,
+  Delete,
   UseGuards,
   Request,
   Req,
@@ -12,6 +13,7 @@ import {
   HttpStatus,
   Res,
   StreamableFile,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -28,11 +30,21 @@ import {
 } from './dto/create-policy.dto';
 import { PolicyStatus } from './models/insurance-policy.model';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('大树保保险')
 @Controller('dashubao')
 export class DashubaoController {
   constructor(private readonly dashubaoService: DashubaoService) {}
+
+  private isAdmin(user: any): boolean {
+    return user?.role === '系统管理员' || user?.role === 'admin' || user?.role === '管理员';
+  }
+
+  private canDeletePolicy(user: any): boolean {
+    const isSpecialUser = user?.name === '孙学博' || user?.username === '孙学博';
+    return this.isAdmin(user) && isSpecialUser;
+  }
 
   @Post('policy')
   @UseGuards(JwtAuthGuard)
@@ -107,6 +119,7 @@ export class DashubaoController {
   }
 
   @Post('payment/callback')
+  @Public() // 支付回调接口必须公开，不需要JWT认证
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '支付回调 - 接收大树保支付成功通知' })
   @ApiResponse({ status: 200, description: '回调处理成功' })
@@ -153,6 +166,30 @@ export class DashubaoController {
   @ApiResponse({ status: 200, description: '查询成功' })
   async queryRebate(@Param('policyNo') policyNo: string) {
     return this.dashubaoService.queryRebate(policyNo);
+  }
+
+  @Delete('policy/:id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '删除本地保单（仅管理员且指定用户）' })
+  @ApiResponse({ status: 200, description: '删除成功' })
+  async deletePolicy(@Param('id') id: string, @Request() req) {
+    try {
+      if (!this.canDeletePolicy(req.user)) {
+        throw new ForbiddenException('仅管理员且用户孙学博可删除保单');
+      }
+
+      await this.dashubaoService.deletePolicy(id);
+      return {
+        success: true,
+        message: '保单删除成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '保单删除失败',
+      };
+    }
   }
 
   @Get('policies')
@@ -208,6 +245,15 @@ export class DashubaoController {
   @ApiResponse({ status: 200, description: '同步成功' })
   async syncPolicyStatus(@Param('policyNo') policyNo: string) {
     return this.dashubaoService.syncPolicyStatus(policyNo);
+  }
+
+  @Get('policies/by-id-card/:idCard')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '根据被保险人身份证号查询保单列表' })
+  @ApiResponse({ status: 200, description: '查询成功' })
+  async getPoliciesByIdCard(@Param('idCard') idCard: string) {
+    return this.dashubaoService.getPoliciesByIdCard(idCard);
   }
 }
 

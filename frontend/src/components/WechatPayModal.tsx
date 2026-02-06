@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Result, Spin, Button, QRCode, Typography, Alert } from 'antd';
+import { Modal, Result, Spin, Button, QRCode, Typography, Alert, message } from 'antd';
 import { WechatOutlined, ReloadOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import insuranceService from '../services/insuranceService';
 
@@ -59,6 +59,32 @@ const WechatPayModal: React.FC<WechatPayModalProps> = ({
     }
   };
 
+  // 手动同步保单状态
+  const syncPaymentStatus = async (policyRef: string) => {
+    try {
+      console.log('🔄 手动同步保单状态，商户单号:', policyRef);
+      // 调用同步接口，从大树保同步最新状态
+      const policy = await insuranceService.syncPolicyStatus(policyRef);
+      console.log('📥 同步后的保单状态:', policy?.status);
+
+      if (policy && policy.status === 'active') {
+        console.log('✅ 支付成功！保单已生效');
+        setPaymentStatus('success');
+        if (checkInterval) {
+          clearInterval(checkInterval);
+        }
+        setTimeout(() => {
+          onSuccess();
+        }, 2000);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('同步支付状态失败:', error);
+      return false;
+    }
+  };
+
   // 轮询检查支付状态
   const startCheckingPaymentStatus = (policyRef: string) => {
     // 清除之前的定时器
@@ -68,7 +94,7 @@ const WechatPayModal: React.FC<WechatPayModalProps> = ({
 
     console.log('🔄 开始轮询支付状态，商户单号:', policyRef);
 
-    // 每3秒检查一次支付状态
+    // 每1秒检查一次支付状态（优化：从3秒改为1秒，提升用户体验）
     const interval = setInterval(async () => {
       try {
         // 使用商户单号查询保单
@@ -86,7 +112,7 @@ const WechatPayModal: React.FC<WechatPayModalProps> = ({
       } catch (error) {
         console.error('检查支付状态失败:', error);
       }
-    }, 3000);
+    }, 1000); // 改为1秒轮询一次
 
     setCheckInterval(interval);
   };
@@ -113,6 +139,8 @@ const WechatPayModal: React.FC<WechatPayModalProps> = ({
     if (!paymentInfo || !paymentInfo.WeChatWebUrl) {
       return null;
     }
+
+    const policyRef = policyNo || agencyPolicyRef;
 
     return (
       <div style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -145,6 +173,20 @@ const WechatPayModal: React.FC<WechatPayModalProps> = ({
               {paymentStatus === 'checking' ? '等待支付中...' : ''}
             </Text>
           </Spin>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <Button
+            type="link"
+            icon={<ReloadOutlined />}
+            onClick={async () => {
+              const success = await syncPaymentStatus(policyRef);
+              if (!success) {
+                message.warning('支付尚未完成，请完成支付后再试');
+              }
+            }}
+          >
+            已完成支付？点击刷新
+          </Button>
         </div>
       </div>
     );

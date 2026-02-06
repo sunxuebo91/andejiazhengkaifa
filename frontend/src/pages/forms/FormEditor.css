@@ -1,0 +1,216 @@
+.form-editor-shell {
+  background: #f5f6f8;
+}
+
+.form-editor-layout {
+  min-height: 720px;
+  background: #f5f6f8;
+  border: 1px solid #eef0f4;
+}
+
+.form-editor-sider {
+  background: #fff;
+  border-right: 1px solid #eef0f4;
+  padding: 16px 12px;
+}
+
+.palette-header {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #1f2937;
+}
+
+.palette-group {
+  margin-bottom: 16px;
+}
+
+.palette-group-title {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.palette-group-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.palette-item {
+  border: 1px dashed #d7dce5;
+  background: #fafbff;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: grab;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.palette-item:active {
+  cursor: grabbing;
+}
+
+.palette-item:hover {
+  border-color: #4c7cff;
+  color: #4c7cff;
+  background: #f1f5ff;
+}
+
+.palette-item-label {
+  font-size: 13px;
+}
+
+.form-editor-canvas-wrapper {
+  padding: 16px;
+}
+
+.form-canvas {
+  background: #fff;
+  border: 1px solid #eef0f4;
+  border-radius: 12px;
+  min-height: 640px;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-canvas-header {
+  padding: 20px 20px 8px;
+  border-bottom: 1px solid #f0f2f6;
+}
+
+.form-canvas-body {
+  padding: 20px;
+  flex: 1;
+}
+
+.form-canvas-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 220px;
+  border: 1px dashed #e5e9f2;
+  border-radius: 12px;
+  background: #fafbff;
+}
+
+.field-card {
+  border: 1px solid #eef0f4;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  transition: all 0.2s ease;
+}
+
+.field-card-dragging {
+  opacity: 0.5;
+}
+
+.field-card-drop-target {
+  border-color: #4c7cff;
+  background: #f5f7ff;
+}
+
+.field-card-selected {
+  border-color: #4c7cff;
+  box-shadow: 0 0 0 2px rgba(76, 124, 255, 0.12);
+}
+
+.field-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.field-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.field-card-required {
+  color: #ef4444;
+}
+
+.field-card-body {
+  color: #6b7280;
+}
+
+.field-card-options {
+  font-size: 13px;
+}
+
+.form-canvas-footer {
+  padding: 16px 20px 20px;
+  border-top: 1px solid #f0f2f6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-canvas-success {
+  font-size: 12px;
+}
+
+.field-drop-line {
+  height: 10px;
+  border-radius: 10px;
+  border: 1px dashed transparent;
+  transition: all 0.2s ease;
+  margin: 4px 0;
+}
+
+.field-drop-line-active {
+  border-color: #4c7cff;
+  background: rgba(76, 124, 255, 0.12);
+}
+
+.form-editor-panel {
+  background: #fff;
+  border-left: 1px solid #eef0f4;
+  padding: 16px 16px 24px;
+}
+
+.panel-header {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #1f2937;
+}
+
+.panel-content {
+  overflow-y: auto;
+  max-height: 640px;
+  padding-right: 4px;
+}
+
+.panel-section {
+  padding-bottom: 12px;
+}
+
+.panel-section-title {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.panel-selected-label {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.panel-options {
+  margin-top: 8px;
+}
+
+.panel-option-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.panel-option-input {
+  min-width: 0;
+}

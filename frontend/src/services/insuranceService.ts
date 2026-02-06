@@ -87,6 +87,12 @@ export const insuranceService = {
     return response.data;
   },
 
+  // 删除本地保单
+  async deletePolicy(id: string): Promise<{ success: boolean; message?: string }> {
+    const response = await apiService.delete(`/api/dashubao/policy/${id}`);
+    return response;
+  },
+
   // 根据ID获取保单详情
   async getPolicyById(id: string): Promise<InsurancePolicy> {
     const response = await apiService.get(`/api/dashubao/policy/${id}`);
@@ -108,6 +114,12 @@ export const insuranceService = {
   // 同步保单状态
   async syncPolicyStatus(policyNo: string): Promise<InsurancePolicy> {
     const response = await apiService.post(`/api/dashubao/policy/sync/${policyNo}`);
+    return response.data;
+  },
+
+  // 根据被保险人身份证号查询保单列表
+  async getPoliciesByIdCard(idCard: string): Promise<InsurancePolicy[]> {
+    const response = await apiService.get(`/api/dashubao/policies/by-id-card/${idCard}`);
     return response.data;
   },
 };

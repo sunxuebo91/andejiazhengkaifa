@@ -163,6 +163,9 @@ export class LeadAutoTransferService implements OnModuleInit {
 
       // 允许自动流转
       autoTransferEnabled: { $ne: false },
+
+      // 排除转介绍线索（不参与自动流转）
+      leadSource: { $ne: '转介绍' },
     };
 
     // 添加线索来源过滤（字段名是 leadSource 而不是 source）
@@ -765,6 +768,8 @@ export class LeadAutoTransferService implements OnModuleInit {
         ],
         inPublicPool: false,
         autoTransferEnabled: { $ne: false },
+        // 排除转介绍线索（不参与自动流转）
+        leadSource: { $ne: '转介绍' },
       };
 
       if (triggerConditions.leadSources && triggerConditions.leadSources.length > 0) {

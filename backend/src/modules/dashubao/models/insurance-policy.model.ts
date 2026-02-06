@@ -247,6 +247,10 @@ export class InsurancePolicy {
   @Prop({ type: Types.ObjectId, ref: 'Resume', index: true })
   resumeId?: Types.ObjectId;
 
+  @ApiProperty({ description: '关联的合同ID' })
+  @Prop({ type: Types.ObjectId, ref: 'Contract', index: true })
+  contractId?: Types.ObjectId;
+
   @ApiProperty({ description: '创建人ID' })
   @Prop({ type: Types.ObjectId, ref: 'User' })
   createdBy?: Types.ObjectId;

@@ -9,6 +9,8 @@ import {
   Put,
   UseGuards,
   Request,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
@@ -16,14 +18,23 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 import { ESignService } from '../esign/esign.service';
+import { ContractApprovalsService } from '../contract-approvals/contract-approvals.service';
 
 @Controller('contracts')
 @UseGuards(JwtAuthGuard)
 export class ContractsController {
+  private readonly logger = new Logger(ContractsController.name);
+
   constructor(
     private readonly contractsService: ContractsService,
     private readonly esignService: ESignService,
+    private readonly approvalsService: ContractApprovalsService,
   ) {}
+
+  // 检查是否是管理员
+  private isAdmin(user: any): boolean {
+    return user.role === '系统管理员' || user.role === 'admin';
+  }
 
 
   @Post()
@@ -167,6 +178,59 @@ export class ContractsController {
     }
   }
 
+  /**
+   * 重新获取签署链接
+   * 注意：此路由必须放在 @Get(':id') 之前，否则会被当作 ID 参数处理
+   */
+  @Post(':id/resend-sign-urls')
+  async resendSignUrls(@Param('id') contractId: string) {
+    try {
+      console.log('🔄 开始重新获取签署链接, 合同ID:', contractId);
+      const contract = await this.contractsService.findOne(contractId);
+
+      if (!contract.esignContractNo) {
+        console.log('❌ 合同未关联爱签合同');
+        return {
+          success: false,
+          message: '该合同未关联爱签合同',
+        };
+      }
+
+      console.log('📝 爱签合同编号:', contract.esignContractNo);
+      // 使用新的获取签署链接方法
+      const result = await this.esignService.getContractSignUrls(contract.esignContractNo);
+
+      console.log('📊 获取签署链接结果:', {
+        success: result.success,
+        message: result.message,
+        signUrlsCount: result.data?.signUrls?.length || 0,
+      });
+
+      if (!result.success) {
+        console.log('❌ 获取签署链接失败:', result.message);
+        return {
+          success: false,
+          message: result.message || '获取签署链接失败',
+        };
+      }
+
+      // 更新到数据库
+      await this.contractsService.update(contractId, {
+        esignSignUrls: JSON.stringify(result.data.signUrls),
+      });
+
+      console.log('✅ 签署链接已保存到数据库');
+      console.log('🎉 返回结果给前端:', JSON.stringify(result, null, 2));
+      return result;
+    } catch (error) {
+      console.error('❌ 重新获取签署链接失败:', error);
+      return {
+        success: false,
+        message: error.message || '获取签署链接失败',
+      };
+    }
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     console.log('🚨🚨🚨 [CONTRACTS API CALLED] 收到合同详情请求, ID:', id);
@@ -209,9 +273,62 @@ export class ContractsController {
     }
   }
 
-  @Delete(':id')
-  async remove(@Param('id') id: string) {
+  // 删除请求端点（管理员直接删除，员工创建审批请求）
+  @Post(':id/request-deletion')
+  async requestDeletion(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Request() req,
+  ) {
     try {
+      this.logger.log(`用户 ${req.user.username} (${req.user.name}) 请求删除合同 ${id}`);
+
+      // 获取合同信息
+      const contract = await this.contractsService.findOne(id);
+
+      // 如果是管理员，直接删除
+      if (this.isAdmin(req.user)) {
+        this.logger.log(`管理员直接删除合同 ${id}`);
+        await this.contractsService.remove(id);
+        return {
+          success: true,
+          message: '合同删除成功',
+        };
+      }
+
+      // 非管理员，创建审批请求
+      this.logger.log(`创建删除审批请求，合同 ${id}`);
+      const approval = await this.approvalsService.createDeletionApproval(
+        id,
+        contract.contractNumber,
+        req.user.userId,
+        req.user.name,
+        body.reason || '申请删除合同',
+      );
+
+      return {
+        success: true,
+        message: '删除申请已提交，等待审批',
+        data: approval,
+      };
+    } catch (error) {
+      this.logger.error(`删除请求失败: ${error.message}`);
+      return {
+        success: false,
+        message: error.message || '操作失败',
+      };
+    }
+  }
+
+  // 保留原有的删除端点（仅供内部使用）
+  @Delete(':id')
+  async remove(@Param('id') id: string, @Request() req) {
+    try {
+      // 只有管理员可以直接删除
+      if (!this.isAdmin(req.user)) {
+        throw new ForbiddenException('只有管理员可以直接删除合同');
+      }
+
       await this.contractsService.remove(id);
       return {
         success: true,
@@ -297,7 +414,7 @@ export class ContractsController {
   ) {
     try {
       const contract = await this.contractsService.findOne(contractId);
-      
+
       if (!contract.esignContractNo) {
         return {
           success: false,
@@ -455,6 +572,32 @@ export class ContractsController {
       return {
         success: false,
         message: error.message || '合同签约成功处理失败',
+      };
+    }
+  }
+
+  /**
+   * 手动触发保险同步（用于重试失败的同步）
+   * 增强功能：先查询爱签API确认合同状态，再触发保险同步
+   */
+  @Post(':id/sync-insurance')
+  async syncInsurance(@Param('id') contractId: string) {
+    try {
+      this.logger.log(`🔄 手动触发保险同步: ${contractId}`);
+
+      // 调用增强的同步方法（会先查询爱签状态）
+      const result = await this.contractsService.manualSyncInsurance(contractId);
+
+      return {
+        success: true,
+        message: result.message || '保险同步已完成',
+        data: result,
+      };
+    } catch (error) {
+      this.logger.error(`保险同步失败:`, error);
+      return {
+        success: false,
+        message: error.message || '保险同步失败',
       };
     }
   }

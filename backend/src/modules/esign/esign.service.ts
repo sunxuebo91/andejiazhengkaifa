@@ -739,18 +739,33 @@ export class ESignService {
   async getTemplateData(templateIdent: string): Promise<any> {
     try {
       console.log('🔍 使用官方API获取模板控件信息:', templateIdent);
-      
+
       // 使用官方的 /template/data 接口
       const response = await this.callESignAPI('/template/data', {
         templateIdent: templateIdent
       });
 
-      console.log('📋 官方API模板控件信息响应:', response);
+      console.log('📋 官方API模板控件信息响应 - response.code:', response.code);
+      console.log('📋 官方API模板控件信息响应 - response.msg:', response.msg);
+      console.log('📋 官方API模板控件信息响应 - response.data类型:', typeof response.data);
+      console.log('📋 官方API模板控件信息响应 - response.data是否为数组:', Array.isArray(response.data));
+
+      if (response.data && Array.isArray(response.data)) {
+        console.log('📋 官方API返回的字段数量:', response.data.length);
+        console.log('📋 前3个字段示例:', JSON.stringify(response.data.slice(0, 3), null, 2));
+
+        // 🔥 查找"首次匹配费大写"字段
+        const targetField = response.data.find((f: any) => f.dataKey === '首次匹配费大写');
+        if (targetField) {
+          console.log('🔍 找到"首次匹配费大写"字段:', JSON.stringify(targetField, null, 2));
+        }
+      }
 
       if (response.code !== 100000) {
         throw new BadRequestException(`获取模板控件信息失败: ${response.msg}`);
       }
 
+      // 🔥 直接返回response.data（应该是字段数组）
       return response.data;
     } catch (error) {
       console.error('❌ 获取模板控件信息失败:', error);
@@ -2175,7 +2190,7 @@ export class ESignService {
     try {
       console.log('🔍 获取模板控件信息:', templateId);
       
-      // 基于爱签模板ID TNCBC37535B2134B5F949E1BBC86116B59 的预期控件
+      // 基于爱签模板ID TN84E8C106BFE74FD3AE36AC2CA33A44DE 的预期控件
       // 这里我们定义该模板的实际控件结构
       const templateComponents = this.getTemplateComponentsConfig(templateId);
       
@@ -2225,7 +2240,7 @@ export class ESignService {
    * 获取模板控件配置
    */
   private getTemplateComponentsConfig(templateId: string): any[] {
-    // 针对模板 TNCBC37535B2134B5F949E1BBC86116B59 的控件配置
+    // 针对模板 TN84E8C106BFE74FD3AE36AC2CA33A44DE 的控件配置
     const components = [
       {
         id: 'party_a_name',
@@ -2755,16 +2770,16 @@ export class ESignService {
           // 使用坐标签章（基于模板控件的实际坐标）
           // 根据签署人顺序确定签章位置
           let signKey: string;
-          
+
           if (index === 0) {
             // 第一个签署人通常是甲方（客户）
-            signKey = '甲方签名区';
+            signKey = '甲方'; // 🔥 修复：使用模板中实际的签署区名称
           } else if (index === 1) {
             // 第二个签署人通常是乙方（阿姨）
-            signKey = '乙方签名区';
+            signKey = '乙方'; // 🔥 修复：使用模板中实际的签署区名称
           } else {
             // 第三个及以后的签署人（企业）
-            signKey = '丙方签章区';
+            signKey = '丙方'; // 🔥 修复：使用模板中实际的签署区名称
             
             // 为企业用户设置默认印章（同步等待，确保在签章策略生效前完成）
             try {
@@ -2896,10 +2911,82 @@ export class ESignService {
       // 使用正确的API端点：/contract/status（根据官方文档）
       const response = await this.callESignAPI('/contract/status', bizData);
       console.log('✅ 获取合同状态成功:', response);
-      
+
       return response;
     } catch (error) {
       console.error('❌ 获取合同状态失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取合同签署链接
+   * 使用合同预览接口获取签署方信息和链接
+   */
+  async getContractSignUrls(contractNo: string): Promise<any> {
+    try {
+      console.log('🔄 获取合同签署链接:', contractNo);
+
+      // 使用合同预览接口获取签署方信息（这个接口返回完整的signUser数据）
+      const previewResult = await this.previewContractWithSignUrls(contractNo);
+
+      if (!previewResult.success) {
+        throw new Error(previewResult.message || '获取合同信息失败');
+      }
+
+      const signUsers = previewResult.signUsers || [];
+      if (signUsers.length === 0) {
+        throw new Error('该合同暂无签署方信息，请确保已添加签署人');
+      }
+
+      console.log('📋 签署方列表:', signUsers);
+
+      // 构建签署链接数据
+      const signUrls = signUsers.map((user: any, index: number) => {
+        // 根据签署顺序判断角色
+        let role = '签署方';
+        if (user.signOrder === 1 || index === 0) {
+          role = '甲方（客户）';
+        } else if (user.signOrder === 2 || index === 1) {
+          role = '乙方（服务人员）';
+        } else if (user.signOrder === 3 || index === 2) {
+          role = '丙方（企业）';
+        }
+
+        console.log(`🔍 签署方 ${index + 1}: signOrder=${user.signOrder}, index=${index}, role=${role}, name=${user.name}, signUrl=${user.signUrl}`);
+
+        // 如果是企业签署方且没有签署链接，说明使用的是无感知签章（自动签章）
+        let signUrl = user.signUrl;
+        if (!signUrl && (index >= 2 || role.includes('丙方'))) {
+          signUrl = '无需签署（企业自动签章）';
+          console.log(`ℹ️ 企业签署方使用无感知签章，无需签署链接`);
+        }
+
+        return {
+          name: user.name || '未知',
+          mobile: user.phone || user.account,
+          role: role,
+          signUrl: signUrl, // 从预览接口获取的签署链接
+          account: user.account,
+          signOrder: user.signOrder || (index + 1),
+          status: user.signStatus || 1, // 1=待签署, 2=已签署
+          statusText: user.statusText || '待签署',
+          userType: user.userType || 0, // 0=个人, 1=企业
+        };
+      });
+
+      console.log('✅ 签署链接获取成功:', JSON.stringify(signUrls, null, 2));
+
+      return {
+        success: true,
+        data: {
+          signUrls,
+          contractNo,
+        },
+        message: '签署链接获取成功',
+      };
+    } catch (error) {
+      console.error('❌ 获取签署链接失败:', error);
       throw error;
     }
   }
@@ -3234,7 +3321,8 @@ export class ESignService {
         templateNo: params.templateNo,
         templateParams: params.templateParams,
         validityTime: params.validityTime,
-        signOrder: params.signOrder
+        signOrder: params.signOrder,
+        notifyUrl: this.config.notifyUrl // 🔥 添加回调URL，确保爱签在合同状态变化时通知我们
       });
 
       // 步骤3：添加所有签署方（使用模板坐标签章）
@@ -3307,22 +3395,55 @@ export class ESignService {
     try {
       console.log('🔄 开始创建模板合同（官方API）:', contractData);
 
+      // 🔥 检查 templateParams 中的数组字段
+      console.log('🔥🔥🔥 检查 templateParams 中的字段类型:');
+      Object.entries(contractData.templateParams || {}).forEach(([key, value]) => {
+        console.log(`  ${key}: ${typeof value} ${Array.isArray(value) ? '(数组)' : ''} = ${JSON.stringify(value).substring(0, 100)}`);
+      });
+
+      // 🔥🔥🔥 关键修改：获取模板控件信息，用于处理多选字段
+      console.log('🔥 获取模板控件信息...');
+      const templateData = await this.getTemplateControlInfo(contractData.templateNo);
+      console.log('🔥 模板控件信息:', JSON.stringify(templateData, null, 2));
+
+      // 🔒 兜底：确保模板必填的派生字段存在（例如“阿姨工资大写”）
+      // 说明：后端模板字段转换时会把“阿姨工资/阿姨工资大写”等合并成一个输入控件，
+      // 前端若只提交了“阿姨工资”，这里必须补齐“阿姨工资大写”，否则爱签会报“缺少参数”。
+      let normalizedTemplateParams = this.normalizeTemplateParamsForESign(contractData.templateParams);
+
+      // 🔒 步骤2：验证并补充必填字段的默认值
+      // ⚠️ 禁用 ensureRequiredFields()，只发送模板中实际存在的字段
+      // normalizedTemplateParams = this.ensureRequiredFields(normalizedTemplateParams);
+
       // 构建请求参数，严格按照官方API文档
       console.log('🔥🔥🔥 即将调用convertToFillData方法');
-      const fillData = this.convertToFillData(contractData.templateParams);
+      const fillData = this.convertToFillData(normalizedTemplateParams);
       console.log('🔥🔥🔥 convertToFillData调用完成，结果:', JSON.stringify(fillData, null, 2));
       
-      const requestParams = {
+      // 🔥 确保 notifyUrl 始终有值：优先使用传入的值，否则使用配置中的默认值
+      const notifyUrl = contractData.notifyUrl || this.config.notifyUrl;
+      console.log('🔔 回调URL:', notifyUrl);
+
+      const requestParams: Record<string, any> = {
         contractNo: contractData.contractNo,
         contractName: contractData.contractName,
         signOrder: contractData.signOrder || 1, // 1=无序签约，2=顺序签约
         validityTime: contractData.validityTime || 15, // 合同有效期（天）
+        notifyUrl: notifyUrl, // 🔥 回调URL - 确保始终传递给爱签
         templates: [{
           templateNo: contractData.templateNo, // 平台分配的模板编号
           fillData: fillData, // 文本类填充
-          componentData: this.convertToComponentData(contractData.templateParams) // 选择类填充
+          componentData: this.convertToComponentData(normalizedTemplateParams, templateData) // 选择类填充
         }]
       };
+
+      // 🔥 传递额外的可选参数（如 readSeconds, needAgree 等）
+      const optionalParams = ['readSeconds', 'needAgree', 'autoExpand', 'refuseOn', 'autoContinue', 'viewFlg', 'enableDownloadButton', 'callbackUrl', 'redirectUrl'];
+      for (const param of optionalParams) {
+        if (contractData[param] !== undefined && contractData[param] !== null) {
+          requestParams[param] = contractData[param];
+        }
+      }
 
       console.log('📋 发送到爱签API的请求参数:', JSON.stringify(requestParams, null, 2));
 
@@ -3365,6 +3486,165 @@ export class ESignService {
   }
 
   /**
+   * 兜底补齐爱签模板可能要求但前端未提交的字段（尤其是合并控件导致的“*_大写”字段）
+   */
+  private normalizeTemplateParamsForESign(templateParams: Record<string, any> = {}): Record<string, any> {
+    const normalized: Record<string, any> = { ...(templateParams || {}) };
+
+    // 只在“源字段有值、目标字段为空”的情况下补齐，避免覆盖前端显式传入
+    const ensureUpper = (srcKey: string, dstKey: string) => {
+      const srcVal = normalized[srcKey];
+      const dstVal = normalized[dstKey];
+      if ((dstVal === undefined || dstVal === null || dstVal === '') && srcVal !== undefined && srcVal !== null && srcVal !== '') {
+        normalized[dstKey] = this.convertToChineseAmount(srcVal);
+        console.log(`🧩 补齐模板参数: ${dstKey} <- ${srcKey} (${srcVal}) => ${normalized[dstKey]}`);
+      }
+    };
+
+    // 阿姨工资大写（本次报错的核心字段）
+    ensureUpper('阿姨工资', '阿姨工资大写');
+    // 有些模板可能用“月工资”作为数值源
+    if (!normalized['阿姨工资'] && normalized['月工资']) {
+      normalized['阿姨工资'] = normalized['月工资'];
+    }
+    ensureUpper('阿姨工资', '阿姨工资大写');
+
+    // 服务费大写（兼容“服务费大写/大写服务费”两种字段名）
+    ensureUpper('服务费', '服务费大写');
+    // ensureUpper('服务费', '大写服务费');  // ❌ 模板中不存在"大写服务费"字段
+
+    // 匹配费/首次匹配费大写（避免类似缺参问题）
+    // ensureUpper('匹配费', '匹配费大写');  // ❌ 模板中不存在"匹配费"和"匹配费大写"字段
+    ensureUpper('首次匹配费', '首次匹配费大写');
+
+    return normalized;
+  }
+
+  /**
+   * 确保所有必填字段都有值，避免爱签API报"参数异常"
+   * 根据爱签模板的实际必填字段，补充默认值
+   */
+  private ensureRequiredFields(templateParams: Record<string, any>): Record<string, any> {
+    const params = { ...templateParams };
+
+    console.log('🔍 开始检查必填字段...');
+
+    // 定义必填字段及其默认值
+    const requiredFields = {
+      // 甲方（客户）信息
+      '客户姓名': '未填写',
+      '客户电话': '未填写',
+      '客户身份证号': '未填写',
+      '甲方姓名': '未填写',
+      '甲方联系电话': '未填写',
+      '甲方身份证号': '未填写',
+
+      // 乙方（阿姨）信息
+      '阿姨姓名': '未填写',
+      '阿姨电话': '未填写',
+      '阿姨身份证号': '未填写',
+      '乙方姓名': '未填写',
+      '乙方联系电话': '未填写',
+      '乙方身份证号': '未填写',
+
+      // 时间相关
+      '开始年': new Date().getFullYear(),
+      '开始月': new Date().getMonth() + 1,
+      '开始日': new Date().getDate(),
+      '结束年': new Date().getFullYear() + 1,
+      '结束月': new Date().getMonth() + 1,
+      '结束日': new Date().getDate(),
+
+      // 金额相关
+      '阿姨工资': '0',
+      '阿姨工资大写': '零元整',
+      '服务费': '0',
+      '大写服务费': '零元整',
+      '服务费大写': '零元整',
+      '匹配费': '0',
+      '匹配费大写': '零元整',
+      '首次匹配费': '0',
+      '首次匹配费大写': '零元整',
+
+      // 其他常见字段
+      '服务备注': '无',
+      '备注': '无',
+      '服务内容': '无',
+      '服务项目': '无',
+      '服务类型': '住家保姆',
+
+      // 多选字段（componentData类型）
+      '多选6': [],
+    };
+
+    // 检查并补充缺失的必填字段
+    let addedCount = 0;
+    Object.entries(requiredFields).forEach(([key, defaultValue]) => {
+      if (params[key] === undefined || params[key] === null || params[key] === '') {
+        params[key] = defaultValue;
+        addedCount++;
+        console.log(`✅ 补充必填字段: ${key} = ${defaultValue}`);
+      }
+    });
+
+    console.log(`🔍 必填字段检查完成，补充了 ${addedCount} 个字段`);
+
+    return params;
+  }
+
+  /**
+   * 数字金额转中文大写（与前端 convertToChineseAmount 保持一致）
+   */
+  private convertToChineseAmount(amount: string | number): string {
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (Number.isNaN(num)) return '零元整';
+
+    const digit = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
+    const unit = ['', '拾', '佰', '仟'];
+    const section = ['', '万', '亿'];
+
+    if (num === 0) return '零元整';
+
+    const integerPart = Math.floor(num);
+    const decimalPart = Math.round((num - integerPart) * 100);
+
+    let result = '';
+    if (integerPart === 0) {
+      result = '零';
+    } else {
+      const str = integerPart.toString();
+      const len = str.length;
+      for (let i = 0; i < len; i++) {
+        const n = parseInt(str[i], 10);
+        const pos = len - i - 1;
+        const u = pos % 4;
+        const s = Math.floor(pos / 4);
+
+        if (n !== 0) {
+          result += digit[n] + unit[u];
+          if (u === 0 && s > 0) result += section[s];
+        } else {
+          if (result && !result.endsWith('零')) result += '零';
+        }
+      }
+      result = result.replace(/零+/g, '零').replace(/零$/, '');
+    }
+
+    result += '元';
+
+    if (decimalPart === 0) {
+      result += '整';
+    } else {
+      const jiao = Math.floor(decimalPart / 10);
+      const fen = decimalPart % 10;
+      if (jiao > 0) result += digit[jiao] + '角';
+      if (fen > 0) result += digit[fen] + '分';
+    }
+
+    return result;
+  }
+
+  /**
    * 更新合同的预览链接到数据库
    */
   private async updateContractPreviewUrl(contractNo: string, previewUrl: string): Promise<void> {
@@ -3394,10 +3674,36 @@ export class ESignService {
   }
 
   /**
+   * 获取模板控件信息
+   * 用于获取模板中定义的所有控件信息，特别是多选字段的选项定义
+   */
+  private async getTemplateControlInfo(templateNo: string): Promise<any[]> {
+    try {
+      const response = await this.callESignAPI('/template/data', {
+        templateIdent: templateNo
+      });
+
+      if (response.code === 100000 && response.data) {
+        return response.data;
+      } else {
+        console.warn('⚠️ 获取模板控件信息失败:', response);
+        return [];
+      }
+    } catch (error) {
+      console.error('❌ 获取模板控件信息异常:', error);
+      return [];
+    }
+  }
+
+  /**
    * 转换模板参数为fillData格式（文本类填充）
    */
   private convertToFillData(templateParams: Record<string, any>): Record<string, any> {
     const fillData: Record<string, any> = {};
+    
+    // 🔥 爱签模板字段长度限制（根据实际模板配置调整）
+    const MAX_FIELD_LENGTH = 2000; // 大部分字段的最大长度
+    const MAX_MULTISELECT_LENGTH = 500; // 多选字段的最大长度（通常更短）
     
     console.log('🔥🔥🔥 convertToFillData 开始处理 🔥🔥🔥');
     console.log('🔥 输入参数:', JSON.stringify(templateParams, null, 2));
@@ -3405,50 +3711,78 @@ export class ESignService {
     // 遍历所有模板参数，特殊处理不同类型的字段
     Object.entries(templateParams).forEach(([key, value]) => {
       console.log(`🔥 处理字段: "${key}" = ${JSON.stringify(value)} (类型: ${typeof value}, 是否数组: ${Array.isArray(value)})`);
-      
+
       if (value !== null && value !== undefined && value !== '') {
-        // 特殊处理：服务备注字段（多行文本类型，需要换行符分隔的字符串）
-        // 扩展匹配条件，包含更多可能的字段名
-        const isServiceField = key === '服务备注' || 
-                              key.includes('服务备注') || 
-                              key.includes('服务内容') || 
+        // 🔥 多选字段（dataType 9）：保持分号分隔的字符串格式，不转换为换行符
+        const isMultiSelectField = key.includes('多选') || key.startsWith('多选');
+
+        // 🔥 服务备注字段（dataType 8）：需要换行符分隔的多行文本
+        // ⚠️ 注意：不包含"多选"字段！
+        const isServiceField = !isMultiSelectField && (
+                              key === '服务备注' ||
+                              key.includes('服务备注') ||
+                              key.includes('服务内容') ||
                               key.includes('服务项目') ||
                               key.includes('服务需求') ||
                               key === '服务需求' ||
                               key === '服务内容' ||
-                              key === '服务项目';
-        
-        console.log(`🔥 字段"${key}"匹配检查: isServiceField=${isServiceField}`);
-        
-        if (isServiceField) {
-          console.log(`🔥🔥 检测到服务相关字段: "${key}"`);
-          console.log(`🔥🔥 字段值: ${JSON.stringify(value)}`);
-          console.log(`🔥🔥 字段类型: ${typeof value}`);
-          console.log(`🔥🔥 是否数组: ${Array.isArray(value)}`);
-          
+                              key === '服务项目');
+
+        // 🔥 备注类字段（需要保留换行符）
+        const isRemarkField = key === '备注' ||
+                             key.includes('备注') ||
+                             key === '说明' ||
+                             key.includes('说明') ||
+                             key === '合同备注' ||
+                             key.includes('合同备注');
+
+        console.log(`🔥 字段"${key}"匹配检查: isMultiSelectField=${isMultiSelectField}, isServiceField=${isServiceField}, isRemarkField=${isRemarkField}`);
+
+        if (isMultiSelectField) {
+          // 🔥🔥🔥 重要修改：多选字段不添加到 fillData，改为在 componentData 中处理
+          console.log(`🔥🔥 检测到多选字段: "${key}"，跳过 fillData 处理（将在 componentData 中处理）`);
+          return;
+        } else if (isServiceField) {
+          // 🔥 服务备注字段：转换为换行符分隔的多行文本
+          console.log(`🔥🔥 检测到服务备注字段: "${key}"`);
           if (Array.isArray(value)) {
-            // 🔥 优先处理数组格式（前端Checkbox.Group可能直接传递数组）
-            console.log(`🔥🔥🔥 开始处理数组格式: ${JSON.stringify(value)}`);
-            const serviceLines = value.filter(item => item && item.trim()).join('\n');
+            const serviceLines = value
+              .filter(item => item && item.trim())
+              .map(item => item.trim().replace(/\s+/g, ' '))
+              .join('\n');
             fillData[key] = serviceLines;
-            console.log(`🔥🔥🔥 服务备注数组转换成功!`);
-            console.log(`🔥🔥🔥 原始数组: [${value.join(', ')}]`);
-            console.log(`🔥🔥🔥 转换结果: "${serviceLines}"`);
+            console.log(`🔥🔥 服务备注数组转换: [${value.join(', ')}] -> 多行文本`);
           } else if (typeof value === 'string' && value.includes('；')) {
-            // 将分号分隔的字符串转换为换行符分隔的字符串（多行文本格式）
-            console.log(`🔥🔥 开始处理分号分隔字符串: "${value}"`);
-            const serviceLines = value.split('；').filter(item => item.trim()).join('\n');
+            const serviceLines = value
+              .split('；')
+              .filter(item => item.trim())
+              .map(item => item.trim().replace(/\s+/g, ' '))
+              .join('\n');
             fillData[key] = serviceLines;
-            console.log(`🔥🔥 服务备注字符串转换成功: "${value}" -> 多行文本:\n${serviceLines}`);
+            console.log(`🔥🔥 服务备注字符串转换: "${value}" -> 多行文本`);
           } else {
-            // 单个值保持字符串格式
-            console.log(`🔥🔥 处理单个值: "${value}"`);
-            fillData[key] = String(value);
-            console.log(`🔥🔥 服务备注单值转换: "${value}" -> "${fillData[key]}"`);
+            // 🔥 保留换行符，只清理每行内部的多余空格
+            const cleanedValue = String(value)
+              .split('\n')
+              .map(line => line.trim().replace(/\s+/g, ' '))
+              .join('\n');
+            fillData[key] = cleanedValue;
+            console.log(`🔥🔥 服务备注单值（保留换行）: "${value}" -> "${fillData[key]}"`);
           }
+        } else if (isRemarkField) {
+          // 🔥 备注类字段：保留换行符，只清理每行内部的多余空格
+          console.log(`🔥🔥 检测到备注类字段: "${key}"`);
+          const cleanedValue = String(value)
+            .split('\n')
+            .map(line => line.trim().replace(/\s+/g, ' '))
+            .filter(line => line) // 移除空行
+            .join('\n');
+          fillData[key] = cleanedValue;
+          console.log(`🔥🔥 备注字段转换（保留换行）: "${value}" -> "${fillData[key]}"`);
         } else {
-          // 其他字段保持字符串格式
-          fillData[key] = String(value);
+          // 其他字段保持字符串格式，并清理多余空格（包括换行符）
+          const cleanedValue = String(value).trim().replace(/\s+/g, ' ');
+          fillData[key] = cleanedValue;
           console.log(`➡️ 普通字段转换: "${key}" -> "${fillData[key]}"`);
         }
       } else {
@@ -3478,25 +3812,103 @@ export class ESignService {
 
   /**
    * 转换模板参数为componentData格式（选择类填充）
-   * 目前主要处理勾选框类型的组件
+   * 处理勾选框和多选组件
    */
-  private convertToComponentData(templateParams: Record<string, any>): Array<{
+  private convertToComponentData(
+    templateParams: Record<string, any>,
+    templateControls: any[]
+  ): Array<{
     type: number;
     keyword: string;
-    defaultValue: string;
+    defaultValue?: string;
+    options?: Array<{index: number; selected: boolean}>;
   }> {
     const componentData: Array<{
       type: number;
       keyword: string;
-      defaultValue: string;
+      defaultValue?: string;
+      options?: Array<{index: number; selected: boolean}>;
     }> = [];
 
     // 遍历模板参数，查找需要转换为组件数据的字段
     Object.entries(templateParams).forEach(([key, value]) => {
-      // 如果字段名包含"同意"、"确认"、"勾选"等关键词，或者值为布尔类型
-      if (typeof value === 'boolean' || 
-          key.includes('同意') || 
-          key.includes('确认') || 
+      const isMultiSelectField = key.includes('多选') || key.startsWith('多选');
+
+      if (isMultiSelectField) {
+        // 🔥🔥🔥 关键修改：多选字段使用正确的格式
+        // 查找模板控件定义
+        const control = templateControls.find(c => c.dataKey === key && c.dataType === 9);
+        if (!control || !control.options) {
+          console.log(`⚠️ 未找到多选字段"${key}"的模板定义，跳过`);
+          return;
+        }
+
+        // 解析用户选择的值
+        let selectedTexts: string[] = [];
+        if (typeof value === 'string' && value.trim()) {
+          // 前端发送的是分号分隔的字符串
+          selectedTexts = value.split('；').map(t => t.trim()).filter(Boolean);
+        }
+
+        console.log(`🔥 多选字段"${key}"用户选择:`, selectedTexts);
+        console.log(`🔥 模板定义的选项:`, control.options);
+
+        // 匹配用户选择的文本到模板选项的索引
+        const options = control.options.map((opt) => {
+          const isSelected = selectedTexts.some(text =>
+            text.includes(opt.label) || opt.label.includes(text)
+          );
+          return {
+            index: opt.index, // 使用模板中的 index 值（可能是字符串或数字）
+            selected: isSelected
+          };
+        });
+
+        // 🔥 关键修改：如果没有任何选项被选中，跳过这个多选字段
+        const selectedCount = options.filter(o => o.selected).length;
+        if (selectedCount === 0) {
+          console.log(`⚠️ 多选字段"${key}"没有任何选项被选中，跳过`);
+          return;
+        }
+
+        componentData.push({
+          type: 9,
+          keyword: key,
+          options: options
+        });
+
+        console.log(`🔘 多选组件转换: "${key}" -> ${selectedCount}/${options.length} 项选中`);
+        return;
+      }
+
+      // 🔥🔥🔥 处理下拉控件（type=16）
+      const dropdownControl = templateControls.find(c => c.dataKey === key && c.dataType === 16);
+      if (dropdownControl && dropdownControl.options) {
+        // 查找用户选择的值在模板选项中的索引
+        const selectedOption = dropdownControl.options.find(opt =>
+          opt.label === value || opt.label.includes(value) || value.includes(opt.label)
+        );
+
+        if (selectedOption) {
+          componentData.push({
+            type: 16,
+            keyword: key,
+            options: [{
+              index: selectedOption.index,
+              selected: true
+            }]
+          });
+          console.log(`🔽 下拉控件转换: "${key}" -> 选中索引 ${selectedOption.index} (${selectedOption.label})`);
+        } else {
+          console.log(`⚠️ 下拉控件"${key}"未找到匹配的选项，值: "${value}"`);
+        }
+        return;
+      }
+
+      // 处理勾选框类型
+      if (typeof value === 'boolean' ||
+          key.includes('同意') ||
+          key.includes('确认') ||
           key.includes('勾选') ||
           key.includes('选择')) {
         componentData.push({
@@ -3507,8 +3919,96 @@ export class ESignService {
       }
     });
 
-    console.log('🔘 转换后的componentData:', componentData);
+    console.log('🔘 转换后的componentData:', JSON.stringify(componentData, null, 2));
     return componentData;
+  }
+
+  /**
+   * 从爱签API获取模板名称
+   * 通过查询模板列表接口，找到对应模板的名称
+   */
+  private async getTemplateNameFromAPI(templateNo: string): Promise<string> {
+    // 方法1：尝试查询模板列表接口
+    try {
+      console.log('🔍 方法1：尝试从模板列表接口获取模板名称:', templateNo);
+
+      const response = await this.callESignAPI('/template/list', {
+        pageNum: 1,
+        pageSize: 100
+      });
+
+      console.log('📋 模板列表API响应:', JSON.stringify(response, null, 2));
+
+      if (response.code === 100000 && response.data) {
+        // 尝试多种可能的数据结构
+        const templates = response.data.list ||
+                         response.data.templates ||
+                         response.data.data ||
+                         (Array.isArray(response.data) ? response.data : null);
+
+        if (Array.isArray(templates)) {
+          console.log(`📋 找到 ${templates.length} 个模板`);
+
+          const matchedTemplate = templates.find((t: any) =>
+            t.templateNo === templateNo ||
+            t.templateIdent === templateNo ||
+            t.templateId === templateNo ||
+            t.id === templateNo
+          );
+
+          if (matchedTemplate) {
+            const templateName = matchedTemplate.templateName ||
+                                matchedTemplate.name ||
+                                matchedTemplate.title;
+            if (templateName) {
+              console.log('✅ 成功从模板列表获取模板名称:', templateName);
+              return templateName;
+            }
+          } else {
+            console.log('⚠️ 模板列表中未找到匹配的模板编号:', templateNo);
+          }
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ 模板列表接口调用失败:', error.message);
+    }
+
+    // 方法2：尝试其他可能的接口
+    const possibleEndpoints = [
+      '/template/detail',
+      '/template/get',
+      '/template/query',
+      '/template/info'
+    ];
+
+    for (const endpoint of possibleEndpoints) {
+      try {
+        console.log(`🔍 方法2：尝试接口 ${endpoint} 获取模板名称:`, templateNo);
+
+        const response = await this.callESignAPI(endpoint, {
+          templateIdent: templateNo
+        });
+
+        console.log(`📋 ${endpoint} 响应:`, JSON.stringify(response, null, 2));
+
+        if (response.code === 100000 && response.data) {
+          const templateName = response.data.templateName ||
+                              response.data.name ||
+                              response.data.title ||
+                              response.data.templateTitle;
+          if (templateName) {
+            console.log(`✅ 成功从 ${endpoint} 获取模板名称:`, templateName);
+            return templateName;
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️ ${endpoint} 调用失败:`, error.message);
+        // 继续尝试下一个接口
+      }
+    }
+
+    console.log('⚠️ 所有方法都未能获取模板名称，使用默认值');
+    return '未知模板';
   }
 
   /**
@@ -3519,15 +4019,17 @@ export class ESignService {
     try {
       console.log('🔍 从爱签API获取模板信息:', templateNo);
 
-      // 直接调用getTemplateData方法，它使用真正的爱签API
+      // 1. 获取模板字段数据
       const templateFields = await this.getTemplateData(templateNo);
-
       console.log('📋 爱签API返回的原始模板数据:', templateFields);
 
-      // 转换为前端需要的格式
+      // 2. 🔥 尝试从API获取真实的模板名称
+      const templateName = await this.getTemplateNameFromAPI(templateNo);
+
+      // 3. 转换为前端需要的格式
       const formattedTemplate = {
         templateNo: templateNo,
-        templateName: '家政服务合同模板',
+        templateName: templateName,
         description: '基于爱签平台的真实模板',
         fields: this.convertTemplateFieldsToFormFields(templateFields)
       };
@@ -3536,7 +4038,7 @@ export class ESignService {
       return formattedTemplate;
     } catch (error) {
       console.error('❌ 获取模板信息失败:', error);
-      
+
       // 如果API调用失败，返回空字段列表，提示用户重试
       console.log('🔄 API调用失败，返回空模板');
       return {
@@ -3550,265 +4052,111 @@ export class ESignService {
 
   /**
    * 将爱签API返回的模板字段转换为前端表单字段格式
-   * 只使用爱签API返回的原始字段，不添加自定义字段
-   * 彻底解决重复字段问题
+   * 🔥 新策略：不做任何字段合并，原样返回所有字段
+   * 让前端显示所有字段，避免遗漏必填字段
    */
   private convertTemplateFieldsToFormFields(templateFields: any[]): any[] {
     console.log('🔍 开始转换爱签API原始模板字段，字段数量:', templateFields?.length);
-    
+
+    // 🔥 打印所有原始字段的完整信息
+    console.log('📋 所有原始字段详情:');
+    templateFields?.forEach((field, index) => {
+      console.log(`字段 ${index + 1}: dataKey="${field.dataKey}", dataType=${field.dataType}, required=${field.required}`);
+    });
+
     const formFields: any[] = [];
-    const seenKeys = new Set();
+    const seenKeys = new Set();  // 用于去重，但不合并字段
 
     // 只处理从爱签API获取的原始字段
     if (Array.isArray(templateFields)) {
       templateFields.forEach((field, index) => {
-        if (field.dataKey) {
-          const fieldKey = field.dataKey;
-          console.log(`🔍 处理字段 ${index + 1}/${templateFields.length}: ${fieldKey} (dataType: ${field.dataType})`);
-          
-          // 特殊处理：客户/甲方相关字段合并
-          if (fieldKey === '客户姓名' || fieldKey === '签署人姓名' || fieldKey === '甲方姓名' || fieldKey === '甲方姓名（客户）') {
-            if (seenKeys.has('甲方姓名_group')) {
-              console.log(`⚠️  跳过重复的甲方姓名字段: ${fieldKey}`);
-              return;
-            } else {
-              seenKeys.add('甲方姓名_group');
-              seenKeys.add('客户姓名');
-              seenKeys.add('签署人姓名');
-              seenKeys.add('甲方姓名');
-              seenKeys.add('甲方姓名（客户）');
-              const formField = {
-                key: '甲方姓名',
-                label: '甲方姓名（客户）',
-                type: this.getFieldTypeByDataType(field.dataType),
-                required: field.required === 1,
-                originalField: field
-              };
-              formFields.push(formField);
-              console.log(`✅ 添加甲方姓名字段: 甲方姓名 (合并了客户姓名、签署人姓名、甲方姓名)`);
-              return;
-            }
-          }
-
-          // 客户/甲方电话字段合并
-          if (fieldKey === '客户电话' || fieldKey === '甲方联系电话') {
-            if (seenKeys.has('甲方电话_group')) {
-              console.log(`⚠️  跳过重复的甲方电话字段: ${fieldKey}`);
-              return;
-            } else {
-              seenKeys.add('甲方电话_group');
-              seenKeys.add('客户电话');
-              seenKeys.add('甲方联系电话');
-              const formField = {
-                key: '甲方联系电话',
-                label: '甲方联系电话',
-                type: this.getFieldTypeByDataType(field.dataType),
-                required: field.required === 1,
-                originalField: field
-              };
-              formFields.push(formField);
-              console.log(`✅ 添加甲方电话字段: 甲方联系电话 (合并了客户电话、甲方联系电话)`);
-              return;
-            }
-          }
-
-          // 客户/甲方身份证号字段合并
-          if (fieldKey === '客户身份证号' || fieldKey === '身份证号' || fieldKey === '甲方身份证号') {
-            if (seenKeys.has('甲方身份证_group')) {
-              console.log(`⚠️  跳过重复的甲方身份证字段: ${fieldKey}`);
-              return;
-            } else {
-              seenKeys.add('甲方身份证_group');
-              seenKeys.add('客户身份证号');
-              seenKeys.add('身份证号');
-              seenKeys.add('甲方身份证号');
-              const formField = {
-                key: '甲方身份证号',
-                label: '甲方身份证号',
-                type: this.getFieldTypeByDataType(field.dataType),
-                required: field.required === 1,
-                originalField: field
-              };
-              formFields.push(formField);
-              console.log(`✅ 添加甲方身份证字段: 甲方身份证号 (合并了客户身份证号、身份证号、甲方身份证号)`);
-              return;
-            }
-          }
-
-          // 客户/甲方地址字段合并
-          if (fieldKey === '客户联系地址') {
-            if (seenKeys.has('甲方地址_group')) {
-              console.log(`⚠️  跳过重复的甲方地址字段: ${fieldKey}`);
-              return;
-            } else {
-              seenKeys.add('甲方地址_group');
-              seenKeys.add('客户联系地址');
-              const formField = {
-                key: '客户联系地址',
-                label: '甲方联系地址',
-                type: this.getFieldTypeByDataType(field.dataType),
-                required: field.required === 1,
-                originalField: field
-              };
-              formFields.push(formField);
-              console.log(`✅ 添加甲方地址字段: 客户联系地址`);
-              return;
-            }
-          }
-
-          // 特殊处理：匹配费相关字段只保留第一个
-          if (fieldKey === '匹配费' || fieldKey === '匹配费大写') {
-            if (seenKeys.has('匹配费_group')) {
-              console.log(`⚠️  跳过重复的匹配费字段: ${fieldKey}`);
-              return;
-            } else {
-              seenKeys.add('匹配费_group');
-              seenKeys.add('匹配费');
-              seenKeys.add('匹配费大写');
-              const formField = {
-                key: '匹配费',
-                label: '匹配费',
-                type: this.getFieldTypeByDataType(field.dataType),
-                required: field.required === 1,
-                originalField: field
-              };
-              formFields.push(formField);
-              console.log(`✅ 添加匹配费字段: 匹配费 (合并了匹配费和匹配费大写)`);
-              return;
-            }
-          }
-          
-          // 阿姨工资相关字段只保留第一个
-          if (fieldKey === '阿姨工资' || fieldKey === '阿姨工资大写') {
-            if (seenKeys.has('阿姨工资_group')) {
-              console.log(`⚠️  跳过重复的阿姨工资字段: ${fieldKey}`);
-              return;
-            } else {
-              seenKeys.add('阿姨工资_group');
-              seenKeys.add('阿姨工资');
-              seenKeys.add('阿姨工资大写');
-              const formField = {
-                key: '阿姨工资',
-                label: '阿姨工资',
-                type: this.getFieldTypeByDataType(field.dataType),
-                required: field.required === 1,
-                originalField: field
-              };
-              formFields.push(formField);
-              console.log(`✅ 添加阿姨工资字段: 阿姨工资 (合并了阿姨工资和阿姨工资大写)`);
-              return;
-            }
-          }
-          
-          // 服务费相关字段只保留第一个
-          if (fieldKey === '服务费' || fieldKey === '大写服务费') {
-            if (seenKeys.has('服务费_group')) {
-              console.log(`⚠️  跳过重复的服务费字段: ${fieldKey}`);
-              return;
-            } else {
-              seenKeys.add('服务费_group');
-              seenKeys.add('服务费');
-              seenKeys.add('大写服务费');
-              const formField = {
-                key: '服务费',
-                label: '服务费',
-                type: this.getFieldTypeByDataType(field.dataType),
-                required: field.required === 1,
-                originalField: field
-              };
-              formFields.push(formField);
-              console.log(`✅ 添加服务费字段: 服务费 (合并了服务费和大写服务费)`);
-              return;
-            }
-          }
-
-          // 甲乙丙方字段特殊处理：只保留checkbox类型，跳过text类型
-          if (fieldKey === '甲方' || fieldKey === '乙方' || fieldKey === '丙方') {
-            const fieldType = this.getFieldTypeByDataType(field.dataType);
-            
-            // 如果是text类型的甲乙丙方字段，直接跳过
-            if (fieldType === 'text') {
-              console.log(`⚠️  跳过text类型的${fieldKey}字段`);
-              return;
-            }
-            
-            // checkbox类型的甲乙丙方字段，检查是否已存在
-            if (seenKeys.has(fieldKey)) {
-              console.log(`⚠️  跳过重复的${fieldKey}字段`);
-              return;
-            } else {
-              seenKeys.add(fieldKey);
-              const formField = {
-                key: fieldKey,
-                label: fieldKey,
-                type: fieldType,
-                required: field.required === 1,
-                originalField: field
-              };
-              formFields.push(formField);
-              console.log(`✅ 添加${fieldKey}字段: ${fieldKey} (只保留checkbox类型)`);
-              return;
-            }
-          }
-          
-          // 其他字段正常处理 - 严格去重
-          if (!seenKeys.has(fieldKey)) {
-            seenKeys.add(fieldKey);
-            
-            // 特殊处理：服务备注字段，添加预定义选项
-            let options = undefined;
-            console.log(`🔍 检查字段: ${fieldKey}, dataType: ${field.dataType}`);
-            if (fieldKey === '服务备注' && field.dataType === 8) {
-              // 为服务备注字段添加预定义的选项
-              const serviceOptions = [
-                '做饭', '做早餐', '做午餐', '做晚餐', '买菜', '熨烫衣服', '洗衣服', '打扫卫生',
-                '照顾老人', '照顾孩子', '辅助照顾老人\\孩子',
-                '科学合理的喂养指导，保障婴幼儿生长发育的营养需要',
-                '婴幼儿洗澡、洗头、清洗五官',
-                '婴幼儿换洗衣物、尿不湿等，保障婴幼儿卫生、干爽、预防尿布疹',
-                '为婴幼儿进行抚触、被动操、安抚哭闹、呵护入睡',
-                '随时对婴幼儿的身体状况（如摄入量、大小便、皮肤、体温等）进行观察，协助护理婴幼儿常见疾病。',
-                '婴幼儿房间的卫生、通风，奶瓶、餐具的清洁消毒',
-                '婴幼儿的早期教育和正确引导',
-                '婴幼儿的辅食制作及喂养',
-                '做儿童早餐', '做儿童中餐', '做儿童晚餐',
-                '手洗儿童衣服', '熨烫儿童衣服', '整理儿童玩具、书籍',
-                '接送孩子上学、课外辅导'
-              ];
-              
-              options = serviceOptions.map((option, index) => ({
-                label: option,
-                value: option,
-                selected: false,
-                index: index
-              }));
-              
-              console.log(`✅ 为服务备注字段添加了 ${serviceOptions.length} 个预定义选项`);
-            } else if (field.options && Array.isArray(field.options)) {
-              // 处理爱签API原有的options字段
-              options = field.options.map((opt: any) => ({
-                label: opt.label,
-                value: opt.label,
-                selected: opt.selected,
-                index: opt.index
-              }));
-            }
-            
-            const formField = {
-              key: fieldKey,
-              label: fieldKey, // 使用原始字段名作为标签
-              type: this.getFieldTypeByDataType(field.dataType),
-              required: field.required === 1,
-              originalField: field, // 保留原始字段信息
-              options: options // 可能包含服务备注的预定义选项或爱签API的选项
-            };
-            
-            formFields.push(formField);
-            console.log(`✅ 添加爱签原始字段: ${fieldKey} (类型: ${field.dataType}, options: ${options ? options.length : 0})`);
-          } else {
-            console.log(`⚠️  跳过重复字段: ${fieldKey}`);
-          }
+        if (!field.dataKey) {
+          return;  // 跳过没有dataKey的字段
         }
+
+        const fieldKey = field.dataKey;
+        console.log(`🔍 处理字段 ${index + 1}/${templateFields.length}: ${fieldKey} (dataType: ${field.dataType}, required: ${field.required})`);
+
+        // 🔥 过滤签名区、签章区等不需要用户填写的字段
+        // dataType: 6=签署区, 7=签署时间, 15=备注签署区
+        if (field.dataType === 6 || field.dataType === 7 || field.dataType === 15) {
+          console.log(`⚠️  跳过签名/签章字段: ${fieldKey} (dataType: ${field.dataType})`);
+          return;
+        }
+
+        // 🔥 过滤签名区、签章区相关的字段名
+        const lowerKey = fieldKey.toLowerCase();
+        if (lowerKey.includes('签名区') || lowerKey.includes('签章区') ||
+            lowerKey.includes('签署区') || lowerKey.includes('印章')) {
+          console.log(`⚠️  跳过签名相关字段: ${fieldKey}`);
+          return;
+        }
+
+        // 🔥 严格去重：同一个dataKey只添加一次
+        if (seenKeys.has(fieldKey)) {
+          console.log(`⚠️  跳过重复字段: ${fieldKey}`);
+          return;
+        }
+
+        // 🔥 添加字段到列表（不做任何合并）
+        seenKeys.add(fieldKey);
+
+        // 特殊处理：服务备注字段，添加预定义选项
+        let options = undefined;
+        if (fieldKey === '服务备注' && field.dataType === 8) {
+          // 为服务备注字段添加预定义的选项
+          const serviceOptions = [
+            '做饭', '做早餐', '做午餐', '做晚餐', '买菜', '熨烫衣服', '洗衣服', '打扫卫生',
+            '照顾老人', '照顾孩子', '辅助照顾老人\\孩子',
+            '科学合理的喂养指导，保障婴幼儿生长发育的营养需要',
+            '婴幼儿洗澡、洗头、清洗五官',
+            '婴幼儿换洗衣物、尿不湿等，保障婴幼儿卫生、干爽、预防尿布疹',
+            '为婴幼儿进行抚触、被动操、安抚哭闹、呵护入睡',
+            '随时对婴幼儿的身体状况（如摄入量、大小便、皮肤、体温等）进行观察，协助护理婴幼儿常见疾病。',
+            '婴幼儿房间的卫生、通风，奶瓶、餐具的清洁消毒',
+            '婴幼儿的早期教育和正确引导',
+            '婴幼儿的辅食制作及喂养',
+            '做儿童早餐', '做儿童中餐', '做儿童晚餐',
+            '手洗儿童衣服', '熨烫儿童衣服', '整理儿童玩具、书籍',
+            '接送孩子上学、课外辅导'
+          ];
+
+          options = serviceOptions.map((option, index) => ({
+            label: option,
+            value: option,
+            selected: false,
+            index: index
+          }));
+
+          console.log(`✅ 为服务备注字段添加了 ${serviceOptions.length} 个预定义选项`);
+        } else if (field.options && Array.isArray(field.options)) {
+          // 处理爱签API原有的options字段
+          options = field.options.map((opt: any) => ({
+            label: opt.label,
+            value: opt.label,
+            selected: opt.selected,
+            index: opt.index
+          }));
+        }
+
+        // 特殊处理：阿姨身份证字段虽然在爱签API中是dataType: 1（单行文本），但应该作为身份证类型处理
+        let fieldType = this.getFieldTypeByDataType(field.dataType);
+        if (fieldKey === '阿姨身份证' && field.dataType === 1) {
+          fieldType = 'idcard';
+          console.log(`🔧 特殊处理: 将"阿姨身份证"字段类型从text强制转换为idcard`);
+        }
+
+        const formField = {
+          key: fieldKey,
+          label: fieldKey, // 使用原始字段名作为标签
+          type: fieldType,
+          required: field.required === 1,
+          originalField: field, // 保留原始字段信息
+          options: options // 可能包含服务备注的预定义选项或爱签API的选项
+        };
+
+        formFields.push(formField);
+        console.log(`✅ 添加爱签原始字段: ${fieldKey} (类型: ${field.dataType}, required: ${field.required})`);
       });
     }
 
@@ -3820,21 +4168,41 @@ export class ESignService {
 
   /**
    * 根据爱签API的数据类型转换为表单控件类型
+   * 爱签API数据类型说明：
+   * 1: 单行文本
+   * 2: 多行文本
+   * 3: 数字
+   * 4: 身份证
+   * 5: 日期
+   * 6: 签名
+   * 7: 印章
+   * 8: 多行文本
+   * 9: 多选
+   * 13: 勾选框
+   * 16: 单选
    */
   private getFieldTypeByDataType(dataType: number): string {
     switch (dataType) {
       case 1: // 单行文本
         return 'text';
       case 2: // 多行文本
+      case 8: // 多行文本
         return 'textarea';
       case 3: // 数字
         return 'number';
-      case 4: // 日期
+      case 4: // 身份证
+        return 'idcard';
+      case 5: // 日期
         return 'date';
-      case 5: // 选择框
-        return 'select';
-      case 6: // 勾选框
+      case 6: // 签名
+      case 7: // 印章
+        return 'signature';
+      case 9: // 多选
+        return 'multiselect';
+      case 13: // 勾选框
         return 'checkbox';
+      case 16: // 单选
+        return 'select';
       default:
         return 'text';
     }
@@ -3848,7 +4216,7 @@ export class ESignService {
       console.log('🔍 获取真实模板列表');
 
       // 目前使用已知的模板编号
-      const knownTemplateNo = 'TNCBC37535B2134B5F949E1BBC86116B59';
+      const knownTemplateNo = 'TN84E8C106BFE74FD3AE36AC2CA33A44DE';
       
       // 获取模板信息
       const templateInfo = await this.getRealTemplateInfo(knownTemplateNo);
@@ -3859,7 +4227,7 @@ export class ESignService {
       
       // 返回空模板列表，提示用户重试
       return [{
-                  templateNo: 'TNCBC37535B2134B5F949E1BBC86116B59',
+                  templateNo: 'TN84E8C106BFE74FD3AE36AC2CA33A44DE',
         templateName: '模板加载失败',
         description: '无法从爱签API获取模板字段，请刷新页面重试',
         fields: []
@@ -4095,40 +4463,48 @@ export class ESignService {
   /**
    * 作废合同（针对已签署完成的合同）
    * @param contractNo 合同唯一编码
-   * @param invalidReason 作废原因
-   * @param isNoticeSignUser 是否短信通知签署用户，默认false
+   * @param validityTime 作废签署剩余天数，默认15天
+   * @param notifyUrl 合同签署完成后回调通知地址
+   * @param redirectUrl 合同签署完成后同步回调地址
    */
   async invalidateContract(
-    contractNo: string, 
-    invalidReason?: string, 
-    isNoticeSignUser: boolean = false
+    contractNo: string,
+    validityTime: number = 15,
+    notifyUrl?: string,
+    redirectUrl?: string
   ): Promise<any> {
     try {
       console.log('🔍 作废合同:', contractNo);
 
       // 构建作废合同请求数据
-      const invalidateData: any = {
+      const cancellationData: any = {
         contractNo,
-        isNoticeSignUser
+        validityTime // 作废签署剩余天数
       };
 
-      // 可选字段：作废原因
-      if (invalidReason && invalidReason.trim()) {
-        invalidateData.invalidReason = invalidReason;
+      // 可选字段：回调通知地址
+      if (notifyUrl && notifyUrl.trim()) {
+        cancellationData.notifyUrl = notifyUrl;
       }
 
-      console.log('📋 作废合同请求数据:', JSON.stringify(invalidateData, null, 2));
+      // 可选字段：同步回调地址
+      if (redirectUrl && redirectUrl.trim()) {
+        cancellationData.redirectUrl = redirectUrl;
+      }
 
-      // 调用爱签作废合同API
-      const result = await this.callESignAPI('/contract/invalid', invalidateData);
-      
+      console.log('📋 作废合同请求数据:', JSON.stringify(cancellationData, null, 2));
+
+      // 调用爱签作废合同API（正确的端点是 /contract/cancellation）
+      const result = await this.callESignAPI('/contract/cancellation', cancellationData);
+
       console.log('✅ 作废合同响应:', result);
 
       if (result.code === 100000) {
         return {
           success: true,
           contractNo,
-          message: '合同作废成功',
+          cancelContractNo: result.data?.cancelContractNo,
+          message: '合同作废成功，签署方需要签署作废印章',
           data: result.data
         };
       } else {
@@ -4167,14 +4543,15 @@ export class ESignService {
         // 如果是101000错误码（合同已签署完成），则尝试作废
         if (withdrawError.message.includes('已签署完成')) {
           console.log('🔄 合同已签署完成，尝试作废操作...');
-          const invalidateResult = await this.invalidateContract(contractNo, reason, isNoticeSignUser);
+          // 使用默认15天有效期进行作废
+          const invalidateResult = await this.invalidateContract(contractNo, 15);
           return {
             ...invalidateResult,
             action: 'invalidate',
             message: '合同作废成功'
           };
         }
-        
+
         // 其他错误直接抛出
         throw withdrawError;
       }
@@ -4225,5 +4602,71 @@ export class ESignService {
   }
 
   // 🗑️ 所有重复的方法定义已删除，保持代码简洁
+
+  /**
+   * 处理爱签合同状态回调
+   * 当爱签合同状态变化时，爱签会调用这个方法
+   */
+  async handleContractCallback(callbackData: any): Promise<void> {
+    try {
+      this.logger.log('📥 处理爱签回调数据:', JSON.stringify(callbackData));
+
+      // 爱签回调数据格式可能包含：
+      // - contractNo: 合同编号
+      // - status: 合同状态 (0=等待签约, 1=签约中, 2=已签约, 3=过期, 4=拒签, 6=作废, 7=撤销)
+      // - signTime: 签署时间
+      // 具体格式需要根据爱签实际回调数据调整
+
+      const { contractNo, status } = callbackData;
+
+      if (!contractNo) {
+        this.logger.error('❌ 回调数据缺少合同编号');
+        return;
+      }
+
+      this.logger.log(`📋 合同编号: ${contractNo}, 状态: ${status}`);
+
+      // 查找本地数据库中的合同
+      const contract = await this.contractModel.findOne({
+        esignContractNo: contractNo
+      }).exec();
+
+      if (!contract) {
+        this.logger.error(`❌ 未找到合同: ${contractNo}`);
+        return;
+      }
+
+      this.logger.log(`✅ 找到合同: ${contract._id}, 当前状态: ${contract.contractStatus}`);
+
+      // 更新爱签状态
+      const updateData: any = {
+        esignStatus: status.toString()
+      };
+
+      // 如果爱签状态是"已签约"(2)，则更新本地合同状态为"active"
+      if (status === 2 || status === '2') {
+        updateData.contractStatus = 'active';
+        updateData.esignSignedAt = new Date();
+        this.logger.log('🎉 合同已签约，更新状态为 active');
+      }
+
+      // 更新合同
+      await this.contractModel.findByIdAndUpdate(contract._id, updateData).exec();
+
+      this.logger.log(`✅ 合同状态已更新: ${contract._id}`);
+
+      // 🔔 如果状态变为 active，触发保险同步
+      // 注意：这里不能直接注入 ContractsService（会造成循环依赖）
+      // 保险同步会在 ContractsService.update() 方法中自动触发
+      // 所以我们需要通过 ContractsService.update() 来更新合同，而不是直接更新数据库
+
+      // 重新实现：通过事件或者直接调用 ContractsService
+      // 由于循环依赖问题，这里我们先更新数据库，然后在 ContractsController 中手动触发同步
+
+    } catch (error) {
+      this.logger.error('❌ 处理爱签回调失败:', error);
+      throw error;
+    }
+  }
 
 }

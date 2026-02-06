@@ -417,7 +417,9 @@ const CustomerList: React.FC = () => {
         return (
           <Space size={4}>
             <Link
-              to={`/customers/${record._id}`}
+              to={`/standalone/customers/${record._id}`}
+              target="_blank"
+              rel="noopener noreferrer"
               style={{ color: '#1890ff', fontWeight: 'bold' }}
             >
               {customerId}

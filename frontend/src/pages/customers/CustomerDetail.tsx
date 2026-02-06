@@ -216,6 +216,24 @@ const CustomerDetail: React.FC = () => {
     } else {
       console.log('ℹ️ 客户状态已经是"已签约"，无需更新');
     }
+
+    // 🆕 同步线索等级为O类（当合同签约时）
+    if (hasSignedContract && customer.leadLevel !== 'O类') {
+      console.log('🔄 检测到已签约合同，自动同步线索等级为O类...');
+
+      try {
+        await customerService.syncLeadLevelToO(customer._id);
+        console.log('✅ 线索等级已自动同步为O类');
+
+        // 更新本地客户数据
+        setCustomer(prev => prev ? { ...prev, leadLevel: 'O类' } : prev);
+
+        message.success('线索等级已自动更新为O类');
+      } catch (error) {
+        console.error('❌ 自动同步线索等级时出错:', error);
+        // 不显示错误消息，避免干扰用户
+      }
+    }
   };
 
   // 返回客户列表

@@ -114,6 +114,12 @@ export class Contract {
   @Prop()
   esignPreviewUrl?: string; // 爱签预览链接（缓存）
 
+  @Prop()
+  esignSignUrls?: string; // 爱签签署链接（JSON字符串）
+
+  @Prop({ type: Object })
+  templateParams?: Record<string, any>; // 爱签模板参数（用于换人时复制）
+
   // 换人功能相关字段
   @Prop({ default: true })
   isLatest: boolean; // 是否为该客户最新合同
@@ -132,6 +138,19 @@ export class Contract {
 
   @Prop()
   serviceDays?: number; // 实际服务天数（如果已结束）
+
+  // 保险同步相关字段
+  @Prop({ default: false })
+  insuranceSyncPending?: boolean; // 是否有待同步的保险换人
+
+  @Prop({ enum: ['pending', 'success', 'failed'] })
+  insuranceSyncStatus?: string; // 保险同步状态
+
+  @Prop()
+  insuranceSyncError?: string; // 保险同步失败原因
+
+  @Prop()
+  insuranceSyncedAt?: Date; // 保险同步完成时间
 
   @Prop({ default: Date.now })
   createdAt: Date; // 录入时间，自动生成

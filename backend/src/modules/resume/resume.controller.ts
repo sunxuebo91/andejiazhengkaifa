@@ -462,6 +462,7 @@ export class ResumeController {
         orderStatus: [
           { value: 'accepting', label: '想接单' },
           { value: 'not-accepting', label: '不接单' },
+          { value: 'signed', label: '已签约' },
           { value: 'on-service', label: '已上户' }
         ],
         leadSource: [

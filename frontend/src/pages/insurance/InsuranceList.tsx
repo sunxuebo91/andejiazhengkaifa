@@ -27,11 +27,13 @@ import {
   WechatOutlined,
   RollbackOutlined,
   SwapOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import insuranceService from '../../services/insuranceService';
+import { getCurrentUser } from '../../services/auth';
 import {
   InsurancePolicy,
   PolicyStatus,
@@ -63,6 +65,10 @@ const InsuranceList: React.FC = () => {
   const [amendLoading, setAmendLoading] = useState(false);
   const [amendForm] = Form.useForm();
   const navigate = useNavigate();
+  const currentUser = getCurrentUser();
+  const canDeletePolicy =
+    (currentUser?.role === '系统管理员' || currentUser?.role === 'admin' || currentUser?.role === '管理员') &&
+    (currentUser?.name === '孙学博' || currentUser?.username === '孙学博');
 
   // 加载保单列表
   const loadPolicies = async () => {
@@ -93,8 +99,16 @@ const InsuranceList: React.FC = () => {
   };
 
   // 打印保单
-  const handlePrint = async (policyNo: string) => {
+  const handlePrint = async (policyNo: string, event?: React.MouseEvent) => {
+    // 阻止事件冒泡，防止重复触发
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+
     try {
+      message.loading({ content: '正在下载保单...', key: 'download-policy' });
+
       const blob = await insuranceService.printPolicy({ policyNo });
 
       // 创建下载链接
@@ -104,12 +118,16 @@ const InsuranceList: React.FC = () => {
       link.download = `policy-${policyNo}.pdf`;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
 
-      message.success('保单PDF下载成功');
+      // 延迟清理，确保下载完成
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+
+      message.success({ content: '保单PDF下载成功', key: 'download-policy' });
     } catch (error: any) {
-      message.error(error.message || '打印保单失败');
+      message.error({ content: error.message || '打印保单失败', key: 'download-policy' });
     }
   };
 
@@ -139,6 +157,24 @@ const InsuranceList: React.FC = () => {
     }
   };
 
+  const handleDeletePolicy = async (record: InsurancePolicy) => {
+    try {
+      if (!record?._id) {
+        message.error('保单ID不存在');
+        return;
+      }
+      const result = await insuranceService.deletePolicy(record._id);
+      if (result?.success === false) {
+        message.error(result.message || '保单删除失败');
+        return;
+      }
+      message.success('保单删除成功');
+      loadPolicies();
+    } catch (error: any) {
+      message.error(error.message || '保单删除失败');
+    }
+  };
+
   // 打开支付弹窗
   const handlePay = (record: InsurancePolicy) => {
     setPaymentPolicy(record);
@@ -150,6 +186,10 @@ const InsuranceList: React.FC = () => {
     setSurrenderPolicy(record);
     setSurrenderModalVisible(true);
     surrenderForm.resetFields();
+  };
+
+  const isDashubaoSuccess = (result?: { Success?: string | boolean }) => {
+    return result?.Success === 'true' || result?.Success === true;
   };
 
   // 退保
@@ -173,12 +213,14 @@ const InsuranceList: React.FC = () => {
         removeReason: values.removeReason,
       });
 
-      if (result.Success === 'true') {
+      console.log('退保接口响应:', result);
+
+      if (isDashubaoSuccess(result)) {
         message.success('退保成功');
         setSurrenderModalVisible(false);
         loadPolicies();
       } else {
-        message.error(result.Message || '退保失败');
+        message.error(result.Message || '退保失败（接口未返回原因）');
       }
     } catch (error: any) {
       console.error('退保错误:', error);
@@ -247,6 +289,16 @@ const InsuranceList: React.FC = () => {
 
       setAmendLoading(true);
 
+      const oldInfoFromId = extractInfoFromIdCard(values.oldIdNumber);
+      const fallbackOld = amendPolicy?.insuredList?.[0];
+      const oldBirthDate = oldInfoFromId?.birthDate || fallbackOld?.birthDate;
+      const oldGender = oldInfoFromId?.gender || fallbackOld?.gender;
+
+      if (!oldBirthDate || !oldGender) {
+        message.error('原被保险人出生日期或性别缺失，请核对证件信息');
+        return;
+      }
+
       // 构建请求数据
       const amendData = {
         policyNo: amendPolicy.policyNo,
@@ -254,6 +306,8 @@ const InsuranceList: React.FC = () => {
           insuredName: values.oldInsuredName,
           idType: values.oldIdType,
           idNumber: values.oldIdNumber,
+          birthDate: oldBirthDate,
+          gender: oldGender,
         },
         newInsured: {
           insuredName: values.newInsuredName,
@@ -269,13 +323,15 @@ const InsuranceList: React.FC = () => {
 
       const result = await insuranceService.amendPolicy(amendData);
 
-      if (result.Success === 'true') {
+      console.log('换人接口响应:', result);
+
+      if (isDashubaoSuccess(result)) {
         message.success('换人成功！');
         setAmendModalVisible(false);
         amendForm.resetFields();
         loadPolicies();
       } else {
-        message.error(result.Message || '换人失败');
+        message.error(result.Message || '换人失败（接口未返回原因）');
       }
     } catch (error: any) {
       console.error('换人错误:', error);
@@ -370,7 +426,7 @@ const InsuranceList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 240,
       fixed: 'right',
       render: (_, record) => (
         <Space size="small">
@@ -400,44 +456,79 @@ const InsuranceList: React.FC = () => {
 
           {record.policyNo && (
             <>
-              <Tooltip title="打印保单">
-                <Button type="link" size="small" icon={<PrinterOutlined />} onClick={() => handlePrint(record.policyNo!)} />
+              <Tooltip title="下载保单">
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<PrinterOutlined />}
+                  onClick={(e) => handlePrint(record.policyNo!, e)}
+                />
               </Tooltip>
-              {record.status === PolicyStatus.PENDING && (
-                <Popconfirm
-                  title="确定要注销此保单吗？"
-                  onConfirm={() => handleCancel(record.policyNo!)}
-                  okText="确定"
-                  cancelText="取消"
-                >
-                  <Tooltip title="注销保单">
-                    <Button type="link" size="small" danger icon={<CloseCircleOutlined />} />
-                  </Tooltip>
-                </Popconfirm>
-              )}
-              {record.status === PolicyStatus.ACTIVE && (
-                <>
-                  <Tooltip title="换人">
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<SwapOutlined />}
-                      style={{ color: '#722ed1' }}
-                      onClick={() => handleOpenAmend(record)}
-                    />
-                  </Tooltip>
-                  <Tooltip title="退保">
-                    <Button
-                      type="link"
-                      size="small"
-                      danger
-                      icon={<RollbackOutlined />}
-                      onClick={() => handleOpenSurrender(record)}
-                    />
-                  </Tooltip>
-                </>
-              )}
+              {(() => {
+                // 如果保单已注销或已退保，不显示注销和换人按钮
+                if (record.status === PolicyStatus.CANCELLED || record.status === PolicyStatus.SURRENDERED) {
+                  return null;
+                }
+
+                // 判断保单是否已生效（根据生效日期）
+                const now = new Date();
+                const effectiveDate = record.effectiveDate
+                  ? new Date(
+                      parseInt(record.effectiveDate.substring(0, 4)),
+                      parseInt(record.effectiveDate.substring(4, 6)) - 1,
+                      parseInt(record.effectiveDate.substring(6, 8)),
+                      parseInt(record.effectiveDate.substring(8, 10) || '0'),
+                      parseInt(record.effectiveDate.substring(10, 12) || '0'),
+                      parseInt(record.effectiveDate.substring(12, 14) || '0')
+                    )
+                  : null;
+
+                const isEffective = effectiveDate ? now >= effectiveDate : false;
+
+                // 🆕 生效前和生效后都可以换人
+                return (
+                  <>
+                    {/* 未生效：显示注销按钮 */}
+                    {!isEffective && (
+                      <Popconfirm
+                        title="确定要注销此保单吗？"
+                        onConfirm={() => handleCancel(record.policyNo!)}
+                        okText="确定"
+                        cancelText="取消"
+                      >
+                        <Tooltip title="注销保单（未生效）">
+                          <Button type="link" size="small" danger icon={<CloseCircleOutlined />} />
+                        </Tooltip>
+                      </Popconfirm>
+                    )}
+
+                    {/* 换人按钮：生效前和生效后都可以换人 */}
+                    <Tooltip title={isEffective ? "换人" : "换人（生效前）"}>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<SwapOutlined />}
+                        style={{ color: '#722ed1' }}
+                        onClick={() => handleOpenAmend(record)}
+                      />
+                    </Tooltip>
+                  </>
+                );
+              })()}
             </>
+          )}
+          {canDeletePolicy && (
+            <Popconfirm
+              title="确定要删除此保单记录吗？"
+              description="此操作仅删除本地记录，不会影响大树保平台"
+              onConfirm={() => handleDeletePolicy(record)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Tooltip title="删除保单记录">
+                <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+              </Tooltip>
+            </Popconfirm>
           )}
         </Space>
       ),
@@ -543,7 +634,7 @@ const InsuranceList: React.FC = () => {
                 </a>
               </Descriptions.Item>
             )}
-            {selectedPolicy.errorMessage && (
+            {selectedPolicy.errorMessage && selectedPolicy.status !== 'active' && (
               <Descriptions.Item label="错误信息" span={2}>
                 <span style={{ color: 'red' }}>{selectedPolicy.errorMessage}</span>
               </Descriptions.Item>

@@ -30,6 +30,11 @@ const BannerForm = lazy(() => import('./pages/baobei/BannerForm'));
 const ArticleList = lazy(() => import('./pages/baobei/ArticleList'));
 const ArticleForm = lazy(() => import('./pages/baobei/ArticleForm'));
 const MiniProgramUserList = lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
+// 表单管理相关页面
+import FormList from './pages/forms/FormList';
+import FormEditor from './pages/forms/FormEditor';
+import FormSubmissions from './pages/forms/FormSubmissions';
+import PublicForm from './pages/public/PublicForm';
 
 export interface RouteConfig {
   path: string;
@@ -213,6 +218,43 @@ export const basicLayoutRoutes: RouteConfig[] = [
           description: '管理小程序端注册的用户信息'
         }
       },
+      // 表单管理
+      {
+        path: 'forms',
+        name: '表单列表',
+        element: <FormList />,
+        meta: {
+          title: '表单管理',
+          description: '管理表单配置'
+        }
+      },
+      {
+        path: 'forms/create',
+        name: '创建表单',
+        element: <FormEditor />,
+        meta: {
+          title: '创建表单',
+          description: '创建新的表单'
+        }
+      },
+      {
+        path: 'forms/edit/:id',
+        name: '编辑表单',
+        element: <FormEditor />,
+        meta: {
+          title: '编辑表单',
+          description: '编辑表单配置'
+        }
+      },
+      {
+        path: 'forms/:id/submissions',
+        name: '表单提交数据',
+        element: <FormSubmissions />,
+        meta: {
+          title: '表单提交数据',
+          description: '查看表单提交数据'
+        }
+      },
     ],
   },
 ];
@@ -225,9 +267,18 @@ export const authRoutes: RouteConfig[] = [
   },
 ];
 
+export const publicRoutes: RouteConfig[] = [
+  {
+    path: '/public/form/:id',
+    name: '公开表单',
+    element: <PublicForm />,
+  },
+];
+
 export const routeConfig: RouteConfig[] = [
   ...basicLayoutRoutes,
   ...authRoutes,
+  ...publicRoutes,
   {
     path: '*',
     element: <NotFound />,

@@ -352,6 +352,35 @@ export class CustomersService {
     };
   }
 
+  // 🔥 电子签名专用搜索：包含所有状态的客户（包括流失客户）
+  async searchForESign(search: string, limit: number = 10): Promise<Customer[]> {
+    if (!search) {
+      return [];
+    }
+
+    const searchConditions: any = {
+      inPublicPool: false, // 只搜索非公海客户
+      $or: [
+        { name: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { phone: (search || '').trim() }, // 精确匹配
+        { wechatId: { $regex: search, $options: 'i' } },
+        { wechatId: (search || '').trim() },
+      ],
+    };
+
+    // 🔥 注意：不过滤 contractStatus，允许搜索所有状态的客户（包括流失客户）
+    const customers = await this.customerModel
+      .find(searchConditions)
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .limit(limit)
+      .populate('assignedTo', 'name username')
+      .lean()
+      .exec();
+
+    return customers as any;
+  }
+
   // 根据ID获取客户详情（包含跟进记录）
   async findOne(id: string): Promise<Customer & {
     createdByUser?: { name: string; username: string } | null;
@@ -431,6 +460,14 @@ export class CustomersService {
     const currentCustomer = await this.customerModel.findById(id).exec();
     if (!currentCustomer) {
       throw new NotFoundException('客户不存在');
+    }
+
+    // 🔒 权限检查：O类线索等级只能由管理员手动修改
+    if (updateCustomerDto.leadLevel === 'O类' && userId) {
+      const user = await this.userModel.findById(userId).select('role').lean();
+      if (!user || user.role !== 'admin') {
+        throw new ForbiddenException('只有管理员可以手动设置线索等级为O类');
+      }
     }
 
     // 验证手机号或微信号至少有一个（考虑更新后的值）
@@ -553,6 +590,55 @@ export class CustomersService {
     }
 
     return customer;
+  }
+
+  /**
+   * 🆕 自动更新客户线索等级为O类（当合同签约时调用）
+   * 此方法由合同服务在检测到合同签约时调用
+   * @param customerId 客户ID
+   */
+  async updateLeadLevelToOOnContractSigned(customerId: string): Promise<void> {
+    try {
+      this.logger.log(`🔄 检查客户 ${customerId} 是否需要更新线索等级为O类`);
+
+      const customer = await this.customerModel.findById(customerId).exec();
+      if (!customer) {
+        this.logger.warn(`客户 ${customerId} 不存在，跳过线索等级更新`);
+        return;
+      }
+
+      // 如果已经是O类，无需更新
+      if (customer.leadLevel === 'O类') {
+        this.logger.log(`客户 ${customer.name} 已经是O类，无需更新`);
+        return;
+      }
+
+      const oldLeadLevel = customer.leadLevel;
+
+      // 更新线索等级为O类
+      await this.customerModel.findByIdAndUpdate(customerId, {
+        leadLevel: 'O类',
+        lastActivityAt: new Date(),
+      });
+
+      this.logger.log(`✅ 客户 ${customer.name} 线索等级已自动更新: ${oldLeadLevel} -> O类`);
+
+      // 记录操作日志
+      await this.logOperation(
+        customerId,
+        'system', // 系统自动操作
+        'update',
+        '自动更新线索等级',
+        {
+          description: `合同签约成功，线索等级自动更新为O类`,
+          before: { leadLevel: oldLeadLevel },
+          after: { leadLevel: 'O类' },
+        }
+      );
+    } catch (error) {
+      this.logger.error(`❌ 自动更新客户线索等级失败:`, error);
+      // 不抛出异常，避免影响合同流程
+    }
   }
 
   // 删除客户

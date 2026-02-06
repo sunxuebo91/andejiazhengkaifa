@@ -4,12 +4,16 @@ import { ConfigModule } from '@nestjs/config';
 import { DashubaoController } from './dashubao.controller';
 import { DashubaoService } from './dashubao.service';
 import { InsurancePolicy, InsurancePolicySchema } from './models/insurance-policy.model';
+import { InsuranceSyncLog, InsuranceSyncLogSchema } from './models/insurance-sync-log.model';
+import { Contract, ContractSchema } from '../contracts/models/contract.model';
 
 @Module({
   imports: [
     ConfigModule,
     MongooseModule.forFeature([
       { name: InsurancePolicy.name, schema: InsurancePolicySchema },
+      { name: InsuranceSyncLog.name, schema: InsuranceSyncLogSchema },
+      { name: Contract.name, schema: ContractSchema },
     ]),
   ],
   controllers: [DashubaoController],

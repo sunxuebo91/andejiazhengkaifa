@@ -2899,6 +2899,7 @@ export class ESignService {
   /**
    * 步骤4：获取合同状态和签署链接
    * API: /contract/status (根据官方文档)
+   * 🔥 增强：同时获取签署方详细信息，用于前端显示签署状态
    */
   async getContractStatus(contractNo: string): Promise<any> {
     try {
@@ -2911,6 +2912,67 @@ export class ESignService {
       // 使用正确的API端点：/contract/status（根据官方文档）
       const response = await this.callESignAPI('/contract/status', bizData);
       console.log('✅ 获取合同状态成功:', response);
+
+      // 🔥 增强：尝试获取签署方详细信息
+      if (response.code === 100000 && response.data) {
+        try {
+          // 调用 getContract 接口获取签署方信息
+          const contractInfoResult = await this.getContractInfo(contractNo);
+
+          if (contractInfoResult.success && contractInfoResult.data?.signUser) {
+            const signUsers = contractInfoResult.data.signUser;
+
+            console.log('🔍 爱签返回的签署方原始数据:', JSON.stringify(signUsers, null, 2));
+
+            // 将签署方信息添加到响应中
+            response.data.signUsers = signUsers.map((user: any, index: number) => {
+              // 🔥 修复：使用多种方式判断角色
+              // 按照创建合同时的顺序：第1个是客户(甲方)，第2个是阿姨(乙方)，第3个是企业(丙方)
+              let role = '签署方';
+              const userName = user.name || '';
+
+              // 🔥 方法1：根据名称关键词判断
+              if (userName.includes('企业') || userName.includes('公司') || userName.includes('安得') || userName.includes('家政')) {
+                role = '丙方（企业）';
+              } else if (userName.includes('客户') || userName.includes('甲方') || userName.includes('雇主')) {
+                role = '甲方（客户）';
+              } else if (userName.includes('阿姨') || userName.includes('乙方') || userName.includes('服务人员') || userName.includes('保姆') || userName.includes('育儿嫂')) {
+                role = '乙方（阿姨）';
+              }
+              // 🔥 方法2：如果名称没有关键词，根据 userType 判断（1=企业，0=个人）
+              else if (user.userType === 1) {
+                role = '丙方（企业）';
+              }
+              // 🔥 方法3：如果以上都不满足，根据索引判断
+              else if (index === 0) {
+                role = '甲方（客户）';
+              } else if (index === 1) {
+                role = '乙方（阿姨）';
+              } else if (index >= 2) {
+                role = '丙方（企业）';
+              }
+
+              console.log(`🔍 签署方 ${index}: name=${user.name}, userType=${user.userType}, signOrder=${user.signOrder}, role=${role}`);
+
+              return {
+                account: user.account,
+                name: user.name || `签署方${index + 1}`,
+                role: role,
+                phone: user.mobile || user.phone,
+                signStatus: user.signStatus,
+                signStatusText: this.getSignStatusText(user.signStatus || 0),
+                signTime: user.signTime,
+                signOrder: user.signOrder || (index + 1),
+                userType: user.userType // 0=个人, 1=企业
+              };
+            });
+
+            console.log('✅ 获取签署方信息成功:', JSON.stringify(response.data.signUsers, null, 2));
+          }
+        } catch (signersError) {
+          console.warn('⚠️ 获取签署方信息失败，但不影响主流程:', signersError.message);
+        }
+      }
 
       return response;
     } catch (error) {
@@ -3340,9 +3402,13 @@ export class ESignService {
       });
 
       // 处理返回结果
+      // 🔥 修复：使用配置的域名而不是硬编码的测试环境域名
+      const esignHost = this.config.host || 'https://oapi.asign.cn';
+
       if (signersData.length === 1) {
         // 单个签署人：返回单个签署链接（向后兼容）
-        const signUrl = signerResult?.signUrl || `https://prev.asign.cn/sign/${params.contractNo}`;
+        // 注意：签署链接应该从爱签API响应中获取，而不是自己拼接
+        const signUrl = signerResult?.signUrl || `${esignHost}/sign/${params.contractNo}`;
         console.log('✅ 完整流程执行成功，签署链接:', signUrl);
 
         return {
@@ -3353,10 +3419,11 @@ export class ESignService {
         };
       } else {
         // 多个签署人：返回多个签署链接
+        // 🔥 注意：签署链接应该从爱签API响应中获取，这里使用配置的正式环境域名作为备用
         const signUrls = signerAccounts.map(signerAccount => ({
           name: signerAccount.name,
           mobile: signerAccount.mobile,
-          signUrl: `https://prev.asign.cn/sign/${params.contractNo}?account=${signerAccount.account}`
+          signUrl: `${esignHost}/sign/${params.contractNo}?account=${signerAccount.account}`
         }));
 
         console.log('✅ 完整流程执行成功，多个签署链接:', signUrls);
@@ -4266,13 +4333,22 @@ export class ESignService {
 
   /**
    * 获取签约状态文本描述
+   * 🔥 重要：根据爱签实际返回的数据调整状态映射
+   * 爱签实际返回：signStatus=2 表示已签约（因为有 signFinishedTime）
+   * 状态码映射（根据实际API返回推断）：
+   * - 0: 待签约（未开始签署）
+   * - 1: 签约中（正在签署）
+   * - 2: 已签约（签署完成）
+   * - 3: 拒签
+   * - 4: 已撤销
+   * - 5: 已过期
    */
   private getSignStatusText(signStatus: number): string {
     const statusMap = {
       0: '待签约',
-      1: '已签约',
-      2: '拒签',
-      3: '签约中',
+      1: '签约中',
+      2: '已签约',  // 🔥 修复：2 表示已签约，不是拒签
+      3: '拒签',    // 🔥 修复：3 表示拒签
       4: '已撤销',
       5: '已过期'
     };
@@ -4280,12 +4356,113 @@ export class ESignService {
   }
 
   /**
-   * 简单预览合同 - 使用签约链接作为预览链接
-   * 这是最简单且最准确的预览方式
+   * 🔥 正确的预览合同接口 - 使用爱签官方 /contract/previewContract API
+   * 根据官方文档：创建待签署文件后，在调用合同签署（添加签署方接口）前，可先调用此接口预览合同在签署完成后的样式效果。
+   * 接口地址：https://{host}/contract/previewContract
+   */
+  async previewContractOfficial(contractNo: string, signStrategyList?: Array<{
+    attachNo: number;
+    locationMode: number;
+    signKey?: string;
+    signPage: number;
+    signX?: number;
+    signY?: number;
+  }>): Promise<any> {
+    try {
+      console.log('🔍 调用官方预览合同接口:', contractNo);
+
+      // 1. 获取合同信息，包括签署方信息
+      const contractInfoResult = await this.getContractInfo(contractNo);
+
+      if (!contractInfoResult.success || !contractInfoResult.data) {
+        throw new Error('无法获取合同信息');
+      }
+
+      const contractInfo = contractInfoResult.data;
+      const signUsers = contractInfo.signUser || [];
+
+      if (signUsers.length === 0) {
+        throw new Error('合同暂无签署方信息，无法预览');
+      }
+
+      // 2. 使用第一个签署方的 account 调用预览接口
+      const firstSigner = signUsers[0];
+      const account = firstSigner.account;
+
+      // 3. 构建签署策略（如果没有提供，则使用默认的模板坐标签章）
+      const defaultSignStrategyList = signStrategyList || [{
+        attachNo: 1,
+        locationMode: 4, // 模板坐标签章
+        signKey: '甲方', // 使用甲方签署位置
+        signPage: 1
+      }];
+
+      // 4. 调用爱签官方预览接口
+      const bizData = [{
+        account: account,
+        contractNo: contractNo,
+        isWrite: 0, // 非手写章
+        signStrategyList: defaultSignStrategyList
+      }];
+
+      console.log('📤 调用预览接口参数:', JSON.stringify(bizData, null, 2));
+
+      const response = await this.callESignAPI('/contract/previewContract', bizData);
+      console.log('📥 预览接口响应:', response);
+
+      if (response.code === 100000 && response.data) {
+        console.log('✅ 获取官方预览链接成功:', response.data);
+        return {
+          success: true,
+          contractNo,
+          previewUrl: response.data, // 官方预览链接
+          previewData: response.data,
+          method: 'officialPreviewAPI',
+          contractInfo: {
+            contractNo: contractInfo.contractNo || contractNo,
+            contractName: contractInfo.contractName,
+            status: contractInfo.status,
+          },
+          signUsers: signUsers.map((user: any) => ({
+            account: user.account,
+            name: user.name,
+            signStatus: user.signStatus || 0,
+            statusText: this.getSignStatusText(user.signStatus || 0),
+            signUrl: user.signUrl
+          })),
+          message: '获取官方预览链接成功'
+        };
+      } else {
+        console.error('❌ 官方预览接口返回错误:', response);
+        throw new Error(response.msg || '获取预览链接失败');
+      }
+    } catch (error) {
+      console.error('❌ 调用官方预览接口失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 简单预览合同 - 使用签约链接作为预览链接（备用方案）
+   * 当官方预览接口不可用时的备选方案
    */
   async previewContractWithSignUrls(contractNo: string): Promise<any> {
     try {
-      console.log('🔍 使用签约链接预览合同:', contractNo);
+      console.log('🔍 预览合同:', contractNo);
+
+      // 🔥 优先尝试使用官方预览接口
+      try {
+        const officialResult = await this.previewContractOfficial(contractNo);
+        if (officialResult.success && officialResult.previewUrl) {
+          console.log('✅ 使用官方预览接口成功');
+          return officialResult;
+        }
+      } catch (officialError) {
+        console.warn('⚠️ 官方预览接口失败，尝试备用方案:', officialError.message);
+      }
+
+      // 🔥 备用方案：使用签约链接作为预览链接
+      console.log('🔄 使用签约链接作为预览（备用方案）');
 
       // 步骤1：获取合同基本信息
       const contractInfoResult = await this.getContractInfo(contractNo);

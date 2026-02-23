@@ -476,30 +476,57 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
             </div>
           )}
           
-          {/* 如果不是精准状态，显示原有的签署方信息 */}
-          {!contractStatus.detailedStatus?.detailed && contractStatus.data?.signers && contractStatus.data.signers.length > 0 && (
+          {/* 🔥 显示签署方详细状态（支持signers和signUsers两种数据格式） */}
+          {!contractStatus.detailedStatus?.detailed && (contractStatus.data?.signers?.length > 0 || contractStatus.data?.signUsers?.length > 0) && (
             <div style={{ marginTop: 16 }}>
               <p><strong>签署方状态：</strong></p>
-              <Row gutter={[8, 8]}>
-                {contractStatus.data.signers.map((signer: any, index: number) => (
-                  <Col key={index} span={8}>
-                    <div style={{ 
-                      padding: '8px 12px', 
-                      background: '#f9f9f9', 
-                      borderRadius: '4px',
-                      fontSize: '12px'
-                    }}>
-                      <div><strong>{signer.name || `签署方${index + 1}`}</strong></div>
-                      <div>
-                        <Tag 
-                          color={signer.status === 2 ? 'green' : signer.status === 1 ? 'orange' : 'gray'}
-                        >
-                          {signer.status === 2 ? '已签署' : signer.status === 1 ? '待签署' : '未签署'}
-                        </Tag>
+              <Row gutter={[12, 8]}>
+                {(contractStatus.data.signUsers || contractStatus.data.signers || []).map((signer: any, index: number) => {
+                  // 🔥 支持多种签署状态字段格式
+                  const signStatus = signer.signStatus ?? signer.status ?? 0;
+                  // 🔥 修复：根据爱签实际返回的状态码调整
+                  // signStatus: 0=待签约, 1=签约中, 2=已签约, 3=拒签
+                  const isSigned = signStatus === 2;      // 🔥 修复：2 表示已签约
+                  const isPending = signStatus === 0 || signStatus === 1;  // 0=待签约, 1=签约中
+                  const isRejected = signStatus === 3;    // 🔥 修复：3 表示拒签
+
+                  const statusColor = isSigned ? 'green' : isRejected ? 'red' : 'orange';
+                  const statusText = signer.signStatusText || (isSigned ? '已签约' : isRejected ? '已拒签' : isPending ? '待签约' : '未知');
+                  const bgColor = isSigned ? '#f6ffed' : isRejected ? '#fff2f0' : '#fff7e6';
+                  const borderColor = isSigned ? '#b7eb8f' : isRejected ? '#ffccc7' : '#ffd591';
+
+                  return (
+                    <Col key={index} span={8}>
+                      <div style={{
+                        padding: '10px 12px',
+                        background: bgColor,
+                        borderRadius: '6px',
+                        border: `1px solid ${borderColor}`,
+                        fontSize: '12px'
+                      }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <UserOutlined style={{ marginRight: '4px' }} />
+                          <strong>{signer.role || signer.name || `签署方${index + 1}`}</strong>
+                        </div>
+                        {signer.name && signer.role && (
+                          <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>
+                            {signer.name}
+                          </div>
+                        )}
+                        <div>
+                          <Tag color={statusColor}>
+                            {statusText}
+                          </Tag>
+                        </div>
+                        {signer.signTime && (
+                          <div style={{ fontSize: '10px', color: '#999', marginTop: '4px' }}>
+                            签署时间: {signer.signTime}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </Col>
-                ))}
+                    </Col>
+                  );
+                })}
               </Row>
             </div>
           )}

@@ -20,6 +20,40 @@
   - [创建员工评价](#创建员工评价)
   - [获取评价列表](#获取评价列表)
   - [获取评价统计](#获取评价统计)
+- [� 合同管理](#合同管理)
+  - [获取合同列表](#获取合同列表)
+  - [获取合同详情](#获取合同详情)
+  - [根据合同编号获取合同](#根据合同编号获取合同)
+  - [根据客户ID获取合同](#根据客户id获取合同)
+  - [根据服务人员ID获取合同](#根据服务人员id获取合同)
+  - [根据服务人员信息搜索合同](#根据服务人员信息搜索合同)
+  - [检查客户现有合同](#检查客户现有合同)
+  - [获取客户合同历史](#获取客户合同历史)
+  - [获取合同统计信息](#获取合同统计信息)
+  - [创建合同](#创建合同)
+  - [更新合同](#更新合同)
+  - [创建换人合同](#创建换人合同)
+  - [手动触发保险同步](#手动触发保险同步)
+  - [同步爱签合同状态](#同步爱签合同状态)
+  - [批量同步所有合同状态](#批量同步所有合同状态)
+  - [获取爱签信息](#获取爱签信息)
+  - [重新获取签署链接](#重新获取签署链接)
+  - [下载已签署合同](#下载已签署合同)
+- [�🛡️ 保险保单管理](#保险保单管理)
+  - [获取保单列表](#获取保单列表)
+  - [根据身份证号查询保单](#根据身份证号查询保单)
+  - [获取保单详情](#获取保单详情)
+  - [根据保单号查询](#根据保单号查询)
+  - [根据商户单号查询](#根据商户单号查询)
+  - [创建保单（投保）](#创建保单投保)
+  - [查询保单状态（大树保）](#查询保单状态大树保)
+  - [创建支付订单](#创建支付订单)
+  - [注销保单](#注销保单)
+  - [退保](#退保)
+  - [获取电子保单PDF](#获取电子保单pdf)
+  - [批改保单（替换被保险人）](#批改保单替换被保险人)
+  - [批增（增加被保险人）](#批增增加被保险人)
+  - [同步保单状态](#同步保单状态)
 - [文件上传](#文件上传)
 - [数据字典](#数据字典)
 - [错误码说明](#错误码说明)
@@ -3900,13 +3934,1532 @@ wx.request({
 
 ---
 
+## 📝 合同管理
+
+小程序端合同管理接口，支持合同创建、查询、更新、换人、保险同步、电子签章等完整操作流程。
+
+**路由前缀**: `/api/contracts/miniprogram/`
+**认证要求**: 所有接口均为公开接口，无需JWT认证
+
+### 合同类型枚举（ContractType）
+
+| 值 | 说明 |
+|------|------|
+| `月嫂` | 月嫂服务 |
+| `住家育儿嫂` | 住家育儿嫂服务 |
+| `保洁` | 保洁服务 |
+| `住家保姆` | 住家保姆服务 |
+| `养宠` | 养宠服务 |
+| `小时工` | 小时工服务 |
+| `白班育儿` | 白班育儿服务 |
+| `白班保姆` | 白班保姆服务 |
+| `住家护老` | 住家护老服务 |
+
+### 合同状态枚举（ContractStatus）
+
+| 值 | 说明 |
+|------|------|
+| `draft` | 草稿 |
+| `signing` | 签约中 |
+| `active` | 生效中 |
+| `replaced` | 已被替换 |
+| `cancelled` | 已作废 |
+
+---
+
+### 获取合同列表
+
+分页获取合同列表，支持关键词搜索。
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/list?page=1&limit=10&search=孙学博
+```
+
+**认证**: ❌ 无需登录
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `page` | number | ❌ | 页码，默认1 |
+| `limit` | number | ❌ | 每页数量，默认10 |
+| `search` | string | ❌ | 搜索关键词（匹配客户姓名、手机号、合同编号等） |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "contracts": [
+      {
+        "_id": "698549c7ff8bbd52fc75df76",
+        "contractNumber": "CONTRACT_1770342853643_81ql5hl3v",
+        "customerName": "孙学博",
+        "customerPhone": "18604592681",
+        "contractType": "住家育儿嫂",
+        "contractStatus": "active",
+        "workerName": "赵瑶如",
+        "workerPhone": "18614058566",
+        "workerIdCard": "141034199605090042",
+        "startDate": "2026-02-06T01:54:14.808Z",
+        "endDate": "2027-02-06T00:00:00.000Z",
+        "workerSalary": 7000,
+        "customerServiceFee": 7000,
+        "isLatest": true,
+        "esignStatus": "2",
+        "createdAt": "2026-02-06T01:54:14.808Z"
+      }
+    ],
+    "total": 6,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  },
+  "message": "获取合同列表成功"
+}
+```
+
+---
+
+### 获取合同详情
+
+根据合同ID获取完整详情。
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/detail/{id}
+```
+
+**认证**: ❌ 无需登录
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | ✅ | 合同ID |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "698549c7ff8bbd52fc75df76",
+    "contractNumber": "CONTRACT_1770342853643_81ql5hl3v",
+    "customerName": "孙学博",
+    "customerPhone": "18604592681",
+    "customerIdCard": "230623199105111630",
+    "contractType": "住家育儿嫂",
+    "contractStatus": "active",
+    "workerName": "赵瑶如",
+    "workerIdCard": "141034199605090042",
+    "startDate": "2026-02-06T01:54:14.808Z",
+    "endDate": "2027-02-06T00:00:00.000Z",
+    "workerSalary": 7000,
+    "customerServiceFee": 7000,
+    "esignContractNo": "CONTRACT_1770342853643_81ql5hl3v",
+    "esignStatus": "2",
+    "esignSignedAt": "2026-02-06T01:55:00.000Z",
+    "isLatest": true,
+    "insuranceSyncStatus": "success"
+  },
+  "message": "获取合同详情成功"
+}
+```
+
+---
+
+### 根据合同编号获取合同
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/by-number/{contractNumber}
+```
+
+**认证**: ❌ 无需登录
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `contractNumber` | string | ✅ | 合同编号 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "...合同详情..." },
+  "message": "获取合同详情成功"
+}
+```
+
+### 根据客户ID获取合同
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/by-customer/{customerId}
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": [ { "...合同对象..." } ],
+  "message": "获取客户合同列表成功"
+}
+```
+
+---
+
+### 根据服务人员ID获取合同
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/by-worker-id/{workerId}
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": [ { "...合同对象..." } ],
+  "message": "获取服务人员合同列表成功"
+}
+```
+
+---
+
+### 根据服务人员信息搜索合同
+
+通过姓名、身份证号、手机号模糊搜索关联合同，常用于保险投保页面自动填充。
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/search-worker?name=赵瑶如&idCard=141034199605090042&phone=18614058566
+```
+
+**认证**: ❌ 无需登录
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `name` | string | ❌ | 服务人员姓名 |
+| `idCard` | string | ❌ | 服务人员身份证号 |
+| `phone` | string | ❌ | 服务人员手机号 |
+
+> 至少提供一个查询参数
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "698549c7ff8bbd52fc75df76",
+      "contractNumber": "CONTRACT_1770342853643_81ql5hl3v",
+      "customerName": "孙学博",
+      "workerName": "赵瑶如",
+      "contractStatus": "active"
+    }
+  ],
+  "message": "查询成功"
+}
+```
+
+---
+
+### 检查客户现有合同
+
+检查客户是否已有合同，用于判断新建合同还是换人合同。
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/check-customer/{customerPhone}
+```
+
+**认证**: ❌ 无需登录
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `customerPhone` | string | ✅ | 客户手机号 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "hasContract": true,
+    "contract": { "...最新合同对象..." },
+    "contractCount": 3
+  },
+  "message": "客户已有合同"
+}
+```
+
+---
+
+### 获取客户合同历史
+
+获取客户的完整合同变更历史记录。
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/history/{customerPhone}
+```
+
+**认证**: ❌ 无需登录
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `customerPhone` | string | ✅ | 客户手机号 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "customerPhone": "18604592681",
+    "contracts": [ { "...合同对象..." } ],
+    "timeline": [ { "...变更记录..." } ]
+  },
+  "message": "获取客户合同历史成功"
+}
+```
+
+---
+
+### 获取合同统计信息
+
+获取合同总数、按类型统计、本月/本年数量等。
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/statistics
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 6,
+    "byContractType": { "住家育儿嫂": 6 },
+    "thisMonth": 5,
+    "thisYear": 5
+  },
+  "message": "获取统计信息成功"
+}
+```
+
+### 创建合同
+
+创建新合同。
+
+#### 请求
+
+```http
+POST /api/contracts/miniprogram/create
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+```json
+{
+  "customerName": "孙学博",
+  "customerPhone": "18604592681",
+  "customerIdCard": "230623199105111630",
+  "contractType": "住家育儿嫂",
+  "startDate": "2026-02-06",
+  "endDate": "2027-02-06",
+  "workerName": "赵瑶如",
+  "workerPhone": "18614058566",
+  "workerIdCard": "141034199605090042",
+  "workerSalary": 7000,
+  "customerServiceFee": 7000,
+  "workerServiceFee": 500,
+  "deposit": 1000,
+  "remarks": "备注信息"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `customerName` | string | ✅ | 客户姓名 |
+| `customerPhone` | string | ✅ | 客户手机号 |
+| `customerIdCard` | string | ❌ | 客户身份证号 |
+| `contractType` | string | ❌ | 合同类型（见枚举） |
+| `startDate` | string | ❌ | 开始日期 |
+| `endDate` | string | ❌ | 结束日期 |
+| `workerName` | string | ❌ | 服务人员姓名 |
+| `workerPhone` | string | ❌ | 服务人员手机号 |
+| `workerIdCard` | string | ❌ | 服务人员身份证号 |
+| `workerSalary` | number | ❌ | 家政员工资 |
+| `customerServiceFee` | number | ❌ | 客户服务费 |
+| `workerServiceFee` | number | ❌ | 家政员服务费 |
+| `deposit` | number | ❌ | 约定定金 |
+| `finalPayment` | number | ❌ | 约定尾款 |
+| `expectedDeliveryDate` | string | ❌ | 预产期 |
+| `salaryPaymentDay` | number | ❌ | 工资发放日（1-31） |
+| `monthlyWorkDays` | number | ❌ | 月工作天数（1-31） |
+| `remarks` | string | ❌ | 备注 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "...新创建的合同对象..." },
+  "message": "合同创建成功"
+}
+```
+
+---
+
+### 更新合同
+
+#### 请求
+
+```http
+PUT /api/contracts/miniprogram/update/{id}
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+| 路径参数 | 说明 |
+|------|------|
+| `id` | 合同ID |
+
+请求体与创建合同字段相同，所有字段均为可选。
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "...更新后的合同对象..." },
+  "message": "合同更新成功"
+}
+```
+
+---
+
+### 创建换人合同
+
+基于原合同创建换人合同，自动合并原合同参数。
+
+#### 请求
+
+```http
+POST /api/contracts/miniprogram/change-worker/{originalContractId}
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+| 路径参数 | 说明 |
+|------|------|
+| `originalContractId` | 原合同ID |
+
+```json
+{
+  "customerName": "孙学博",
+  "customerPhone": "18604592681",
+  "workerName": "徐双梅",
+  "workerPhone": "18910415525",
+  "workerIdCard": "13032219780902162X",
+  "workerSalary": 7999,
+  "customerServiceFee": 7000,
+  "contractType": "住家育儿嫂",
+  "startDate": "2026-02-06",
+  "endDate": "2027-02-06"
+}
+```
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "6985671d6f813160cd287bae",
+    "contractNumber": "CONTRACT_1770350360363_zu643qx2b",
+    "contractStatus": "draft",
+    "replacesContractId": "698549c7ff8bbd52fc75df76"
+  },
+  "message": "换人合同创建成功"
+}
+```
+
+---
+
+### 手动触发保险同步
+
+合同签约后手动触发保险同步（查询爱签状态并同步保单）。
+
+#### 请求
+
+```http
+POST /api/contracts/miniprogram/sync-insurance/{id}
+```
+
+**认证**: ❌ 无需登录
+
+| 路径参数 | 说明 |
+|------|------|
+| `id` | 合同ID |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "message": "保险同步已完成", "syncResult": "..." },
+  "message": "保险同步已完成"
+}
+```
+
+---
+
+### 同步爱签合同状态
+
+从爱签API查询最新状态并同步到本地数据库。
+
+#### 请求
+
+```http
+POST /api/contracts/miniprogram/sync-esign-status/{id}
+```
+
+**认证**: ❌ 无需登录
+
+| 路径参数 | 说明 |
+|------|------|
+| `id` | 合同ID |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "esignStatus": "2",
+    "contractStatus": "active",
+    "message": "已签约"
+  },
+  "message": "状态同步成功"
+}
+```
+
+**爱签状态说明**:
+
+| esignStatus | contractStatus | 说明 |
+|-------------|----------------|------|
+| "0" | "draft" | 等待签约 |
+| "1" | "signing" | 签约中 |
+| "2" | "active" | 已签约（生效中） |
+| "3" | - | 过期 |
+| "4" | - | 拒签 |
+| "6" | "cancelled" | 作废 |
+| "7" | "cancelled" | 撤销 |
+
+---
+
+### 批量同步所有合同状态
+
+批量同步所有草稿和签约中状态的合同（最多50个）。
+
+#### 请求
+
+```http
+POST /api/contracts/miniprogram/sync-all-esign-status
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 5,
+    "success": 5,
+    "failed": 0,
+    "updated": 3,
+    "details": [
+      {
+        "contractNumber": "CONTRACT_1770282785780_59jb3gozk",
+        "oldStatus": "draft",
+        "newStatus": "active",
+        "esignStatus": "2"
+      },
+      {
+        "contractNumber": "CONTRACT_1754297069164_8dw350x75",
+        "oldStatus": "draft",
+        "newStatus": "signing",
+        "esignStatus": "1"
+      }
+    ]
+  },
+  "message": "批量同步完成：成功5个，失败0个，更新3个"
+}
+```
+
+**使用场景**:
+- CRM端发现合同状态不一致时
+- 定期同步所有合同状态
+- 爱签回调失败后的补救措施
+
+---
+
+### 获取爱签信息
+
+获取合同关联的爱签电子签章信息（签署状态、预览链接等）。
+
+#### 请求
+
+```http
+GET /api/contracts/miniprogram/esign-info/{id}
+```
+
+**认证**: ❌ 无需登录
+
+| 路径参数 | 说明 |
+|------|------|
+| `id` | 合同ID |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "contractNo": "CONTRACT_1770342853643_81ql5hl3v",
+    "templateNo": "TN84E8C106BFE74FD3AE36AC2CA33A44DE",
+    "status": { "contractStatus": "2", "statusName": "已签约" },
+    "preview": { "previewUrl": "https://..." }
+  },
+  "message": "获取爱签信息成功"
+}
+```
+
+---
+
+### 重新获取签署链接
+
+重新获取合同的签署链接（用于签署链接过期后重新获取）。
+
+#### 请求
+
+```http
+POST /api/contracts/miniprogram/resend-sign-urls/{id}
+```
+
+**认证**: ❌ 无需登录
+
+| 路径参数 | 说明 |
+|------|------|
+| `id` | 合同ID |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "signUrls": [
+      { "name": "孙学博", "mobile": "18604592681", "signUrl": "https://..." },
+      { "name": "赵瑶如", "mobile": "18614058566", "signUrl": "https://..." }
+    ]
+  },
+  "message": "获取签署链接成功"
+}
+```
+
+---
+
+### 下载已签署合同
+
+下载已签署完成的合同文件。
+
+#### 请求
+
+```http
+POST /api/contracts/miniprogram/download-contract/{id}
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+| 路径参数 | 说明 |
+|------|------|
+| `id` | 合同ID |
+
+```json
+{
+  "force": 0,
+  "downloadFileType": 0
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `force` | number | ❌ | 是否强制重新生成（0否/1是） |
+| `downloadFileType` | number | ❌ | 文件类型（0-PDF） |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "downloadUrl": "https://..." },
+  "message": "合同下载成功"
+}
+```
+
+---
+
+### 小程序调用示例
+
+```javascript
+// utils/contract-api.js
+const BASE_URL = 'https://crm.andejiazheng.com/api';
+
+/** 获取合同列表 */
+export function getContractList(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/contracts/miniprogram/list?${query}`,
+      method: 'GET',
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/** 检查客户是否已有合同 */
+export function checkCustomerContract(phone) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/contracts/miniprogram/check-customer/${phone}`,
+      method: 'GET',
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/** 创建换人合同 */
+export function createChangeWorkerContract(originalContractId, data) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/contracts/miniprogram/change-worker/${originalContractId}`,
+      method: 'POST',
+      header: { 'Content-Type': 'application/json' },
+      data,
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+```
+
+---
+
+## 🛡️ 保险保单管理
+
+小程序端保险保单管理接口，对接大树保平台，支持保单创建、查询、支付、退保等完整操作流程。
+
+### 📱 一句话总结
+
+所有保单相关接口均为公开接口（无需登录），路由前缀 `/api/dashubao/miniprogram/`。
+
+### 📋 接口列表
+
+| 接口 | 方法 | 路径 | 说明 |
+|------|------|------|------|
+| 获取保单列表 | GET | `/api/dashubao/miniprogram/policies` | 分页获取保单列表 |
+| 身份证查保单 | GET | `/api/dashubao/miniprogram/policy/by-id-card/:idCard` | 根据被保险人身份证号查询 |
+| 保单号查保单 | GET | `/api/dashubao/miniprogram/policy/by-policy-no/:policyNo` | 根据大树保保单号查询 |
+| 商户单号查保单 | GET | `/api/dashubao/miniprogram/policy/by-policy-ref/:policyRef` | 根据渠道流水号查询 |
+| 获取保单详情 | GET | `/api/dashubao/miniprogram/policy/:id` | 根据记录ID获取详情 |
+| 创建保单 | POST | `/api/dashubao/miniprogram/policy` | 投保确认，创建新保单 |
+| 查询保单状态 | POST | `/api/dashubao/miniprogram/policy/query` | 从大树保查询最新状态 |
+| 创建支付订单 | POST | `/api/dashubao/miniprogram/policy/payment/:policyRef` | 获取微信小程序支付信息 |
+| 注销保单 | POST | `/api/dashubao/miniprogram/policy/cancel` | 注销未生效保单 |
+| 退保 | POST | `/api/dashubao/miniprogram/policy/surrender` | 已生效保单退保 |
+| 获取电子保单 | POST | `/api/dashubao/miniprogram/policy/print` | 获取电子保单PDF |
+| 批改保单 | POST | `/api/dashubao/miniprogram/policy/amend` | 替换被保险人 |
+| 批增被保险人 | POST | `/api/dashubao/miniprogram/policy/add-insured` | 增加被保险人 |
+| 同步保单状态 | POST | `/api/dashubao/miniprogram/policy/sync/:identifier` | 从大树保同步最新状态到本地 |
+
+---
+
+### 获取保单列表
+
+分页获取保单列表，支持按状态和简历ID筛选。
+
+#### 请求
+
+```http
+GET /api/dashubao/miniprogram/policies?page=1&limit=10&status=active
+```
+
+**认证**: ❌ 无需登录
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `status` | string | 否 | 保单状态：pending/processing/active/expired/cancelled/surrendered |
+| `resumeId` | string | 否 | 关联简历ID |
+| `page` | number | 否 | 页码，默认1 |
+| `limit` | number | 否 | 每页条数，默认10 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "data": [
+      {
+        "_id": "6985518e2b89d09207c00045",
+        "agencyPolicyRef": "ANDE1770344846144mrvapl",
+        "policyNo": "14527006800217497720",
+        "planCode": "PK00029001",
+        "effectiveDate": "20260207000000",
+        "expireDate": "20260306000000",
+        "groupSize": 1,
+        "totalPremium": 12,
+        "status": "active",
+        "policyHolder": {
+          "policyHolderType": "C",
+          "policyHolderName": "北京安得家政有限公司",
+          "phIdType": "G",
+          "phIdNumber": "91110111MACJMD2R5J"
+        },
+        "insuredList": [
+          {
+            "insuredName": "赵瑶如",
+            "idType": "1",
+            "idNumber": "141034199605090042",
+            "birthDate": "19960509000000",
+            "gender": "F",
+            "mobile": "18614058566"
+          }
+        ],
+        "contractId": "69855462f92117b2d2455202",
+        "createdAt": "2026-02-06T02:27:26.411Z"
+      }
+    ],
+    "total": 1
+  },
+  "message": "获取成功"
+}
+```
+
+#### 保单状态说明
+
+| 状态值 | 说明 |
+|--------|------|
+| `pending` | 待支付 |
+| `processing` | 处理中 |
+| `active` | 已生效 |
+| `expired` | 已过期 |
+| `cancelled` | 已注销 |
+| `surrendered` | 已退保 |
+
+---
+
+### 根据身份证号查询保单
+
+根据被保险人的身份证号查询所有关联保单。
+
+#### 请求
+
+```http
+GET /api/dashubao/miniprogram/policy/by-id-card/141034199605090042
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "6985518e2b89d09207c00045",
+      "agencyPolicyRef": "ANDE1770344846144mrvapl",
+      "policyNo": "14527006800217497720",
+      "status": "active",
+      "insuredList": [
+        {
+          "insuredName": "赵瑶如",
+          "idNumber": "141034199605090042"
+        }
+      ],
+      "totalPremium": 12,
+      "effectiveDate": "20260207000000",
+      "expireDate": "20260306000000"
+    }
+  ],
+  "message": "获取成功"
+}
+```
+
+---
+
+### 获取保单详情
+
+根据保单记录ID获取完整详情。
+
+#### 请求
+
+```http
+GET /api/dashubao/miniprogram/policy/6985518e2b89d09207c00045
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "6985518e2b89d09207c00045",
+    "agencyPolicyRef": "ANDE1770344846144mrvapl",
+    "policyNo": "14527006800217497720",
+    "orderId": "19753109",
+    "productCode": "MP10450132",
+    "planCode": "PK00029001",
+    "issueDate": "20260206102726",
+    "effectiveDate": "20260207000000",
+    "expireDate": "20260306000000",
+    "groupSize": 1,
+    "totalPremium": 12,
+    "status": "active",
+    "policyHolder": {
+      "policyHolderType": "C",
+      "policyHolderName": "北京安得家政有限公司",
+      "phIdType": "G",
+      "phIdNumber": "91110111MACJMD2R5J",
+      "phAddress": "北京市朝阳区望京园602号楼3层339"
+    },
+    "insuredList": [
+      {
+        "insuredName": "赵瑶如",
+        "insuredType": "1",
+        "idType": "1",
+        "idNumber": "141034199605090042",
+        "birthDate": "19960509000000",
+        "gender": "F",
+        "mobile": "18614058566"
+      }
+    ],
+    "contractId": "69855462f92117b2d2455202",
+    "createdAt": "2026-02-06T02:27:26.411Z",
+    "updatedAt": "2026-02-06T02:40:55.229Z"
+  },
+  "message": "获取成功"
+}
+```
+
+---
+
+### 根据保单号查询
+
+根据大树保保单号查询保单。
+
+#### 请求
+
+```http
+GET /api/dashubao/miniprogram/policy/by-policy-no/14527006800217497720
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+同"获取保单详情"响应格式。
+
+---
+
+### 根据商户单号查询
+
+根据渠道流水号（商户单号）查询保单。
+
+#### 请求
+
+```http
+GET /api/dashubao/miniprogram/policy/by-policy-ref/ANDE1770344846144mrvapl
+```
+
+**认证**: ❌ 无需登录
+
+#### 响应
+
+同"获取保单详情"响应格式。
+
+---
+
+### 创建保单（投保）
+
+向大树保平台提交投保请求，创建新保单。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+#### 请求参数
+
+```json
+{
+  "planCode": "PK00029001",
+  "effectiveDate": "20260207000000",
+  "expireDate": "20260306000000",
+  "groupSize": 1,
+  "totalPremium": 12,
+  "policyHolder": {
+    "policyHolderType": "C",
+    "policyHolderName": "北京安得家政有限公司",
+    "phIdType": "G",
+    "phIdNumber": "91110111MACJMD2R5J",
+    "phAddress": "北京市朝阳区望京园602号楼3层339",
+    "phProvinceCode": "110000",
+    "phCityCode": "110100",
+    "phDistrictCode": "110105"
+  },
+  "insuredList": [
+    {
+      "insuredName": "赵瑶如",
+      "idType": "1",
+      "idNumber": "141034199605090042",
+      "birthDate": "19960509000000",
+      "gender": "F",
+      "mobile": "18614058566"
+    }
+  ],
+  "resumeId": "可选-关联简历ID"
+}
+```
+
+#### 请求字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `planCode` | string | ✅ | 计划代码 |
+| `effectiveDate` | string | ✅ | 生效日期（yyyyMMddHHmmss） |
+| `expireDate` | string | ✅ | 结束日期（yyyyMMddHHmmss） |
+| `groupSize` | number | ✅ | 被保险人数量 |
+| `totalPremium` | number | ✅ | 总保费 |
+| `productCode` | string | 否 | 产品代码 |
+| `destination` | string | 否 | 目的地 |
+| `remark` | string | 否 | 备注 |
+| `serviceAddress` | string | 否 | 服务地址（工单险必传） |
+| `workOrderId` | string | 否 | 订单编号（工单险必传） |
+| `resumeId` | string | 否 | 关联的阿姨简历ID |
+
+**投保人字段（policyHolder）**:
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `policyHolderType` | string | ✅ | I-个人，C-企业 |
+| `policyHolderName` | string | ✅ | 投保人名称 |
+| `phIdType` | string | ✅ | 证件类型（G-营业执照，1-身份证等） |
+| `phIdNumber` | string | ✅ | 证件号码 |
+| `phAddress` | string | 否 | 地址 |
+| `phProvinceCode` | string | 否 | 省级编码（工单险必传） |
+| `phCityCode` | string | 否 | 市级编码（工单险必传） |
+| `phDistrictCode` | string | 否 | 区级编码（工单险必传） |
+
+**被保险人字段（insuredList[]）**:
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `insuredName` | string | ✅ | 被保险人姓名 |
+| `idType` | string | ✅ | 证件类型：1-身份证 |
+| `idNumber` | string | ✅ | 证件号码 |
+| `birthDate` | string | ✅ | 出生日期（yyyyMMddHHmmss） |
+| `gender` | string | ✅ | 性别：M-男，F-女 |
+| `mobile` | string | 否 | 联系电话 |
+| `occupationCode` | string | 否 | 职业类别代码 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "6985518e2b89d09207c00045",
+    "agencyPolicyRef": "ANDE1770344846144mrvapl",
+    "policyNo": "14527006800217497720",
+    "status": "pending",
+    "totalPremium": 12
+  },
+  "message": "保单创建成功"
+}
+```
+
+---
+
+### 查询保单状态（大树保）
+
+从大树保平台查询保单最新状态（非本地缓存）。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy/query
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+#### 请求参数
+
+```json
+{
+  "agencyPolicyRef": "ANDE1770344846144mrvapl",
+  "policyNo": "14527006800217497720"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `agencyPolicyRef` | string | 二选一 | 渠道流水号 |
+| `policyNo` | string | 二选一 | 大树保保单号 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "Success": "true",
+    "PolicyNo": "14527006800217497720",
+    "Status": "1",
+    "Message": ""
+  },
+  "message": "查询成功"
+}
+```
+
+---
+
+### 创建支付订单
+
+获取微信小程序支付信息，用于发起微信支付。小程序端固定使用 MINI 支付方式。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy/payment/ANDE1770344846144mrvapl
+```
+
+**认证**: ❌ 无需登录
+
+#### 路径参数
+
+| 参数 | 说明 |
+|------|------|
+| `policyRef` | 保单号或商户单号 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "Success": "true",
+    "WeChatAppId": "wx1234567890",
+    "WeChatTimeStamp": "1770344846",
+    "WeChatNonceStr": "随机字符串",
+    "WeChatPackageValue": "prepay_id=wx...",
+    "WeChatSign": "签名字符串",
+    "WeChatPrepayId": "wx..."
+  },
+  "message": "获取支付信息成功"
+}
+```
+
+> ⚠️ **注意**: 支付成功后大树保会回调 `/api/dashubao/payment/callback`（系统自动处理），保单状态会自动更新为 `active`。
+
+---
+
+### 注销保单
+
+注销未生效的保单。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy/cancel
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+```json
+{
+  "policyNo": "14527006800217497720"
+}
+```
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "Success": "true", "Message": "" },
+  "message": "注销成功"
+}
+```
+
+---
+
+### 退保
+
+已生效保单退保。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy/surrender
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+```json
+{
+  "policyNo": "14527006800217497720",
+  "removeReason": "13"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `policyNo` | string | ✅ | 保单号 |
+| `removeReason` | string | ✅ | 退保原因：13-退票退保，14-航班取消，15-航班改签 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "Success": "true", "SurrenderPremium": "10.00" },
+  "message": "退保成功"
+}
+```
+
+---
+
+### 获取电子保单PDF
+
+获取电子保单PDF文件。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy/print
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+```json
+{
+  "policyNo": "14527006800217497720"
+}
+```
+
+#### 响应
+
+返回 `application/pdf` 二进制文件流，可直接用于下载或预览。
+
+---
+
+### 批改保单（替换被保险人）
+
+替换保单中的被保险人信息。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy/amend
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+```json
+{
+  "policyNo": "14527006800217497720",
+  "oldInsured": {
+    "insuredName": "赵瑶如",
+    "idType": "1",
+    "idNumber": "141034199605090042",
+    "birthDate": "19960509000000",
+    "gender": "F"
+  },
+  "newInsured": {
+    "insuredName": "张三",
+    "idType": "1",
+    "idNumber": "110101199001011234",
+    "birthDate": "19900101000000",
+    "gender": "M",
+    "mobile": "13800138000"
+  }
+}
+```
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "Success": "true", "Message": "" },
+  "message": "批改成功"
+}
+```
+
+### 批增（增加被保险人）
+
+在现有保单中增加被保险人。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy/add-insured
+Content-Type: application/json
+```
+
+**认证**: ❌ 无需登录
+
+```json
+{
+  "policyNo": "14527006800217497720",
+  "totalPremium": 24,
+  "insuredList": [
+    {
+      "insuredName": "李四",
+      "idType": "1",
+      "idNumber": "110101199201011234",
+      "birthDate": "19920101000000",
+      "gender": "M",
+      "mobile": "13900139000"
+    }
+  ]
+}
+```
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": { "Success": "true", "Message": "" },
+  "message": "批增成功"
+}
+```
+
+---
+
+### 同步保单状态
+
+从大树保平台同步最新保单状态到本地数据库。
+
+#### 请求
+
+```http
+POST /api/dashubao/miniprogram/policy/sync/ANDE1770344846144mrvapl
+```
+
+**认证**: ❌ 无需登录
+
+#### 路径参数
+
+| 参数 | 说明 |
+|------|------|
+| `identifier` | 保单号或商户单号 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "6985518e2b89d09207c00045",
+    "status": "active",
+    "policyNo": "14527006800217497720"
+  },
+  "message": "同步成功"
+}
+```
+
+---
+
+### 小程序调用示例
+
+```javascript
+// utils/insurance-api.js
+const BASE_URL = 'https://crm.andejiazheng.com/api';
+
+/**
+ * 获取保单列表
+ */
+export function getPolicyList(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/dashubao/miniprogram/policies?${query}`,
+      method: 'GET',
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/**
+ * 根据身份证号查询保单
+ */
+export function getPoliciesByIdCard(idCard) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/dashubao/miniprogram/policy/by-id-card/${idCard}`,
+      method: 'GET',
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/**
+ * 创建保单
+ */
+export function createPolicy(policyData) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/dashubao/miniprogram/policy`,
+      method: 'POST',
+      header: { 'Content-Type': 'application/json' },
+      data: policyData,
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/**
+ * 创建支付订单（小程序支付）
+ */
+export function createPaymentOrder(policyRef) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/dashubao/miniprogram/policy/payment/${policyRef}`,
+      method: 'POST',
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/**
+ * 发起微信支付
+ */
+export async function payForPolicy(policyRef) {
+  const payInfo = await createPaymentOrder(policyRef);
+  return new Promise((resolve, reject) => {
+    wx.requestPayment({
+      timeStamp: payInfo.WeChatTimeStamp,
+      nonceStr: payInfo.WeChatNonceStr,
+      package: payInfo.WeChatPackageValue,
+      signType: 'MD5',
+      paySign: payInfo.WeChatSign,
+      success: resolve,
+      fail: reject
+    });
+  });
+}
+```
+
+---
+
 ## 📞 技术支持
 
 如有问题或建议，请联系技术团队。
 
-**文档版本**: v1.6.0
-**最后更新**: 2026-01-18
+**文档版本**: v1.8.0
+**最后更新**: 2026-02-06
 **维护团队**: 安得家政技术团队
+
+**v1.8.0 更新内容**:
+- ✅ 新增合同管理API（17个接口）
+- ✅ 支持合同创建、查询、更新、换人、保险同步等完整操作
+- ✅ 支持根据合同编号、客户ID、服务人员信息等多种方式查询
+- ✅ 支持爱签电子签章集成（签署链接、下载合同、状态查询）
+- ✅ 支持客户合同历史和统计信息
+- ✅ 所有接口为公开接口，无需认证
+- ✅ 已上线生产环境，可直接使用
+
+**v1.7.0 更新内容**:
+- ✅ 新增保险保单管理API（14个接口）
+- ✅ 支持保单创建、查询、支付、注销、退保、批改、批增等完整操作
+- ✅ 支持根据身份证号、保单号、商户单号多种方式查询
+- ✅ 小程序支付固定使用MINI支付方式
+- ✅ 支持从大树保同步最新保单状态
+- ✅ 所有接口为公开接口，无需认证
+- ✅ 已上线生产环境，可直接使用
 
 **v1.6.0 更新内容**:
 - ✅ 新增员工评价管理API（创建评价、获取评价列表、获取评价统计）

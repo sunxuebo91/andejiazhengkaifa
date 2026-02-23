@@ -222,9 +222,9 @@ H --> J[返回转码文件Buffer]
 ### COS服务配置
 COS服务使用以下配置连接腾讯云：
 
-**配置项**  
-- **SecretId**: AKIDjNmxrVs53we6JG0VllVzDArIcppZ9UZN
-- **SecretKey**: czCML4XrwlJadYDcldFeojOmumPmsiJe
+**配置项**
+- **SecretId**: 通过环境变量 `COS_SECRET_ID` 配置
+- **SecretKey**: 通过环境变量 `COS_SECRET_KEY` 配置
 - **Bucket**: housekeeping-1254058915
 - **Region**: ap-guangzhou
 - **Domain**: housekeeping-1254058915.cos.ap-guangzhou.myqcloud.com

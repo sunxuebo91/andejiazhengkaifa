@@ -65,12 +65,26 @@ export class UsersController {
     }
   }
 
+  // ⚠️ 注意：所有具体路径的路由必须放在 :id 动态路由之前
+  // 例如：如果有 /users/batch-sync 路由，应该在这里添加
+
   @Get(':id')
   @ApiOperation({ summary: '获取用户详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 404, description: '用户不存在' })
+  @ApiResponse({ status: 400, description: '无效的用户ID格式' })
   async findOne(@Param('id') id: string) {
     try {
+      // ✅ 验证 id 是否是有效的 MongoDB ObjectId（24位十六进制字符串）
+      const isValidObjectId = /^[a-fA-F0-9]{24}$/.test(id);
+      if (!isValidObjectId) {
+        throw new HttpException({
+          success: false,
+          message: `无效的用户ID格式: ${id}`,
+          error: 'INVALID_ID_FORMAT'
+        }, HttpStatus.BAD_REQUEST);
+      }
+
       const user = await this.usersService.findById(id);
       if (!user) {
         throw new HttpException({
@@ -79,14 +93,14 @@ export class UsersController {
           error: 'USER_NOT_FOUND'
         }, HttpStatus.NOT_FOUND);
       }
-      
+
       return {
         success: true,
         data: user,
         message: '获取用户详情成功'
       };
     } catch (error) {
-      if (error.status === HttpStatus.NOT_FOUND) {
+      if (error.status === HttpStatus.NOT_FOUND || error.status === HttpStatus.BAD_REQUEST) {
         throw error;
       }
       throw new HttpException({

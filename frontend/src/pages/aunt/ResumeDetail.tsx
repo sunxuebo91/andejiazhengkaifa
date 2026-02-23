@@ -541,8 +541,11 @@ const ResumeDetail = () => {
         });
         
         // 🔧 前端直接处理lastUpdatedBy用户信息获取
-        if (resumeData.lastUpdatedBy && typeof resumeData.lastUpdatedBy === 'string') {
-          console.log('🔧 前端检测到lastUpdatedBy为字符串，准备获取用户信息');
+        // ✅ 验证 lastUpdatedBy 是否是有效的 MongoDB ObjectId（24位十六进制字符串）
+        const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
+
+        if (resumeData.lastUpdatedBy && typeof resumeData.lastUpdatedBy === 'string' && isValidObjectId(resumeData.lastUpdatedBy)) {
+          console.log('🔧 前端检测到lastUpdatedBy为有效ObjectId，准备获取用户信息');
           try {
             const userResponse = await apiService.get(`/api/users/${resumeData.lastUpdatedBy}`);
             if (userResponse.success && userResponse.data) {
@@ -556,6 +559,10 @@ const ResumeDetail = () => {
           } catch (error) {
             console.warn('🔧 前端获取用户信息失败:', error);
           }
+        } else if (resumeData.lastUpdatedBy && typeof resumeData.lastUpdatedBy === 'string') {
+          // ⚠️ lastUpdatedBy 是无效的字符串（如 "batch-sync"），清空它
+          console.warn('⚠️ lastUpdatedBy 不是有效的ObjectId:', resumeData.lastUpdatedBy);
+          resumeData.lastUpdatedBy = undefined;
         }
         
         setResume(resumeData);

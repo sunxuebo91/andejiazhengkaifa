@@ -103,21 +103,23 @@ export class ContractsService {
           console.log('为爱签合同生成临时员工ID:', finalWorkerId);
         }
         
-        // 处理创建人ID
+        // 处理创建人ID（只有当 userId 是有效的 ObjectId 格式时才使用）
+        const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
         let finalCreatedBy = createContractDto.createdBy;
         if (createContractDto.createdBy === 'temp' || !createContractDto.createdBy) {
-          // 使用传入的userId或生成临时ID
-          finalCreatedBy = userId || new Types.ObjectId().toString();
+          // 使用传入的userId（如果是有效ObjectId）或生成临时ID
+          finalCreatedBy = (userId && isValidObjectId(userId)) ? userId : new Types.ObjectId().toString();
           console.log('为合同设置创建人ID:', finalCreatedBy);
         }
-        
+
         // 更新字段
         createContractDto.customerId = finalCustomerId;
         createContractDto.workerId = finalWorkerId;
         createContractDto.createdBy = finalCreatedBy;
       } else {
-        // 正常创建合同时，确保设置创建人ID
-        if (userId && !createContractDto.createdBy) {
+        // 正常创建合同时，确保设置创建人ID（只有当 userId 是有效的 ObjectId 格式时才设置）
+        const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
+        if (userId && isValidObjectId(userId) && !createContractDto.createdBy) {
           createContractDto.createdBy = userId;
         }
       }
@@ -264,13 +266,45 @@ export class ContractsService {
     console.log('🚨🚨🚨 [CONTRACTS SERVICE] 开始查询合同详情, ID:', id);
     console.log('🚨🚨🚨 [CONTRACTS SERVICE] 当前时间:', new Date().toISOString());
 
-    const contract = await this.contractModel
+    // ✅ 验证 ObjectId 格式的辅助函数
+    const isValidObjectId = (val: any): boolean => {
+      if (!val) return false;
+      if (typeof val === 'string') {
+        return /^[a-fA-F0-9]{24}$/.test(val);
+      }
+      // 如果是 ObjectId 对象
+      if (val._bsontype === 'ObjectId' || val.toString) {
+        return /^[a-fA-F0-9]{24}$/.test(val.toString());
+      }
+      return false;
+    };
+
+    // 先查询合同基本信息（不 populate createdBy 和 lastUpdatedBy）
+    let query = this.contractModel
       .findById(id)
       .populate('customerId', 'name phone customerId address')
-      .populate('workerId', 'name phone idCardNumber currentAddress')
-      .populate('createdBy', 'name username')
-      .populate('lastUpdatedBy', 'name username')
-      .exec();
+      .populate('workerId', 'name phone idCardNumber currentAddress');
+
+    // 先获取原始数据检查 createdBy 和 lastUpdatedBy 的值
+    const rawContract = await this.contractModel.findById(id).lean().exec();
+
+    if (rawContract) {
+      // 只有当 createdBy 是有效的 ObjectId 时才 populate
+      if (isValidObjectId(rawContract.createdBy)) {
+        query = query.populate('createdBy', 'name username');
+      } else if (rawContract.createdBy) {
+        console.warn('⚠️ [CONTRACTS SERVICE] createdBy 不是有效的 ObjectId:', rawContract.createdBy);
+      }
+
+      // 只有当 lastUpdatedBy 是有效的 ObjectId 时才 populate
+      if (isValidObjectId(rawContract.lastUpdatedBy)) {
+        query = query.populate('lastUpdatedBy', 'name username');
+      } else if (rawContract.lastUpdatedBy) {
+        console.warn('⚠️ [CONTRACTS SERVICE] lastUpdatedBy 不是有效的 ObjectId:', rawContract.lastUpdatedBy);
+      }
+    }
+
+    const contract = await query.exec();
 
     if (!contract) {
       console.log('🚨🚨🚨 [CONTRACTS SERVICE] 合同不存在, ID:', id);
@@ -394,18 +428,39 @@ export class ContractsService {
       updateData.expectedDeliveryDate = new Date(updateContractDto.expectedDeliveryDate);
     }
 
-    // 设置最后更新人
-    if (userId) {
+    // 设置最后更新人（只有当 userId 是有效的 ObjectId 格式时才设置）
+    const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
+    if (userId && isValidObjectId(userId)) {
       updateData.lastUpdatedBy = userId;
     }
 
-    const contract = await this.contractModel
+    // 先执行更新
+    const updatedContract = await this.contractModel
       .findByIdAndUpdate(id, updateData, { new: true })
-      .populate('customerId', 'name phone customerId address')
-      .populate('workerId', 'name phone idCardNumber currentAddress')
-      .populate('createdBy', 'name username')
-      .populate('lastUpdatedBy', 'name username')
+      .lean()
       .exec();
+
+    if (!updatedContract) {
+      throw new NotFoundException('合同不存在');
+    }
+
+    // 构建 populate 查询，只 populate 有效的 ObjectId 字段
+    let query = this.contractModel
+      .findById(id)
+      .populate('customerId', 'name phone customerId address')
+      .populate('workerId', 'name phone idCardNumber currentAddress');
+
+    // 只有当 createdBy 是有效的 ObjectId 时才 populate
+    if (isValidObjectId(updatedContract.createdBy?.toString())) {
+      query = query.populate('createdBy', 'name username');
+    }
+
+    // 只有当 lastUpdatedBy 是有效的 ObjectId 时才 populate
+    if (isValidObjectId(updatedContract.lastUpdatedBy?.toString())) {
+      query = query.populate('lastUpdatedBy', 'name username');
+    }
+
+    const contract = await query.exec();
 
     if (!contract) {
       throw new NotFoundException('合同不存在');

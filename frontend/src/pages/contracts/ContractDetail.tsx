@@ -179,8 +179,11 @@ const ContractDetail: React.FC = () => {
       console.log('🔍 lastUpdatedBy类型:', typeof response.lastUpdatedBy);
       
       // 🔧 前端直接处理lastUpdatedBy用户信息获取（类似简历详情页）
-      if (response.lastUpdatedBy && typeof response.lastUpdatedBy === 'string') {
-        console.log('🔧 前端检测到lastUpdatedBy为字符串，准备获取用户信息');
+      // ✅ 验证 lastUpdatedBy 是否是有效的 MongoDB ObjectId（24位十六进制字符串）
+      const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
+
+      if (response.lastUpdatedBy && typeof response.lastUpdatedBy === 'string' && isValidObjectId(response.lastUpdatedBy)) {
+        console.log('🔧 前端检测到lastUpdatedBy为有效ObjectId，准备获取用户信息');
         try {
           const userResponse = await fetch(`/api/users/${response.lastUpdatedBy}`, {
             headers: {
@@ -199,6 +202,10 @@ const ContractDetail: React.FC = () => {
         } catch (error) {
           console.warn('🔧 前端获取用户信息失败:', error);
         }
+      } else if (response.lastUpdatedBy && typeof response.lastUpdatedBy === 'string') {
+        // ⚠️ lastUpdatedBy 是无效的字符串（如 "batch-sync"），清空它
+        console.warn('⚠️ lastUpdatedBy 不是有效的ObjectId:', response.lastUpdatedBy);
+        response.lastUpdatedBy = undefined;
       }
       
       setContract(response);

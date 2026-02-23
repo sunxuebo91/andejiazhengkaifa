@@ -52,4 +52,11 @@ tmp
 temp
 
 # 备份文件
-backups/ 
+backups/
+*.backup
+
+# 自动生成的文档/工具目录
+.qoder/
+
+# PM2 配置（可能包含敏感环境变量）
+ecosystem.config.js

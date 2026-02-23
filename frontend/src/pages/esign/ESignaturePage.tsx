@@ -784,23 +784,41 @@ const ESignatureStepPage: React.FC = () => {
   }, [currentStep, stepData.users]);
 
   // 监听时间字段变化，自动计算有效期
+  // 🔥 使用 ref 追踪是否已经初始化过默认时间，避免用户修改后被覆盖
+  const timeFieldsInitializedRef = React.useRef(false);
+
   React.useEffect(() => {
     if (currentStep === 1) {
-      // 设置默认时间值并计算有效期
-      const currentDate = new Date();
-      const nextYearDate = new Date(currentDate.getFullYear() + 1, currentDate.getMonth(), currentDate.getDate());
-			
-			// ⚠️ 不要用 setFieldsValue({ templateParams: {...} }) 覆盖整个对象，
-			// 用 setFields 按 namePath 精确写入，避免把其它已填写字段清掉。
-			step2Form.setFields([
-				{ name: ['templateParams', '开始年'], value: currentDate.getFullYear() },
-				{ name: ['templateParams', '开始月'], value: currentDate.getMonth() + 1 },
-				{ name: ['templateParams', '开始日'], value: currentDate.getDate() },
-				{ name: ['templateParams', '结束年'], value: nextYearDate.getFullYear() },
-				{ name: ['templateParams', '结束月'], value: nextYearDate.getMonth() + 1 },
-				{ name: ['templateParams', '结束日'], value: nextYearDate.getDate() },
-			]);
-      
+      // 🔥 只在首次进入步骤1且未初始化过时，才设置默认时间值
+      // 这样用户修改后返回步骤1时不会被覆盖
+      const formValues = step2Form.getFieldsValue();
+      const hasEndYear = formValues?.templateParams?.['结束年'];
+
+      // 如果已经有结束年的值，说明用户已经填写过或已初始化过，不再覆盖
+      if (!timeFieldsInitializedRef.current && !hasEndYear) {
+        timeFieldsInitializedRef.current = true;
+
+        // 设置默认时间值并计算有效期
+        const currentDate = new Date();
+        const nextYearDate = new Date(currentDate.getFullYear() + 1, currentDate.getMonth(), currentDate.getDate());
+
+        // ⚠️ 不要用 setFieldsValue({ templateParams: {...} }) 覆盖整个对象，
+        // 用 setFields 按 namePath 精确写入，避免把其它已填写字段清掉。
+        step2Form.setFields([
+          { name: ['templateParams', '开始年'], value: currentDate.getFullYear() },
+          { name: ['templateParams', '开始月'], value: currentDate.getMonth() + 1 },
+          { name: ['templateParams', '开始日'], value: currentDate.getDate() },
+          { name: ['templateParams', '结束年'], value: nextYearDate.getFullYear() },
+          { name: ['templateParams', '结束月'], value: nextYearDate.getMonth() + 1 },
+          { name: ['templateParams', '结束日'], value: nextYearDate.getDate() },
+        ]);
+
+        console.log('📅 初始化默认时间值:', {
+          开始: `${currentDate.getFullYear()}-${currentDate.getMonth() + 1}-${currentDate.getDate()}`,
+          结束: `${nextYearDate.getFullYear()}-${nextYearDate.getMonth() + 1}-${nextYearDate.getDate()}`
+        });
+      }
+
       // 计算默认有效期
       setTimeout(() => {
         calculateValidityTime();
@@ -1020,11 +1038,27 @@ const ESignatureStepPage: React.FC = () => {
 
       // 生成合同编号
       const contractNo = `CONTRACT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+
       // 填充甲乙双方信息到模板参数 - 只保留模板真正需要的字段
       // 🔥 调试：打印模板参数的所有字段名
       console.log('🔍 模板参数字段名列表:', Object.keys(values.templateParams || {}));
       console.log('🔍 步骤1用户数据:', stepData.users?.batchRequest);
+
+      // 🔥 调试：打印用户填写的时间值（包括完整日期字段和分开的年月日字段）
+      console.log('📅 用户填写的时间值:', {
+        // 完整日期字段（模板可能使用这种格式）
+        合同开始时间: values.templateParams?.['合同开始时间'],
+        合同结束时间: values.templateParams?.['合同结束时间'],
+        服务开始时间: values.templateParams?.['服务开始时间'],
+        服务结束时间: values.templateParams?.['服务结束时间'],
+        // 分开的年月日字段（模板可能使用这种格式）
+        开始年: values.templateParams?.['开始年'],
+        开始月: values.templateParams?.['开始月'],
+        开始日: values.templateParams?.['开始日'],
+        结束年: values.templateParams?.['结束年'],
+        结束月: values.templateParams?.['结束月'],
+        结束日: values.templateParams?.['结束日'],
+      });
 
       const enhancedTemplateParams = {
         ...values.templateParams,
@@ -1048,12 +1082,49 @@ const ESignatureStepPage: React.FC = () => {
         // '匹配费大写': values.templateParams?.['匹配费大写'] || convertToChineseAmount(values.templateParams?.['匹配费'] || '0'),  // ❌ 模板中不存在
         '首次匹配费大写': values.templateParams?.['首次匹配费大写'] || convertToChineseAmount(values.templateParams?.['首次匹配费'] || '0', 'none'),
         '阿姨工资大写': convertToChineseAmount(values.templateParams?.['阿姨工资'] || '0', 'yuanzheng'),
-        // 时间相关字段 - 合并分别的年月日为完整格式
-        '服务开始时间': `${values.templateParams?.['开始年'] || new Date().getFullYear()}年${values.templateParams?.['开始月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['开始日'] || new Date().getDate()}日`,
-        '服务结束时间': `${values.templateParams?.['结束年'] || (new Date().getFullYear() + 1)}年${values.templateParams?.['结束月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['结束日'] || new Date().getDate()}日`,
-        '合同开始时间': `${values.templateParams?.['开始年'] || new Date().getFullYear()}年${values.templateParams?.['开始月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['开始日'] || new Date().getDate()}日`,
-        '合同结束时间': `${values.templateParams?.['结束年'] || (new Date().getFullYear() + 1)}年${values.templateParams?.['结束月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['结束日'] || new Date().getDate()}日`,
-        '服务期限': `${values.templateParams?.['开始年'] || new Date().getFullYear()}年${values.templateParams?.['开始月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['开始日'] || new Date().getDate()}日至${values.templateParams?.['结束年'] || (new Date().getFullYear() + 1)}年${values.templateParams?.['结束月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['结束日'] || new Date().getDate()}日`,
+        // 🔥 时间相关字段处理 - 优先使用用户填写的完整日期字段，否则从分开的年月日构建
+        // 辅助函数：从完整日期字符串中提取年月日
+        '服务开始时间': (() => {
+          // 优先使用用户直接填写的完整日期
+          if (values.templateParams?.['合同开始时间']) return values.templateParams['合同开始时间'];
+          if (values.templateParams?.['服务开始时间']) return values.templateParams['服务开始时间'];
+          // 否则从分开的年月日构建
+          const year = values.templateParams?.['开始年'] || new Date().getFullYear();
+          const month = values.templateParams?.['开始月'] || (new Date().getMonth() + 1);
+          const day = values.templateParams?.['开始日'] || new Date().getDate();
+          return `${year}年${month}月${day}日`;
+        })(),
+        '服务结束时间': (() => {
+          if (values.templateParams?.['合同结束时间']) return values.templateParams['合同结束时间'];
+          if (values.templateParams?.['服务结束时间']) return values.templateParams['服务结束时间'];
+          const year = values.templateParams?.['结束年'] || (new Date().getFullYear() + 1);
+          const month = values.templateParams?.['结束月'] || (new Date().getMonth() + 1);
+          const day = values.templateParams?.['结束日'] || new Date().getDate();
+          return `${year}年${month}月${day}日`;
+        })(),
+        '合同开始时间': (() => {
+          if (values.templateParams?.['合同开始时间']) return values.templateParams['合同开始时间'];
+          if (values.templateParams?.['服务开始时间']) return values.templateParams['服务开始时间'];
+          const year = values.templateParams?.['开始年'] || new Date().getFullYear();
+          const month = values.templateParams?.['开始月'] || (new Date().getMonth() + 1);
+          const day = values.templateParams?.['开始日'] || new Date().getDate();
+          return `${year}年${month}月${day}日`;
+        })(),
+        '合同结束时间': (() => {
+          if (values.templateParams?.['合同结束时间']) return values.templateParams['合同结束时间'];
+          if (values.templateParams?.['服务结束时间']) return values.templateParams['服务结束时间'];
+          const year = values.templateParams?.['结束年'] || (new Date().getFullYear() + 1);
+          const month = values.templateParams?.['结束月'] || (new Date().getMonth() + 1);
+          const day = values.templateParams?.['结束日'] || new Date().getDate();
+          return `${year}年${month}月${day}日`;
+        })(),
+        '服务期限': (() => {
+          const startDate = values.templateParams?.['合同开始时间'] || values.templateParams?.['服务开始时间'] ||
+            `${values.templateParams?.['开始年'] || new Date().getFullYear()}年${values.templateParams?.['开始月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['开始日'] || new Date().getDate()}日`;
+          const endDate = values.templateParams?.['合同结束时间'] || values.templateParams?.['服务结束时间'] ||
+            `${values.templateParams?.['结束年'] || (new Date().getFullYear() + 1)}年${values.templateParams?.['结束月'] || (new Date().getMonth() + 1)}月${values.templateParams?.['结束日'] || new Date().getDate()}日`;
+          return `${startDate}至${endDate}`;
+        })(),
         // 保留原有的分别字段，方便模板按需使用
         '开始年': values.templateParams?.['开始年'] || new Date().getFullYear(),
         '开始月': values.templateParams?.['开始月'] || (new Date().getMonth() + 1),
@@ -1219,13 +1290,51 @@ const ESignatureStepPage: React.FC = () => {
             customerPhone: stepData.users?.batchRequest?.partyAMobile || values.templateParams?.['客户电话'],
             customerIdCard: stepData.users?.batchRequest?.partyAIdCard || values.templateParams?.['客户身份证号'],
             contractType: values.templateParams?.['合同类型'] || '住家育儿嫂',
+            // 🔥 日期提取：优先从完整日期字段解析，否则从分开的年月日构建
             startDate: (() => {
+              // 辅助函数：从中文日期格式解析为 YYYY-MM-DD
+              const parseChineseDate = (dateStr: string): string | null => {
+                const match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+                if (match) {
+                  return `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`;
+                }
+                return null;
+              };
+
+              // 优先尝试从完整日期字段解析
+              const fullStartDate = values.templateParams?.['合同开始时间'] || values.templateParams?.['服务开始时间'];
+              if (fullStartDate && typeof fullStartDate === 'string') {
+                const parsed = parseChineseDate(fullStartDate);
+                if (parsed) {
+                  console.log('📅 从完整日期字段解析开始日期:', fullStartDate, '->', parsed);
+                  return parsed;
+                }
+              }
+
+              // 否则从分开的年月日构建
               const year = values.templateParams?.['开始年'] || new Date().getFullYear();
               const month = values.templateParams?.['开始月'] || (new Date().getMonth() + 1);
               const day = values.templateParams?.['开始日'] || new Date().getDate();
               return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             })(),
             endDate: (() => {
+              const parseChineseDate = (dateStr: string): string | null => {
+                const match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+                if (match) {
+                  return `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`;
+                }
+                return null;
+              };
+
+              const fullEndDate = values.templateParams?.['合同结束时间'] || values.templateParams?.['服务结束时间'];
+              if (fullEndDate && typeof fullEndDate === 'string') {
+                const parsed = parseChineseDate(fullEndDate);
+                if (parsed) {
+                  console.log('📅 从完整日期字段解析结束日期:', fullEndDate, '->', parsed);
+                  return parsed;
+                }
+              }
+
               const year = values.templateParams?.['结束年'] || (new Date().getFullYear() + 1);
               const month = values.templateParams?.['结束月'] || (new Date().getMonth() + 1);
               const day = values.templateParams?.['结束日'] || new Date().getDate();

@@ -5465,8 +5465,8 @@ OCR_SECRET_ID=your-ocr-secret-id
 OCR_SECRET_KEY=your-ocr-secret-key
 
 # ====== 微信配置 ======
-WECHAT_APPID=wx986d99b2dab1b026
-WECHAT_APPSECRET=93a50c000e7c708fdd33bc569f375387
+WECHAT_APPID=your-wechat-appid
+WECHAT_APPSECRET=your-wechat-appsecret
 WECHAT_TOKEN=andejiazheng2025
 
 # ====== 小程序API认证 ======

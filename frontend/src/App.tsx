@@ -21,6 +21,7 @@ const LeadTransferRecords = React.lazy(() => import('./pages/customers/LeadTrans
 const ContractList = React.lazy(() => import('./pages/contracts/ContractList'));
 const ContractDetail = React.lazy(() => import('./pages/contracts/ContractDetail'));
 const ContractDeletionApprovals = React.lazy(() => import('./pages/contracts/ContractDeletionApprovals'));
+const MiniProgramContractList = React.lazy(() => import('./pages/contracts/MiniProgramContractList'));
 const UserList = React.lazy(() => import('./pages/users/UserList'));
 const CreateUser = React.lazy(() => import('./pages/users/CreateUser'));
 const EditUser = React.lazy(() => import('./pages/users/EditUser'));
@@ -210,6 +211,10 @@ export default function App({ children }: AppProps) {
                     <Route
                       path="create"
                       element={<AuthorizedRoute element={<ESignaturePage />} />}
+                    />
+                    <Route
+                      path="miniprogram"
+                      element={<AuthorizedRoute element={<MiniProgramContractList />} />}
                     />
                     <Route
                       path="approvals"

@@ -66,6 +66,8 @@ const FormSubmissions = React.lazy(() => import('./pages/forms/FormSubmissions')
 const FormSubmissionList = React.lazy(() => import('./pages/forms/FormSubmissionList'));
 const PublicForm = React.lazy(() => import('./pages/public/PublicForm'));
 const PublicTrainingLeadForm = React.lazy(() => import('./pages/public/PublicTrainingLeadForm'));
+// H5 移动端合同页面（用于小程序 WebView 内嵌）
+const MobileContractCreate = React.lazy(() => import('./pages/mobile/contract/MobileContractCreate'));
 
 interface AppProps {
   children?: ReactNode;
@@ -125,6 +127,9 @@ export default function App({ children }: AppProps) {
                 <Route path="/interview/h5-login" element={<H5Login />} />
                 <Route path="/interview/miniprogram" element={<MiniProgramHost />} />
                 <Route path="/interview/miniprogram-config" element={<MiniProgramConfig />} />
+
+                {/* 📱 H5 移动端合同页面 - 用于小程序 WebView 内嵌，无需登录 */}
+                <Route path="/mobile/contract/create" element={<MobileContractCreate />} />
 
                 {/* 独立详情页路由 - 不显示左侧导航栏 */}
                 <Route path="/standalone/customers/:id" element={<AuthorizedRoute element={<CustomerDetail />} />} />

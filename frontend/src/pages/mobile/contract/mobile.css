@@ -1,0 +1,190 @@
+/* H5 移动端合同创建页面样式 */
+
+/* 移动端布局 */
+.mobile-layout {
+  min-height: 100vh;
+  background: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 顶部导航栏 */
+.mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+}
+
+.mobile-header-back {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #333;
+}
+
+.mobile-header-title {
+  flex: 1;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-header-right {
+  width: 44px;
+}
+
+/* 内容区域 */
+.mobile-content {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 步骤条样式 */
+.mobile-steps {
+  background: #fff;
+  padding: 16px 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+}
+
+.mobile-steps .ant-steps-item-title {
+  font-size: 12px !important;
+}
+
+.mobile-steps .ant-steps-item-description {
+  font-size: 11px !important;
+}
+
+/* 卡片样式 */
+.mobile-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.mobile-card-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.mobile-card-title::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: #1890ff;
+  border-radius: 2px;
+  margin-right: 8px;
+}
+
+/* 表单样式 */
+.mobile-form .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.mobile-form .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+.mobile-form .ant-form-item-label > label {
+  font-size: 14px;
+  color: #666;
+}
+
+.mobile-form .ant-input,
+.mobile-form .ant-select-selector,
+.mobile-form .ant-picker {
+  height: 44px !important;
+  font-size: 15px !important;
+  border-radius: 6px !important;
+}
+
+.mobile-form .ant-select-selection-item {
+  line-height: 42px !important;
+}
+
+.mobile-form .ant-input-textarea textarea {
+  height: auto !important;
+  min-height: 80px;
+}
+
+/* 搜索框样式 */
+.mobile-search {
+  margin-bottom: 16px;
+}
+
+.mobile-search .ant-input-search {
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.mobile-search .ant-input-search .ant-input {
+  height: 44px;
+  border-radius: 22px 0 0 22px;
+}
+
+/* 用户信息卡片 */
+.mobile-user-card {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #e8e8e8;
+}
+
+.mobile-user-card.selected {
+  border-color: #1890ff;
+  background: #e6f7ff;
+}
+
+.mobile-user-card-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.mobile-user-card-info {
+  font-size: 13px;
+  color: #666;
+}
+
+/* 底部按钮区域 */
+.mobile-footer {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  padding: 12px 16px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 12px;
+}
+
+.mobile-footer .ant-btn {
+  flex: 1;
+  height: 44px;
+  font-size: 16px;
+  border-radius: 22px;
+}
+

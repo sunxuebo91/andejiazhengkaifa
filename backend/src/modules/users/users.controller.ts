@@ -166,4 +166,60 @@ export class UsersController {
       }, HttpStatus.BAD_REQUEST);
     }
   }
-} 
+
+  @Patch(':id/suspend')
+  @ApiOperation({ summary: '暂停用户账号' })
+  @ApiResponse({ status: 200, description: '暂停成功' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
+  async suspend(@Param('id') id: string) {
+    try {
+      const user = await this.usersService.suspendUser(id);
+      return {
+        success: true,
+        data: user,
+        message: '用户账号已暂停'
+      };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw new HttpException({
+          success: false,
+          message: '用户不存在',
+          error: 'USER_NOT_FOUND'
+        }, HttpStatus.NOT_FOUND);
+      }
+      throw new HttpException({
+        success: false,
+        message: error.message || '暂停用户失败',
+        error: 'SUSPEND_FAILED'
+      }, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Patch(':id/resume')
+  @ApiOperation({ summary: '恢复用户账号' })
+  @ApiResponse({ status: 200, description: '恢复成功' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
+  async resume(@Param('id') id: string) {
+    try {
+      const user = await this.usersService.resumeUser(id);
+      return {
+        success: true,
+        data: user,
+        message: '用户账号已恢复'
+      };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw new HttpException({
+          success: false,
+          message: '用户不存在',
+          error: 'USER_NOT_FOUND'
+        }, HttpStatus.NOT_FOUND);
+      }
+      throw new HttpException({
+        success: false,
+        message: error.message || '恢复用户失败',
+        error: 'RESUME_FAILED'
+      }, HttpStatus.BAD_REQUEST);
+    }
+  }
+}

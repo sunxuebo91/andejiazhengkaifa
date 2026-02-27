@@ -30,6 +30,10 @@ const BannerForm = lazy(() => import('./pages/baobei/BannerForm'));
 const ArticleList = lazy(() => import('./pages/baobei/ArticleList'));
 const ArticleForm = lazy(() => import('./pages/baobei/ArticleForm'));
 const MiniProgramUserList = lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
+// 合同管理相关页面
+const ContractList = lazy(() => import('./pages/contracts/ContractList'));
+const ContractCreate = lazy(() => import('./pages/contracts/ContractCreate'));
+const MiniProgramContractList = lazy(() => import('./pages/contracts/MiniProgramContractList'));
 // 表单管理相关页面
 import FormList from './pages/forms/FormList';
 import FormEditor from './pages/forms/FormEditor';
@@ -216,6 +220,34 @@ export const basicLayoutRoutes: RouteConfig[] = [
         meta: {
           title: '小程序用户管理',
           description: '管理小程序端注册的用户信息'
+        }
+      },
+      // 合同管理
+      {
+        path: 'contracts/list',
+        name: '合同列表',
+        element: <ContractList />,
+        meta: {
+          title: '合同列表',
+          description: '查看和管理所有合同'
+        }
+      },
+      {
+        path: 'contracts/create',
+        name: '创建合同',
+        element: <ContractCreate />,
+        meta: {
+          title: '创建合同',
+          description: '创建新的合同'
+        }
+      },
+      {
+        path: 'contracts/miniprogram',
+        name: '小程序合同',
+        element: <MiniProgramContractList />,
+        meta: {
+          title: '小程序合同',
+          description: '查看和管理小程序端创建的合同'
         }
       },
       // 表单管理

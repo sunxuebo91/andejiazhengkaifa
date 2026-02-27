@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Table, Button, Space, Tag, Popconfirm, Input, App } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import apiService from '../../services/api';
 
 interface User {
@@ -13,6 +13,7 @@ interface User {
   role: string;
   permissions: string[];
   active: boolean;
+  suspended?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +80,40 @@ const UserList: React.FC = () => {
     }
   };
 
+  // 暂停用户
+  const handleSuspend = async (id: string) => {
+    try {
+      const response = await apiService.patch(`/api/users/${id}/suspend`);
+
+      if (response.success) {
+        message.success('用户账号已暂停');
+        fetchUsers(currentPage, pageSize, searchText);
+      } else {
+        message.error(response.message || '暂停用户失败');
+      }
+    } catch (error: any) {
+      console.error('暂停用户失败:', error);
+      message.error(error.response?.data?.message || '暂停用户失败');
+    }
+  };
+
+  // 恢复用户
+  const handleResume = async (id: string) => {
+    try {
+      const response = await apiService.patch(`/api/users/${id}/resume`);
+
+      if (response.success) {
+        message.success('用户账号已恢复');
+        fetchUsers(currentPage, pageSize, searchText);
+      } else {
+        message.error(response.message || '恢复用户失败');
+      }
+    } catch (error: any) {
+      console.error('恢复用户失败:', error);
+      message.error(error.response?.data?.message || '恢复用户失败');
+    }
+  };
+
   // 处理搜索
   const handleSearch = (value: string) => {
     setSearchText(value);
@@ -134,10 +169,15 @@ const UserList: React.FC = () => {
       title: '状态',
       dataIndex: 'active',
       key: 'active',
-      render: (active: boolean) => (
-        <Tag color={active ? 'green' : 'red'}>
-          {active ? '启用' : '禁用'}
-        </Tag>
+      render: (active: boolean, record: User) => (
+        <Space>
+          <Tag color={active ? 'green' : 'red'}>
+            {active ? '启用' : '禁用'}
+          </Tag>
+          {record.suspended && (
+            <Tag color="orange">已暂停</Tag>
+          )}
+        </Space>
       ),
     },
     {
@@ -158,6 +198,31 @@ const UserList: React.FC = () => {
           >
             编辑
           </Button>
+          {record.suspended ? (
+            <Popconfirm
+              title="确定要恢复这个用户吗？"
+              description="恢复后用户可以正常使用系统"
+              onConfirm={() => handleResume(record._id)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button type="link" icon={<PlayCircleOutlined />} style={{ color: '#52c41a' }}>
+                恢复
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Popconfirm
+              title="确定要暂停这个用户吗？"
+              description="暂停后用户将无法登录和使用系统"
+              onConfirm={() => handleSuspend(record._id)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button type="link" icon={<PauseCircleOutlined />} style={{ color: '#faad14' }}>
+                暂停
+              </Button>
+            </Popconfirm>
+          )}
           <Popconfirm
             title="确定要删除这个用户吗？"
             onConfirm={() => handleDelete(record._id)}

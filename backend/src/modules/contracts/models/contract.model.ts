@@ -11,6 +11,7 @@ export enum ContractType {
   YANGCHONG = '养宠',
   XIAOSHI = '小时工',
   BAIBAN_YUER = '白班育儿',
+  BAIBAN_YUER_SAO = '白班育儿嫂', // 🔥 新增：白班育儿嫂
   BAIBAN_BAOMU = '白班保姆',
   ZHUJIA_HULAO = '住家护老'
 }
@@ -38,6 +39,9 @@ export class Contract {
   @Prop()
   customerIdCard?: string; // 客户身份证号
 
+  @Prop()
+  customerAddress?: string; // 客户服务地址
+
   @Prop({ required: true, enum: ContractType })
   contractType: ContractType; // 合同类型
 
@@ -55,6 +59,9 @@ export class Contract {
 
   @Prop({ required: true })
   workerIdCard: string; // 劳动者身份证号
+
+  @Prop()
+  workerAddress?: string; // 阿姨联系地址
 
   @Prop({ required: true })
   workerSalary: number; // 家政员工资

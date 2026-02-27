@@ -148,6 +148,40 @@ export class UsersService {
     return updatedUser as UserWithoutPassword;
   }
 
+  /**
+   * 暂停用户账号
+   */
+  async suspendUser(id: string): Promise<UserWithoutPassword> {
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(id, { suspended: true }, { new: true })
+      .select('-password')
+      .lean()
+      .exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    return updatedUser as UserWithoutPassword;
+  }
+
+  /**
+   * 恢复用户账号
+   */
+  async resumeUser(id: string): Promise<UserWithoutPassword> {
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(id, { suspended: false }, { new: true })
+      .select('-password')
+      .lean()
+      .exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    return updatedUser as UserWithoutPassword;
+  }
+
   // 根据角色获取默认权限
   private getDefaultPermissions(role: string): string[] {
     switch (role) {

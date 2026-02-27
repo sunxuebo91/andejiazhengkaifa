@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>小程序API测试工具</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #4CAF50;
+      padding-bottom: 10px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .test-section h2 {
+      color: #555;
+      margin-top: 0;
+    }
+    .success {
+      color: #4CAF50;
+      font-weight: bold;
+    }
+    .error {
+      color: #f44336;
+      font-weight: bold;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      cursor: pointer;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    input[type="text"] {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 15px;
+      overflow-x: auto;
+      border-radius: 4px;
+      border-left: 4px solid #4CAF50;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .loading {
+      color: #2196F3;
+      font-style: italic;
+    }
+    .info {
+      background: #e3f2fd;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+      border-left: 4px solid #2196F3;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 小程序合同API测试工具</h1>
+  
+  <div class="info">
+    <strong>📌 说明：</strong>此工具用于测试小程序合同相关的公开API接口，无需JWT认证。
+  </div>
+  
+  <div class="test-section">
+    <h2>1️⃣ 测试获取模板列表</h2>
+    <p>接口：<code>GET /api/esign/templates</code></p>
+    <button onclick="testGetTemplates()">🚀 开始测试</button>
+    <div id="result1"></div>
+  </div>
+  
+  <div class="test-section">
+    <h2>2️⃣ 测试获取模板控件信息（核心接口）</h2>
+    <p>接口：<code>POST /api/esign/template/data</code></p>
+    <label>模板编号：</label>
+    <input type="text" id="templateId" value="TN84E8C106BFE74FD3AE36AC2CA33A44DE" style="width: 400px;">
+    <br><br>
+    <button onclick="testGetTemplateData()">🚀 开始测试</button>
+    <div id="result2"></div>
+  </div>
+  
+  <div class="test-section">
+    <h2>3️⃣ 测试查询合同列表</h2>
+    <p>接口：<code>GET /api/contracts/miniprogram/list</code></p>
+    <button onclick="testGetContractList()">🚀 开始测试</button>
+    <div id="result3"></div>
+  </div>
+  
+  <div class="test-section">
+    <h2>4️⃣ 测试查询合同统计</h2>
+    <p>接口：<code>GET /api/contracts/miniprogram/statistics</code></p>
+    <button onclick="testGetStatistics()">🚀 开始测试</button>
+    <div id="result4"></div>
+  </div>
+
+  <script>
+    const API_BASE = 'https://crm.andejiazheng.com/api';
+    
+    async function testGetTemplates() {
+      const resultDiv = document.getElementById('result1');
+      resultDiv.innerHTML = '<p class="loading">⏳ 测试中...</p>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/esign/templates`);
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          resultDiv.innerHTML = `
+            <p class="success">✅ 测试成功！</p>
+            <p>获取到 <strong>${data.data.length}</strong> 个模板</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <p class="error">❌ 测试失败</p>
+            <p>状态码: ${response.status}</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <p class="error">❌ 网络错误: ${error.message}</p>
+          <p>请检查：</p>
+          <ul>
+            <li>后端服务是否启动</li>
+            <li>API地址是否正确</li>
+            <li>网络连接是否正常</li>
+          </ul>
+        `;
+      }
+    }
+    
+    async function testGetTemplateData() {
+      const resultDiv = document.getElementById('result2');
+      const templateId = document.getElementById('templateId').value;
+      
+      if (!templateId) {
+        resultDiv.innerHTML = '<p class="error">❌ 请输入模板编号</p>';
+        return;
+      }
+      
+      resultDiv.innerHTML = '<p class="loading">⏳ 测试中...</p>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/esign/template/data`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            templateIdent: templateId
+          })
+        });
+        const data = await response.json();
+
+        if (response.ok && data.code === 100000) {
+          const fields = data.data;
+          resultDiv.innerHTML = `
+            <p class="success">✅ 测试成功！</p>
+            <p>获取到 <strong>${fields.length}</strong> 个字段</p>
+            <details>
+              <summary>查看前10个字段</summary>
+              <pre>${JSON.stringify(fields.slice(0, 10), null, 2)}</pre>
+            </details>
+            <details>
+              <summary>查看完整响应</summary>
+              <pre>${JSON.stringify(data, null, 2)}</pre>
+            </details>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <p class="error">❌ 测试失败</p>
+            <p>状态码: ${response.status}</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <p class="error">❌ 网络错误: ${error.message}</p>
+        `;
+      }
+    }
+
+    async function testGetContractList() {
+      const resultDiv = document.getElementById('result3');
+      resultDiv.innerHTML = '<p class="loading">⏳ 测试中...</p>';
+
+      try {
+        const response = await fetch(`${API_BASE}/contracts/miniprogram/list?page=1&limit=5`);
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          resultDiv.innerHTML = `
+            <p class="success">✅ 测试成功！</p>
+            <p>获取到 <strong>${data.data.length}</strong> 条合同</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <p class="error">❌ 测试失败</p>
+            <p>状态码: ${response.status}</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <p class="error">❌ 网络错误: ${error.message}</p>
+        `;
+      }
+    }
+
+    async function testGetStatistics() {
+      const resultDiv = document.getElementById('result4');
+      resultDiv.innerHTML = '<p class="loading">⏳ 测试中...</p>';
+
+      try {
+        const response = await fetch(`${API_BASE}/contracts/miniprogram/statistics`);
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          resultDiv.innerHTML = `
+            <p class="success">✅ 测试成功！</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <p class="error">❌ 测试失败</p>
+            <p>状态码: ${response.status}</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <p class="error">❌ 网络错误: ${error.message}</p>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>
+

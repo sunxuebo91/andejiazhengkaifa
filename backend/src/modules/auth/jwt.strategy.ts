@@ -1,6 +1,6 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -18,6 +18,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       return null;
+    }
+
+    // 检查账号是否被暂停
+    if (user.suspended) {
+      throw new UnauthorizedException('账号已被暂停，无法访问系统');
+    }
+
+    // 检查账号是否被禁用
+    if (!user.active) {
+      throw new UnauthorizedException('账号已被禁用');
     }
 
     return {

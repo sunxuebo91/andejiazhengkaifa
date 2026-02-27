@@ -160,6 +160,13 @@ const BasicLayout = () => {
         });
       }
 
+      // 小程序合同 - 所有人可见
+      contractMenu.routes!.push({
+        path: '/contracts/miniprogram',
+        name: '小程序合同',
+        icon: <QrcodeOutlined />,
+      });
+
       baseMenus.push(contractMenu);
     }
 

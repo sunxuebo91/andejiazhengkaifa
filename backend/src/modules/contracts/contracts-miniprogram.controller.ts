@@ -8,6 +8,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { ContractsService } from './contracts.service';
@@ -20,6 +21,8 @@ import { ContractStatus } from './models/contract.model';
 @ApiTags('小程序-合同管理')
 @Controller('contracts/miniprogram')
 export class ContractsMiniProgramController {
+  private readonly logger = new Logger(ContractsMiniProgramController.name);
+
   constructor(
     private readonly contractsService: ContractsService,
     private readonly esignService: ESignService,
@@ -36,10 +39,12 @@ export class ContractsMiniProgramController {
   @ApiQuery({ name: 'page', required: false, description: '页码，默认1' })
   @ApiQuery({ name: 'limit', required: false, description: '每页数量，默认10' })
   @ApiQuery({ name: 'search', required: false, description: '搜索关键词' })
+  @ApiQuery({ name: 'syncStatus', required: false, description: '是否同步爱签状态（true/false），默认true' })
   async getContractList(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
     @Query('search') search?: string,
+    @Query('syncStatus') syncStatus: string = 'true',
   ) {
     try {
       const result = await this.contractsService.findAll(
@@ -48,6 +53,54 @@ export class ContractsMiniProgramController {
         search,
         true,
       );
+
+      // 🔥 如果需要同步状态，批量查询爱签API获取最新状态
+      if (syncStatus === 'true' && result.contracts && result.contracts.length > 0) {
+        this.logger.log(`🔄 开始同步 ${result.contracts.length} 个合同的爱签状态...`);
+
+        // 并发查询所有合同的爱签状态
+        const contractsWithStatus = await Promise.all(
+          result.contracts.map(async (contract: any) => {
+            // 🔥 将 Mongoose 文档转换为普通对象，以便添加新字段
+            const contractObj = contract.toObject ? contract.toObject() : { ...contract };
+
+            // 如果有爱签合同编号，查询最新状态
+            if (contractObj.esignContractNo) {
+              try {
+                const statusResponse = await this.esignService.getContractStatus(contractObj.esignContractNo);
+
+                if (statusResponse && statusResponse.data) {
+                  const latestEsignStatus = statusResponse.data.status?.toString();
+
+                  // 更新合同对象中的状态（不写入数据库，只返回给前端）
+                  contractObj.esignStatus = latestEsignStatus;
+                  contractObj.esignStatusText = this.getStatusText(latestEsignStatus);
+
+                  // 🔥 根据爱签状态推断本地状态
+                  if (latestEsignStatus === '2') {
+                    contractObj.contractStatus = 'active'; // 已签约
+                  } else if (latestEsignStatus === '0' || latestEsignStatus === '1') {
+                    contractObj.contractStatus = 'signing'; // 签约中
+                  } else if (latestEsignStatus === '6' || latestEsignStatus === '7') {
+                    contractObj.contractStatus = 'cancelled'; // 已作废/撤销
+                  }
+
+                  this.logger.log(`✅ 合同 ${contractObj.contractNumber} 状态已同步: ${latestEsignStatus} (${contractObj.esignStatusText})`);
+                }
+              } catch (error) {
+                this.logger.warn(`⚠️  查询合同 ${contractObj.contractNumber} 爱签状态失败: ${error.message}`);
+                // 查询失败时保留原有状态
+              }
+            }
+
+            return contractObj;
+          })
+        );
+
+        result.contracts = contractsWithStatus;
+        this.logger.log(`✅ 合同状态同步完成`);
+      }
+
       return { success: true, data: result, message: '获取合同列表成功' };
     } catch (error) {
       return { success: false, message: error.message || '获取合同列表失败' };
@@ -202,18 +255,328 @@ export class ContractsMiniProgramController {
   // ==================== 合同操作接口 ====================
 
   /**
+   * 验证合同数据（提交前验证）
+   */
+  @Post('validate')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '【小程序】验证合同数据' })
+  async validateContract(@Body() createContractDto: CreateContractDto) {
+    try {
+      const validation = this.contractsService.validateEsignFields(createContractDto);
+
+      if (validation.valid) {
+        return {
+          success: true,
+          valid: true,
+          message: '✅ 数据验证通过，可以提交创建合同'
+        };
+      } else {
+        return {
+          success: true,
+          valid: false,
+          message: validation.message,
+          missingFields: validation.missingFields,
+          details: {
+            templateNo: createContractDto.templateNo ? '✅ 已提供' : '❌ 缺失',
+            customerName: createContractDto.customerName ? '✅ 已提供' : '❌ 缺失',
+            customerPhone: createContractDto.customerPhone ? '✅ 已提供' : '❌ 缺失',
+            customerIdCard: createContractDto.customerIdCard ? '✅ 已提供' : '❌ 缺失',
+            workerName: createContractDto.workerName ? '✅ 已提供' : '❌ 缺失',
+            workerPhone: createContractDto.workerPhone ? '✅ 已提供' : '❌ 缺失',
+            workerIdCard: createContractDto.workerIdCard ? '✅ 已提供' : '❌ 缺失',
+          }
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '验证失败'
+      };
+    }
+  }
+
+  /**
    * 创建合同
+   * 🔥 使用 any 类型接收请求体，以保留小程序传递的中文字段（如"客户姓名"、"阿姨工资"等）
+   * 这些字段会被保存到 templateParams 中，用于后续发起爱签签署
    */
   @Post('create')
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】创建合同' })
-  async createContract(@Body() createContractDto: CreateContractDto) {
+  async createContract(@Body() body: any) {
     try {
-      const contract = await this.contractsService.create(createContractDto, 'miniprogram-user');
-      return { success: true, data: contract, message: '合同创建成功' };
+      // 🔥 打印接收到的原始数据，用于调试
+      this.logger.log(`📥 收到创建合同请求，字段数量: ${Object.keys(body || {}).length}`);
+
+      // 🔍 数据验证：检查爱签必填字段
+      const validation = this.contractsService.validateEsignFields(body);
+
+      if (!validation.valid) {
+        this.logger.warn(`❌ 合同创建失败：数据验证不通过`, {
+          missingFields: validation.missingFields,
+          receivedData: {
+            templateNo: body.templateNo,
+            customerName: body.customerName,
+            customerPhone: body.customerPhone,
+            customerIdCard: body.customerIdCard ? '已提供' : '未提供',
+            workerName: body.workerName,
+            workerPhone: body.workerPhone,
+            workerIdCard: body.workerIdCard ? '已提供' : '未提供',
+          }
+        });
+
+        return {
+          success: false,
+          message: `数据验证失败：${validation.message}`,
+          error: {
+            code: 'VALIDATION_ERROR',
+            missingFields: validation.missingFields,
+            details: validation.message
+          }
+        };
+      }
+
+      // ✅ 数据验证通过，创建合同（不自动触发爱签流程）
+      this.logger.log(`✅ 数据验证通过，开始创建合同（不自动触发爱签）`);
+      const contract = await this.contractsService.create(
+        body as CreateContractDto,  // 🔥 使用 body（包含所有字段，包括中文字段）
+        'miniprogram-user',
+        { autoInitiateEsign: false }  // 🔥 不自动触发爱签流程
+      );
+
+      const contractId = (contract as any)._id?.toString() || (contract as any).id;
+
+      this.logger.log(`✅ 合同创建成功`, {
+        contractNumber: contract.contractNumber,
+        contractStatus: contract.contractStatus,
+        _id: contractId
+      });
+
+      return {
+        success: true,
+        data: {
+          _id: contractId,
+          contractNumber: contract.contractNumber,
+          contractStatus: contract.contractStatus || 'draft',
+          customerName: contract.customerName,
+          customerPhone: contract.customerPhone,
+          workerName: contract.workerName,
+          workerPhone: contract.workerPhone,
+          createdAt: contract.createdAt
+        },
+        message: `✅ 合同创建成功！合同编号：${contract.contractNumber}`,
+        nextStep: {
+          action: 'initiate_signing',
+          description: '请点击「发起签署」按钮获取签署链接',
+          endpoint: `/api/contracts/miniprogram/initiate-signing/${contractId}`
+        }
+      }
     } catch (error) {
-      return { success: false, message: error.message || '合同创建失败' };
+      this.logger.error(`❌ 合同创建失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        message: error.message || '合同创建失败',
+        error: {
+          code: 'CREATE_ERROR',
+          details: error.message
+        }
+      };
+    }
+  }
+
+  /**
+   * 发起签署（手动触发爱签流程）
+   */
+  @Post('initiate-signing/:id')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '【小程序】发起签署' })
+  @ApiParam({ name: 'id', description: '合同ID' })
+  async initiateSigning(@Param('id') contractId: string) {
+    try {
+      this.logger.log(`📝 收到发起签署请求，合同ID: ${contractId}`);
+
+      // 1. 获取合同信息
+      const contract = await this.contractsService.findOne(contractId);
+      if (!contract) {
+        return {
+          success: false,
+          message: '合同不存在',
+          error: {
+            code: 'CONTRACT_NOT_FOUND',
+            details: '未找到指定的合同'
+          }
+        };
+      }
+
+      // 2. 检查合同是否已经发起过签署
+      if (contract.esignContractNo && contract.esignSignUrls) {
+        this.logger.log(`⚠️ 合同已发起过签署，返回现有签署链接`);
+
+        const signUrls = JSON.parse(contract.esignSignUrls);
+        return {
+          success: true,
+          data: {
+            contractId: contract._id,
+            contractNumber: contract.contractNumber,
+            esignContractNo: contract.esignContractNo,
+            contractStatus: contract.contractStatus,
+            signUrls: signUrls
+          },
+          message: '✅ 签署链接已存在（之前已生成）'
+        };
+      }
+
+      // 3. 数据验证
+      const validation = this.contractsService.validateEsignFields(contract as any);
+      if (!validation.valid) {
+        return {
+          success: false,
+          message: `数据验证失败：${validation.message}`,
+          error: {
+            code: 'VALIDATION_ERROR',
+            missingFields: validation.missingFields,
+            details: validation.message
+          }
+        };
+      }
+
+      // 4. 提取模板参数
+      const templateParams = this.contractsService.extractTemplateParamsPublic(contract as any);
+      this.logger.log(`📋 提取的模板参数:`, JSON.stringify(templateParams, null, 2));
+
+      // 5. 调用爱签API创建合同并生成签署链接
+      this.logger.log(`🚀 开始为合同 ${contract.contractNumber} 创建爱签电子合同...`);
+
+      // 获取模板编号（支持 templateNo 或 esignTemplateNo）
+      const templateNo = contract.templateNo || contract.esignTemplateNo || 'TN84E8C106BFE74FD3AE36AC2CA33A44DE';
+      this.logger.log(`📋 使用模板编号: ${templateNo}`);
+
+      const esignResult = await this.esignService.createCompleteContractFlow({
+        contractNo: contract.contractNumber,
+        contractName: `${contract.contractType || '服务'}合同`,
+        templateNo: templateNo,
+        templateParams: templateParams,
+        signers: [
+          {
+            name: contract.customerName,
+            mobile: contract.customerPhone,
+            idCard: contract.customerIdCard,
+            signType: 'manual', // 有感知签署（用户需要在签署时进行实名认证）
+            validateType: 'sms'
+          },
+          {
+            name: contract.workerName,
+            mobile: contract.workerPhone,
+            idCard: contract.workerIdCard,
+            signType: 'manual', // 有感知签署
+            validateType: 'sms'
+          },
+          {
+            // 🔥 丙方（企业）签署人 - 与CRM端保持一致
+            name: '北京安得家政有限公司',
+            mobile: '400-000-0000', // 企业客服电话
+            idCard: '91110111MACJMD2R5J', // 企业统一社会信用代码作为标识
+            signType: 'auto', // 无感知签约（自动签章）
+            validateType: 'sms'
+          }
+        ],
+        validityTime: 30,
+        signOrder: 1
+      });
+
+      if (esignResult.success) {
+        // 6. 获取正确的签署链接（短链接格式）- 带重试机制
+        this.logger.log(`🔄 获取签署短链接...`);
+        let finalSignUrls = esignResult.signUrls || [];
+
+        // 重试获取签署链接，最多3次，每次间隔递增
+        const maxRetries = 3;
+        const retryDelays = [2000, 3000, 5000]; // 2秒、3秒、5秒
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            // 等待一段时间，确保爱签系统已处理完成
+            const delay = retryDelays[attempt];
+            this.logger.log(`⏳ 等待 ${delay}ms 后获取签署链接 (尝试 ${attempt + 1}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            const signUrlsResult = await this.esignService.getContractSignUrls(esignResult.contractNo);
+            if (signUrlsResult.success && signUrlsResult.data?.signUrls && signUrlsResult.data.signUrls.length > 0) {
+              // 检查是否获取到了短链接格式
+              const firstUrl = signUrlsResult.data.signUrls[0]?.signUrl || '';
+              if (firstUrl.includes('/web/short/') || firstUrl.includes('hzuul.asign.cn')) {
+                finalSignUrls = signUrlsResult.data.signUrls;
+                this.logger.log(`✅ 获取签署短链接成功 (尝试 ${attempt + 1}): ${JSON.stringify(finalSignUrls)}`);
+                break; // 成功获取，跳出循环
+              } else {
+                this.logger.warn(`⚠️ 获取到的不是短链接格式 (尝试 ${attempt + 1}): ${firstUrl}`);
+              }
+            } else {
+              this.logger.warn(`⚠️ 获取签署短链接失败 (尝试 ${attempt + 1}): ${signUrlsResult.message}`);
+            }
+          } catch (signUrlError) {
+            this.logger.warn(`⚠️ 获取签署短链接异常 (尝试 ${attempt + 1}): ${signUrlError.message}`);
+          }
+
+          // 如果是最后一次尝试仍然失败，记录警告
+          if (attempt === maxRetries - 1) {
+            this.logger.warn(`⚠️ 多次尝试后仍无法获取短链接，使用原始链接`);
+          }
+        }
+
+        // 7. 更新合同的爱签信息
+        await this.contractsService.update(
+          contractId,
+          {
+            esignContractNo: esignResult.contractNo,
+            esignSignUrls: JSON.stringify(finalSignUrls),
+            esignCreatedAt: new Date(),
+            contractStatus: 'signing'
+          } as any,
+          'miniprogram-user'
+        );
+
+        this.logger.log(`✅ 爱签电子合同创建成功: ${esignResult.contractNo}`);
+
+        return {
+          success: true,
+          data: {
+            contractId: contract._id,
+            contractNumber: contract.contractNumber,
+            esignContractNo: esignResult.contractNo,
+            contractStatus: 'signing',
+            signUrls: finalSignUrls
+          },
+          message: '✅ 签署链接生成成功！'
+        };
+      } else {
+        // 7. 爱签API调用失败
+        this.logger.error(`❌ 爱签API调用失败:`, esignResult);
+
+        return {
+          success: false,
+          message: `❌ 签署链接生成失败：${esignResult.message || '未知错误'}`,
+          error: {
+            code: 'ESIGN_ERROR',
+            esignCode: (esignResult as any).code,
+            esignMessage: esignResult.message,
+            details: esignResult.message || '请检查合同数据是否完整'
+          }
+        };
+      }
+    } catch (error) {
+      this.logger.error(`❌ 发起签署失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        message: error.message || '发起签署失败',
+        error: {
+          code: 'INITIATE_SIGNING_ERROR',
+          details: error.message
+        }
+      };
     }
   }
 

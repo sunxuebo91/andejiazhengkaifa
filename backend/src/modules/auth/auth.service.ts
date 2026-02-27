@@ -56,6 +56,18 @@ export class AuthService {
         return null;
       }
 
+      // 检查账号是否被暂停
+      if (user.suspended) {
+        await this.logLoginAttempt(user._id.toString(), ip, userAgent, 'failed');
+        throw new UnauthorizedException('账号已被暂停，无法登录');
+      }
+
+      // 检查账号是否被禁用
+      if (!user.active) {
+        await this.logLoginAttempt(user._id.toString(), ip, userAgent, 'failed');
+        throw new UnauthorizedException('账号已被禁用');
+      }
+
       const isValid = await bcrypt.compare(password, user.password);
       await this.logLoginAttempt(user._id.toString(), ip, userAgent, isValid ? 'success' : 'failed');
 

@@ -40,9 +40,11 @@ export class ContractsController {
   @Post()
   async create(@Body() createContractDto: CreateContractDto, @Request() req) {
     try {
+      // ✅ CRM端保持原样：自动触发爱签流程
       const contract = await this.contractsService.create(
         createContractDto,
         req.user.userId,
+        // 不传递 options 参数，使用默认值 autoInitiateEsign: true
       );
       return {
         success: true,
@@ -104,6 +106,16 @@ export class ContractsController {
   @Get('customer/:customerId')
   async findByCustomerId(@Param('customerId') customerId: string) {
     try {
+      // ✅ 验证 customerId 是否是有效的 MongoDB ObjectId（24位十六进制字符串）
+      const isValidObjectId = /^[a-fA-F0-9]{24}$/.test(customerId);
+      if (!isValidObjectId) {
+        return {
+          success: false,
+          message: `无效的客户ID格式: ${customerId}。请使用客户的 _id (MongoDB ObjectId) 而不是 customerId 字段`,
+          error: 'INVALID_CUSTOMER_ID_FORMAT'
+        };
+      }
+
       const contracts = await this.contractsService.findByCustomerId(customerId);
       return {
         success: true,

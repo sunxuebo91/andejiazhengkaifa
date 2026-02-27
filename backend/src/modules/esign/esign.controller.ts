@@ -292,6 +292,7 @@ export class ESignController {
    * 获取模板控件信息 - 调用真实的爱签API
    * 基于官方SDK的 /template/data 端点
    */
+  @Public() // 🔥 小程序需要公开访问此接口 - 必须在@Post之前
   @Post('template/data')
   async getTemplateData(@Body() body: { templateIdent: string }) {
     this.logger.log(`调用 template/data 端点，模板标识: ${body.templateIdent}`);
@@ -804,6 +805,7 @@ export class ESignController {
   /**
    * 获取模板列表（从爱签API）
    */
+  @Public() // 🔥 小程序需要公开访问此接口 - 必须在@Get之前
   @Get('templates')
   async getTemplates() {
     this.logger.log('调用 templates 端点（从爱签API获取真实模板）');
@@ -853,8 +855,8 @@ export class ESignController {
         name: body.partyAName,
         mobile: body.partyAMobile,
         idCard: body.partyAIdCard,
-        isNotice: body.isNotice ? 1 : 0,
-        isSignPwdNotice: body.isSignPwdNotice ? 1 : 0,
+        isNotice: 0, // 🔕 不发送短信通知
+        isSignPwdNotice: 0, // 不通知签约密码
       };
 
       // 构建乙方用户请求
@@ -864,8 +866,8 @@ export class ESignController {
         name: body.partyBName,
         mobile: body.partyBMobile,
         idCard: body.partyBIdCard,
-        isNotice: body.isNotice ? 1 : 0,
-        isSignPwdNotice: body.isSignPwdNotice ? 1 : 0,
+        isNotice: 0, // 🔕 不发送短信通知
+        isSignPwdNotice: 0, // 不通知签约密码
       };
 
       // 🎯 关键修复：使用官方已实名的测试企业账号（支持无感知签约）

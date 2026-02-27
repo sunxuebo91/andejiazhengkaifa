@@ -143,6 +143,11 @@ export class CreateContractDto {
   @IsString()
   esignPreviewUrl?: string;
 
+  // 🔥 爱签模板编号
+  @IsOptional()
+  @IsString()
+  templateNo?: string;
+
   // 🔥 爱签模板参数（用于换人时复制）
   @IsOptional()
   templateParams?: Record<string, any>;

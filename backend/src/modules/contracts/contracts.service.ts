@@ -4,6 +4,9 @@ import { Model, Types } from 'mongoose';
 import { Contract, ContractDocument } from './models/contract.model';
 import { CustomerContractHistory, CustomerContractHistoryDocument } from './models/customer-contract-history.model';
 import { CustomerOperationLog } from '../customers/models/customer-operation-log.model';
+import { Customer, CustomerDocument } from '../customers/models/customer.model';
+import { Resume, IResume } from '../resume/models/resume.entity';
+import { User } from '../users/models/user.entity';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { ResumeService } from '../resume/resume.service';
@@ -20,6 +23,9 @@ export class ContractsService {
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
     @InjectModel(CustomerContractHistory.name) private customerContractHistoryModel: Model<CustomerContractHistoryDocument>,
     @InjectModel(CustomerOperationLog.name) private operationLogModel: Model<CustomerOperationLog>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    @InjectModel(Resume.name) private resumeModel: Model<IResume>,
+    @InjectModel(User.name) private userModel: Model<User>,
     @Inject(forwardRef(() => ResumeService)) private resumeService: ResumeService,
     private dashubaoService: DashubaoService,
     private esignService: ESignService,
@@ -57,8 +63,139 @@ export class ContractsService {
     return `CON${timestamp.slice(-8)}${random}`;
   }
 
+  /**
+   * 验证爱签必填字段并返回详细的错误信息
+   * @returns { valid: boolean, missingFields: string[], message: string }
+   */
+  public validateEsignFields(contractDto: CreateContractDto): {
+    valid: boolean;
+    missingFields: string[];
+    message: string;
+  } {
+    const missingFields: string[] = [];
+
+    // 检查模板编号（支持 templateNo 或 esignTemplateNo）
+    if (!contractDto.templateNo && !(contractDto as any).esignTemplateNo) {
+      missingFields.push('模板编号(templateNo 或 esignTemplateNo)');
+    }
+
+    // 检查客户信息
+    if (!contractDto.customerName) {
+      missingFields.push('客户姓名(customerName)');
+    }
+    if (!contractDto.customerPhone) {
+      missingFields.push('客户手机号(customerPhone)');
+    }
+    if (!contractDto.customerIdCard) {
+      missingFields.push('客户身份证号(customerIdCard)');
+    }
+
+    // 检查服务人员信息
+    if (!contractDto.workerName) {
+      missingFields.push('服务人员姓名(workerName)');
+    }
+    if (!contractDto.workerPhone) {
+      missingFields.push('服务人员手机号(workerPhone)');
+    }
+    if (!contractDto.workerIdCard) {
+      missingFields.push('服务人员身份证号(workerIdCard)');
+    }
+
+    const valid = missingFields.length === 0;
+    const message = valid
+      ? '所有必填字段已填写'
+      : `缺少以下必填字段：${missingFields.join('、')}`;
+
+    return { valid, missingFields, message };
+  }
+
+  /**
+   * 判断是否应该启动爱签流程
+   * 只有当合同包含必要的签署人信息时才启动
+   */
+  private shouldInitiateEsignFlow(contractDto: CreateContractDto): boolean {
+    const validation = this.validateEsignFields(contractDto);
+    return validation.valid;
+  }
+
+  /**
+   * 从小程序提交的平铺数据中提取爱签模板参数（公开方法）
+   * 小程序提交的数据格式：{ "客户姓名": "张三", "customerName": "张三", ... }
+   * 需要提取中文字段名（爱签模板的 dataKey）
+   */
+  public extractTemplateParamsPublic(contractDto: any): Record<string, any> {
+    return this.extractTemplateParams(contractDto);
+  }
+
+  /**
+   * 从小程序提交的平铺数据中提取爱签模板参数（私有方法）
+   * 小程序提交的数据格式：{ "客户姓名": "张三", "customerName": "张三", ... }
+   * 需要提取中文字段名（爱签模板的 dataKey）
+   */
+  private extractTemplateParams(contractDto: CreateContractDto | any): Record<string, any> {
+    console.log('🔍 [extractTemplateParams] 开始提取模板参数');
+    console.log('🔍 [extractTemplateParams] 输入数据类型:', typeof contractDto);
+    console.log('🔍 [extractTemplateParams] 输入数据字段数量:', Object.keys(contractDto || {}).length);
+
+    // 如果已经有 templateParams 对象，直接使用
+    if (contractDto.templateParams && Object.keys(contractDto.templateParams).length > 0) {
+      console.log('🔍 [extractTemplateParams] 已有 templateParams，直接使用，字段数量:', Object.keys(contractDto.templateParams).length);
+      return contractDto.templateParams;
+    }
+
+    // 否则，从平铺的数据中提取中文字段名
+    const templateParams: Record<string, any> = {};
+
+    // 定义需要排除的英文字段名（这些是CRM内部使用的字段，不是爱签模板字段）
+    const excludeFields = [
+      'templateNo', 'customerName', 'customerPhone', 'customerIdCard',
+      'workerName', 'workerPhone', 'workerIdCard', 'customerId', 'workerId',
+      'createdBy', 'contractType', 'startDate', 'endDate', 'remarks',
+      'customerServiceAddress', 'serviceAddress', 'workerAddress',
+      'workerNativePlace', 'workerGender', 'workerAge', 'workerSalary',
+      'workerSalaryUpper', 'customerServiceFee', 'customerServiceFeeUpper',
+      'serviceTime', 'restType', 'templateParams'
+    ];
+
+    // 打印所有字段名，用于调试
+    const allKeys = Object.keys(contractDto || {});
+    console.log('🔍 [extractTemplateParams] 所有字段名:', allKeys.join(', '));
+
+    // 遍历所有字段，提取中文字段名
+    for (const [key, value] of Object.entries(contractDto)) {
+      // 跳过排除的字段
+      if (excludeFields.includes(key)) {
+        continue;
+      }
+
+      // 跳过空值
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
+
+      // 跳过以 _ 结尾的字段（如 "首次匹配费_index"）
+      if (key.endsWith('_index')) {
+        continue;
+      }
+
+      // 检查是否包含中文字符
+      const hasChinese = /[\u4e00-\u9fa5]/.test(key);
+      if (hasChinese) {
+        templateParams[key] = value;
+        console.log(`🔍 [extractTemplateParams] 提取中文字段: ${key}`);
+      }
+    }
+
+    console.log('🔍 [extractTemplateParams] 提取完成，中文字段数量:', Object.keys(templateParams).length);
+    return templateParams;
+  }
+
   // 创建合同
-  async create(createContractDto: CreateContractDto, userId?: string): Promise<Contract> {
+  async create(
+    createContractDto: CreateContractDto,
+    userId?: string,
+    options?: { autoInitiateEsign?: boolean }  // 🆕 新增选项：是否自动触发爱签流程
+  ): Promise<Contract> {
     try {
       console.log('创建合同服务被调用，数据:', createContractDto);
       
@@ -128,9 +265,25 @@ export class ContractsService {
       if (!createContractDto.contractNumber) {
         createContractDto.contractNumber = await this.generateContractNumber();
       }
-      
+
+      // 🆕 将 templateNo 映射到 esignTemplateNo（因为 Schema 中只有 esignTemplateNo）
+      if ((createContractDto as any).templateNo && !createContractDto.esignTemplateNo) {
+        createContractDto.esignTemplateNo = (createContractDto as any).templateNo;
+        console.log('📋 将 templateNo 映射到 esignTemplateNo:', createContractDto.esignTemplateNo);
+      }
+
+      // 🆕 提取中文字段并保存到 templateParams（用于后续发起爱签签署）
+      if (!createContractDto.templateParams || Object.keys(createContractDto.templateParams).length === 0) {
+        const extractedTemplateParams = this.extractTemplateParams(createContractDto);
+        if (Object.keys(extractedTemplateParams).length > 0) {
+          createContractDto.templateParams = extractedTemplateParams;
+          console.log('📋 提取并保存模板参数，字段数量:', Object.keys(extractedTemplateParams).length);
+          console.log('📋 模板参数:', JSON.stringify(extractedTemplateParams, null, 2));
+        }
+      }
+
       console.log('处理后的合同数据:', createContractDto);
-      
+
       const contract = new this.contractModel(createContractDto);
       const savedContract = await contract.save();
 
@@ -191,6 +344,72 @@ export class ContractsService {
         }
       }
 
+      // 🆕 调用爱签API创建电子合同（仅当有必要字段且明确要求时）
+      const shouldAutoInitiate = options?.autoInitiateEsign !== false; // 默认为 true（向后兼容）
+
+      if (shouldAutoInitiate && this.shouldInitiateEsignFlow(createContractDto)) {
+        try {
+          this.logger.log(`🚀 开始为合同 ${savedContract.contractNumber} 创建爱签电子合同...`);
+
+          // 🔥 提取模板参数：从小程序提交的平铺数据中提取爱签模板字段
+          const templateParams = this.extractTemplateParams(createContractDto);
+
+          this.logger.log(`📋 提取的模板参数:`, JSON.stringify(templateParams, null, 2));
+
+          const esignResult = await this.esignService.createCompleteContractFlow({
+            contractNo: savedContract.contractNumber,
+            contractName: `${createContractDto.contractType || '服务'}合同`,
+            templateNo: createContractDto.templateNo || 'default_template',
+            templateParams: templateParams,
+            signers: [
+              {
+                name: createContractDto.customerName,
+                mobile: createContractDto.customerPhone,
+                idCard: createContractDto.customerIdCard,
+                signType: 'auto',
+                validateType: 'sms'
+              },
+              {
+                name: createContractDto.workerName,
+                mobile: createContractDto.workerPhone,
+                idCard: createContractDto.workerIdCard,
+                signType: 'auto',
+                validateType: 'sms'
+              }
+            ],
+            validityTime: 30,
+            signOrder: 1
+          });
+
+          if (esignResult.success) {
+            // 更新合同的爱签信息
+            const updatedContract = await this.contractModel.findByIdAndUpdate(
+              savedContract._id,
+              {
+                esignContractNo: esignResult.contractNo,
+                esignSignUrls: JSON.stringify(esignResult.signUrls || []),
+                esignCreatedAt: new Date(),
+                contractStatus: 'signing',
+                updatedAt: new Date()
+              },
+              { new: true } // 返回更新后的文档
+            );
+
+            this.logger.log(`✅ 爱签电子合同创建成功: ${esignResult.contractNo}`);
+
+            // 返回更新后的合同对象，包含签署链接
+            return updatedContract || savedContract;
+          } else {
+            this.logger.warn(`⚠️ 爱签电子合同创建失败: ${esignResult.message}`);
+          }
+        } catch (esignError) {
+          this.logger.error(`❌ 爱签流程失败: ${esignError.message}`, esignError.stack);
+          // 不阻止合同创建，只记录错误
+        }
+      } else {
+        this.logger.log(`ℹ️ 合同 ${savedContract.contractNumber} 缺少必要字段，跳过爱签流程`);
+      }
+
       return savedContract;
     } catch (error) {
       console.error('创建合同失败:', error);
@@ -206,59 +425,132 @@ export class ContractsService {
     limit: number;
     totalPages: number;
   }> {
-    const query: any = {};
-    
-    // 默认只显示最新合同，除非明确要求显示所有合同
-    if (!showAll) {
-      query.$or = [
-        { isLatest: true },
-        { isLatest: { $exists: false } }, // 兼容旧数据
-        { contractStatus: { $ne: 'replaced' } } // 不显示已替换的合同
-      ];
-    }
-    
-    if (search) {
-      const searchConditions = [
-        { contractNumber: { $regex: search, $options: 'i' } },
-        { customerName: { $regex: search, $options: 'i' } },
-        { customerPhone: { $regex: search, $options: 'i' } },
-        { workerName: { $regex: search, $options: 'i' } },
-        { workerPhone: { $regex: search, $options: 'i' } },
-        { workerIdCard: { $regex: search, $options: 'i' } }, // 支持按阿姨身份证搜索
-      ];
-      
-      if (query.$or) {
-        // 如果已经有$or条件，需要合并
-        query.$and = [
-          { $or: query.$or },
-          { $or: searchConditions }
+    try {
+      const query: any = {};
+
+      // 默认只显示最新合同，除非明确要求显示所有合同
+      if (!showAll) {
+        query.$or = [
+          { isLatest: true }, // 显示标记为最新的合同
+          {
+            isLatest: { $exists: false }, // 兼容旧数据：没有 isLatest 字段
+            contractStatus: { $ne: 'replaced' } // 且状态不是已替换
+          }
         ];
-        delete query.$or;
-      } else {
-        query.$or = searchConditions;
       }
+
+      if (search) {
+        const searchConditions = [
+          { contractNumber: { $regex: search, $options: 'i' } },
+          { customerName: { $regex: search, $options: 'i' } },
+          { customerPhone: { $regex: search, $options: 'i' } },
+          { workerName: { $regex: search, $options: 'i' } },
+          { workerPhone: { $regex: search, $options: 'i' } },
+          { workerIdCard: { $regex: search, $options: 'i' } }, // 支持按阿姨身份证搜索
+        ];
+
+        if (query.$or) {
+          // 如果已经有$or条件，需要合并
+          query.$and = [
+            { $or: query.$or },
+            { $or: searchConditions }
+          ];
+          delete query.$or;
+        } else {
+          query.$or = searchConditions;
+        }
+      }
+
+      // 验证 ObjectId 格式的辅助函数
+      const isValidObjectId = (id: any): boolean => {
+        if (!id) return false;
+        const idStr = id.toString();
+        return /^[a-fA-F0-9]{24}$/.test(idStr);
+      };
+
+      // 先获取合同数据（不populate），然后手动处理populate以避免无效引用导致的错误
+      const [rawContracts, total] = await Promise.all([
+        this.contractModel
+          .find(query)
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean()
+          .exec(),
+        this.contractModel.countDocuments(query).exec(),
+      ]);
+
+      // 安全地获取需要populate的有效ID
+      const validCustomerIds = rawContracts
+        .filter(c => c.customerId && isValidObjectId(c.customerId))
+        .map(c => c.customerId);
+      const validWorkerIds = rawContracts
+        .filter(c => c.workerId && isValidObjectId(c.workerId))
+        .map(c => c.workerId);
+      const validCreatedByIds = rawContracts
+        .filter(c => c.createdBy && isValidObjectId(c.createdBy))
+        .map(c => c.createdBy);
+
+      // 批量查询关联数据
+      const [customers, workers, users] = await Promise.all([
+        validCustomerIds.length > 0
+          ? this.customerModel.find({ _id: { $in: validCustomerIds } }).select('name phone').lean().exec()
+          : [],
+        validWorkerIds.length > 0
+          ? this.resumeModel.find({ _id: { $in: validWorkerIds } }).select('name phone').lean().exec()
+          : [],
+        validCreatedByIds.length > 0
+          ? this.userModel.find({ _id: { $in: validCreatedByIds } }).select('name username').lean().exec()
+          : [],
+      ]);
+
+      // 创建查找映射
+      const customerMap = new Map<string, any>(customers.map(c => [c._id.toString(), c] as [string, any]));
+      const workerMap = new Map<string, any>(workers.map(w => [w._id.toString(), w] as [string, any]));
+      const userMap = new Map<string, any>(users.map(u => [u._id.toString(), u] as [string, any]));
+
+      // 手动填充关联数据
+      const contracts = rawContracts.map(contract => {
+        const result: any = { ...contract };
+
+        // 安全地填充 customerId
+        if (contract.customerId && isValidObjectId(contract.customerId)) {
+          const customer = customerMap.get(contract.customerId.toString());
+          result.customerId = customer || null;
+        } else {
+          result.customerId = null;
+        }
+
+        // 安全地填充 workerId
+        if (contract.workerId && isValidObjectId(contract.workerId)) {
+          const worker = workerMap.get(contract.workerId.toString());
+          result.workerId = worker || null;
+        } else {
+          result.workerId = null;
+        }
+
+        // 安全地填充 createdBy
+        if (contract.createdBy && isValidObjectId(contract.createdBy)) {
+          const user = userMap.get(contract.createdBy.toString());
+          result.createdBy = user || null;
+        } else {
+          result.createdBy = null;
+        }
+
+        return result;
+      });
+
+      return {
+        contracts,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      this.logger.error(`获取合同列表失败: ${error.message}`, error.stack);
+      throw error;
     }
-
-    const [contracts, total] = await Promise.all([
-      this.contractModel
-        .find(query)
-        .populate('customerId', 'name phone customerId')
-        .populate('workerId', 'name phone')
-        .populate('createdBy', 'name username')
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .exec(),
-      this.contractModel.countDocuments(query).exec(),
-    ]);
-
-    return {
-      contracts,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
   }
 
   // 根据ID获取合同详情
@@ -369,6 +661,18 @@ export class ContractsService {
     // 将合同对象转换为普通对象并添加保险信息
     const contractObj: any = contract.toObject();
     contractObj.insuranceInfo = insuranceInfo;
+
+    // 🔥 如果 workerId populate 失败（返回 null），保留原始的 ObjectId
+    // 这样前端至少知道有 workerId，只是关联的记录不存在
+    if (!contractObj.workerId && rawContract.workerId) {
+      console.warn('⚠️ [CONTRACTS SERVICE] workerId populate 失败，保留原始 ObjectId');
+      contractObj.workerId = rawContract.workerId;
+    }
+
+    // 🔥 确保 templateParams 字段存在（即使为空对象）
+    if (!contractObj.templateParams) {
+      contractObj.templateParams = {};
+    }
 
     return contractObj;
   }
@@ -538,7 +842,7 @@ export class ContractsService {
     this.logger.log(`✅ 合同已删除: ${result.contractNumber}`);
   }
 
-  // 获取统计信息
+  // 获取统计信息（只统计有效合同）
   async getStatistics(): Promise<{
     total: number;
     byContractType: Record<string, number>;
@@ -549,15 +853,29 @@ export class ContractsService {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfYear = new Date(now.getFullYear(), 0, 1);
 
+    // 只统计有效合同的查询条件
+    const validContractQuery = {
+      $or: [
+        { isLatest: true }, // 显示标记为最新的合同
+        {
+          isLatest: { $exists: false }, // 兼容旧数据：没有 isLatest 字段
+          contractStatus: { $ne: 'replaced' } // 且状态不是已替换
+        }
+      ]
+    };
+
     const [total, byContractType, thisMonth, thisYear] = await Promise.all([
-      this.contractModel.countDocuments().exec(),
+      this.contractModel.countDocuments(validContractQuery).exec(),
       this.contractModel.aggregate([
+        { $match: validContractQuery },
         { $group: { _id: '$contractType', count: { $sum: 1 } } }
       ]).exec(),
       this.contractModel.countDocuments({
+        ...validContractQuery,
         createdAt: { $gte: startOfMonth }
       }).exec(),
       this.contractModel.countDocuments({
+        ...validContractQuery,
         createdAt: { $gte: startOfYear }
       }).exec(),
     ]);
@@ -925,12 +1243,82 @@ export class ContractsService {
         mergedContractData.contractNumber = await this.generateContractNumber();
       }
 
+      // 🆕 将 templateNo 映射到 esignTemplateNo（与普通创建合同保持一致）
+      if ((createContractDto as any).templateNo && !mergedContractData.esignTemplateNo) {
+        (mergedContractData as any).esignTemplateNo = (createContractDto as any).templateNo;
+        console.log('📋 [换人合同] 将 templateNo 映射到 esignTemplateNo:', (mergedContractData as any).esignTemplateNo);
+      }
+
+      // 🆕 提取中文字段并保存到 templateParams（用于后续发起爱签签署）
+      // 🔥 修复：优先从原始合同继承 templateParams，然后用新数据覆盖
+      if (!mergedContractData.templateParams || Object.keys(mergedContractData.templateParams).length === 0) {
+        console.log('🔍 [换人合同] 开始处理 templateParams');
+
+        // 步骤1：从原始合同继承 templateParams（如果存在）
+        let baseTemplateParams = {};
+        if (originalContract.templateParams && Object.keys(originalContract.templateParams).length > 0) {
+          baseTemplateParams = { ...originalContract.templateParams };
+          console.log('📋 [换人合同] 从原始合同继承 templateParams，字段数量:', Object.keys(baseTemplateParams).length);
+        } else {
+          console.log('⚠️ [换人合同] 原始合同没有 templateParams');
+        }
+
+        // 步骤2：从 createContractDto 中提取新的中文字段（如果有）
+        console.log('🔍 [换人合同] 从 createContractDto 中提取中文字段');
+        console.log('🔍 [换人合同] createContractDto 字段:', Object.keys(createContractDto).join(', '));
+
+        const extractedTemplateParams = this.extractTemplateParams(createContractDto);
+        if (Object.keys(extractedTemplateParams).length > 0) {
+          console.log('📋 [换人合同] 从 createContractDto 提取到中文字段，数量:', Object.keys(extractedTemplateParams).length);
+          // 合并：新数据覆盖旧数据
+          baseTemplateParams = { ...baseTemplateParams, ...extractedTemplateParams };
+        } else {
+          console.log('⚠️ [换人合同] createContractDto 中没有提取到中文字段');
+        }
+
+        // 步骤3：更新服务人员相关字段（换人后必须更新）
+        if (Object.keys(baseTemplateParams).length > 0) {
+          // 更新阿姨信息
+          if (createContractDto.workerName) baseTemplateParams['阿姨姓名'] = createContractDto.workerName;
+          if (createContractDto.workerPhone) baseTemplateParams['阿姨电话'] = createContractDto.workerPhone;
+          if (createContractDto.workerIdCard) baseTemplateParams['阿姨身份证'] = createContractDto.workerIdCard;
+          if (createContractDto.workerAddress) baseTemplateParams['联系地址'] = createContractDto.workerAddress;
+
+          // 更新工资信息（如果有变化）
+          if (createContractDto.workerSalary) {
+            baseTemplateParams['阿姨工资'] = createContractDto.workerSalary.toString();
+            // 转换为大写
+            const salaryUpper = this.numberToChinese(createContractDto.workerSalary);
+            baseTemplateParams['阿姨工资大写'] = salaryUpper;
+          }
+
+          // 更新客户服务费（如果有变化）
+          if (createContractDto.customerServiceFee) {
+            baseTemplateParams['服务费'] = createContractDto.customerServiceFee.toString();
+            const feeUpper = this.numberToChinese(createContractDto.customerServiceFee);
+            baseTemplateParams['服务费大写'] = feeUpper;
+          }
+
+          (mergedContractData as any).templateParams = baseTemplateParams;
+          console.log('✅ [换人合同] 最终 templateParams 字段数量:', Object.keys(baseTemplateParams).length);
+          console.log('📋 [换人合同] 关键字段:', {
+            阿姨姓名: baseTemplateParams['阿姨姓名'],
+            阿姨工资: baseTemplateParams['阿姨工资'],
+            服务时间: baseTemplateParams['服务时间'],
+            休息方式: baseTemplateParams['休息方式']
+          });
+        } else {
+          console.log('⚠️ [换人合同] 最终没有任何 templateParams 数据');
+        }
+      }
+
       console.log('🔄 合并后的合同数据:', {
         contractNumber: mergedContractData.contractNumber,
         customerName: mergedContractData.customerName,
         workerName: mergedContractData.workerName,
         originalWorkerName: originalContract.workerName,
-        serviceDays
+        serviceDays,
+        hasTemplateParams: !!(mergedContractData as any).templateParams
       });
 
       // 创建新的合并合同
@@ -947,12 +1335,12 @@ export class ContractsService {
 
       // 🆕 同时更新该客户的其他历史合同状态
       await this.contractModel.updateMany(
-        { 
+        {
           customerPhone: originalContract.customerPhone,
           _id: { $ne: newContract._id },
           isLatest: { $ne: false }
         },
-        { 
+        {
           isLatest: false,
           contractStatus: 'replaced'
         }
@@ -960,6 +1348,89 @@ export class ContractsService {
 
       console.log('✅ 换人合并完成，新合同ID:', (newContract as any)._id);
       console.log('📋 客户合同已自动合并，换人历史已记录');
+
+      // 🔥🔥🔥 修复：换人合同也需要调用爱签API创建电子合同
+      console.log('🔍 检查是否应该启动爱签流程...');
+      console.log('  - templateNo:', createContractDto.templateNo);
+      console.log('  - customerName:', createContractDto.customerName);
+      console.log('  - customerPhone:', createContractDto.customerPhone);
+      console.log('  - customerIdCard:', createContractDto.customerIdCard);
+      console.log('  - workerName:', createContractDto.workerName);
+      console.log('  - workerPhone:', createContractDto.workerPhone);
+      console.log('  - workerIdCard:', createContractDto.workerIdCard);
+
+      const shouldInitiate = this.shouldInitiateEsignFlow(createContractDto);
+      console.log('  - shouldInitiateEsignFlow 结果:', shouldInitiate);
+
+      if (shouldInitiate) {
+        try {
+          this.logger.log(`🚀 开始为换人合同 ${newContract.contractNumber} 创建爱签电子合同...`);
+
+          // 🔥 修复：从保存后的合同对象中提取 templateParams，而不是使用 createContractDto.templateParams
+          const templateParams = this.extractTemplateParams(newContract as any);
+          this.logger.log(`📋 [换人合同] 提取的模板参数:`, JSON.stringify(templateParams, null, 2));
+
+          if (Object.keys(templateParams).length === 0) {
+            this.logger.warn(`⚠️ [换人合同] 没有提取到模板参数，跳过爱签流程`);
+            return newContract;
+          }
+
+          const esignResult = await this.esignService.createCompleteContractFlow({
+            contractNo: newContract.contractNumber,
+            contractName: `${createContractDto.contractType || '服务'}合同（换人）`,
+            templateNo: createContractDto.templateNo || 'default_template',
+            templateParams: templateParams,  // ✅ 修复：使用从合同对象中提取的参数
+            signers: [
+              {
+                name: mergedContractData.customerName,
+                mobile: mergedContractData.customerPhone,
+                idCard: mergedContractData.customerIdCard,
+                signType: 'auto',
+                validateType: 'sms'
+              },
+              {
+                name: createContractDto.workerName,
+                mobile: createContractDto.workerPhone,
+                idCard: createContractDto.workerIdCard,
+                signType: 'auto',
+                validateType: 'sms'
+              }
+            ],
+            validityTime: 30,
+            signOrder: 1
+          });
+
+          if (esignResult.success) {
+            // 更新合同的爱签信息
+            await this.contractModel.findByIdAndUpdate(newContract._id, {
+              esignContractNo: esignResult.contractNo,
+              esignSignUrls: JSON.stringify(esignResult.signUrls || []),
+              esignCreatedAt: new Date(),
+              contractStatus: 'signing',
+              updatedAt: new Date()
+            });
+
+            // 返回更新后的合同（包含爱签信息）
+            const updatedContract = await this.contractModel.findById(newContract._id).exec();
+            this.logger.log(`✅ 换人合同爱签电子合同创建成功: ${esignResult.contractNo}`);
+            return updatedContract;
+          } else {
+            this.logger.warn(`⚠️ 换人合同爱签电子合同创建失败: ${esignResult.message}`);
+          }
+        } catch (esignError) {
+          this.logger.error(`❌ 换人合同爱签流程失败: ${esignError.message}`, esignError.stack);
+          // 不阻止合同创建，只记录错误
+        }
+      } else {
+        this.logger.log(`ℹ️ 换人合同 ${newContract.contractNumber} 缺少必要字段，跳过爱签流程`);
+        this.logger.log(`  - templateNo: ${createContractDto.templateNo || '未提供'}`);
+        this.logger.log(`  - customerName: ${mergedContractData.customerName || '未提供'}`);
+        this.logger.log(`  - customerPhone: ${mergedContractData.customerPhone || '未提供'}`);
+        this.logger.log(`  - customerIdCard: ${mergedContractData.customerIdCard || '未提供'}`);
+        this.logger.log(`  - workerName: ${createContractDto.workerName || '未提供'}`);
+        this.logger.log(`  - workerPhone: ${createContractDto.workerPhone || '未提供'}`);
+        this.logger.log(`  - workerIdCard: ${createContractDto.workerIdCard || '未提供'}`);
+      }
 
       return newContract;
 

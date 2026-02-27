@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const FormData = require('form-data');
 require('dotenv').config();
 
-const contractNo = 'CONTRACT_1770341803997_7uy0hwd34';
+const contractNo = process.argv[2] || 'CONTRACT_1770341803997_7uy0hwd34';
 
 // 爱签配置
 const config = {

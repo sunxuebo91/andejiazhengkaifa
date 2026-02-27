@@ -735,6 +735,8 @@ export class ESignService {
   /**
    * 获取已同步的模板控件信息
    * 根据爱签官方文档：https://{host}/template/getTemplateData
+   * 🔥 过滤掉签署方占位符字段（甲方、乙方、丙方等），这些字段由后端自动处理
+   * 🔥 使用与 CRM 端相同的过滤逻辑（convertTemplateFieldsToFormFields）
    */
   async getTemplateData(templateIdent: string): Promise<any> {
     try {
@@ -750,23 +752,81 @@ export class ESignService {
       console.log('📋 官方API模板控件信息响应 - response.data类型:', typeof response.data);
       console.log('📋 官方API模板控件信息响应 - response.data是否为数组:', Array.isArray(response.data));
 
-      if (response.data && Array.isArray(response.data)) {
-        console.log('📋 官方API返回的字段数量:', response.data.length);
-        console.log('📋 前3个字段示例:', JSON.stringify(response.data.slice(0, 3), null, 2));
-
-        // 🔥 查找"首次匹配费大写"字段
-        const targetField = response.data.find((f: any) => f.dataKey === '首次匹配费大写');
-        if (targetField) {
-          console.log('🔍 找到"首次匹配费大写"字段:', JSON.stringify(targetField, null, 2));
-        }
-      }
-
       if (response.code !== 100000) {
         throw new BadRequestException(`获取模板控件信息失败: ${response.msg}`);
       }
 
-      // 🔥 直接返回response.data（应该是字段数组）
-      return response.data;
+      // 🔥 使用与 CRM 端相同的过滤和去重逻辑
+      // 过滤规则：
+      // 1. dataType = 6 (签名区) 或 7 (签章区/印章) 或 15 (备注签署区) 的字段
+      // 2. 字段名包含"签名区"、"签章区"、"签署区"、"印章"的字段
+      // 3. 去重：同一个 dataKey 只保留第一次出现的字段
+      let filteredData = response.data;
+      if (response.data && Array.isArray(response.data)) {
+        console.log('📋 官方API返回的原始字段数量:', response.data.length);
+
+        // 第一步：过滤签署字段
+        const afterFilter = response.data.filter((field: any) => {
+          if (!field.dataKey) {
+            return false; // 跳过没有dataKey的字段
+          }
+
+          const fieldKey = field.dataKey;
+
+          // 🔥 过滤签名区、签章区等不需要用户填写的字段
+          // dataType: 6=签署区, 7=签章区/印章, 15=备注签署区
+          if (field.dataType === 6 || field.dataType === 7 || field.dataType === 15) {
+            console.log(`⚠️  过滤签名/签章字段: ${fieldKey} (dataType: ${field.dataType})`);
+            return false;
+          }
+
+          // 🔥 过滤签名区、签章区相关的字段名
+          const lowerKey = fieldKey.toLowerCase();
+          if (lowerKey.includes('签名区') || lowerKey.includes('签章区') ||
+              lowerKey.includes('签署区') || lowerKey.includes('印章')) {
+            console.log(`⚠️  过滤签名相关字段: ${fieldKey}`);
+            return false;
+          }
+
+          // 🔥 过滤甲乙丙方占位符字段（与 CRM 端逻辑一致）
+          // 这些是签名/印章位置字段，由爱签平台在签署时自动处理，不需要用户填写
+          if (fieldKey === '甲方' || fieldKey === '乙方' || fieldKey === '丙方') {
+            console.log(`⚠️  过滤签名位置字段: ${fieldKey} (dataType: ${field.dataType})`);
+            return false;
+          }
+
+          // 其他字段保留
+          return true;
+        });
+
+        console.log('📋 过滤签署字段后的数量:', afterFilter.length);
+
+        // 第二步：去重 - 使用与 CRM 端相同的逻辑
+        const seenKeys = new Set<string>();
+        filteredData = [];
+
+        for (const field of afterFilter) {
+          const fieldKey = field.dataKey;
+
+          // 如果已经见过这个字段，跳过
+          if (seenKeys.has(fieldKey)) {
+            console.log(`⚠️  跳过重复字段: ${fieldKey} (page: ${field.page})`);
+            continue;
+          }
+
+          // 标记为已见过
+          seenKeys.add(fieldKey);
+          filteredData.push(field);
+          console.log(`✅ 保留字段: ${fieldKey} (page: ${field.page}, dataType: ${field.dataType})`);
+        }
+
+        console.log('📋 去重后的字段数量:', filteredData.length);
+        console.log('📋 过滤掉的字段数量:', response.data.length - filteredData.length);
+        console.log('📋 前3个保留字段示例:', JSON.stringify(filteredData.slice(0, 3), null, 2));
+      }
+
+      // 🔥 返回过滤和去重后的字段数组
+      return filteredData;
     } catch (error) {
       console.error('❌ 获取模板控件信息失败:', error);
       throw new BadRequestException(`获取模板控件信息失败: ${error.message}`);
@@ -2669,14 +2729,14 @@ export class ESignService {
         ...(signer.authSignAccount && { authSignAccount: signer.authSignAccount }),
         ...(signer.noticeMobile && { noticeMobile: signer.noticeMobile }),
         ...(signer.signOrder && { signOrder: signer.signOrder }),
-        isNotice: signer.isNotice ?? 1, // 默认发送通知
+        isNotice: signer.isNotice ?? 0, // 🔕 默认不发送通知
         ...(signer.validateType && { validateType: signer.validateType }),
         ...(signer.faceAuthMode && { faceAuthMode: signer.faceAuthMode }),
         ...(signer.validateTypeList && { validateTypeList: signer.validateTypeList }),
         ...(signer.autoSwitch && { autoSwitch: signer.autoSwitch }),
         ...(signer.isNoticeComplete && { isNoticeComplete: signer.isNoticeComplete }),
         waterMark: signer.waterMark ?? 1, // 默认启用日期水印
-        autoSms: signer.autoSms ?? 1, // 默认自动发送短信
+        autoSms: signer.autoSms ?? 0, // 🔕 默认不自动发送短信
         customSignFlag: signer.customSignFlag ?? 0, // 默认指定签章位置
         ...(signer.signStrategyList && { signStrategyList: signer.signStrategyList }),
         ...(signer.signStrikeList && { signStrikeList: signer.signStrikeList }),
@@ -2860,10 +2920,10 @@ export class ESignService {
           account: signer.account,
           signType: signType,
           signOrder: params.signOrder === 'sequential' ? (index + 1).toString() : '1',
-          isNotice: 1,
+          isNotice: 0, // 🔕 不发送短信通知
           validateType: validateType,
           waterMark: 1, // 启用日期水印，自动显示签署日期
-          autoSms: 1,
+          autoSms: 0, // 🔕 不自动发送短信
           customSignFlag: 0,
           signStrategyList: signStrategyList,
           ...(receiverFillStrategyList.length > 0 && { receiverFillStrategyList }),
@@ -3171,7 +3231,7 @@ export class ESignService {
       // 1. 准备参数
       const appId = this.config.appId;
       const privateKey = this.config.privateKey;
-      
+
       if (!appId || !privateKey) {
         throw new Error('爱签配置不完整，缺少appId或privateKey');
       }
@@ -3179,20 +3239,28 @@ export class ESignService {
       // 2. 处理bizData - 按字母排序（官方要求）
       const sortedBizData = this.sortObjectKeys(bizData);
       const bizDataString = JSON.stringify(sortedBizData);
-      
+
       // 3. 生成13位时间戳（当前时间 + 10分钟）
       const timestamp = (Date.now() + 10 * 60 * 1000).toString();
-      
+
+      console.log('🔐 [callESignAPI] 签名前数据:');
+      console.log('  - URI:', uri);
+      console.log('  - appId:', appId);
+      console.log('  - timestamp:', timestamp);
+      console.log('  - bizDataString (前100字符):', bizDataString.substring(0, 100));
+
       // 4. 生成签名
       const sign = this.generateOfficialSignature(appId, privateKey, bizDataString, timestamp);
-      
+
+      console.log('  - 生成的签名 (前50字符):', sign.substring(0, 50));
+
              // 5. 构建FormData请求
        const FormData = require('form-data');
        const formData = new FormData();
        formData.append('appId', appId);
        formData.append('timestamp', timestamp);
        formData.append('bizData', bizDataString);
-       
+
        // 6. 发送请求
        const response = await this.axiosInstance.post(uri, formData, {
          headers: {
@@ -3202,9 +3270,10 @@ export class ESignService {
          }
        });
 
+      console.log('✅ [callESignAPI] 请求成功，响应码:', response.data?.code);
       return response.data;
     } catch (error) {
-      console.error('爱签API调用失败:', error.response?.data || error.message);
+      console.error('❌ [callESignAPI] 爱签API调用失败:', error.response?.data || error.message);
       throw error;
     }
   }
@@ -3221,17 +3290,19 @@ export class ESignService {
     try {
       // 1. 计算dataString的MD5哈希值
       const md5Hash = crypto.createHash('md5').update(dataString, 'utf8').digest('hex');
-      
+
       // 2. 构建待签名字符串：dataString + md5(dataString) + appId + timestamp
       const updateString = dataString + md5Hash + appId + timestamp;
-      
-      console.log('签名算法调试信息:');
-      console.log('- appId:', appId);
-      console.log('- timestamp:', timestamp);
-      console.log('- dataString:', dataString);
-      console.log('- md5Hash:', md5Hash);
-      console.log('- updateString:', updateString);
-      
+
+      console.log('🔐 [generateOfficialSignature] 签名算法调试信息:');
+      console.log('  - appId:', appId);
+      console.log('  - timestamp:', timestamp);
+      console.log('  - dataString (前200字符):', dataString.substring(0, 200));
+      console.log('  - dataString 长度:', dataString.length);
+      console.log('  - md5Hash:', md5Hash);
+      console.log('  - updateString (前200字符):', updateString.substring(0, 200));
+      console.log('  - updateString 长度:', updateString.length);
+
       // 3. 准备私钥
       // 清理私钥格式，移除头尾标识和换行符
       let cleanPrivateKey = privateKey
@@ -3241,25 +3312,27 @@ export class ESignService {
         .replace(/-----END RSA PRIVATE KEY-----/g, '')
         .replace(/\r?\n/g, '')
         .replace(/\s/g, '');
-      
-      console.log('- 清理后的私钥长度:', cleanPrivateKey.length);
-      
+
+      console.log('  - 清理后的私钥长度:', cleanPrivateKey.length);
+      console.log('  - 私钥前50字符:', cleanPrivateKey.substring(0, 50));
+
       // 4. 构建完整的PKCS8格式私钥
       const privateKeyPEM = `-----BEGIN PRIVATE KEY-----\n${cleanPrivateKey}\n-----END PRIVATE KEY-----`;
-      
+
       // 5. 使用SHA1withRSA算法签名
       const sign = crypto.createSign('RSA-SHA1');
       sign.update(updateString, 'utf8');
       const signature = sign.sign(privateKeyPEM, 'base64');
-      
+
       // 6. 移除签名中的换行符（按照Java实现）
-      const finalSignature = signature.replace(/\r\n/g, '');
-      
-      console.log('- 最终签名:', finalSignature);
-      
+      const finalSignature = signature.replace(/\r\n/g, '').replace(/\n/g, '');
+
+      console.log('  - 签名长度:', finalSignature.length);
+      console.log('  - 最终签名 (前100字符):', finalSignature.substring(0, 100));
+
       return finalSignature;
     } catch (error) {
-      console.error('签名生成失败详细信息:', error);
+      console.error('❌ [generateOfficialSignature] 签名生成失败详细信息:', error);
       throw new Error(`签名生成失败: ${error.message}`);
     }
   }
@@ -3351,33 +3424,51 @@ export class ESignService {
 
       console.log('📝 处理后的签署人信息:', signersData);
 
-      // 步骤1：为每个签署人添加陌生用户
+      // 步骤1：为每个签署人添加陌生用户（区分个人用户和企业用户）
       const signerAccounts: Array<{ name: string; mobile: string; account: string }> = [];
-      
+
+      // 🔥 企业账号（丙方）使用固定的已实名企业账号
+      const ENTERPRISE_ACCOUNT = 'ASIGN91110111MACJMD2R5J';
+      const ENTERPRISE_NAME = '北京安得家政有限公司';
+
       for (const [index, signer] of signersData.entries()) {
-        const signerAccount = `account_${Date.now()}_${index}`;
-        
-        await this.addStranger({
-          account: signerAccount,
-          userType: 2, // 个人用户
-          name: signer.name,
-          mobile: signer.mobile,
-          idCard: signer.idCard,
-          isNotice: 1, // 开启短信通知
-          isSignPwdNotice: 0 // 不通知签约密码
-        });
+        // 🔥 判断是否是企业用户（第3个签署人或名称包含"公司"）
+        const isEnterprise = index >= 2 || signer.name.includes('公司') || signer.name.includes('企业');
 
-        signerAccounts.push({
-          name: signer.name,
-          mobile: signer.mobile,
-          account: signerAccount
-        });
+        if (isEnterprise) {
+          // 企业用户：使用固定的已实名企业账号
+          signerAccounts.push({
+            name: ENTERPRISE_NAME,
+            mobile: signer.mobile,
+            account: ENTERPRISE_ACCOUNT
+          });
+          console.log(`🏢 企业签署人 ${ENTERPRISE_NAME} 使用已有账户: ${ENTERPRISE_ACCOUNT}`);
+        } else {
+          // 个人用户：创建新账户
+          const signerAccount = `account_${Date.now()}_${index}`;
 
-        console.log(`✅ 签署人 ${signer.name} 添加成功，账户: ${signerAccount}`);
+          await this.addStranger({
+            account: signerAccount,
+            userType: 2, // 个人用户
+            name: signer.name,
+            mobile: signer.mobile,
+            idCard: signer.idCard,
+            isNotice: 0, // 🔕 不发送短信通知
+            isSignPwdNotice: 0 // 不通知签约密码
+          });
+
+          signerAccounts.push({
+            name: signer.name,
+            mobile: signer.mobile,
+            account: signerAccount
+          });
+
+          console.log(`✅ 签署人 ${signer.name} 添加成功，账户: ${signerAccount}`);
+        }
       }
 
       // 步骤2：创建合同
-      await this.createContractWithTemplate({
+      const createResult = await this.createContractWithTemplate({
         contractNo: params.contractNo,
         contractName: params.contractName,
         templateNo: params.templateNo,
@@ -3386,6 +3477,15 @@ export class ESignService {
         signOrder: params.signOrder,
         notifyUrl: this.config.notifyUrl // 🔥 添加回调URL，确保爱签在合同状态变化时通知我们
       });
+
+      // 🔥 检查合同创建是否成功
+      if (!createResult || createResult.code !== 100000) {
+        const errorMsg = createResult?.msg || '创建合同失败';
+        const errorCode = createResult?.code || 'UNKNOWN';
+        console.error(`❌ 爱签创建合同失败: code=${errorCode}, msg=${errorMsg}`);
+        throw new Error(`爱签创建合同失败: ${errorMsg} (错误码: ${errorCode})`);
+      }
+      console.log('✅ 步骤2完成：合同创建成功');
 
       // 步骤3：添加所有签署方（使用模板坐标签章）
       const signerResult = await this.addSimpleContractSigners({
@@ -3402,14 +3502,67 @@ export class ESignService {
       });
 
       // 处理返回结果
-      // 🔥 修复：使用配置的域名而不是硬编码的测试环境域名
-      const esignHost = this.config.host || 'https://oapi.asign.cn';
+      // 🔥 修复：小程序端使用 hxcx.asign.cn，后端API使用 oapi.asign.cn
+      // 根据环境变量判断使用哪个域名
+      const apiHost = this.config.host || 'https://oapi.asign.cn';
+      // 小程序签署页面域名（生产环境）
+      const miniProgramSignHost = apiHost.includes('prev.asign.cn') || apiHost.includes('bprev.asign.cn')
+        ? 'https://bpre.asign.cn'  // 测试环境
+        : 'https://hxcx.asign.cn'; // 生产环境
 
+      console.log('🔧 签署链接域名配置:', {
+        apiHost,
+        miniProgramSignHost,
+        environment: apiHost.includes('prev') ? '测试环境' : '生产环境'
+      });
+
+      // 🔥 等待爱签系统处理完成，然后获取真正的短链接
+      console.log('🔄 等待爱签系统处理，然后获取真正的签署短链接...');
+      await new Promise(resolve => setTimeout(resolve, 2000)); // 等待2秒
+
+      // 尝试获取爱签返回的真正签署链接（短链接格式）
+      let realSignUrls: any[] = [];
+      try {
+        const contractInfoResult = await this.getContractInfo(params.contractNo);
+        if (contractInfoResult.success && contractInfoResult.data?.signUser?.length > 0) {
+          realSignUrls = contractInfoResult.data.signUser.map((user: any, index: number) => ({
+            name: user.name || signerAccounts[index]?.name,
+            mobile: user.mobile || signerAccounts[index]?.mobile,
+            signUrl: user.signUrl, // 🔥 这是爱签返回的真正短链接！
+            account: user.account || signerAccounts[index]?.account,
+            signOrder: index + 1,
+            role: index === 0 ? '甲方（客户）' : '乙方（服务人员）'
+          }));
+          console.log('✅ 获取到爱签真正的签署链接:', realSignUrls.map(u => ({ name: u.name, signUrl: u.signUrl })));
+        }
+      } catch (infoError) {
+        console.warn('⚠️ 获取爱签签署链接失败，使用备用链接:', infoError.message);
+      }
+
+      // 如果获取到了真正的签署链接，使用它；否则使用拼接的备用链接
+      if (realSignUrls.length > 0 && realSignUrls[0].signUrl) {
+        if (signersData.length === 1) {
+          return {
+            success: true,
+            contractNo: params.contractNo,
+            signUrl: realSignUrls[0].signUrl,
+            message: '合同创建成功，签署链接已生成'
+          };
+        } else {
+          return {
+            success: true,
+            contractNo: params.contractNo,
+            signUrls: realSignUrls,
+            message: `合同创建成功，已为${signersData.length}个签署人生成签署链接`
+          };
+        }
+      }
+
+      // 🔥 备用方案：使用拼接的小程序链接
+      console.log('⚠️ 使用拼接的备用签署链接');
       if (signersData.length === 1) {
-        // 单个签署人：返回单个签署链接（向后兼容）
-        // 注意：签署链接应该从爱签API响应中获取，而不是自己拼接
-        const signUrl = signerResult?.signUrl || `${esignHost}/sign/${params.contractNo}`;
-        console.log('✅ 完整流程执行成功，签署链接:', signUrl);
+        const signUrl = signerResult?.signUrl || `${miniProgramSignHost}/sign/${params.contractNo}`;
+        console.log('✅ 完整流程执行成功，签署链接(备用):', signUrl);
 
         return {
           success: true,
@@ -3418,15 +3571,16 @@ export class ESignService {
           message: '合同创建成功，签署链接已生成'
         };
       } else {
-        // 多个签署人：返回多个签署链接
-        // 🔥 注意：签署链接应该从爱签API响应中获取，这里使用配置的正式环境域名作为备用
-        const signUrls = signerAccounts.map(signerAccount => ({
+        const signUrls = signerAccounts.map((signerAccount, index) => ({
           name: signerAccount.name,
           mobile: signerAccount.mobile,
-          signUrl: `${esignHost}/sign/${params.contractNo}?account=${signerAccount.account}`
+          signUrl: `${miniProgramSignHost}/sign/${params.contractNo}?account=${signerAccount.account}`,
+          account: signerAccount.account,
+          signOrder: index + 1,
+          role: index === 0 ? '甲方（客户）' : '乙方（服务人员）'
         }));
 
-        console.log('✅ 完整流程执行成功，多个签署链接:', signUrls);
+        console.log('✅ 完整流程执行成功，多个签署链接(备用):', signUrls);
 
         return {
           success: true,
@@ -3763,7 +3917,70 @@ export class ESignService {
   }
 
   /**
+   * 🎯 [桥接模式] 准备发送给爱签API的fillData（直接透传，不做转换）
+   * 小程序提交的字段名就是爱签模板的原始字段名，直接使用即可
+   */
+  private prepareFillDataForESign(templateParams: Record<string, any>): Record<string, any> {
+    const fillData: Record<string, any> = {};
+
+    console.log('🎯 [桥接模式] 准备fillData，直接透传小程序数据');
+
+    // 直接遍历所有字段，只做基本的类型转换（确保都是字符串）
+    Object.entries(templateParams).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        // 数组类型（如多选字段）转换为分号分隔的字符串
+        if (Array.isArray(value)) {
+          fillData[key] = value.join('；');
+          console.log(`  📋 数组字段 "${key}": [${value.join(', ')}] -> "${fillData[key]}"`);
+        } else {
+          // 其他类型直接转字符串
+          fillData[key] = String(value);
+          console.log(`  ✅ 普通字段 "${key}": "${fillData[key]}"`);
+        }
+      }
+    });
+
+    console.log('✅ [桥接模式] fillData准备完成，字段数量:', Object.keys(fillData).length);
+    return fillData;
+  }
+
+  /**
+   * 🎯 [桥接模式] 准备发送给爱签API的componentData（处理勾选框等组件）
+   */
+  private prepareComponentDataForESign(templateParams: Record<string, any>): Array<{
+    type: number;
+    keyword: string;
+    defaultValue: string;
+  }> {
+    const componentData: Array<{
+      type: number;
+      keyword: string;
+      defaultValue: string;
+    }> = [];
+
+    // 遍历模板参数，查找需要转换为组件数据的字段（布尔类型或包含特定关键词）
+    Object.entries(templateParams).forEach(([key, value]) => {
+      if (typeof value === 'boolean' ||
+          key.includes('同意') ||
+          key.includes('确认') ||
+          key.includes('勾选') ||
+          key.includes('选择')) {
+        componentData.push({
+          type: 3, // 3=勾选组件
+          keyword: key,
+          defaultValue: value ? 'Yes' : 'Off'
+        });
+        console.log(`  ☑️ 勾选字段 "${key}": ${value ? 'Yes' : 'Off'}`);
+      }
+    });
+
+    console.log('✅ [桥接模式] componentData准备完成，组件数量:', componentData.length);
+    return componentData;
+  }
+
+  /**
    * 转换模板参数为fillData格式（文本类填充）
+   * ⚠️ 已废弃：请使用 prepareFillDataForESign 方法（桥接模式）
    */
   private convertToFillData(templateParams: Record<string, any>): Record<string, any> {
     const fillData: Record<string, any> = {};
@@ -3897,6 +4114,30 @@ export class ESignService {
       options?: Array<{index: number; selected: boolean}>;
     }> = [];
 
+    // 🔥 服务类型映射表：将小程序/CRM的服务类型映射到爱签模板的标准值
+    const serviceTypeMapping: Record<string, string> = {
+      '月嫂': '月嫂',
+      '住家育儿嫂': '住家育儿嫂',
+      '白班育儿': '白班育儿嫂',
+      '白班育儿嫂': '白班育儿嫂',
+      '保洁': '保洁',
+      '白班保姆': '白班保姆',
+      '住家保姆': '住家保姆',
+      '养宠': '养宠',
+      '小时工': '小时工',
+      '住家护老': '住家护老'
+    };
+
+    // 🔥 预处理：映射服务类型字段
+    if (templateParams['服务类型'] && serviceTypeMapping[templateParams['服务类型']]) {
+      const originalValue = templateParams['服务类型'];
+      const mappedValue = serviceTypeMapping[originalValue];
+      if (originalValue !== mappedValue) {
+        console.log(`🔄 服务类型映射: "${originalValue}" -> "${mappedValue}"`);
+        templateParams['服务类型'] = mappedValue;
+      }
+    }
+
     // 遍历模板参数，查找需要转换为组件数据的字段
     Object.entries(templateParams).forEach(([key, value]) => {
       const isMultiSelectField = key.includes('多选') || key.startsWith('多选');
@@ -3951,10 +4192,16 @@ export class ESignService {
       // 🔥🔥🔥 处理下拉控件（type=16）
       const dropdownControl = templateControls.find(c => c.dataKey === key && c.dataType === 16);
       if (dropdownControl && dropdownControl.options) {
+        // 🔥 标准化用户输入的值：将"元"替换为"圆"（爱签模板使用"圆"）
+        const normalizedValue = String(value).replace(/元/g, '圆');
+
         // 查找用户选择的值在模板选项中的索引
-        const selectedOption = dropdownControl.options.find(opt =>
-          opt.label === value || opt.label.includes(value) || value.includes(opt.label)
-        );
+        const selectedOption = dropdownControl.options.find(opt => {
+          const normalizedLabel = String(opt.label).replace(/元/g, '圆');
+          return normalizedLabel === normalizedValue ||
+                 normalizedLabel.includes(normalizedValue) ||
+                 normalizedValue.includes(normalizedLabel);
+        });
 
         if (selectedOption) {
           componentData.push({
@@ -3967,7 +4214,9 @@ export class ESignService {
           });
           console.log(`🔽 下拉控件转换: "${key}" -> 选中索引 ${selectedOption.index} (${selectedOption.label})`);
         } else {
-          console.log(`⚠️ 下拉控件"${key}"未找到匹配的选项，值: "${value}"`);
+          console.log(`⚠️ 下拉控件"${key}"未找到匹配的选项，值: "${value}" (标准化后: "${normalizedValue}")`);
+          // 🔥 打印所有可用选项，帮助调试
+          console.log(`⚠️ 可用选项: ${dropdownControl.options.map(o => o.label).join(', ')}`);
         }
         return;
       }

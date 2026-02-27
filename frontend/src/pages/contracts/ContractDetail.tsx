@@ -177,22 +177,15 @@ const ContractDetail: React.FC = () => {
       return;
     }
 
-    // 2) 兜底：从关联简历的 hukouAddress（户籍地址）获取
+    // 2) 获取 workerId
     const workerObj = typeof contract?.workerId === 'object' ? contract.workerId : null;
-
-    // 2.1) 先尝试已 populate 的数据
-    if (workerObj?.hukouAddress?.trim()) {
-      setWorkerAddress(workerObj.hukouAddress.trim());
-      return;
-    }
-
-    // 2.2) 如果有 workerId._id，再查一次简历详情
     const resumeId = workerObj?._id || (typeof contract?.workerId === 'string' ? contract.workerId : null);
 
+    // 始终查询简历详情获取户籍地址
     if (resumeId) {
       try {
         const response = await resumeService.getById(resumeId);
-        const resume = response as any;  // API 返回结构可能嵌套
+        const resume = response as any;
         const hukouAddr = resume?.hukouAddress || resume?.data?.hukouAddress;
         if (hukouAddr?.trim()) {
           setWorkerAddress(hukouAddr.trim());

@@ -853,6 +853,9 @@ const ESignatureStepPage: React.FC = () => {
             keyLower.includes('多选') || // 🔥 工作内容字段（多选6、多选7等），需要自动填充但不锁定
             keyLower.includes('服务时间') || // 🔥 服务时间字段，需要自动填充但不锁定
             keyLower.includes('休息方式') || // 🔥 休息方式字段，需要自动填充但不锁定
+            keyLower.includes('服务内容') || // 🔥 服务内容字段（多选），需要自动填充但不锁定
+            keyLower.includes('服务备注') || // 🔥 服务备注字段，需要自动填充但不锁定
+            keyLower.includes('服务项目') || // 🔥 服务项目字段，需要自动填充但不锁定
             keyLower.includes('合同备注')    // 🔥 合同备注字段，需要自动填充但不锁定
 	          ) {
 	            // 🔥 时间拆分字段：Select 的 Option value 是 number，这里强制转 number 避免“值有但下拉不显示”

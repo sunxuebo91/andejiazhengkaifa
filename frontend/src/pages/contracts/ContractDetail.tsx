@@ -1363,19 +1363,36 @@ const ContractDetail: React.FC = () => {
                 
                 <Descriptions.Item label="服务开始日期" span={1}>
                   <span style={{ fontWeight: 'bold' }}>
-                    {formatDate(contract.startDate)}
+                    {/* 优先使用 templateParams 中的合同时间 */}
+                    {contract.templateParams?.['合同开始时间'] ||
+                     contract.templateParams?.['服务开始时间'] ||
+                     formatDate(contract.startDate)}
                   </span>
                 </Descriptions.Item>
-                
+
                 <Descriptions.Item label="服务结束日期" span={1}>
                   <span style={{ fontWeight: 'bold' }}>
-                    {formatDate(contract.endDate)}
+                    {contract.templateParams?.['合同结束时间'] ||
+                     contract.templateParams?.['服务结束时间'] ||
+                     formatDate(contract.endDate)}
                   </span>
                 </Descriptions.Item>
-                
+
                 <Descriptions.Item label="服务期限" span={1}>
                   <span style={{ color: '#52c41a' }}>
-                    {dayjs(contract.endDate).diff(dayjs(contract.startDate), 'day') + 1} 天
+                    {(() => {
+                      // 优先从 templateParams 计算服务期限
+                      const startStr = contract.templateParams?.['合同开始时间'] || contract.templateParams?.['服务开始时间'];
+                      const endStr = contract.templateParams?.['合同结束时间'] || contract.templateParams?.['服务结束时间'];
+                      if (startStr && endStr) {
+                        const start = dayjs(startStr);
+                        const end = dayjs(endStr);
+                        if (start.isValid() && end.isValid()) {
+                          return end.diff(start, 'day') + 1;
+                        }
+                      }
+                      return dayjs(contract.endDate).diff(dayjs(contract.startDate), 'day') + 1;
+                    })()} 天
                   </span>
                 </Descriptions.Item>
               </Descriptions>

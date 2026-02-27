@@ -48,13 +48,13 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
   // 状态映射函数
   const getStatusColor = (status: number): string => {
     const colorMap: { [key: number]: string } = {
-      0: 'orange',  // 等待签约
-      1: 'blue',    // 签约中
-      2: 'green',   // 已签约
-      3: 'red',     // 过期
-      4: 'red',     // 拒签
-      6: 'gray',    // 作废
-      7: 'gray'     // 撤销
+      0: 'orange',    // 等待签约
+      1: 'blue',      // 签约中
+      2: '#5DBFB3',   // 已签约 - 使用主题色
+      3: 'red',       // 过期
+      4: 'red',       // 拒签
+      6: 'gray',      // 作废
+      7: 'gray'       // 撤销
     };
     return colorMap[status] || 'gray';
   };

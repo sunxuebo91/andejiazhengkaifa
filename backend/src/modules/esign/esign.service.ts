@@ -3501,6 +3501,15 @@ export class ESignService {
         templateParams: params.templateParams // 传递模板参数用于多行文本填充
       });
 
+      // 🔥 检查添加签署方是否成功
+      if (signerResult && signerResult.code !== 100000) {
+        const errorMsg = signerResult?.msg || '添加签署方失败';
+        const errorCode = signerResult?.code || 'UNKNOWN';
+        console.error(`❌ 爱签添加签署方失败: code=${errorCode}, msg=${errorMsg}`);
+        throw new Error(`爱签添加签署方失败: ${errorMsg} (错误码: ${errorCode})`);
+      }
+      console.log('✅ 步骤3完成：添加签署方成功');
+
       // 处理返回结果
       // 🔥 修复：小程序端使用 hxcx.asign.cn，后端API使用 oapi.asign.cn
       // 根据环境变量判断使用哪个域名
@@ -3516,27 +3525,50 @@ export class ESignService {
         environment: apiHost.includes('prev') ? '测试环境' : '生产环境'
       });
 
-      // 🔥 等待爱签系统处理完成，然后获取真正的短链接
+      // 🔥 等待爱签系统处理完成，然后获取真正的短链接（带重试机制）
       console.log('🔄 等待爱签系统处理，然后获取真正的签署短链接...');
-      await new Promise(resolve => setTimeout(resolve, 2000)); // 等待2秒
 
-      // 尝试获取爱签返回的真正签署链接（短链接格式）
+      // 尝试获取爱签返回的真正签署链接（短链接格式）- 最多重试5次
       let realSignUrls: any[] = [];
-      try {
-        const contractInfoResult = await this.getContractInfo(params.contractNo);
-        if (contractInfoResult.success && contractInfoResult.data?.signUser?.length > 0) {
-          realSignUrls = contractInfoResult.data.signUser.map((user: any, index: number) => ({
-            name: user.name || signerAccounts[index]?.name,
-            mobile: user.mobile || signerAccounts[index]?.mobile,
-            signUrl: user.signUrl, // 🔥 这是爱签返回的真正短链接！
-            account: user.account || signerAccounts[index]?.account,
-            signOrder: index + 1,
-            role: index === 0 ? '甲方（客户）' : '乙方（服务人员）'
-          }));
-          console.log('✅ 获取到爱签真正的签署链接:', realSignUrls.map(u => ({ name: u.name, signUrl: u.signUrl })));
+      const maxRetries = 5;
+      const retryDelays = [2000, 3000, 4000, 5000, 6000]; // 递增等待时间
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const delay = retryDelays[attempt];
+          console.log(`⏳ 等待 ${delay}ms 后获取签署链接 (尝试 ${attempt + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+
+          const contractInfoResult = await this.getContractInfo(params.contractNo);
+          if (contractInfoResult.success && contractInfoResult.data?.signUser?.length > 0) {
+            // 检查是否有真实的签署链接
+            const signUsers = contractInfoResult.data.signUser;
+            const hasRealSignUrls = signUsers.some((user: any) => user.signUrl && user.signUrl.includes('hzuul.asign.cn'));
+
+            if (hasRealSignUrls) {
+              realSignUrls = signUsers.map((user: any, index: number) => ({
+                name: user.name || signerAccounts[index]?.name,
+                mobile: user.mobile || signerAccounts[index]?.mobile,
+                signUrl: user.signUrl, // 🔥 这是爱签返回的真正短链接！
+                account: user.account || signerAccounts[index]?.account,
+                signOrder: index + 1,
+                role: index === 0 ? '甲方（客户）' : (index === 1 ? '乙方（服务人员）' : '丙方（企业）')
+              }));
+              console.log(`✅ 获取到爱签真正的签署链接 (尝试 ${attempt + 1}):`, realSignUrls.map(u => ({ name: u.name, signUrl: u.signUrl })));
+              break; // 成功获取，跳出循环
+            } else {
+              console.log(`⚠️ signUser 有数据但没有签署链接 (尝试 ${attempt + 1})`);
+            }
+          } else {
+            console.log(`⚠️ signUser 为空 (尝试 ${attempt + 1})`);
+          }
+        } catch (infoError) {
+          console.warn(`⚠️ 获取爱签签署链接失败 (尝试 ${attempt + 1}):`, infoError.message);
         }
-      } catch (infoError) {
-        console.warn('⚠️ 获取爱签签署链接失败，使用备用链接:', infoError.message);
+
+        if (attempt === maxRetries - 1) {
+          console.warn('⚠️ 多次尝试后仍无法获取真实签署链接，使用备用链接');
+        }
       }
 
       // 如果获取到了真正的签署链接，使用它；否则使用拼接的备用链接

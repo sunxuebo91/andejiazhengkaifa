@@ -51,6 +51,9 @@ export interface Contract {
   esignPreviewUrl?: string;
   esignSignUrls?: string; // JSON字符串，存储真实的签署链接
 
+  // 爱签模板参数（包含合同开始/结束时间等）
+  templateParams?: Record<string, any>;
+
   // 保险信息
   insuranceInfo?: InsuranceInfo;
 }

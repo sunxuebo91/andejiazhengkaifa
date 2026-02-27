@@ -192,6 +192,10 @@ const CreateInsurance: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const resumeId = searchParams.get('resumeId');
+  // 🆕 从合同详情页传递的服务人员信息
+  const workerName = searchParams.get('workerName');
+  const workerPhone = searchParams.get('workerPhone');
+  const workerIdCard = searchParams.get('workerIdCard');
 
   // 获取次日的日期（保险默认次日生效）
   const getTomorrowDate = () => dayjs().add(1, 'day').startOf('day');
@@ -216,6 +220,25 @@ const CreateInsurance: React.FC = () => {
       return effectiveDate.add(months, 'month').subtract(1, 'day');
     }
   };
+
+  // 🆕 从合同详情页跳转时，自动填充服务人员信息
+  useEffect(() => {
+    if (workerName && workerIdCard) {
+      console.log('📋 从合同详情页跳转，自动填充服务人员信息:', { workerName, workerPhone, workerIdCard });
+      const info = extractInfoFromIdCard(workerIdCard);
+      form.setFieldsValue({
+        insuredList: [{
+          insuredName: workerName,
+          idType: '1',
+          idNumber: workerIdCard,
+          birthDate: info?.birthDate ? dayjs(info.birthDate.substring(0, 8), 'YYYYMMDD') : undefined,
+          gender: info?.gender || 'M',
+          mobile: workerPhone || '',
+        }],
+      });
+      message.success(`已自动填充服务人员信息：${workerName}`);
+    }
+  }, [workerName, workerPhone, workerIdCard]);
 
   // 加载阿姨简历信息
   useEffect(() => {

@@ -233,14 +233,42 @@ const ContractList: React.FC = () => {
       title: '服务期间',
       key: 'period',
       width: 200,
-      render: (_: any, record: Contract) => (
-        <div>
-          <div>{dayjs(record.startDate).format('YYYY-MM-DD')}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            至 {dayjs(record.endDate).format('YYYY-MM-DD')}
+      render: (_: any, record: Contract) => {
+        // 优先使用 templateParams 中的合同时间
+        const startDateStr = record.templateParams?.['合同开始时间'] || record.templateParams?.['服务开始时间'];
+        const endDateStr = record.templateParams?.['合同结束时间'] || record.templateParams?.['服务结束时间'];
+
+        // 统一格式化日期为 YYYY-MM-DD
+        const formatDateUnified = (dateStr: string | undefined, fallback: string) => {
+          if (dateStr) {
+            // 尝试解析中文日期格式 "2026年02月27日"
+            const chineseMatch = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日?/);
+            if (chineseMatch) {
+              const [, year, month, day] = chineseMatch;
+              return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+            // 尝试标准日期解析
+            const parsed = dayjs(dateStr);
+            if (parsed.isValid()) {
+              return parsed.format('YYYY-MM-DD');
+            }
+            return dateStr;
+          }
+          return dayjs(fallback).format('YYYY-MM-DD');
+        };
+
+        const displayStart = formatDateUnified(startDateStr, record.startDate);
+        const displayEnd = formatDateUnified(endDateStr, record.endDate);
+
+        return (
+          <div>
+            <div>{displayStart}</div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              至 {displayEnd}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: '工资',

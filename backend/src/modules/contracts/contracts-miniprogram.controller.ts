@@ -507,7 +507,8 @@ export class ContractsMiniProgramController {
             if (signUrlsResult.success && signUrlsResult.data?.signUrls && signUrlsResult.data.signUrls.length > 0) {
               // 检查是否获取到了短链接格式
               const firstUrl = signUrlsResult.data.signUrls[0]?.signUrl || '';
-              if (firstUrl.includes('/web/short/') || firstUrl.includes('hzuul.asign.cn')) {
+              // 🔥 修复：正确的短链接格式是 hxcx.asign.cn
+              if (firstUrl.includes('hxcx.asign.cn') || firstUrl.includes('/web/short/') || firstUrl.includes('hzuul.asign.cn')) {
                 finalSignUrls = signUrlsResult.data.signUrls;
                 this.logger.log(`✅ 获取签署短链接成功 (尝试 ${attempt + 1}): ${JSON.stringify(finalSignUrls)}`);
                 break; // 成功获取，跳出循环
@@ -601,6 +602,8 @@ export class ContractsMiniProgramController {
 
   /**
    * 创建换人合同
+   * 🔥 使用 any 类型接收请求体，以保留小程序传递的中文字段（如"休息方式"、"服务时间"、"多选6"、"多选7"等）
+   * 这些字段会被保存到 templateParams 中，用于后续发起爱签签署
    */
   @Post('change-worker/:originalContractId')
   @Public()
@@ -609,11 +612,15 @@ export class ContractsMiniProgramController {
   @ApiParam({ name: 'originalContractId', description: '原合同ID' })
   async createChangeWorkerContract(
     @Param('originalContractId') originalContractId: string,
-    @Body() createContractDto: CreateContractDto,
+    @Body() body: any,  // 🔥 修复：使用 any 类型保留所有字段（包括中文字段）
   ) {
     try {
+      // 🔥 打印接收到的原始数据，用于调试
+      this.logger.log(`📥 收到换人合同请求，字段数量: ${Object.keys(body || {}).length}`);
+      this.logger.log(`📥 换人合同关键字段: 服务时间=${body['服务时间']}, 休息方式=${body['休息方式']}, 多选6=${body['多选6'] ? '有' : '无'}, 多选7=${body['多选7'] ? '有' : '无'}`);
+
       const newContract = await this.contractsService.createChangeWorkerContract(
-        createContractDto,
+        body as CreateContractDto,  // 🔥 使用 body（包含所有字段，包括中文字段）
         originalContractId,
         'miniprogram-user',
       );

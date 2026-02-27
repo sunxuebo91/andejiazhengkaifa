@@ -64,6 +64,58 @@ export class ContractsService {
   }
 
   /**
+   * 数字金额转中文大写
+   */
+  private convertToChineseAmount(amount: string | number): string {
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (Number.isNaN(num)) return '零元整';
+
+    const digit = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
+    const unit = ['', '拾', '佰', '仟'];
+    const section = ['', '万', '亿'];
+
+    if (num === 0) return '零元整';
+
+    const integerPart = Math.floor(num);
+    const decimalPart = Math.round((num - integerPart) * 100);
+
+    let result = '';
+    if (integerPart === 0) {
+      result = '零';
+    } else {
+      const str = integerPart.toString();
+      const len = str.length;
+      for (let i = 0; i < len; i++) {
+        const n = parseInt(str[i], 10);
+        const pos = len - i - 1;
+        const u = pos % 4;
+        const s = Math.floor(pos / 4);
+
+        if (n !== 0) {
+          result += digit[n] + unit[u];
+          if (u === 0 && s > 0) result += section[s];
+        } else {
+          if (result && !result.endsWith('零')) result += '零';
+        }
+      }
+      result = result.replace(/零+/g, '零').replace(/零$/, '');
+    }
+
+    result += '元';
+
+    if (decimalPart === 0) {
+      result += '整';
+    } else {
+      const jiao = Math.floor(decimalPart / 10);
+      const fen = decimalPart % 10;
+      if (jiao > 0) result += digit[jiao] + '角';
+      if (fen > 0) result += digit[fen] + '分';
+    }
+
+    return result;
+  }
+
+  /**
    * 验证爱签必填字段并返回详细的错误信息
    * @returns { valid: boolean, missingFields: string[], message: string }
    */
@@ -624,6 +676,14 @@ export class ContractsService {
             p.status === 'active' || p.status === 'processing' || p.status === 'pending'
           );
 
+          // 🔍 调试：检查原始保单数据
+          console.log('🔍 [CONTRACTS SERVICE] 原始保单数据 insuredList:', activePolicies.map(p => ({
+            policyNo: p.policyNo,
+            insuredList: p.insuredList,
+            hasInsuredList: !!p.insuredList,
+            insuredListLength: p.insuredList?.length
+          })));
+
           insuranceInfo = {
             hasInsurance: activePolicies.length > 0,
             policies: activePolicies.map(p => ({
@@ -635,10 +695,13 @@ export class ContractsService {
               totalPremium: p.totalPremium,
               status: p.status,
               policyPdfUrl: p.policyPdfUrl,
+              // 🆕 添加被保险人信息
+              insuredList: p.insuredList || [],
+              insuredName: p.insuredList?.[0]?.insuredName || contract.workerName || '',
             })),
             totalPolicies: activePolicies.length,
           };
-          console.log('✅ [CONTRACTS SERVICE] 找到保险信息:', insuranceInfo);
+          console.log('✅ [CONTRACTS SERVICE] 找到保险信息:', JSON.stringify(insuranceInfo, null, 2));
         } else {
           insuranceInfo = {
             hasInsurance: false,
@@ -1250,65 +1313,69 @@ export class ContractsService {
       }
 
       // 🆕 提取中文字段并保存到 templateParams（用于后续发起爱签签署）
-      // 🔥 修复：优先从原始合同继承 templateParams，然后用新数据覆盖
-      if (!mergedContractData.templateParams || Object.keys(mergedContractData.templateParams).length === 0) {
-        console.log('🔍 [换人合同] 开始处理 templateParams');
+      // 🔥 修复：总是处理 templateParams，不管 mergedContractData 中是否已有（可能是空对象）
+      {
+        this.logger.log('🔍 [换人合同] 开始处理 templateParams');
+        this.logger.log(`🔍 [换人合同] mergedContractData.templateParams 当前状态: ${JSON.stringify(mergedContractData.templateParams)}`);
+        this.logger.log(`🔍 [换人合同] originalContract.templateParams 字段数: ${Object.keys(originalContract.templateParams || {}).length}`);
 
         // 步骤1：从原始合同继承 templateParams（如果存在）
-        let baseTemplateParams = {};
+        let baseTemplateParams: Record<string, any> = {};
         if (originalContract.templateParams && Object.keys(originalContract.templateParams).length > 0) {
           baseTemplateParams = { ...originalContract.templateParams };
-          console.log('📋 [换人合同] 从原始合同继承 templateParams，字段数量:', Object.keys(baseTemplateParams).length);
+          this.logger.log(`📋 [换人合同] 从原始合同继承 templateParams，字段数量: ${Object.keys(baseTemplateParams).length}`);
         } else {
-          console.log('⚠️ [换人合同] 原始合同没有 templateParams');
+          this.logger.warn('⚠️ [换人合同] 原始合同没有 templateParams');
         }
 
         // 步骤2：从 createContractDto 中提取新的中文字段（如果有）
-        console.log('🔍 [换人合同] 从 createContractDto 中提取中文字段');
-        console.log('🔍 [换人合同] createContractDto 字段:', Object.keys(createContractDto).join(', '));
+        this.logger.log('🔍 [换人合同] 从 createContractDto 中提取中文字段');
+        this.logger.log(`🔍 [换人合同] createContractDto 字段: ${Object.keys(createContractDto).join(', ')}`);
 
         const extractedTemplateParams = this.extractTemplateParams(createContractDto);
         if (Object.keys(extractedTemplateParams).length > 0) {
-          console.log('📋 [换人合同] 从 createContractDto 提取到中文字段，数量:', Object.keys(extractedTemplateParams).length);
+          this.logger.log(`📋 [换人合同] 从 createContractDto 提取到中文字段，数量: ${Object.keys(extractedTemplateParams).length}`);
           // 合并：新数据覆盖旧数据
           baseTemplateParams = { ...baseTemplateParams, ...extractedTemplateParams };
         } else {
-          console.log('⚠️ [换人合同] createContractDto 中没有提取到中文字段');
+          this.logger.warn('⚠️ [换人合同] createContractDto 中没有提取到中文字段');
         }
 
         // 步骤3：更新服务人员相关字段（换人后必须更新）
-        if (Object.keys(baseTemplateParams).length > 0) {
-          // 更新阿姨信息
-          if (createContractDto.workerName) baseTemplateParams['阿姨姓名'] = createContractDto.workerName;
-          if (createContractDto.workerPhone) baseTemplateParams['阿姨电话'] = createContractDto.workerPhone;
-          if (createContractDto.workerIdCard) baseTemplateParams['阿姨身份证'] = createContractDto.workerIdCard;
-          if (createContractDto.workerAddress) baseTemplateParams['联系地址'] = createContractDto.workerAddress;
+        // 更新阿姨信息
+        if (createContractDto.workerName) baseTemplateParams['阿姨姓名'] = createContractDto.workerName;
+        if (createContractDto.workerPhone) baseTemplateParams['阿姨电话'] = createContractDto.workerPhone;
+        if (createContractDto.workerIdCard) baseTemplateParams['阿姨身份证'] = createContractDto.workerIdCard;
+        if ((createContractDto as any).workerAddress) baseTemplateParams['联系地址'] = (createContractDto as any).workerAddress;
 
-          // 更新工资信息（如果有变化）
-          if (createContractDto.workerSalary) {
-            baseTemplateParams['阿姨工资'] = createContractDto.workerSalary.toString();
-            // 转换为大写
-            const salaryUpper = this.numberToChinese(createContractDto.workerSalary);
-            baseTemplateParams['阿姨工资大写'] = salaryUpper;
-          }
+        // 更新工资信息（如果有变化）
+        if (createContractDto.workerSalary) {
+          baseTemplateParams['阿姨工资'] = createContractDto.workerSalary.toString();
+          // 转换为大写
+          const salaryUpper = this.convertToChineseAmount(createContractDto.workerSalary);
+          baseTemplateParams['阿姨工资大写'] = salaryUpper;
+        }
 
-          // 更新客户服务费（如果有变化）
-          if (createContractDto.customerServiceFee) {
-            baseTemplateParams['服务费'] = createContractDto.customerServiceFee.toString();
-            const feeUpper = this.numberToChinese(createContractDto.customerServiceFee);
-            baseTemplateParams['服务费大写'] = feeUpper;
-          }
+        // 更新客户服务费（如果有变化）
+        if (createContractDto.customerServiceFee) {
+          baseTemplateParams['服务费'] = createContractDto.customerServiceFee.toString();
+          const feeUpper = this.convertToChineseAmount(createContractDto.customerServiceFee);
+          baseTemplateParams['服务费大写'] = feeUpper;
+        }
 
-          (mergedContractData as any).templateParams = baseTemplateParams;
-          console.log('✅ [换人合同] 最终 templateParams 字段数量:', Object.keys(baseTemplateParams).length);
-          console.log('📋 [换人合同] 关键字段:', {
-            阿姨姓名: baseTemplateParams['阿姨姓名'],
-            阿姨工资: baseTemplateParams['阿姨工资'],
-            服务时间: baseTemplateParams['服务时间'],
-            休息方式: baseTemplateParams['休息方式']
-          });
-        } else {
-          console.log('⚠️ [换人合同] 最终没有任何 templateParams 数据');
+        // 🔥 关键修复：总是设置 templateParams，即使之前有空对象
+        (mergedContractData as any).templateParams = baseTemplateParams;
+        this.logger.log(`✅ [换人合同] 最终 templateParams 字段数量: ${Object.keys(baseTemplateParams).length}`);
+        this.logger.log(`📋 [换人合同] 关键字段: ${JSON.stringify({
+          阿姨姓名: baseTemplateParams['阿姨姓名'],
+          阿姨工资: baseTemplateParams['阿姨工资'],
+          服务时间: baseTemplateParams['服务时间'],
+          休息方式: baseTemplateParams['休息方式'],
+          首次匹配费: baseTemplateParams['首次匹配费']
+        })}`);
+
+        if (Object.keys(baseTemplateParams).length === 0) {
+          this.logger.error('❌ [换人合同] 最终没有任何 templateParams 数据！这将导致爱签签署失败！');
         }
       }
 
@@ -1385,14 +1452,14 @@ export class ContractsService {
                 name: mergedContractData.customerName,
                 mobile: mergedContractData.customerPhone,
                 idCard: mergedContractData.customerIdCard,
-                signType: 'auto',
+                signType: 'manual',  // 🔥 修复：使用有感知签章，支持未实名用户
                 validateType: 'sms'
               },
               {
                 name: createContractDto.workerName,
                 mobile: createContractDto.workerPhone,
                 idCard: createContractDto.workerIdCard,
-                signType: 'auto',
+                signType: 'manual',  // 🔥 修复：使用有感知签章，支持未实名用户
                 validateType: 'sms'
               }
             ],
@@ -1406,6 +1473,7 @@ export class ContractsService {
               esignContractNo: esignResult.contractNo,
               esignSignUrls: JSON.stringify(esignResult.signUrls || []),
               esignCreatedAt: new Date(),
+              esignStatus: '0',  // 🔥 修复：设置爱签状态为待签约
               contractStatus: 'signing',
               updatedAt: new Date()
             });

@@ -3933,18 +3933,26 @@ export class ESignService {
    */
   private async getTemplateControlInfo(templateNo: string): Promise<any[]> {
     try {
+      console.log('🔍 正在获取模板控件信息，模板编号:', templateNo);
       const response = await this.callESignAPI('/template/data', {
         templateIdent: templateNo
       });
 
+      console.log('📋 爱签API响应:', JSON.stringify(response, null, 2));
+
       if (response.code === 100000 && response.data) {
+        console.log('✅ 成功获取模板控件信息，字段数量:', response.data.length);
         return response.data;
       } else {
         console.warn('⚠️ 获取模板控件信息失败:', response);
+        console.warn('⚠️ 错误码:', response.code);
+        console.warn('⚠️ 错误信息:', response.msg);
+        console.warn('⚠️ 这可能是因为模板在爱签平台上被修改后需要重新同步');
         return [];
       }
     } catch (error) {
       console.error('❌ 获取模板控件信息异常:', error);
+      console.error('❌ 模板编号:', templateNo);
       return [];
     }
   }

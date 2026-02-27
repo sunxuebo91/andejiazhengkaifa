@@ -2872,33 +2872,44 @@ export class ESignService {
         }> = [];
 
         // 处理服务备注等多行文本字段（只在第一个签署人中处理）
+        // 🔥🔥🔥 注意："服务内容"已改为多选控件(dataType=9)，在 createContractWithTemplate 的
+        //        componentData 中处理，不能再放入 receiverFillStrategyList，否则爱签报 100629
         console.log(`🔍 处理签署人 ${index + 1}/${params.signers.length}: ${signer.name}`);
         console.log(`📋 templateParams存在: ${!!params.templateParams}`);
-        
+
+        // 🔥 已通过 componentData 处理的多选控件字段，不能出现在 receiverFillStrategyList 中
+        const COMPONENT_DATA_FIELDS = ['服务内容'];
+
         if (index === 0 && params.templateParams) {
           console.log(`✅ 开始处理第一个签署人的模板填充策略`);
-          
+
           Object.entries(params.templateParams).forEach(([key, value]) => {
             console.log(`🔍 检查字段: ${key} = ${typeof value === 'string' ? value.substring(0, 30) + '...' : value}`);
-            
-            if (key === '服务备注' || key.includes('服务备注') || key.includes('服务内容') || key.includes('服务项目')) {
+
+            // 🔥 跳过已由 componentData 处理的多选控件字段
+            if (COMPONENT_DATA_FIELDS.includes(key)) {
+              console.log(`⏭️ 跳过字段"${key}"：已在 componentData 中作为多选控件处理`);
+              return;
+            }
+
+            if (key === '服务备注' || key.includes('服务备注') || key.includes('服务项目')) {
               console.log(`✅ 字段匹配: ${key}`);
-              
+
               if (value && typeof value === 'string' && value.trim()) {
                 console.log(`✅ 值有效: ${typeof value}, 长度: ${value.length}`);
-                
+
                 // 对于多行文本，将分号分隔的内容转换为换行符分隔
                 const multiLineContent = value.split('；')
                   .filter(item => item.trim())
                   .join('\n'); // 使用换行符连接多个服务项目
-                
+
                 receiverFillStrategyList.push({
                   attachNo: 1, // 合同附件序号
                   key: key, // 模板中的字段key
                   value: multiLineContent, // 多行文本内容
                   fillStage: 2 // 2=即时填充（接口调用时填充）
                 });
-                
+
                 console.log(`🔄 添加多行文本填充策略: ${key} -> ${multiLineContent.substring(0, 50)}...`);
                 console.log(`📝 完整的多行文本内容:\n${multiLineContent}`);
               } else {
@@ -4036,6 +4047,20 @@ export class ESignService {
     console.log('🔥 输入参数:', JSON.stringify(templateParams, null, 2));
     console.log('🔥 模板控件数量:', templateControls?.length || 0);
 
+    // 🔥🔥🔥 关键修复：已知的多选字段列表
+    // 这些字段名在爱签模板中是多选控件（dataType=9）
+    // 注意：只有在模板控件信息可用时才跳过fillData
+    const KNOWN_MULTISELECT_FIELDS = [
+      '多选6',
+      '多选7',
+    ];
+
+    // 🔥🔥🔥 服务内容特殊处理：当模板信息不可用时，作为文本字段处理
+    // 因为CRM端在这种情况下成功地将"服务内容"作为换行分隔的文本放入fillData
+    const SERVICE_CONTENT_FIELD = '服务内容';
+
+    console.log('🔥 已知多选字段列表:', KNOWN_MULTISELECT_FIELDS);
+
     // 🔥 构建字段类型映射表（基于模板控件信息）
     const fieldTypeMap: Record<string, number> = {};
     if (templateControls && Array.isArray(templateControls)) {
@@ -4045,6 +4070,12 @@ export class ESignService {
         }
       });
       console.log('🔥 字段类型映射表:', JSON.stringify(fieldTypeMap, null, 2));
+    }
+
+    // 🔥🔥🔥 关键：如果模板控件信息为空，使用已知多选字段列表作为回退
+    const useKnownMultiselectFallback = !templateControls || templateControls.length === 0;
+    if (useKnownMultiselectFallback) {
+      console.log('⚠️ 模板控件信息为空，将使用已知多选字段列表作为回退机制');
     }
 
     // 遍历所有模板参数，特殊处理不同类型的字段
@@ -4060,24 +4091,34 @@ export class ESignService {
 
         // 🔥 兼容旧逻辑：字段名包含"多选"的也视为多选字段
         const isMultiSelectByName = key.includes('多选') || key.startsWith('多选');
-        const isMultiSelectField = isMultiSelectByDataType || isMultiSelectByName;
 
-        console.log(`🔥 字段"${key}" dataType=${fieldDataType}, isMultiSelectByDataType=${isMultiSelectByDataType}, isDropdownByDataType=${isDropdownByDataType}`);
+        // 🔥🔥🔥 关键修复：使用已知多选字段列表作为回退机制（仅当模板信息可用时）
+        // 注意：只在模板控件信息可用时才跳过这些字段，否则无法处理
+        const isKnownMultiselectField = !useKnownMultiselectFallback && KNOWN_MULTISELECT_FIELDS.includes(key);
 
-        // 🔥 服务备注字段（dataType 8）：需要换行符分隔的多行文本
-        // ⚠️ 注意：多选字段和下拉控件字段不作为服务字段处理！
-        const isServiceField = !isMultiSelectField && !isDropdownByDataType && (
+        // 🔥 综合判断：任一条件满足即为多选字段
+        const isMultiSelectField = isMultiSelectByDataType || isMultiSelectByName || isKnownMultiselectField;
+
+        // 🔥🔥🔥 关键：检查是否为"服务内容"字段
+        // 当模板信息不可用时，"服务内容"需要作为文本字段处理（用换行符分隔）
+        // 这与CRM端的处理方式一致
+        const isServiceContentFallback = useKnownMultiselectFallback && key === SERVICE_CONTENT_FIELD;
+
+        console.log(`🔥 字段"${key}" dataType=${fieldDataType}, isMultiSelectByDataType=${isMultiSelectByDataType}, isKnownMultiselectField=${isKnownMultiselectField}, isDropdownByDataType=${isDropdownByDataType}, isServiceContentFallback=${isServiceContentFallback}`);
+
+        // 🔥 服务备注/服务内容字段：需要换行符分隔的多行文本
+        // ⚠️ 注意：当模板信息可用时，多选字段和下拉控件字段不作为服务字段处理！
+        // 🔥🔥🔥 关键修复：当模板信息不可用时，"服务内容"作为文本字段处理
+        const isServiceField = (!isMultiSelectField && !isDropdownByDataType && (
                               key === '服务备注' ||
                               key.includes('服务备注') ||
-                              key.includes('服务内容') ||
                               key.includes('服务项目') ||
                               key.includes('服务需求') ||
-                              key === '服务需求' ||
-                              key === '服务内容' ||
-                              key === '服务项目');
+                              key === '服务需求')) ||
+                              isServiceContentFallback;  // 🔥 模板信息不可用时，服务内容作为文本处理
 
         // 🔥 备注类字段（需要保留换行符）- 排除多选和下拉字段
-        const isRemarkField = !isMultiSelectField && !isDropdownByDataType && (
+        const isRemarkField = !isMultiSelectField && !isDropdownByDataType && !isServiceContentFallback && (
                              key === '备注' ||
                              key.includes('备注') ||
                              key === '说明' ||
@@ -4085,11 +4126,12 @@ export class ESignService {
                              key === '合同备注' ||
                              key.includes('合同备注'));
 
-        console.log(`🔥 字段"${key}"匹配检查: isMultiSelectField=${isMultiSelectField}, isDropdownByDataType=${isDropdownByDataType}, isServiceField=${isServiceField}, isRemarkField=${isRemarkField}`);
+        console.log(`🔥 字段"${key}"匹配检查: isMultiSelectField=${isMultiSelectField}, isServiceContentFallback=${isServiceContentFallback}, isDropdownByDataType=${isDropdownByDataType}, isServiceField=${isServiceField}, isRemarkField=${isRemarkField}`);
 
-        if (isMultiSelectField) {
+        if (isMultiSelectField && !isServiceContentFallback) {
           // 🔥🔥🔥 重要修改：多选字段不添加到 fillData，改为在 componentData 中处理
-          console.log(`🔥🔥 检测到多选字段(dataType=9): "${key}"，跳过 fillData 处理（将在 componentData 中处理）`);
+          // 但如果是"服务内容"回退模式，则跳过此判断，继续作为文本处理
+          console.log(`🔥🔥 检测到多选字段: "${key}" (byDataType=${isMultiSelectByDataType}, byName=${isMultiSelectByName}, byKnownList=${isKnownMultiselectField})，跳过 fillData 处理（将在 componentData 中处理）`);
           return;
         } else if (isDropdownByDataType) {
           // 🔥🔥🔥 重要修改：下拉控件字段不添加到 fillData，改为在 componentData 中处理

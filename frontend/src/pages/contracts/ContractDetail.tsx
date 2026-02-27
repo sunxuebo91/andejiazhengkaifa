@@ -39,6 +39,7 @@ import {
 } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { customerService } from '../../services/customerService';
+import { resumeService } from '../../services/resume.service';
 import { Contract, ContractType } from '../../types/contract.types';
 import EditContractModal from '../../components/EditContractModal';
 import ContractStatusCard, { ContractStatusInfo } from '../../components/ContractStatusCard';
@@ -76,6 +77,9 @@ const ContractDetail: React.FC = () => {
 
   // 🆕 新增：客户服务地址
   const [customerAddress, setCustomerAddress] = useState<string | null>(null);
+
+  // 🆕 新增：服务人员联系地址
+  const [workerAddress, setWorkerAddress] = useState<string | null>(null);
 
   // 🆕 新增：保险同步状态
   const [syncInsuranceLoading, setSyncInsuranceLoading] = useState(false);
@@ -120,6 +124,9 @@ const ContractDetail: React.FC = () => {
 
     // 🆕 获取客户服务地址（优先取合同已populate的数据，兜底再查）
     fetchCustomerAddress();
+
+    // 🆕 获取服务人员联系地址
+    fetchWorkerAddress();
   }, [contract]);
 
   // 🆕 获取客户服务地址
@@ -160,6 +167,42 @@ const ContractDetail: React.FC = () => {
       // 客户不存在/手机号不匹配时会被拦截器抛错，这里不需要弹窗，只保留日志
       console.warn('获取客户服务地址失败(手机号兜底):', error);
     }
+  };
+
+  // 🆕 获取服务人员联系地址（首选合同字段，兜底简历户籍地址）
+  const fetchWorkerAddress = async () => {
+    // 1) 首选：从合同字段直接获取
+    if (contract?.workerAddress?.trim()) {
+      setWorkerAddress(contract.workerAddress.trim());
+      return;
+    }
+
+    // 2) 兜底：从关联简历的 hukouAddress（户籍地址）获取
+    const workerObj = typeof contract?.workerId === 'object' ? contract.workerId : null;
+
+    // 2.1) 先尝试已 populate 的数据
+    if (workerObj?.hukouAddress?.trim()) {
+      setWorkerAddress(workerObj.hukouAddress.trim());
+      return;
+    }
+
+    // 2.2) 如果有 workerId._id，再查一次简历详情
+    const resumeId = workerObj?._id || (typeof contract?.workerId === 'string' ? contract.workerId : null);
+
+    if (resumeId) {
+      try {
+        const resume = await resumeService.getById(resumeId);
+        if (resume?.hukouAddress?.trim()) {
+          setWorkerAddress(resume.hukouAddress.trim());
+          return;
+        }
+      } catch (error) {
+        console.warn('获取简历详情(用于地址兜底)失败:', error);
+      }
+    }
+
+    // 未找到地址
+    setWorkerAddress(null);
   };
 
   // 不再需要独立的useEffect获取用户信息，已在fetchContractDetail中处理
@@ -1445,7 +1488,7 @@ const ContractDetail: React.FC = () => {
                 </Descriptions.Item>
 
                 <Descriptions.Item label="联系地址">
-                  {typeof contract.workerId === 'object' && contract.workerId?.currentAddress || '未提供'}
+                  {workerAddress || '未提供'}
                 </Descriptions.Item>
               </Descriptions>
             </Card>

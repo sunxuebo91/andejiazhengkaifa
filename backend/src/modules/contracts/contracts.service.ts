@@ -318,6 +318,19 @@ export class ContractsService {
         createContractDto.contractNumber = await this.generateContractNumber();
       }
 
+      // 🆕 自动从简历获取 workerAddress（如果未提供）
+      if (!createContractDto.workerAddress && createContractDto.workerPhone) {
+        try {
+          const resume = await this.resumeService.findByPhone(createContractDto.workerPhone);
+          if (resume && resume.currentAddress) {
+            createContractDto.workerAddress = resume.currentAddress;
+            console.log('📍 从简历自动获取联系地址:', createContractDto.workerAddress);
+          }
+        } catch (error) {
+          console.warn('⚠️ 从简历获取联系地址失败:', error.message);
+        }
+      }
+
       // 🆕 将 templateNo 映射到 esignTemplateNo（因为 Schema 中只有 esignTemplateNo）
       if ((createContractDto as any).templateNo && !createContractDto.esignTemplateNo) {
         createContractDto.esignTemplateNo = (createContractDto as any).templateNo;
@@ -627,7 +640,7 @@ export class ContractsService {
     let query = this.contractModel
       .findById(id)
       .populate('customerId', 'name phone customerId address')
-      .populate('workerId', 'name phone idCardNumber currentAddress');
+      .populate('workerId', 'name phone idCardNumber hukouAddress');
 
     // 先获取原始数据检查 createdBy 和 lastUpdatedBy 的值
     const rawContract = await this.contractModel.findById(id).lean().exec();
@@ -745,7 +758,7 @@ export class ContractsService {
     const contract = await this.contractModel
       .findOne({ contractNumber })
       .populate('customerId', 'name phone customerId address')
-      .populate('workerId', 'name phone idCardNumber currentAddress')
+      .populate('workerId', 'name phone idCardNumber hukouAddress')
       .populate('createdBy', 'name username')
       .exec();
 
@@ -815,7 +828,7 @@ export class ContractsService {
     let query = this.contractModel
       .findById(id)
       .populate('customerId', 'name phone customerId address')
-      .populate('workerId', 'name phone idCardNumber currentAddress');
+      .populate('workerId', 'name phone idCardNumber hukouAddress');
 
     // 只有当 createdBy 是有效的 ObjectId 时才 populate
     if (isValidObjectId(updatedContract.createdBy?.toString())) {
@@ -1230,7 +1243,7 @@ export class ContractsService {
       const contracts = await this.contractModel
         .find(query)
         .populate('customerId', 'name phone customerId address')
-        .populate('workerId', 'name phone idNumber currentAddress')
+        .populate('workerId', 'name phone idNumber hukouAddress')
         .sort({ createdAt: -1 })
         .limit(10) // 限制返回数量
         .exec();
@@ -1320,6 +1333,19 @@ export class ContractsService {
       // 如果没有提供合同编号，使用爱签返回的编号或生成新的
       if (!mergedContractData.contractNumber) {
         mergedContractData.contractNumber = await this.generateContractNumber();
+      }
+
+      // 🆕 自动从简历获取 workerAddress（如果未提供）
+      if (!mergedContractData.workerAddress && createContractDto.workerPhone) {
+        try {
+          const resume = await this.resumeService.findByPhone(createContractDto.workerPhone);
+          if (resume && resume.currentAddress) {
+            (mergedContractData as any).workerAddress = resume.currentAddress;
+            console.log('📍 [换人合同] 从简历自动获取联系地址:', resume.currentAddress);
+          }
+        } catch (error) {
+          console.warn('⚠️ [换人合同] 从简历获取联系地址失败:', error.message);
+        }
       }
 
       // 🆕 将 templateNo 映射到 esignTemplateNo（与普通创建合同保持一致）

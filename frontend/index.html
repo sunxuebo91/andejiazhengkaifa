@@ -15,6 +15,25 @@
     <link rel="preconnect" href="https://crm.andejiazheng.com" crossorigin />
 
     <title>安得家政</title>
+
+    <!-- 拦截百度地图授权弹窗 -->
+    <script>
+      (function() {
+        // 保存原始的 alert 函数
+        var originalAlert = window.alert;
+        // 重写 alert 函数，过滤百度地图授权提示
+        window.alert = function(msg) {
+          if (msg && typeof msg === 'string' &&
+              (msg.indexOf('商用授权') !== -1 ||
+               msg.indexOf('地图服务') !== -1 ||
+               msg.indexOf('lbsyun.baidu.com') !== -1)) {
+            console.warn('🗺️ 百度地图授权提示已被拦截:', msg);
+            return;
+          }
+          return originalAlert.apply(this, arguments);
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

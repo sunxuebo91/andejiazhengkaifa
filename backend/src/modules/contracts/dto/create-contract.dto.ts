@@ -55,6 +55,10 @@ export class CreateContractDto {
   workerIdCard?: string;
 
   @IsOptional()
+  @IsString()
+  workerAddress?: string; // 服务人员联系地址
+
+  @IsOptional()
   @IsNumber({}, { message: '家政员工资必须是数字' })
   @Min(0, { message: '家政员工资不能小于0' })
   @Transform(({ value }) => value ? parseFloat(value) : 0)

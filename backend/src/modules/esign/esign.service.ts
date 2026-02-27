@@ -3670,7 +3670,8 @@ export class ESignService {
 
       // 构建请求参数，严格按照官方API文档
       console.log('🔥🔥🔥 即将调用convertToFillData方法');
-      const fillData = this.convertToFillData(normalizedTemplateParams);
+      // 🔥 传递模板控件信息，用于正确识别多选字段（dataType 9）
+      const fillData = this.convertToFillData(normalizedTemplateParams, templateData);
       console.log('🔥🔥🔥 convertToFillData调用完成，结果:', JSON.stringify(fillData, null, 2));
       
       // 🔥 确保 notifyUrl 始终有值：优先使用传入的值，否则使用配置中的默认值
@@ -4013,28 +4014,51 @@ export class ESignService {
   /**
    * 转换模板参数为fillData格式（文本类填充）
    * ⚠️ 已废弃：请使用 prepareFillDataForESign 方法（桥接模式）
+   * @param templateParams - 模板参数
+   * @param templateControls - 模板控件信息（用于正确识别字段类型）
    */
-  private convertToFillData(templateParams: Record<string, any>): Record<string, any> {
+  private convertToFillData(templateParams: Record<string, any>, templateControls: any[] = []): Record<string, any> {
     const fillData: Record<string, any> = {};
-    
+
     // 🔥 爱签模板字段长度限制（根据实际模板配置调整）
     const MAX_FIELD_LENGTH = 2000; // 大部分字段的最大长度
     const MAX_MULTISELECT_LENGTH = 500; // 多选字段的最大长度（通常更短）
-    
+
     console.log('🔥🔥🔥 convertToFillData 开始处理 🔥🔥🔥');
     console.log('🔥 输入参数:', JSON.stringify(templateParams, null, 2));
-    
+    console.log('🔥 模板控件数量:', templateControls?.length || 0);
+
+    // 🔥 构建字段类型映射表（基于模板控件信息）
+    const fieldTypeMap: Record<string, number> = {};
+    if (templateControls && Array.isArray(templateControls)) {
+      templateControls.forEach((control: any) => {
+        if (control.dataKey && control.dataType !== undefined) {
+          fieldTypeMap[control.dataKey] = control.dataType;
+        }
+      });
+      console.log('🔥 字段类型映射表:', JSON.stringify(fieldTypeMap, null, 2));
+    }
+
     // 遍历所有模板参数，特殊处理不同类型的字段
     Object.entries(templateParams).forEach(([key, value]) => {
       console.log(`🔥 处理字段: "${key}" = ${JSON.stringify(value)} (类型: ${typeof value}, 是否数组: ${Array.isArray(value)})`);
 
       if (value !== null && value !== undefined && value !== '') {
-        // 🔥 多选字段（dataType 9）：保持分号分隔的字符串格式，不转换为换行符
-        const isMultiSelectField = key.includes('多选') || key.startsWith('多选');
+        // 🔥🔥🔥 关键修复：基于模板控件的 dataType 判断字段类型
+        // dataType 9 = 多选控件, dataType 16 = 下拉控件
+        const fieldDataType = fieldTypeMap[key];
+        const isMultiSelectByDataType = fieldDataType === 9; // 多选控件
+        const isDropdownByDataType = fieldDataType === 16; // 下拉控件
+
+        // 🔥 兼容旧逻辑：字段名包含"多选"的也视为多选字段
+        const isMultiSelectByName = key.includes('多选') || key.startsWith('多选');
+        const isMultiSelectField = isMultiSelectByDataType || isMultiSelectByName;
+
+        console.log(`🔥 字段"${key}" dataType=${fieldDataType}, isMultiSelectByDataType=${isMultiSelectByDataType}, isDropdownByDataType=${isDropdownByDataType}`);
 
         // 🔥 服务备注字段（dataType 8）：需要换行符分隔的多行文本
-        // ⚠️ 注意：不包含"多选"字段！
-        const isServiceField = !isMultiSelectField && (
+        // ⚠️ 注意：多选字段和下拉控件字段不作为服务字段处理！
+        const isServiceField = !isMultiSelectField && !isDropdownByDataType && (
                               key === '服务备注' ||
                               key.includes('服务备注') ||
                               key.includes('服务内容') ||
@@ -4044,19 +4068,24 @@ export class ESignService {
                               key === '服务内容' ||
                               key === '服务项目');
 
-        // 🔥 备注类字段（需要保留换行符）
-        const isRemarkField = key === '备注' ||
+        // 🔥 备注类字段（需要保留换行符）- 排除多选和下拉字段
+        const isRemarkField = !isMultiSelectField && !isDropdownByDataType && (
+                             key === '备注' ||
                              key.includes('备注') ||
                              key === '说明' ||
                              key.includes('说明') ||
                              key === '合同备注' ||
-                             key.includes('合同备注');
+                             key.includes('合同备注'));
 
-        console.log(`🔥 字段"${key}"匹配检查: isMultiSelectField=${isMultiSelectField}, isServiceField=${isServiceField}, isRemarkField=${isRemarkField}`);
+        console.log(`🔥 字段"${key}"匹配检查: isMultiSelectField=${isMultiSelectField}, isDropdownByDataType=${isDropdownByDataType}, isServiceField=${isServiceField}, isRemarkField=${isRemarkField}`);
 
         if (isMultiSelectField) {
           // 🔥🔥🔥 重要修改：多选字段不添加到 fillData，改为在 componentData 中处理
-          console.log(`🔥🔥 检测到多选字段: "${key}"，跳过 fillData 处理（将在 componentData 中处理）`);
+          console.log(`🔥🔥 检测到多选字段(dataType=9): "${key}"，跳过 fillData 处理（将在 componentData 中处理）`);
+          return;
+        } else if (isDropdownByDataType) {
+          // 🔥🔥🔥 重要修改：下拉控件字段不添加到 fillData，改为在 componentData 中处理
+          console.log(`🔥🔥 检测到下拉控件字段(dataType=16): "${key}"，跳过 fillData 处理（将在 componentData 中处理）`);
           return;
         } else if (isServiceField) {
           // 🔥 服务备注字段：转换为换行符分隔的多行文本
@@ -4172,14 +4201,20 @@ export class ESignService {
 
     // 遍历模板参数，查找需要转换为组件数据的字段
     Object.entries(templateParams).forEach(([key, value]) => {
-      const isMultiSelectField = key.includes('多选') || key.startsWith('多选');
+      // 🔥🔥🔥 关键修复：优先基于模板控件的 dataType 判断字段类型
+      const control = templateControls.find((c: any) => c.dataKey === key);
+      const isMultiSelectByDataType = control && control.dataType === 9; // dataType 9 = 多选控件
+      const isMultiSelectByName = key.includes('多选') || key.startsWith('多选');
+      const isMultiSelectField = isMultiSelectByDataType || isMultiSelectByName;
+
+      console.log(`🔥 [componentData] 字段"${key}": dataType=${control?.dataType}, isMultiSelectByDataType=${isMultiSelectByDataType}, isMultiSelectByName=${isMultiSelectByName}`);
 
       if (isMultiSelectField) {
         // 🔥🔥🔥 关键修改：多选字段使用正确的格式
         // 查找模板控件定义
-        const control = templateControls.find(c => c.dataKey === key && c.dataType === 9);
-        if (!control || !control.options) {
-          console.log(`⚠️ 未找到多选字段"${key}"的模板定义，跳过`);
+        const multiSelectControl = templateControls.find((c: any) => c.dataKey === key && c.dataType === 9);
+        if (!multiSelectControl || !multiSelectControl.options) {
+          console.log(`⚠️ 未找到多选字段"${key}"的模板定义(dataType=9)，跳过`);
           return;
         }
 
@@ -4188,13 +4223,16 @@ export class ESignService {
         if (typeof value === 'string' && value.trim()) {
           // 前端发送的是分号分隔的字符串
           selectedTexts = value.split('；').map(t => t.trim()).filter(Boolean);
+        } else if (Array.isArray(value)) {
+          // 也支持数组格式
+          selectedTexts = value.map(v => String(v).trim()).filter(Boolean);
         }
 
         console.log(`🔥 多选字段"${key}"用户选择:`, selectedTexts);
-        console.log(`🔥 模板定义的选项:`, control.options);
+        console.log(`🔥 模板定义的选项:`, multiSelectControl.options);
 
         // 匹配用户选择的文本到模板选项的索引
-        const options = control.options.map((opt) => {
+        const options = multiSelectControl.options.map((opt: any) => {
           const isSelected = selectedTexts.some(text =>
             text.includes(opt.label) || opt.label.includes(text)
           );

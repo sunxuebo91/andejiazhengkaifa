@@ -1494,14 +1494,21 @@ export class ContractsService {
                 name: mergedContractData.customerName,
                 mobile: mergedContractData.customerPhone,
                 idCard: mergedContractData.customerIdCard,
-                signType: 'manual',  // 🔥 修复：使用有感知签章，支持未实名用户
+                signType: 'manual',  // 甲方：有感知签章
                 validateType: 'sms'
               },
               {
                 name: createContractDto.workerName,
                 mobile: createContractDto.workerPhone,
                 idCard: createContractDto.workerIdCard,
-                signType: 'manual',  // 🔥 修复：使用有感知签章，支持未实名用户
+                signType: 'manual',  // 乙方：有感知签章
+                validateType: 'sms'
+              },
+              {
+                name: '北京安得家政有限公司',
+                mobile: '',  // 企业无需手机号
+                idCard: '91110111MACJMD2R5J',  // 企业统一社会信用代码
+                signType: 'auto',  // 丙方（企业）：无感知签章（自动签章）
                 validateType: 'sms'
               }
             ],

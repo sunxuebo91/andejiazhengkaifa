@@ -1038,5 +1038,168 @@ export class ContractsMiniProgramController {
       return { success: false, message: error.message || '合同下载失败' };
     }
   }
+
+  // ==================== 合同撤销/作废接口 ====================
+
+  /**
+   * 撤销合同（针对未签署完成的合同）
+   */
+  @Post('withdraw/:id')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '【小程序】撤销合同' })
+  @ApiParam({ name: 'id', description: '合同ID' })
+  async withdrawContract(
+    @Param('id') contractId: string,
+    @Body() body: { withdrawReason?: string; isNoticeSignUser?: boolean },
+  ) {
+    try {
+      this.logger.log(`📝 收到撤销合同请求，合同ID: ${contractId}`);
+
+      // 1. 获取合同信息
+      const contract = await this.contractsService.findOne(contractId);
+      if (!contract) {
+        return { success: false, message: '合同不存在' };
+      }
+
+      if (!contract.esignContractNo) {
+        return { success: false, message: '该合同未关联爱签合同，无法撤销' };
+      }
+
+      // 2. 调用爱签撤销接口
+      const result = await this.esignService.withdrawContract(
+        contract.esignContractNo,
+        body.withdrawReason,
+        body.isNoticeSignUser || false,
+      );
+
+      // 3. 更新本地合同状态
+      if (result.success) {
+        await this.contractsService['contractModel'].findByIdAndUpdate(
+          contractId,
+          {
+            esignStatus: '7', // 已撤销
+            contractStatus: ContractStatus.CANCELLED,
+          },
+          { new: true },
+        ).exec();
+
+        this.logger.log(`✅ 合同撤销成功: ${contract.contractNumber}`);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`❌ 撤销合同失败: ${error.message}`);
+      return { success: false, message: error.message || '撤销合同失败' };
+    }
+  }
+
+  /**
+   * 作废合同（针对已签署完成的合同）
+   */
+  @Post('invalidate/:id')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '【小程序】作废合同' })
+  @ApiParam({ name: 'id', description: '合同ID' })
+  async invalidateContract(
+    @Param('id') contractId: string,
+    @Body() body: { validityTime?: number; notifyUrl?: string; redirectUrl?: string },
+  ) {
+    try {
+      this.logger.log(`📝 收到作废合同请求，合同ID: ${contractId}`);
+
+      // 1. 获取合同信息
+      const contract = await this.contractsService.findOne(contractId);
+      if (!contract) {
+        return { success: false, message: '合同不存在' };
+      }
+
+      if (!contract.esignContractNo) {
+        return { success: false, message: '该合同未关联爱签合同，无法作废' };
+      }
+
+      // 2. 调用爱签作废接口
+      const result = await this.esignService.invalidateContract(
+        contract.esignContractNo,
+        body.validityTime || 15, // 默认15天
+        body.notifyUrl,
+        body.redirectUrl,
+      );
+
+      // 3. 更新本地合同状态
+      if (result.success) {
+        await this.contractsService['contractModel'].findByIdAndUpdate(
+          contractId,
+          {
+            esignStatus: '6', // 已作废
+            contractStatus: ContractStatus.CANCELLED,
+          },
+          { new: true },
+        ).exec();
+
+        this.logger.log(`✅ 合同作废成功: ${contract.contractNumber}`);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`❌ 作废合同失败: ${error.message}`);
+      return { success: false, message: error.message || '作废合同失败' };
+    }
+  }
+
+  /**
+   * 智能撤销/作废合同（自动根据合同状态选择操作）
+   */
+  @Post('cancel/:id')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '【小程序】智能撤销/作废合同' })
+  @ApiParam({ name: 'id', description: '合同ID' })
+  async cancelContract(
+    @Param('id') contractId: string,
+    @Body() body: { reason?: string; isNoticeSignUser?: boolean },
+  ) {
+    try {
+      this.logger.log(`📝 收到智能撤销/作废合同请求，合同ID: ${contractId}`);
+
+      // 1. 获取合同信息
+      const contract = await this.contractsService.findOne(contractId);
+      if (!contract) {
+        return { success: false, message: '合同不存在' };
+      }
+
+      if (!contract.esignContractNo) {
+        return { success: false, message: '该合同未关联爱签合同，无法操作' };
+      }
+
+      // 2. 调用爱签智能撤销/作废接口
+      const result = await this.esignService.cancelContract(
+        contract.esignContractNo,
+        body.reason,
+        body.isNoticeSignUser || false,
+      );
+
+      // 3. 更新本地合同状态
+      if (result.success) {
+        const esignStatus = result.action === 'withdraw' ? '7' : '6';
+        await this.contractsService['contractModel'].findByIdAndUpdate(
+          contractId,
+          {
+            esignStatus: esignStatus,
+            contractStatus: ContractStatus.CANCELLED,
+          },
+          { new: true },
+        ).exec();
+
+        this.logger.log(`✅ 合同${result.action === 'withdraw' ? '撤销' : '作废'}成功: ${contract.contractNumber}`);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`❌ 智能撤销/作废合同失败: ${error.message}`);
+      return { success: false, message: error.message || '操作失败' };
+    }
+  }
 }
 

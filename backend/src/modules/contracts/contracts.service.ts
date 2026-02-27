@@ -858,51 +858,67 @@ export class ContractsService {
 
     this.logger.log(`🗑️ 准备删除合同: ${contractToDelete.contractNumber}`);
 
-    // 🔧 如果这是一个换人合同，同时删除被替换的旧合同
-    if (contractToDelete.replacesContractId) {
-      this.logger.log(`检测到换人合同，同时删除被替换的旧合同: ${contractToDelete.replacesContractId}`);
+    // 🔧 收集整个换人链条中的所有合同ID
+    const contractIdsToDelete: string[] = [id];
 
-      try {
-        const oldContract = await this.contractModel.findById(contractToDelete.replacesContractId).exec();
+    // 向前追溯：找到所有被替换的旧合同（递归）
+    await this.collectReplacedContracts(contractToDelete.replacesContractId, contractIdsToDelete);
 
-        if (oldContract) {
-          await this.contractModel.findByIdAndDelete(contractToDelete.replacesContractId).exec();
-          this.logger.log(`✅ 已删除旧合同: ${oldContract.contractNumber}`);
-        } else {
-          this.logger.warn(`⚠️ 被替换的旧合同不存在: ${contractToDelete.replacesContractId}`);
-        }
-      } catch (error) {
-        this.logger.error(`删除旧合同失败: ${error.message}`);
-        // 不抛出错误，继续删除当前合同
+    // 向后追溯：找到所有替换它的新合同（递归）
+    await this.collectReplacingContracts(contractToDelete.replacedByContractId, contractIdsToDelete);
+
+    this.logger.log(`📋 将要删除的合同链条共 ${contractIdsToDelete.length} 个合同`);
+
+    // 批量删除所有关联合同
+    const deleteResult = await this.contractModel.deleteMany({
+      _id: { $in: contractIdsToDelete }
+    }).exec();
+
+    this.logger.log(`✅ 已删除 ${deleteResult.deletedCount} 个合同（包含换人历史记录）`);
+  }
+
+  /**
+   * 递归收集所有被替换的旧合同（向前追溯）
+   */
+  private async collectReplacedContracts(contractId: any, collected: string[]): Promise<void> {
+    if (!contractId) return;
+
+    const contractIdStr = contractId.toString();
+    if (collected.includes(contractIdStr)) return; // 防止循环
+
+    try {
+      const contract = await this.contractModel.findById(contractId).exec();
+      if (contract) {
+        collected.push(contractIdStr);
+        this.logger.log(`  ↩️ 找到被替换的旧合同: ${contract.contractNumber}`);
+        // 继续向前追溯
+        await this.collectReplacedContracts(contract.replacesContractId, collected);
       }
+    } catch (error) {
+      this.logger.warn(`⚠️ 查找旧合同失败: ${error.message}`);
     }
+  }
 
-    // 🔧 如果这是一个被替换的旧合同，同时删除替换它的新合同
-    if (contractToDelete.replacedByContractId) {
-      this.logger.log(`检测到被替换的旧合同，同时删除替换它的新合同: ${contractToDelete.replacedByContractId}`);
+  /**
+   * 递归收集所有替换它的新合同（向后追溯）
+   */
+  private async collectReplacingContracts(contractId: any, collected: string[]): Promise<void> {
+    if (!contractId) return;
 
-      try {
-        const newContract = await this.contractModel.findById(contractToDelete.replacedByContractId).exec();
+    const contractIdStr = contractId.toString();
+    if (collected.includes(contractIdStr)) return; // 防止循环
 
-        if (newContract) {
-          await this.contractModel.findByIdAndDelete(contractToDelete.replacedByContractId).exec();
-          this.logger.log(`✅ 已删除新合同: ${newContract.contractNumber}`);
-        } else {
-          this.logger.warn(`⚠️ 替换的新合同不存在: ${contractToDelete.replacedByContractId}`);
-        }
-      } catch (error) {
-        this.logger.error(`删除新合同失败: ${error.message}`);
-        // 不抛出错误，继续删除当前合同
+    try {
+      const contract = await this.contractModel.findById(contractId).exec();
+      if (contract) {
+        collected.push(contractIdStr);
+        this.logger.log(`  ↪️ 找到替换的新合同: ${contract.contractNumber}`);
+        // 继续向后追溯
+        await this.collectReplacingContracts(contract.replacedByContractId, collected);
       }
+    } catch (error) {
+      this.logger.warn(`⚠️ 查找新合同失败: ${error.message}`);
     }
-
-    // 执行删除当前合同
-    const result = await this.contractModel.findByIdAndDelete(id).exec();
-    if (!result) {
-      throw new NotFoundException('合同删除失败');
-    }
-
-    this.logger.log(`✅ 合同已删除: ${result.contractNumber}`);
   }
 
   // 获取统计信息（只统计有效合同）

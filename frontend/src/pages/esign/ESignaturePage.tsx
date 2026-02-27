@@ -2387,6 +2387,17 @@ const ESignatureStepPage: React.FC = () => {
                         return value;
                       }
                     }
+
+                    // 6. 服务内容（多选字段）
+                    if (fieldKey.includes('服务内容') || fieldLabel.includes('服务内容') ||
+                        fieldKey.includes('服务备注') || fieldLabel.includes('服务备注') ||
+                        fieldKey.includes('服务项目') || fieldLabel.includes('服务项目')) {
+                      const value = originalParams[field.key];
+                      if (value !== undefined) {
+                        console.log(`🔄 换人模式：从原合同获取服务内容 ${field.key}:`, value);
+                        return value;
+                      }
+                    }
                   }
 
                   if (!stepData.users?.batchRequest) return undefined;

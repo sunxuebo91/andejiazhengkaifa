@@ -191,9 +191,11 @@ const ContractDetail: React.FC = () => {
 
     if (resumeId) {
       try {
-        const resume = await resumeService.getById(resumeId);
-        if (resume?.hukouAddress?.trim()) {
-          setWorkerAddress(resume.hukouAddress.trim());
+        const response = await resumeService.getById(resumeId);
+        const resume = response as any;  // API 返回结构可能嵌套
+        const hukouAddr = resume?.hukouAddress || resume?.data?.hukouAddress;
+        if (hukouAddr?.trim()) {
+          setWorkerAddress(hukouAddr.trim());
           return;
         }
       } catch (error) {

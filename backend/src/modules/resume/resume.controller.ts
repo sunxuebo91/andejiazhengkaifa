@@ -7,7 +7,9 @@ import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Resume } from './models/resume.entity';
 import { UploadService } from '../upload/upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { UseGuards } from '@nestjs/common';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UseGuards, Request } from '@nestjs/common';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -1015,8 +1017,9 @@ export class ResumeController {
   }
 
   @Post('miniprogram/create')
-  @Public()
-  @ApiOperation({ summary: '小程序创建简历（支持幂等性和去重，无需认证）' })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @ApiOperation({ summary: '小程序创建简历（支持幂等性和去重）' })
   @ApiBody({ type: CreateResumeV2Dto })
   async createForMiniprogram(
     @Body() dto: CreateResumeV2Dto,
@@ -1126,8 +1129,9 @@ export class ResumeController {
   }
 
   @Get('miniprogram/:id')
-  @Public()
-  @ApiOperation({ summary: '小程序获取简历详情（无需认证）' })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @ApiOperation({ summary: '小程序获取简历详情' })
   @ApiParam({ name: 'id', description: '简历ID' })
   async getForMiniprogram(
     @Param('id') id: string,
@@ -1228,6 +1232,8 @@ export class ResumeController {
   }
 
   @Patch('miniprogram/:id')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
   @ApiOperation({ summary: '小程序更新简历（JSON格式）' })
   @ApiParam({ name: 'id', description: '简历ID' })
   @ApiBody({ type: UpdateResumeDto })
@@ -1307,6 +1313,8 @@ export class ResumeController {
   }
 
   @Post('miniprogram/:id/upload-file')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
   @UseInterceptors(FileInterceptor('file', multerConfig))
   @ApiOperation({ summary: '小程序上传单个文件' })
   @ApiConsumes('multipart/form-data')
@@ -1372,6 +1380,8 @@ export class ResumeController {
   }
 
   @Post('miniprogram/:id/upload-files')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
   @UseInterceptors(FilesInterceptor('files', 30, multerConfig))
   @ApiOperation({ summary: '小程序批量上传文件' })
   @ApiConsumes('multipart/form-data')
@@ -1457,6 +1467,8 @@ export class ResumeController {
   }
 
   @Delete('miniprogram/:id/delete-file')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
   @ApiOperation({ summary: '小程序删除文件' })
   @ApiParam({ name: 'id', description: '简历ID' })
   @ApiBody({
@@ -1511,6 +1523,8 @@ export class ResumeController {
   }
 
   @Post('miniprogram/validate')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
   @ApiOperation({ summary: '小程序数据验证' })
   @ApiBody({
     schema: {
@@ -1570,6 +1584,8 @@ export class ResumeController {
   }
 
   @Get('miniprogram/stats')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
   @ApiOperation({ summary: '小程序统计信息' })
   async getStatsForMiniprogram(@Req() req) {
     try {

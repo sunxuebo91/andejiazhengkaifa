@@ -66,7 +66,7 @@
 
 - **生产环境**: `https://crm.andejiazheng.com/api`
 - **开发环境**: `http://localhost:3000/api`
-- **认证方式**: Bearer Token
+- **认证方式**: JWT Bearer Token
 - **请求头**: `Authorization: Bearer {token}`
 
 ### 获取Token
@@ -88,11 +88,47 @@ Content-Type: application/json
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "user": {
       "id": "user_id",
-      "openid": "openid"
+      "openid": "openid",
+      "role": "employee"
     }
   }
 }
 ```
+
+### 🛡️ 角色权限控制（RBAC）
+
+小程序API实施了基于角色的访问控制（v1.9.0起），不同角色看到的数据范围不同：
+
+| 角色 | 英文标识 | 数据范围 | 说明 |
+|------|---------|---------|------|
+| **系统管理员** | `admin` | 全部数据 | 可查看和操作所有记录 |
+| **经理** | `manager` | 全部数据 | 可查看和操作所有记录 |
+| **普通员工** | `employee` | 仅自己的数据 | 只能查看和操作自己创建的记录（按 `createdBy` 过滤） |
+
+**权限规则**：
+- 所有业务接口（合同、保险、简历、员工评价）均需要 JWT 认证
+- 每个请求必须在 Header 中携带有效的 `Authorization: Bearer {token}`
+- 普通员工只能看到自己创建的合同、保单等数据
+- 管理员和经理可以看到全部数据
+
+**公开接口（无需Token）**：
+- 用户注册/登录接口（`/api/miniprogram-users/*`）
+- Banner轮播图（`/api/banners/miniprogram/*`）
+- 文章内容（`/api/articles/miniprogram/*`）
+- 阿姨自助注册（`/api/resumes/miniprogram/self-register`）
+- 简历分享链接（`/api/resumes/shared/:token`）
+
+### 接口认证总览
+
+| 模块 | 认证要求 | 角色过滤 |
+|------|---------|---------|
+| 用户注册与登录 | ❌ 无需认证 | - |
+| Banner轮播图 | ❌ 无需认证 | - |
+| 文章内容 | ❌ 无需认证 | - |
+| 简历管理 | ✅ 需要JWT（self-register除外） | ✅ 普通员工仅自己数据 |
+| 员工评价 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
+| 合同管理 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
+| 保险保单管理 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
 
 ---
 
@@ -2008,7 +2044,7 @@ wx.request({
 1. **自动生成**：标签由系统自动提取，无需手动维护
 2. **实时更新**：每次添加新评价后，标签会自动更新
 3. **可能为空**：如果没有评价数据，`recommendationTags` 将返回空数组 `[]`
-4. **无需认证**：获取简历详情接口无需登录即可访问
+4. **需要认证**：获取简历详情接口需要JWT认证，普通员工仅可查看自己创建的简历
 
 ---
 
@@ -3643,6 +3679,9 @@ const updateWorkExperience = async (resumeId) => {
 
 内部员工评价管理，支持创建评价、查询评价列表和统计分析。
 
+**路由前缀**: `/api/employee-evaluations/`
+**认证要求**: ✅ 所有接口均需JWT认证 + 角色权限验证
+
 ### 创建员工评价
 
 创建对员工的内部评价记录。
@@ -3773,9 +3812,10 @@ wx.request({
 
 ```http
 GET /api/employee-evaluations/miniprogram/list?employeeId={employeeId}&page=1&pageSize=10
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录（公开接口）
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 查询参数
 
@@ -3830,9 +3870,13 @@ GET /api/employee-evaluations/miniprogram/list?employeeId={employeeId}&page=1&pa
 
 ```javascript
 // 获取某个员工的评价列表
+const token = wx.getStorageSync('token');
 wx.request({
   url: 'https://crm.andejiazheng.com/api/employee-evaluations/miniprogram/list',
   method: 'GET',
+  header: {
+    'Authorization': `Bearer ${token}`
+  },
   data: {
     employeeId: '507f1f77bcf86cd799439011',
     page: 1,
@@ -3857,9 +3901,10 @@ wx.request({
 
 ```http
 GET /api/employee-evaluations/miniprogram/statistics/{employeeId}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录（公开接口）
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 路径参数
 
@@ -3939,7 +3984,8 @@ wx.request({
 小程序端合同管理接口，支持合同创建、查询、更新、换人、保险同步、电子签章等完整操作流程。
 
 **路由前缀**: `/api/contracts/miniprogram/`
-**认证要求**: 所有接口均为公开接口，无需JWT认证
+**认证要求**: ✅ 所有接口均需JWT认证 + 角色权限验证
+**数据隔离**: 普通员工仅可查看自己创建的合同，管理员和经理可查看全部
 
 ### 合同类型枚举（ContractType）
 
@@ -3975,9 +4021,10 @@ wx.request({
 
 ```http
 GET /api/contracts/miniprogram/list?page=1&limit=10&search=孙学博
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -4030,9 +4077,10 @@ GET /api/contracts/miniprogram/list?page=1&limit=10&search=孙学博
 
 ```http
 GET /api/contracts/miniprogram/detail/{id}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -4075,9 +4123,10 @@ GET /api/contracts/miniprogram/detail/{id}
 
 ```http
 GET /api/contracts/miniprogram/by-number/{contractNumber}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -4099,9 +4148,10 @@ GET /api/contracts/miniprogram/by-number/{contractNumber}
 
 ```http
 GET /api/contracts/miniprogram/by-customer/{customerId}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 响应
 
@@ -4121,9 +4171,10 @@ GET /api/contracts/miniprogram/by-customer/{customerId}
 
 ```http
 GET /api/contracts/miniprogram/by-worker-id/{workerId}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 响应
 
@@ -4145,9 +4196,10 @@ GET /api/contracts/miniprogram/by-worker-id/{workerId}
 
 ```http
 GET /api/contracts/miniprogram/search-worker?name=赵瑶如&idCard=141034199605090042&phone=18614058566
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -4185,9 +4237,10 @@ GET /api/contracts/miniprogram/search-worker?name=赵瑶如&idCard=1410341996050
 
 ```http
 GET /api/contracts/miniprogram/check-customer/{customerPhone}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -4217,9 +4270,10 @@ GET /api/contracts/miniprogram/check-customer/{customerPhone}
 
 ```http
 GET /api/contracts/miniprogram/history/{customerPhone}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -4249,9 +4303,10 @@ GET /api/contracts/miniprogram/history/{customerPhone}
 
 ```http
 GET /api/contracts/miniprogram/statistics
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 响应
 
@@ -4276,10 +4331,11 @@ GET /api/contracts/miniprogram/statistics
 
 ```http
 POST /api/contracts/miniprogram/create
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 ```json
 {
@@ -4339,10 +4395,11 @@ Content-Type: application/json
 
 ```http
 PUT /api/contracts/miniprogram/update/{id}
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 路径参数 | 说明 |
 |------|------|
@@ -4370,10 +4427,11 @@ Content-Type: application/json
 
 ```http
 POST /api/contracts/miniprogram/change-worker/{originalContractId}
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 路径参数 | 说明 |
 |------|------|
@@ -4419,9 +4477,10 @@ Content-Type: application/json
 
 ```http
 POST /api/contracts/miniprogram/sync-insurance/{id}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 路径参数 | 说明 |
 |------|------|
@@ -4447,9 +4506,10 @@ POST /api/contracts/miniprogram/sync-insurance/{id}
 
 ```http
 POST /api/contracts/miniprogram/sync-esign-status/{id}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 路径参数 | 说明 |
 |------|------|
@@ -4491,9 +4551,10 @@ POST /api/contracts/miniprogram/sync-esign-status/{id}
 
 ```http
 POST /api/contracts/miniprogram/sync-all-esign-status
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 响应
 
@@ -4539,9 +4600,10 @@ POST /api/contracts/miniprogram/sync-all-esign-status
 
 ```http
 GET /api/contracts/miniprogram/esign-info/{id}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 路径参数 | 说明 |
 |------|------|
@@ -4572,9 +4634,10 @@ GET /api/contracts/miniprogram/esign-info/{id}
 
 ```http
 POST /api/contracts/miniprogram/resend-sign-urls/{id}
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 路径参数 | 说明 |
 |------|------|
@@ -4605,10 +4668,11 @@ POST /api/contracts/miniprogram/resend-sign-urls/{id}
 
 ```http
 POST /api/contracts/miniprogram/download-contract/{id}
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 | 路径参数 | 说明 |
 |------|------|
@@ -4644,13 +4708,23 @@ Content-Type: application/json
 // utils/contract-api.js
 const BASE_URL = 'https://crm.andejiazheng.com/api';
 
-/** 获取合同列表 */
+/** 获取请求头（含JWT认证） */
+function getAuthHeader() {
+  const token = wx.getStorageSync('token');
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+}
+
+/** 获取合同列表（普通员工仅返回自己创建的合同） */
 export function getContractList(params = {}) {
   const query = new URLSearchParams(params).toString();
   return new Promise((resolve, reject) => {
     wx.request({
       url: `${BASE_URL}/contracts/miniprogram/list?${query}`,
       method: 'GET',
+      header: getAuthHeader(),
       success(res) {
         if (res.data.success) resolve(res.data.data);
         else reject(new Error(res.data.message));
@@ -4666,6 +4740,7 @@ export function checkCustomerContract(phone) {
     wx.request({
       url: `${BASE_URL}/contracts/miniprogram/check-customer/${phone}`,
       method: 'GET',
+      header: getAuthHeader(),
       success(res) {
         if (res.data.success) resolve(res.data.data);
         else reject(new Error(res.data.message));
@@ -4681,7 +4756,7 @@ export function createChangeWorkerContract(originalContractId, data) {
     wx.request({
       url: `${BASE_URL}/contracts/miniprogram/change-worker/${originalContractId}`,
       method: 'POST',
-      header: { 'Content-Type': 'application/json' },
+      header: getAuthHeader(),
       data,
       success(res) {
         if (res.data.success) resolve(res.data.data);
@@ -4699,9 +4774,9 @@ export function createChangeWorkerContract(originalContractId, data) {
 
 小程序端保险保单管理接口，对接大树保平台，支持保单创建、查询、支付、退保等完整操作流程。
 
-### 📱 一句话总结
-
-所有保单相关接口均为公开接口（无需登录），路由前缀 `/api/dashubao/miniprogram/`。
+**路由前缀**: `/api/dashubao/miniprogram/`
+**认证要求**: ✅ 所有接口均需JWT认证 + 角色权限验证
+**数据隔离**: 普通员工仅可查看自己创建的保单，管理员和经理可查看全部
 
 ### 📋 接口列表
 
@@ -4732,9 +4807,10 @@ export function createChangeWorkerContract(originalContractId, data) {
 
 ```http
 GET /api/dashubao/miniprogram/policies?page=1&limit=10&status=active
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 请求参数
 
@@ -4809,9 +4885,10 @@ GET /api/dashubao/miniprogram/policies?page=1&limit=10&status=active
 
 ```http
 GET /api/dashubao/miniprogram/policy/by-id-card/141034199605090042
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 响应
 
@@ -4849,9 +4926,10 @@ GET /api/dashubao/miniprogram/policy/by-id-card/141034199605090042
 
 ```http
 GET /api/dashubao/miniprogram/policy/6985518e2b89d09207c00045
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 响应
 
@@ -4907,9 +4985,10 @@ GET /api/dashubao/miniprogram/policy/6985518e2b89d09207c00045
 
 ```http
 GET /api/dashubao/miniprogram/policy/by-policy-no/14527006800217497720
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 响应
 
@@ -4925,9 +5004,10 @@ GET /api/dashubao/miniprogram/policy/by-policy-no/14527006800217497720
 
 ```http
 GET /api/dashubao/miniprogram/policy/by-policy-ref/ANDE1770344846144mrvapl
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 响应
 
@@ -4943,10 +5023,11 @@ GET /api/dashubao/miniprogram/policy/by-policy-ref/ANDE1770344846144mrvapl
 
 ```http
 POST /api/dashubao/miniprogram/policy
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 请求参数
 
@@ -5048,10 +5129,11 @@ Content-Type: application/json
 
 ```http
 POST /api/dashubao/miniprogram/policy/query
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 请求参数
 
@@ -5092,9 +5174,10 @@ Content-Type: application/json
 
 ```http
 POST /api/dashubao/miniprogram/policy/payment/ANDE1770344846144mrvapl
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 路径参数
 
@@ -5132,10 +5215,11 @@ POST /api/dashubao/miniprogram/policy/payment/ANDE1770344846144mrvapl
 
 ```http
 POST /api/dashubao/miniprogram/policy/cancel
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 ```json
 {
@@ -5163,10 +5247,11 @@ Content-Type: application/json
 
 ```http
 POST /api/dashubao/miniprogram/policy/surrender
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 ```json
 {
@@ -5200,10 +5285,11 @@ Content-Type: application/json
 
 ```http
 POST /api/dashubao/miniprogram/policy/print
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 ```json
 {
@@ -5225,10 +5311,11 @@ Content-Type: application/json
 
 ```http
 POST /api/dashubao/miniprogram/policy/amend
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 ```json
 {
@@ -5269,10 +5356,11 @@ Content-Type: application/json
 
 ```http
 POST /api/dashubao/miniprogram/policy/add-insured
+Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 ```json
 {
@@ -5311,9 +5399,10 @@ Content-Type: application/json
 
 ```http
 POST /api/dashubao/miniprogram/policy/sync/ANDE1770344846144mrvapl
+Authorization: Bearer {token}
 ```
 
-**认证**: ❌ 无需登录
+**认证**: ✅ 需要JWT认证 + 角色权限
 
 #### 路径参数
 
@@ -5343,8 +5432,17 @@ POST /api/dashubao/miniprogram/policy/sync/ANDE1770344846144mrvapl
 // utils/insurance-api.js
 const BASE_URL = 'https://crm.andejiazheng.com/api';
 
+/** 获取请求头（含JWT认证） */
+function getAuthHeader() {
+  const token = wx.getStorageSync('token');
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+}
+
 /**
- * 获取保单列表
+ * 获取保单列表（普通员工仅返回自己创建的保单）
  */
 export function getPolicyList(params = {}) {
   const query = new URLSearchParams(params).toString();
@@ -5352,6 +5450,7 @@ export function getPolicyList(params = {}) {
     wx.request({
       url: `${BASE_URL}/dashubao/miniprogram/policies?${query}`,
       method: 'GET',
+      header: getAuthHeader(),
       success(res) {
         if (res.data.success) resolve(res.data.data);
         else reject(new Error(res.data.message));
@@ -5369,6 +5468,7 @@ export function getPoliciesByIdCard(idCard) {
     wx.request({
       url: `${BASE_URL}/dashubao/miniprogram/policy/by-id-card/${idCard}`,
       method: 'GET',
+      header: getAuthHeader(),
       success(res) {
         if (res.data.success) resolve(res.data.data);
         else reject(new Error(res.data.message));
@@ -5386,7 +5486,7 @@ export function createPolicy(policyData) {
     wx.request({
       url: `${BASE_URL}/dashubao/miniprogram/policy`,
       method: 'POST',
-      header: { 'Content-Type': 'application/json' },
+      header: getAuthHeader(),
       data: policyData,
       success(res) {
         if (res.data.success) resolve(res.data.data);
@@ -5405,6 +5505,7 @@ export function createPaymentOrder(policyRef) {
     wx.request({
       url: `${BASE_URL}/dashubao/miniprogram/policy/payment/${policyRef}`,
       method: 'POST',
+      header: getAuthHeader(),
       success(res) {
         if (res.data.success) resolve(res.data.data);
         else reject(new Error(res.data.message));
@@ -5439,9 +5540,18 @@ export async function payForPolicy(policyRef) {
 
 如有问题或建议，请联系技术团队。
 
-**文档版本**: v1.8.0
-**最后更新**: 2026-02-06
+**文档版本**: v1.9.0
+**最后更新**: 2026-02-28
 **维护团队**: 安得家政技术团队
+
+**v1.9.0 更新内容（安全加固）**:
+- 🔒 **合同模块**：移除所有 `@Public()` 装饰器，新增 JWT 认证 + 角色权限控制（24个接口）
+- 🔒 **保险模块**：移除所有 `@Public()` 装饰器，新增 JWT 认证 + 角色权限控制（14个接口）
+- 🔒 **简历模块**：miniprogram 接口新增 `RolesGuard` 角色权限验证，移除 `create`/`get-by-id` 的 `@Public()`
+- 🔒 **员工评价模块**：移除所有 `@Public()` 装饰器，新增类级 JWT 认证 + 角色权限控制（3个接口）
+- ✅ 实施 RBAC 角色数据隔离：普通员工仅可查看自己创建的数据，管理员/经理可查看全部
+- ✅ 保持公开接口不变：阿姨自助注册（self-register）、分享链接（shared/:token）、Banner、文章
+- ⚠️ **注意**：所有业务接口现在需要在请求头中携带 `Authorization: Bearer {token}`，未携带将返回 401
 
 **v1.8.0 更新内容**:
 - ✅ 新增合同管理API（17个接口）
@@ -5449,8 +5559,6 @@ export async function payForPolicy(policyRef) {
 - ✅ 支持根据合同编号、客户ID、服务人员信息等多种方式查询
 - ✅ 支持爱签电子签章集成（签署链接、下载合同、状态查询）
 - ✅ 支持客户合同历史和统计信息
-- ✅ 所有接口为公开接口，无需认证
-- ✅ 已上线生产环境，可直接使用
 
 **v1.7.0 更新内容**:
 - ✅ 新增保险保单管理API（14个接口）
@@ -5458,16 +5566,12 @@ export async function payForPolicy(policyRef) {
 - ✅ 支持根据身份证号、保单号、商户单号多种方式查询
 - ✅ 小程序支付固定使用MINI支付方式
 - ✅ 支持从大树保同步最新保单状态
-- ✅ 所有接口为公开接口，无需认证
-- ✅ 已上线生产环境，可直接使用
 
 **v1.6.0 更新内容**:
 - ✅ 新增员工评价管理API（创建评价、获取评价列表、获取评价统计）
 - ✅ 支持多维度评分（服务态度、专业技能、工作效率、沟通能力）
 - ✅ 支持评价标签和详细评语
 - ✅ 提供评价统计和分析功能
-- ✅ 查询接口为公开接口，无需认证
-- ✅ 已上线生产环境，可直接使用
 
 **v1.5.0 更新内容**:
 - ✅ 新增文章内容管理API（获取文章列表、获取文章详情）
@@ -5475,5 +5579,4 @@ export async function payForPolicy(policyRef) {
 - ✅ 提供完整的小程序调用示例和页面代码
 - ✅ 支持文章搜索、分页和状态筛选
 - ✅ 支持富文本渲染和图片展示
-- ✅ 已上线生产环境，可直接使用
 

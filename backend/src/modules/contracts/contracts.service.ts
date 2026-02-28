@@ -483,7 +483,7 @@ export class ContractsService {
   }
 
   // 获取合同列表
-  async findAll(page: number = 1, limit: number = 10, search?: string, showAll: boolean = false): Promise<{
+  async findAll(page: number = 1, limit: number = 10, search?: string, showAll: boolean = false, createdBy?: string): Promise<{
     contracts: Contract[];
     total: number;
     page: number;
@@ -492,6 +492,11 @@ export class ContractsService {
   }> {
     try {
       const query: any = {};
+
+      // 按创建人过滤（用于普通员工只看自己的合同）
+      if (createdBy) {
+        query.createdBy = new Types.ObjectId(createdBy);
+      }
 
       // 默认只显示最新合同，除非明确要求显示所有合同
       if (!showAll) {

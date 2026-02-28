@@ -1,12 +1,16 @@
-import { Controller, Get, Post, Body, Query, Param, Logger, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, Logger, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { EmployeeEvaluationService } from './employee-evaluation.service';
 import { QueryEvaluationDto } from './dto/query-evaluation.dto';
 import { CreateEvaluationDto } from './dto/create-evaluation.dto';
-import { Public } from '../auth/decorators/public.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('员工评价')
 @Controller('employee-evaluations')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
 export class EmployeeEvaluationController {
   private readonly logger = new Logger(EmployeeEvaluationController.name);
 
@@ -95,7 +99,6 @@ export class EmployeeEvaluationController {
    * 小程序获取员工评价列表（公开接口，只读展示）
    */
   @Get('miniprogram/list')
-  @Public()
   @ApiOperation({ summary: '小程序获取员工评价列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getListForMiniprogram(@Query() query: QueryEvaluationDto) {
@@ -123,7 +126,6 @@ export class EmployeeEvaluationController {
    * 小程序获取员工评价详情（公开接口）
    */
   @Get('miniprogram/:id')
-  @Public()
   @ApiOperation({ summary: '小程序获取员工评价详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getDetailForMiniprogram(@Param('id') id: string) {
@@ -151,7 +153,6 @@ export class EmployeeEvaluationController {
    * 小程序获取员工评价统计（公开接口）
    */
   @Get('miniprogram/statistics/:employeeId')
-  @Public()
   @ApiOperation({ summary: '小程序获取员工评价统计' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getStatisticsForMiniprogram(@Param('employeeId') employeeId: string) {

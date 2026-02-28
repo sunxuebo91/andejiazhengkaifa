@@ -41,6 +41,10 @@ export class DashubaoController {
     return user?.role === '系统管理员' || user?.role === 'admin' || user?.role === '管理员';
   }
 
+  private isManagerOrAdmin(user: any): boolean {
+    return this.isAdmin(user) || user?.role === '经理' || user?.role === 'manager';
+  }
+
   private canDeletePolicy(user: any): boolean {
     const isSpecialUser = user?.name === '孙学博' || user?.username === '孙学博';
     return this.isAdmin(user) && isSpecialUser;
@@ -195,7 +199,7 @@ export class DashubaoController {
   @Get('policies')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '获取本地保单列表' })
+  @ApiOperation({ summary: '获取本地保单列表（管理员/经理看所有，员工只看自己创建的）' })
   @ApiQuery({ name: 'status', required: false, enum: PolicyStatus })
   @ApiQuery({ name: 'resumeId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -206,8 +210,12 @@ export class DashubaoController {
     @Query('resumeId') resumeId?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Request() req?,
   ) {
-    return this.dashubaoService.getPolicies({ status, resumeId, page, limit });
+    const user = req?.user;
+    // 管理员和经理可以看到所有保单，普通员工只能看自己创建的
+    const createdBy = this.isManagerOrAdmin(user) ? undefined : user?.userId;
+    return this.dashubaoService.getPolicies({ status, resumeId, page, limit, createdBy });
   }
 
   @Get('policy/:id')

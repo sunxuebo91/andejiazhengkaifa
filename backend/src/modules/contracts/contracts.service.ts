@@ -1008,15 +1008,51 @@ export class ContractsService {
       let totalServiceDays = 0;
 
       allContracts.forEach((contract, index) => {
+        // 动态计算服务天数和实际结束日期
+        const contractStartDate = contract.startDate || contract.createdAt;
+        let actualEndDate: Date | null = null;
+        let calculatedServiceDays: number | null = null;
+
+        if (contract.replacedByContractId) {
+          // 已被替换的合同：结束日期 = 下一任合同的开始日期或换人生效日期
+          const nextContract = allContracts.find(c => c._id.toString() === contract.replacedByContractId.toString());
+          if (nextContract) {
+            actualEndDate = nextContract.changeDate || nextContract.startDate || nextContract.createdAt;
+          } else {
+            actualEndDate = contract.updatedAt || contract.endDate;
+          }
+        } else if (contract.isLatest) {
+          // 当前正在服务的合同：结束日期 = 合同约定结束日期，服务天数算到今天
+          actualEndDate = null; // 进行中，不设实际结束日期
+        } else {
+          // 其他情况（如已作废等）
+          actualEndDate = contract.endDate;
+        }
+
+        // 计算实际服务天数
+        if (contract.serviceDays) {
+          calculatedServiceDays = contract.serviceDays;
+        } else if (contractStartDate) {
+          const start = new Date(contractStartDate).getTime();
+          const end = actualEndDate ? new Date(actualEndDate).getTime() : Date.now();
+          calculatedServiceDays = Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+        }
+
+        if (calculatedServiceDays) {
+          totalServiceDays += calculatedServiceDays;
+        }
+
         const historyRecord = {
           序号: index + 1,
           合同编号: contract.contractNumber,
           服务人员: contract.workerName,
           联系电话: contract.workerPhone,
           月薪: contract.workerSalary,
-          开始时间: contract.startDate || contract.createdAt,
+          开始时间: contractStartDate,
           结束时间: contract.replacedByContractId ? '已换人' : '进行中',
-          服务天数: contract.serviceDays || (contract.isLatest ? '进行中' : 0),
+          合同结束日期: contract.endDate,
+          实际结束日期: actualEndDate,
+          服务天数: calculatedServiceDays,
           状态: contract.contractStatus,
           是否最新: contract.isLatest,
           创建时间: contract.createdAt,
@@ -1045,34 +1081,45 @@ export class ContractsService {
           }
         }
 
-        if (contract.serviceDays) {
-          totalServiceDays += contract.serviceDays;
-        }
-
         workerHistory.push(historyRecord);
       });
 
       // 获取当前最新合同
       const currentContract = allContracts.find(c => c.isLatest === true) || allContracts[allContracts.length - 1];
 
-      // 转换为前端期望的格式
-      const contracts = allContracts.map((contract, index) => ({
-        contractId: contract._id.toString(),
-        order: index + 1,
-        contractNumber: contract.contractNumber,
-        workerName: contract.workerName,
-        workerPhone: contract.workerPhone,
-        workerSalary: contract.workerSalary,
-        startDate: contract.startDate || contract.createdAt,
-        endDate: contract.endDate,
-        serviceDays: contract.serviceDays || (contract.isLatest ? '进行中' : 0),
-        status: contract.isLatest ? 'active' : 'replaced',
-        terminationDate: contract.replacedByContractId ? contract.updatedAt : null,
-        terminationReason: contract.replacedByContractId ? '换人' : null,
-        esignStatus: contract.esignStatus,
-        createdAt: contract.createdAt,
-        isLatest: contract.isLatest
-      }));
+      // 转换为前端期望的格式（使用 workerHistory 中已计算好的服务天数）
+      const contracts = allContracts.map((contract, index) => {
+        const historyItem = workerHistory[index];
+        const contractStartDate = contract.startDate || contract.createdAt;
+
+        // 已替换合同的实际结束日期 = 下一任合同的开始日期
+        let actualEndDate: Date | null = null;
+        if (contract.replacedByContractId) {
+          const nextContract = allContracts.find(c => c._id.toString() === contract.replacedByContractId.toString());
+          if (nextContract) {
+            actualEndDate = nextContract.changeDate || nextContract.startDate || nextContract.createdAt;
+          }
+        }
+
+        return {
+          contractId: contract._id.toString(),
+          order: index + 1,
+          contractNumber: contract.contractNumber,
+          workerName: contract.workerName,
+          workerPhone: contract.workerPhone,
+          workerSalary: contract.workerSalary,
+          startDate: contractStartDate,
+          endDate: contract.endDate, // 合同约定结束日期
+          actualEndDate, // 实际结束日期（换人时的结束日期）
+          serviceDays: historyItem?.服务天数 ?? null,
+          status: contract.isLatest ? 'active' : 'replaced',
+          terminationDate: contract.replacedByContractId ? (actualEndDate || contract.updatedAt) : null,
+          terminationReason: contract.replacedByContractId ? '换人' : null,
+          esignStatus: contract.esignStatus,
+          createdAt: contract.createdAt,
+          isLatest: contract.isLatest
+        };
+      });
 
       const result = {
         customerPhone,
@@ -1623,11 +1670,19 @@ export class ContractsService {
         throw new BadRequestException(`合同还未签约完成，当前状态: ${statusText}`);
       }
 
-      // 步骤4：触发保险同步
+      // 步骤4：重置同步状态（手动同步需要强制重新执行，忽略幂等性检查）
+      this.logger.log(`🔄 重置同步状态，强制重新执行保险同步...`);
+      await this.contractModel.findByIdAndUpdate(contractId, {
+        insuranceSyncStatus: null,
+        insuranceSyncError: null,
+        insuranceSyncPending: false,
+      });
+
+      // 步骤5：触发保险同步
       this.logger.log(`🔄 开始保险同步...`);
       await this.syncInsuranceOnContractActive(contractId);
 
-      // 步骤5：查询最终状态
+      // 步骤6：查询最终状态
       const updatedContract = await this.contractModel.findById(contractId).exec();
 
       return {
@@ -1780,57 +1835,80 @@ export class ContractsService {
    * 场景2：换人合同 - 自动换人保单
    */
   private async handleChangeWorkerInsurance(contract: any): Promise<void> {
-    // 查找原合同
-    const originalContract = await this.contractModel.findById(contract.replacesContractId).exec();
-    if (!originalContract) {
-      this.logger.warn('原合同不存在，无法同步保险');
-      await this.contractModel.findByIdAndUpdate(contract._id, {
-        insuranceSyncStatus: 'failed',
-        insuranceSyncError: '原合同不存在',
-      });
-      return;
-    }
+    // 🔗 沿着换人链向上追溯，找到有 active 保险的工人
+    let currentContract = contract;
+    let policyOwnerContract = null;
+    let policies = [];
+    const maxDepth = 10; // 防止无限循环
+    const visitedIds = new Set<string>();
 
-    this.logger.log(`📋 原合同信息: ${originalContract.workerName} (${originalContract.workerIdCard})`);
-    this.logger.log(`📋 新合同信息: ${contract.workerName} (${contract.workerIdCard})`);
+    for (let depth = 0; depth < maxDepth; depth++) {
+      if (!currentContract.replacesContractId) {
+        this.logger.warn(`🔗 追溯到链条顶端，没有更多前任合同`);
+        break;
+      }
 
-    if (!originalContract.workerIdCard) {
-      this.logger.warn('⚠️ 原合同缺少服务人员身份证号，无法匹配保单');
-      await this.contractModel.findByIdAndUpdate(contract._id, {
-        insuranceSyncStatus: 'failed',
-        insuranceSyncError: '原合同缺少服务人员身份证号',
-      });
-      return;
-    }
+      const contractId = currentContract.replacesContractId.toString();
+      if (visitedIds.has(contractId)) {
+        this.logger.warn(`🔗 检测到循环引用，停止追溯`);
+        break;
+      }
+      visitedIds.add(contractId);
 
-    // 🆕 查找绑定到原合同的保单（优先）
-    let policies = await this.dashubaoService['policyModel'].find({
-      contractId: originalContract._id,
-      status: 'active'
-    }).exec();
+      const predecessorContract = await this.contractModel.findById(currentContract.replacesContractId).exec();
+      if (!predecessorContract) {
+        this.logger.warn(`🔗 第${depth + 1}层前任合同不存在 (ID: ${currentContract.replacesContractId})`);
+        break;
+      }
 
-    this.logger.log(`🔍 通过 contractId 查找保单，找到 ${policies.length} 个`);
+      this.logger.log(`🔗 第${depth + 1}层前任: ${predecessorContract.workerName} (${predecessorContract.workerIdCard})`);
 
-    // 🔥 修复：如果没有找到绑定的保单，用身份证号匹配（而不是随机的 workerId）
-    if (policies.length === 0) {
-      this.logger.log(`未找到绑定到原合同的保单，尝试通过身份证号 ${originalContract.workerIdCard} 查找`);
-      policies = await this.dashubaoService['policyModel'].find({
-        'insuredList.idNumber': originalContract.workerIdCard,
+      if (!predecessorContract.workerIdCard) {
+        this.logger.log(`🔗 前任 ${predecessorContract.workerName} 缺少身份证号，继续向上追溯...`);
+        currentContract = predecessorContract;
+        continue;
+      }
+
+      // 查找绑定到该合同的 active 保单
+      let found = await this.dashubaoService['policyModel'].find({
+        contractId: predecessorContract._id,
         status: 'active'
       }).exec();
-      this.logger.log(`🔍 通过身份证号查找保单，找到 ${policies.length} 个`);
+
+      this.logger.log(`🔍 通过 contractId 查找 ${predecessorContract.workerName} 的保单，找到 ${found.length} 个`);
+
+      // 如果没找到，用身份证号匹配
+      if (found.length === 0) {
+        found = await this.dashubaoService['policyModel'].find({
+          'insuredList.idNumber': predecessorContract.workerIdCard,
+          status: 'active'
+        }).exec();
+        this.logger.log(`🔍 通过身份证号查找 ${predecessorContract.workerName} 的保单，找到 ${found.length} 个`);
+      }
+
+      if (found.length > 0) {
+        policies = found;
+        policyOwnerContract = predecessorContract;
+        this.logger.log(`✅ 在第${depth + 1}层前任 ${predecessorContract.workerName} 处找到 ${found.length} 个 active 保单`);
+        break;
+      }
+
+      this.logger.log(`🔗 前任 ${predecessorContract.workerName} 没有 active 保单，继续向上追溯...`);
+      currentContract = predecessorContract;
     }
 
-    if (policies.length === 0) {
-      this.logger.log('未找到需要同步的保险，可能该服务人员没有购买保险');
+    if (policies.length === 0 || !policyOwnerContract) {
+      this.logger.log('未找到需要同步的保险，整条换人链上都没有 active 保单');
       await this.contractModel.findByIdAndUpdate(contract._id, {
         insuranceSyncStatus: 'success',
-        insuranceSyncError: '无需同步（未找到关联保险）',
+        insuranceSyncError: '无需同步（换人链上未找到关联保险）',
         insuranceSyncedAt: new Date(),
       });
       return;
     }
 
+    this.logger.log(`📋 保单持有人: ${policyOwnerContract.workerName} (${policyOwnerContract.workerIdCard})`);
+    this.logger.log(`📋 新合同信息: ${contract.workerName} (${contract.workerIdCard})`);
     this.logger.log(`📦 找到 ${policies.length} 个需要换人的保单`);
 
     // 标记合同为待同步状态
@@ -1844,8 +1922,8 @@ export class ContractsService {
       contractId: contract._id as Types.ObjectId,
       policyIds: policies.map(p => p._id as Types.ObjectId),
       oldWorker: {
-        name: originalContract.workerName,
-        idCard: originalContract.workerIdCard,
+        name: policyOwnerContract.workerName,
+        idCard: policyOwnerContract.workerIdCard,
       },
       newWorker: {
         name: contract.workerName,

@@ -767,12 +767,14 @@ export class DashubaoService {
 
   /**
    * 获取本地保单列表
+   * @param query.createdBy 创建人ID，传入时只返回该用户创建的保单（普通员工场景）
    */
   async getPolicies(query: {
     status?: PolicyStatus;
     resumeId?: string;
     page?: number;
     limit?: number;
+    createdBy?: string;
   }): Promise<{ data: InsurancePolicy[]; total: number }> {
     const filter: any = {};
 
@@ -781,6 +783,9 @@ export class DashubaoService {
     }
     if (query.resumeId) {
       filter.resumeId = new Types.ObjectId(query.resumeId);
+    }
+    if (query.createdBy) {
+      filter.createdBy = new Types.ObjectId(query.createdBy);
     }
 
     const page = query.page || 1;

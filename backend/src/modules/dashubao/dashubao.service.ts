@@ -440,8 +440,9 @@ export class DashubaoService {
    * 支付订单 (0022)
    * @param policyRef 保单号或流水号
    * @param tradeType 支付场景：APP, MINI, OPEN, MWEB, NATIVE
+   * @param openId 微信用户openId（小程序支付MINI必传）
    */
-  async createPaymentOrder(policyRef: string, tradeType: string = 'MWEB'): Promise<DashubaoResponse> {
+  async createPaymentOrder(policyRef: string, tradeType: string = 'MWEB', openId?: string): Promise<DashubaoResponse> {
     // 查询保单信息
     const policy = await this.policyModel.findOne({
       $or: [
@@ -454,6 +455,11 @@ export class DashubaoService {
       throw new BadRequestException('保单不存在');
     }
 
+    // 小程序支付必须传递 openId
+    if (tradeType === 'MINI' && !openId) {
+      throw new BadRequestException('小程序支付必须传递openId');
+    }
+
     // 构建支付信息（添加NotifyUrl回调地址 - 使用自己的服务器地址）
     const backendBaseUrl = process.env.BACKEND_BASE_URL || 'https://crm.andejiazheng.com';
     const notifyUrl = `${backendBaseUrl}/api/dashubao/payment/callback`;
@@ -461,6 +467,7 @@ export class DashubaoService {
     <PayInfo>
       <Target>WeChat</Target>
       <TradeType>${tradeType}</TradeType>
+      ${openId ? `<OpenId>${openId}</OpenId>` : ''}
       <NotifyUrl>${notifyUrl}</NotifyUrl>
     </PayInfo>`;
 

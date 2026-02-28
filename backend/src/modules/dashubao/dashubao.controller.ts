@@ -118,8 +118,9 @@ export class DashubaoController {
   async createPaymentOrder(
     @Param('policyRef') policyRef: string,
     @Query('tradeType') tradeType: string = 'MWEB',
+    @Query('openId') openId?: string,
   ) {
-    return this.dashubaoService.createPaymentOrder(policyRef, tradeType);
+    return this.dashubaoService.createPaymentOrder(policyRef, tradeType, openId);
   }
 
   @Post('payment/callback')

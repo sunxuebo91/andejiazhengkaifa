@@ -157,10 +157,19 @@ export class DashubaoMiniprogramController {
   @ApiOperation({ summary: '【小程序】创建支付订单（微信小程序支付）' })
   @ApiParam({ name: 'policyRef', description: '保单号或商户单号' })
   @ApiResponse({ status: 200, description: '获取支付信息成功' })
-  async createPaymentOrder(@Param('policyRef') policyRef: string) {
+  async createPaymentOrder(
+    @Param('policyRef') policyRef: string,
+    @Body() body: { openId?: string; openid?: string },
+    @Query('openId') queryOpenId?: string,
+  ) {
     try {
+      // 获取 openId（支持多种传递方式：body.openId, body.openid, query.openId）
+      const openId = body?.openId || body?.openid || queryOpenId;
+      if (!openId) {
+        return { success: false, data: null, message: '缺少openId参数，小程序支付必须传递openId' };
+      }
       // 小程序固定使用 MINI 支付方式
-      const result = await this.dashubaoService.createPaymentOrder(policyRef, 'MINI');
+      const result = await this.dashubaoService.createPaymentOrder(policyRef, 'MINI', openId);
       return { success: true, data: result, message: '获取支付信息成功' };
     } catch (error) {
       return { success: false, data: null, message: error.message || '获取支付信息失败' };

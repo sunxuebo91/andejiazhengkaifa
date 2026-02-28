@@ -917,10 +917,10 @@ const CreateInsurance: React.FC = () => {
             name="phIdType"
             label="证件类型"
             rules={[{ required: true, message: '请选择证件类型' }]}
-            initialValue="G"
+            initialValue="14"
           >
             <Select disabled>
-              <Option value="G">统一社会信用代码</Option>
+              <Option value="14">统一社会信用代码</Option>
             </Select>
           </Form.Item>
         </Col>

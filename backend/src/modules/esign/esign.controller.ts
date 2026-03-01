@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { ESignService } from './esign.service';
 import { ContractsService } from '../contracts/contracts.service';
+import { ContractSignNotificationService } from '../weixin/services/contract-sign-notification.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 
@@ -33,6 +34,7 @@ export class ESignController {
     private readonly esignService: ESignService,
     @Inject(forwardRef(() => ContractsService))
     private readonly contractsService: ContractsService,
+    private readonly contractSignNotificationService: ContractSignNotificationService,
   ) {
     this.logger.log('ESignController 已初始化');
   }
@@ -1133,6 +1135,15 @@ export class ESignController {
   /**
    * 爱签合同状态回调
    * 当合同状态变化时，爱签会调用这个接口
+   *
+   * 爱签状态码说明：
+   * 0 = 等待签约
+   * 1 = 签约中（有人已签署，但还有人未签）
+   * 2 = 已签约（所有人都已签署）
+   * 3 = 过期
+   * 4 = 拒签
+   * 6 = 作废
+   * 7 = 撤销
    */
   @Public() // 爱签回调不需要认证
   @Post('callback')
@@ -1144,18 +1155,54 @@ export class ESignController {
       // 1. 处理爱签回调，更新合同状态
       await this.esignService.handleContractCallback(callbackData);
 
-      // 2. 如果合同状态变为"已签约"，触发保险同步
+      // 2. 获取合同信息
       const { contractNo, status } = callbackData;
+      const contract = await this.esignService['contractModel'].findOne({
+        esignContractNo: contractNo
+      }).populate('createdBy', '_id name').exec();
 
-      if (status === 2 || status === '2') {
-        this.logger.log(`🎉 合同 ${contractNo} 已签约，触发保险同步`);
+      if (contract) {
+        // 3. 发送签署状态通知
+        const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
 
-        // 查找合同ID
-        const contract = await this.esignService['contractModel'].findOne({
-          esignContractNo: contractNo
-        }).exec();
+        if (statusNum === 1) {
+          // 签约中 - 有人已签署，判断是甲方还是乙方签了
+          // 注：爱签回调可能包含签署人信息，这里简化处理
+          this.logger.log(`📝 合同 ${contractNo} 有人已签署，发送通知`);
 
-        if (contract) {
+          // 异步发送通知，不阻塞回调响应
+          this.contractSignNotificationService.sendContractSignedNotification(
+            {
+              _id: contract._id.toString(),
+              contractNumber: contract.contractNumber,
+              customerName: contract.customerName,
+              workerName: contract.workerName,
+              customerServiceFee: contract.customerServiceFee,
+              createdBy: contract.createdBy,
+            },
+            'customer' // 暂时假设是雇主先签，后续可根据回调数据判断
+          ).catch(error => {
+            this.logger.error(`发送签署通知失败:`, error);
+          });
+        } else if (statusNum === 2) {
+          // 已签约 - 所有人都已签署
+          this.logger.log(`🎉 合同 ${contractNo} 已签约，发送通知并触发保险同步`);
+
+          // 发送签署完成通知
+          this.contractSignNotificationService.sendContractSignedNotification(
+            {
+              _id: contract._id.toString(),
+              contractNumber: contract.contractNumber,
+              customerName: contract.customerName,
+              workerName: contract.workerName,
+              customerServiceFee: contract.customerServiceFee,
+              createdBy: contract.createdBy,
+            },
+            'both'
+          ).catch(error => {
+            this.logger.error(`发送签署完成通知失败:`, error);
+          });
+
           // 异步触发保险同步，不阻塞回调响应
           this.contractsService.syncInsuranceOnContractActive(contract._id.toString())
             .catch(error => {

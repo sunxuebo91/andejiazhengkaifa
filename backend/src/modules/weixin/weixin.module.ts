@@ -10,6 +10,7 @@ import { AdvisorSubscribe, AdvisorSubscribeSchema } from './models/advisor-subsc
 import { CustomerAction, CustomerActionSchema } from './models/customer-action.entity';
 import { Customer, CustomerSchema } from '../customers/models/customer.model';
 import { User, UserSchema } from '../users/models/user.entity';
+import { MiniProgramUser, MiniProgramUserSchema } from '../miniprogram-user/models/miniprogram-user.entity';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { User, UserSchema } from '../users/models/user.entity';
       { name: CustomerAction.name, schema: CustomerActionSchema },
       { name: Customer.name, schema: CustomerSchema },
       { name: User.name, schema: UserSchema },
+      { name: MiniProgramUser.name, schema: MiniProgramUserSchema },
     ]),
   ],
   controllers: [WeixinController],

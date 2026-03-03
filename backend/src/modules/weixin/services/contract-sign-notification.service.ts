@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import axios from 'axios';
 import { User } from '../../users/models/user.entity';
+import { MiniProgramUser } from '../../miniprogram-user/models/miniprogram-user.entity';
 
 /**
  * 合同签署通知服务
@@ -21,6 +22,7 @@ export class ContractSignNotificationService {
 
   constructor(
     @InjectModel('User') private readonly userModel: Model<User>,
+    @InjectModel('MiniProgramUser') private readonly miniProgramUserModel: Model<MiniProgramUser>,
     private readonly configService: ConfigService,
   ) {
     this.appId = this.configService.get<string>('MINIPROGRAM_APPID') || 'wxb2c4e35d16d99fd3';
@@ -94,7 +96,8 @@ export class ContractSignNotificationService {
       this.logger.log(`📱 开始发送合同签署通知 - 合同ID: ${contract._id}, 签署方: ${signerRole}`);
 
       // 1. 获取需要通知的用户（合同创建人 + 管理员）
-      const usersToNotify = await this.getUsersToNotify(contract.createdBy?.toString());
+      // 直接传入 createdBy 对象，由 getUsersToNotify 内部处理提取ID
+      const usersToNotify = await this.getUsersToNotify(contract.createdBy);
       
       if (usersToNotify.length === 0) {
         this.logger.warn('⚠️ 没有找到需要通知的用户（无绑定微信的员工/管理员）');
@@ -132,28 +135,72 @@ export class ContractSignNotificationService {
 
   /**
    * 获取需要通知的用户列表（合同创建人 + 管理员）
+   * 优先使用 user.wechatOpenId，如果没有则通过手机号关联 miniprogram_users 获取
    */
-  private async getUsersToNotify(createdById?: string): Promise<Array<{ wechatOpenId: string; name: string; role: string }>> {
+  private async getUsersToNotify(createdBy?: any): Promise<Array<{ wechatOpenId: string; name: string; role: string }>> {
     const users: Array<{ wechatOpenId: string; name: string; role: string }> = [];
 
-    // 查找所有绑定了微信的管理员和合同创建人
+    // 提取创建人ID（兼容字符串、ObjectId或对象）
+    let createdById: string | undefined;
+    if (createdBy) {
+      if (typeof createdBy === 'string') {
+        createdById = createdBy;
+      } else if (createdBy._id) {
+        // _id 可能是 ObjectId 或嵌套对象
+        const idValue = createdBy._id;
+        if (typeof idValue === 'string') {
+          createdById = idValue;
+        } else if (typeof idValue.toString === 'function') {
+          createdById = idValue.toString();
+        } else if (typeof idValue === 'object' && idValue !== null) {
+          // 如果是对象，尝试获取其字符串值
+          createdById = String(idValue);
+        }
+      } else if (typeof createdBy.toString === 'function' && createdBy.toString() !== '[object Object]') {
+        // 可能是直接传入的 ObjectId
+        createdById = createdBy.toString();
+      }
+    }
+    this.logger.log(`📋 创建人ID: ${createdById || '无'}, 原始值类型: ${typeof createdBy}, _id类型: ${createdBy?._id ? typeof createdBy._id : 'N/A'}`);
+
+    // 查找所有管理员和合同创建人
     const query: any = {
-      wechatOpenId: { $exists: true, $nin: [null, ''] },
       active: true,
+      $or: [
+        { role: 'admin' },
+        { role: '管理员' },
+        ...(createdById ? [{ _id: createdById }] : []),
+      ],
     };
 
-    const allUsers = await this.userModel.find(query).select('_id name role wechatOpenId').lean().exec();
+    const allUsers = await this.userModel.find(query).select('_id name role phone wechatOpenId').lean().exec();
+    this.logger.log(`📋 查询到 ${allUsers.length} 个管理员/创建人`);
 
     for (const user of allUsers) {
       const isCreator = createdById && user._id.toString() === createdById;
       const isAdmin = user.role === 'admin' || user.role === '管理员';
 
-      if (isCreator || isAdmin) {
+      if (!isCreator && !isAdmin) continue;
+
+      let openId = user.wechatOpenId;
+
+      // 如果 user 表没有 wechatOpenId，通过手机号查找 miniprogram_users 表
+      if (!openId && user.phone) {
+        const miniUser = await this.miniProgramUserModel.findOne({ phone: user.phone }).select('openid').lean().exec();
+        if (miniUser?.openid) {
+          openId = miniUser.openid;
+          this.logger.log(`📱 通过手机号 ${user.phone} 找到 openId: ${openId}`);
+        }
+      }
+
+      if (openId) {
         users.push({
-          wechatOpenId: user.wechatOpenId,
+          wechatOpenId: openId,
           name: user.name,
           role: isCreator ? '创建人' : '管理员',
         });
+      } else {
+        this.logger.warn(`⚠️ 用户 ${user.name} 没有绑定微信（无wechatOpenId且无手机号关联）`);
       }
     }
 

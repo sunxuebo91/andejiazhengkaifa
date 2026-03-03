@@ -661,7 +661,8 @@ const ESignatureStepPage: React.FC = () => {
             type: getFieldType(field.dataType),
             required: field.required === 1,
             options: field.options || [],  // 🔥 直接使用原始options，不做转换
-            originalField: field
+            originalField: field,
+            originalDataType: field.dataType  // 🔥 保存原始dataType，用于判断字段类型
           };
         });
 
@@ -1948,8 +1949,8 @@ const ESignatureStepPage: React.FC = () => {
                            !fieldKey.includes('工资')) {
                     fieldGroups.partyB.fields.push(field);
                   }
-                  // 🔥 服务信息：服务类型、服务地址、服务时间、休息方式
-                  else if (fieldKey.includes('服务类型') || fieldKey.includes('服务地址') || fieldKey.includes('服务时间') || fieldKey.includes('休息')) {
+                  // 🔥 服务信息：服务类型、服务地址、服务时间、休息方式、换人次数
+                  else if (fieldKey.includes('服务类型') || fieldKey.includes('服务地址') || fieldKey.includes('服务时间') || fieldKey.includes('休息') || fieldKey.includes('换人次数')) {
                     fieldGroups.contractService.fields.push(field);
                   }
                   // 🔥 合同期限：开始时间、结束时间、期限、开始年月日、结束年月日
@@ -1982,6 +1983,7 @@ const ESignatureStepPage: React.FC = () => {
                   if (fieldKey.includes('服务地址')) return 2;
                   if (fieldKey.includes('服务时间')) return 3;
                   if (fieldKey.includes('休息方式')) return 4;
+                  if (fieldKey.includes('换人次数')) return 5;
 
                   // 时间相关排序
                   if (fieldKey.includes('开始时间')) return 10;
@@ -2043,11 +2045,18 @@ const ESignatureStepPage: React.FC = () => {
                     else if (fieldKey.includes('服务地址') || fieldLabel.includes('服务地址')) {
                       shouldDisable = true;
                     }
+                    // 7. 换人次数禁用（自动计算）
+                    else if (fieldKey.includes('换人次数') || fieldLabel.includes('换人次数')) {
+                      shouldDisable = true;
+                    }
                   }
 
-                  // 特殊处理：如果是服务备注字段，使用多选框
-                  if (fieldKey.includes('服务备注') || fieldKey.includes('服务内容') || fieldKey.includes('服务项目') ||
-                      (field.options && field.options.length > 0)) {
+                  // 特殊处理：如果是多选字段（dataType=9）并且有选项，使用多选框
+                  // 🔥 修复：服务备注（dataType=8，多行文本）不应该使用checkbox，只有真正有options的字段才使用
+                  const hasRealOptions = field.options && Array.isArray(field.options) && field.options.length > 0;
+                  const isMultiselectField = field.type === 'multiselect' || field.originalDataType === 9;
+
+                  if (hasRealOptions && (isMultiselectField || fieldKey.includes('服务内容') || fieldKey.includes('服务项目'))) {
                     // 🔥 判断是否需要显示补充输入框（只有服务备注相关字段才显示）
                     const showAdditionalInput = fieldKey.includes('服务备注') || fieldKey.includes('服务内容') || fieldKey.includes('服务项目');
 
@@ -2398,6 +2407,15 @@ const ESignatureStepPage: React.FC = () => {
                       const value = originalParams[field.key];
                       if (value !== undefined) {
                         console.log(`🔄 换人模式：从原合同获取服务内容 ${field.key}:`, value);
+                        return value;
+                      }
+                    }
+
+                    // 7. 换人次数：直接代入原合同的值
+                    if (fieldKey.includes('换人次数') || fieldLabel.includes('换人次数')) {
+                      const value = getOriginalValue(field.key) || findFuzzyValue(['换人次数']);
+                      if (value !== undefined && value !== null && value !== '') {
+                        console.log(`🔄 换人模式：从原合同获取换人次数 ${field.key}:`, value);
                         return value;
                       }
                     }

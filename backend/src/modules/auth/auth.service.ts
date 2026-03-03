@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, NotFoundException, InternalServerErrorException, HttpException, HttpStatus } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { UploadService } from '../upload/upload.service';
 import * as bcrypt from 'bcrypt';
@@ -18,6 +19,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private uploadService: UploadService,
+    private configService: ConfigService,
     @InjectModel(LoginLog.name) private loginLogModel: Model<LoginLog>,
   ) {}
 
@@ -133,15 +135,8 @@ export class AuthService {
 
   async miniprogramLogin(code: string, phone: string, ip: string, userAgent: string) {
     try {
-      // 1. 通过code获取openid（暂时模拟）
-      let openidResult;
-      try {
-        openidResult = await this.getWechatOpenid(code);
-      } catch (error) {
-        // 如果微信API调用失败，使用模拟数据
-        console.warn('微信API调用失败，使用模拟openid:', error.message);
-        openidResult = { openid: `mock_openid_${Date.now()}` };
-      }
+      // 1. 通过code获取openid（必须真实微信openid，不允许模拟）
+      const openidResult = await this.getWechatOpenid(code);
 
       // 2. 通过手机号查找CRM用户
       const user = await this.usersService.findByPhone(phone);
@@ -192,10 +187,21 @@ export class AuthService {
 
   private async getWechatOpenid(code: string): Promise<{ openid: string; session_key?: string }> {
     try {
+      const appid = this.configService.get<string>('MINIPROGRAM_APPID')
+        || this.configService.get<string>('WECHAT_APP_ID')
+        || this.configService.get<string>('WECHAT_APPID');
+      const secret = this.configService.get<string>('MINIPROGRAM_APPSECRET')
+        || this.configService.get<string>('WECHAT_APP_SECRET')
+        || this.configService.get<string>('WECHAT_APPSECRET');
+
+      if (!appid || !secret) {
+        throw new HttpException('小程序微信配置缺失（MINIPROGRAM_APPID/MINIPROGRAM_APPSECRET）', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+
       const url = `https://api.weixin.qq.com/sns/jscode2session`;
       const params = {
-        appid: process.env.WECHAT_APP_ID,
-        secret: process.env.WECHAT_APP_SECRET,
+        appid,
+        secret,
         js_code: code,
         grant_type: 'authorization_code',
       };

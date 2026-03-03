@@ -161,12 +161,13 @@ export class DashubaoMiniprogramController {
     @Param('policyRef') policyRef: string,
     @Body() body: { openId?: string; openid?: string },
     @Query('openId') queryOpenId?: string,
+    @Request() req?,
   ) {
     try {
-      // 获取 openId（支持多种传递方式：body.openId, body.openid, query.openId）
-      const openId = body?.openId || body?.openid || queryOpenId;
+      // 获取 openId（优先客户端传参，其次JWT里的openid）
+      const openId = body?.openId || body?.openid || queryOpenId || req?.user?.openid;
       if (!openId) {
-        return { success: false, data: null, message: '缺少openId参数，小程序支付必须传递openId' };
+        return { success: false, data: null, message: '缺少openId参数，且JWT中无openid，小程序支付必须传递openId' };
       }
       // 小程序固定使用 MINI 支付方式
       const result = await this.dashubaoService.createPaymentOrder(policyRef, 'MINI', openId);

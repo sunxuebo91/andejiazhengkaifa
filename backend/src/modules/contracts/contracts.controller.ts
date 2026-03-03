@@ -36,6 +36,10 @@ export class ContractsController {
     return user.role === '系统管理员' || user.role === 'admin';
   }
 
+  // 检查是否是管理员或经理
+  private isManagerOrAdmin(user: any): boolean {
+    return this.isAdmin(user) || user.role === '经理' || user.role === 'manager';
+  }
 
   @Post()
   async create(@Body() createContractDto: CreateContractDto, @Request() req) {
@@ -65,13 +69,19 @@ export class ContractsController {
     @Query('limit') limit: string = '10',
     @Query('search') search?: string,
     @Query('showAll') showAll?: string,
+    @Request() req?,
   ) {
     try {
+      const user = req?.user;
+      // 管理员和经理可以看到所有合同，普通员工只能看自己创建的
+      const createdBy = this.isManagerOrAdmin(user) ? undefined : user?.userId;
+
       const result = await this.contractsService.findAll(
         parseInt(page),
         parseInt(limit),
         search,
         showAll === 'true',
+        createdBy,
       );
       return {
         success: true,

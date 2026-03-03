@@ -73,5 +73,10 @@ export class TrainingLeadQueryDto {
   @IsOptional()
   @IsString()
   assignedTo?: string;
+
+  @ApiPropertyOptional({ description: '创建人ID（用于权限过滤）' })
+  @IsOptional()
+  @IsString()
+  createdBy?: string;
 }
 

@@ -2801,66 +2801,39 @@ export class ESignService {
         if (signer.validateType === 'password') validateType = 2;
         if (signer.validateType === 'face') validateType = 3;
 
-        // 构建签章策略
-        const signStrategyList: any[] = [];
-        
-        if (signer.signPosition) {
-          if (signer.signPosition.keyword) {
-            // 关键字签章
-            signStrategyList.push({
-              attachNo: 1,
-              locationMode: 3, // 关键字签章
-              signKey: signer.signPosition.keyword,
-              canDrag: 0, // 不允许拖动
-              signType: 1 // 签名/签章
-            });
-          } else if (signer.signPosition.page && signer.signPosition.x !== undefined && signer.signPosition.y !== undefined) {
-            // 坐标签章
-            signStrategyList.push({
-              attachNo: 1,
-              locationMode: 2, // 坐标签章
-              signPage: signer.signPosition.page,
-              signX: parseFloat((signer.signPosition.x || 0.25).toFixed(2)),
-              signY: parseFloat((signer.signPosition.y || 0.55).toFixed(2)),
-              canDrag: 0, // 不允许拖动
-              signType: 1 // 签名/签章
-            });
-          }
+        // 🔥 使用模板坐标签章（locationMode: 4），复用模板中配置好的签章区
+        // 签章区名称必须与模板中配置的一致：甲方、乙方、丙方
+        let signKey: string;
+
+        if (index === 0) {
+          // 第一个签署人：甲方（客户）
+          signKey = '甲方';
+        } else if (index === 1) {
+          // 第二个签署人：乙方（阿姨）
+          signKey = '乙方';
         } else {
-          // 使用坐标签章（基于模板控件的实际坐标）
-          // 根据签署人顺序确定签章位置
-          let signKey: string;
+          // 第三个及以后的签署人：丙方（企业）
+          signKey = '丙方';
 
-          if (index === 0) {
-            // 第一个签署人通常是甲方（客户）
-            signKey = '甲方'; // 🔥 修复：使用模板中实际的签署区名称
-          } else if (index === 1) {
-            // 第二个签署人通常是乙方（阿姨）
-            signKey = '乙方'; // 🔥 修复：使用模板中实际的签署区名称
-          } else {
-            // 第三个及以后的签署人（企业）
-            signKey = '丙方'; // 🔥 修复：使用模板中实际的签署区名称
-            
-            // 为企业用户设置默认印章（同步等待，确保在签章策略生效前完成）
-            try {
-              console.log(`🔧 为企业用户 ${signer.account} 设置默认印章...`);
-              await this.setDefaultSeal(signer.account, "5f0e3bd2fc744bd8b500576e60b17711");
-              console.log(`✅ 企业用户 ${signer.account} 默认印章设置完成`);
-            } catch (error) {
-              console.warn(`⚠️ 为企业用户 ${signer.account} 设置默认印章失败: ${error.message}`);
-              // 不抛出异常，继续执行签章策略设置
-            }
+          // 为企业用户设置默认印章
+          try {
+            console.log(`🔧 为企业用户 ${signer.account} 设置默认印章...`);
+            await this.setDefaultSeal(signer.account, "5f0e3bd2fc744bd8b500576e60b17711");
+            console.log(`✅ 企业用户 ${signer.account} 默认印章设置完成`);
+          } catch (error) {
+            console.warn(`⚠️ 为企业用户 ${signer.account} 设置默认印章失败: ${error.message}`);
           }
-
-          signStrategyList.push({
-            attachNo: 1,
-            locationMode: 4, // 模板坐标签章（官方文档推荐，仅支持模板文件）
-            signKey: signKey, // 模板中设置的签署区名称
-            signType: 1, // 签名/签章
-            canDrag: 0 // 不允许拖动
-            // 注意：sealNo参数应该在顶层，不在signStrategyList中
-          });
         }
+
+        const signStrategyList = [{
+          attachNo: 1,
+          locationMode: 4, // 模板坐标签章（复用模板配置）
+          signKey: signKey,
+          signType: 1, // 签名/签章
+          canDrag: 0   // 不允许拖动
+        }];
+
+        console.log(`📝 签署人 ${index + 1} (${signer.name}) 签章策略: signKey=${signKey}`);
 
         // 构建接收方模板填充策略（用于多行文本等控件）
         // 只在第一个签署人中添加模板填充策略，避免重复
@@ -2936,7 +2909,7 @@ export class ESignService {
           waterMark: 1, // 启用日期水印，自动显示签署日期
           autoSms: 0, // 🔕 不自动发送短信
           customSignFlag: 0,
-          signStrategyList: signStrategyList,
+          signStrategyList: signStrategyList, // 使用模板坐标签章策略
           ...(receiverFillStrategyList.length > 0 && { receiverFillStrategyList }),
           signMark: `${signer.name}_${Date.now()}`
         };
@@ -4646,26 +4619,65 @@ export class ESignService {
 
   /**
    * 获取真实的模板列表（从爱签API）
+   * 调用爱签 /template/list 接口动态获取所有模板
    */
   async getRealTemplateList(): Promise<any[]> {
     try {
-      console.log('🔍 获取真实模板列表');
+      console.log('🔍 调用爱签API获取模板列表');
 
-      // 目前使用已知的模板编号
-      const knownTemplateNo = 'TN84E8C106BFE74FD3AE36AC2CA33A44DE';
-      
-      // 获取模板信息
-      const templateInfo = await this.getRealTemplateInfo(knownTemplateNo);
-      
-      return [templateInfo];
+      // 调用爱签 /template/list 接口
+      const response = await this.callESignAPI('/template/list', {
+        page: 1,
+        rows: 100, // 获取最多100个模板
+        status: 1  // 只获取使用中的模板
+      });
+
+      console.log('📋 爱签模板列表API响应:', JSON.stringify(response, null, 2));
+
+      if (response.code === 100000 && response.data?.list) {
+        const templateList = response.data.list;
+        console.log(`✅ 成功获取 ${templateList.length} 个模板`);
+
+        // 转换为前端需要的格式
+        const formattedTemplates = await Promise.all(
+          templateList.map(async (template: any) => {
+            try {
+              // 获取每个模板的字段信息
+              const templateFields = await this.getTemplateData(template.templateIdent);
+              return {
+                templateNo: template.templateIdent,
+                templateName: template.templateName,
+                description: template.comment || `${template.typeName || '合同模板'} - ${template.page}页`,
+                templateType: template.templateType,
+                status: template.status,
+                syncStatus: template.syncStatus,
+                fields: this.convertTemplateFieldsToFormFields(templateFields)
+              };
+            } catch (err) {
+              console.warn(`⚠️ 获取模板 ${template.templateIdent} 字段信息失败:`, err.message);
+              return {
+                templateNo: template.templateIdent,
+                templateName: template.templateName,
+                description: template.comment || '合同模板',
+                fields: []
+              };
+            }
+          })
+        );
+
+        return formattedTemplates;
+      } else {
+        console.warn('⚠️ 爱签API返回异常:', response);
+        throw new Error(response.msg || '获取模板列表失败');
+      }
     } catch (error) {
       console.error('❌ 获取模板列表失败:', error);
-      
+
       // 返回空模板列表，提示用户重试
       return [{
-                  templateNo: 'TN84E8C106BFE74FD3AE36AC2CA33A44DE',
+        templateNo: 'ERROR',
         templateName: '模板加载失败',
-        description: '无法从爱签API获取模板字段，请刷新页面重试',
+        description: `无法从爱签API获取模板列表: ${error.message}`,
         fields: []
       }];
     }

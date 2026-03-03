@@ -792,7 +792,11 @@ export class DashubaoService {
       filter.resumeId = new Types.ObjectId(query.resumeId);
     }
     if (query.createdBy) {
-      filter.createdBy = new Types.ObjectId(query.createdBy);
+      // 兼容 createdBy 可能是 ObjectId 或 string 类型
+      filter.$or = [
+        { createdBy: new Types.ObjectId(query.createdBy) },
+        { createdBy: query.createdBy }
+      ];
     }
 
     const page = query.page || 1;

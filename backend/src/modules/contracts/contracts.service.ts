@@ -492,21 +492,30 @@ export class ContractsService {
   }> {
     try {
       const query: any = {};
+      const andConditions: any[] = [];
 
       // 按创建人过滤（用于普通员工只看自己的合同）
+      // 兼容 createdBy 可能是 ObjectId 或 string 类型
       if (createdBy) {
-        query.createdBy = new Types.ObjectId(createdBy);
+        andConditions.push({
+          $or: [
+            { createdBy: new Types.ObjectId(createdBy) },
+            { createdBy: createdBy }
+          ]
+        });
       }
 
       // 默认只显示最新合同，除非明确要求显示所有合同
       if (!showAll) {
-        query.$or = [
-          { isLatest: true }, // 显示标记为最新的合同
-          {
-            isLatest: { $exists: false }, // 兼容旧数据：没有 isLatest 字段
-            contractStatus: { $ne: 'replaced' } // 且状态不是已替换
-          }
-        ];
+        andConditions.push({
+          $or: [
+            { isLatest: true }, // 显示标记为最新的合同
+            {
+              isLatest: { $exists: false }, // 兼容旧数据：没有 isLatest 字段
+              contractStatus: { $ne: 'replaced' } // 且状态不是已替换
+            }
+          ]
+        });
       }
 
       if (search) {
@@ -518,17 +527,12 @@ export class ContractsService {
           { workerPhone: { $regex: search, $options: 'i' } },
           { workerIdCard: { $regex: search, $options: 'i' } }, // 支持按阿姨身份证搜索
         ];
+        andConditions.push({ $or: searchConditions });
+      }
 
-        if (query.$or) {
-          // 如果已经有$or条件，需要合并
-          query.$and = [
-            { $or: query.$or },
-            { $or: searchConditions }
-          ];
-          delete query.$or;
-        } else {
-          query.$or = searchConditions;
-        }
+      // 合并所有条件
+      if (andConditions.length > 0) {
+        query.$and = andConditions;
       }
 
       // 验证 ObjectId 格式的辅助函数

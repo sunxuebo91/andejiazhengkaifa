@@ -507,6 +507,12 @@ export class ResumeController {
     }
   }
 
+  // 检查是否是管理员或经理
+  private isManagerOrAdmin(user: any): boolean {
+    return user?.role === '系统管理员' || user?.role === 'admin' ||
+           user?.role === '经理' || user?.role === 'manager';
+  }
+
   @Get()
   @ApiOperation({ summary: '获取简历列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -528,8 +534,12 @@ export class ResumeController {
       let pageSize = 10;
       let maxAge: number | undefined = undefined;
 
+      // 权限控制：管理员和经理可以看到所有简历，普通员工只能看自己创建的
+      const user = req?.user;
+      const createdBy = this.isManagerOrAdmin(user) ? undefined : user?.userId;
+
       // 详细记录请求信息
-      this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}`);
+      this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}, createdBy=${createdBy}`);
 
       // 安全地解析页码
       try {
@@ -578,7 +588,8 @@ export class ResumeController {
         orderStatus,
         maxAge,
         nativePlace,
-        ethnicity
+        ethnicity,
+        createdBy
       );
 
       return {

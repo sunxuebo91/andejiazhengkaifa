@@ -207,9 +207,9 @@ export class ResumeService {
     return OrderStatus.SIGNED;
   }
 
-  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string) {
+  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, createdBy?: string) {
     try {
-      this.logger.log(`🔥 [SORT-FIX-FINAL] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
+      this.logger.log(`🔥 [SORT-FIX-FINAL] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}, createdBy: ${createdBy}`);
       console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
 
       // 首次查询时检查updatedAt字段
@@ -221,13 +221,30 @@ export class ResumeService {
       // 构建查询条件
       const query: any = {};
 
+      // 按创建人过滤（用于普通员工只看自己的简历）
+      if (createdBy) {
+        query.$or = [
+          { userId: new Types.ObjectId(createdBy) },
+          { userId: createdBy }
+        ];
+      }
+
       // 关键词搜索
       if (keyword) {
-        query.$or = [
+        const keywordConditions = [
           { name: { $regex: keyword, $options: 'i' } },
           { phone: { $regex: keyword, $options: 'i' } },
           { expectedPosition: { $regex: keyword, $options: 'i' } }
         ];
+        if (query.$or) {
+          // 已有 createdBy 的 $or 条件，需要用 $and 组合
+          query.$and = query.$and || [];
+          query.$and.push({ $or: query.$or });
+          query.$and.push({ $or: keywordConditions });
+          delete query.$or;
+        } else {
+          query.$or = keywordConditions;
+        }
       }
 
       // 工种筛选

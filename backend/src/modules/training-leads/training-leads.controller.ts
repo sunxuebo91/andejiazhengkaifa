@@ -50,6 +50,12 @@ export class TrainingLeadsController {
 
   constructor(private readonly trainingLeadsService: TrainingLeadsService) {}
 
+  // 检查是否是管理员或经理
+  private isManagerOrAdmin(user: any): boolean {
+    return user?.role === '系统管理员' || user?.role === 'admin' ||
+           user?.role === '经理' || user?.role === 'manager';
+  }
+
   @Post()
   @ApiOperation({ summary: '创建培训线索' })
   @ApiResponse({ status: 201, description: '创建成功' })
@@ -112,7 +118,12 @@ export class TrainingLeadsController {
   @Get()
   @ApiOperation({ summary: '获取培训线索列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async findAll(@Query() query: TrainingLeadQueryDto) {
+  async findAll(@Query() query: TrainingLeadQueryDto, @Request() req) {
+    const user = req?.user;
+    // 管理员和经理可以看到所有线索，普通员工只能看自己创建的
+    if (!this.isManagerOrAdmin(user)) {
+      query.createdBy = user?.userId;
+    }
     const result = await this.trainingLeadsService.findAll(query);
     return {
       success: true,

@@ -94,18 +94,36 @@ export class TrainingLeadsService {
    * 查询培训线索列表
    */
   async findAll(query: TrainingLeadQueryDto): Promise<any> {
-    const { page = 1, pageSize = 10, search, leadLevel, status, leadSource, trainingType, startDate, endDate, assignedTo } = query;
+    const { page = 1, pageSize = 10, search, leadLevel, status, leadSource, trainingType, startDate, endDate, assignedTo, createdBy } = query;
 
     const filter: any = {};
+    const andConditions: any[] = [];
+
+    // 按创建人过滤（用于普通员工只看自己的线索）
+    if (createdBy) {
+      andConditions.push({
+        $or: [
+          { createdBy: new Types.ObjectId(createdBy) },
+          { createdBy: createdBy }
+        ]
+      });
+    }
 
     // 搜索条件
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { wechatId: { $regex: search, $options: 'i' } },
-        { leadId: { $regex: search, $options: 'i' } }
-      ];
+      andConditions.push({
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } },
+          { wechatId: { $regex: search, $options: 'i' } },
+          { leadId: { $regex: search, $options: 'i' } }
+        ]
+      });
+    }
+
+    // 合并 $and 条件
+    if (andConditions.length > 0) {
+      filter.$and = andConditions;
     }
 
     // 筛选条件

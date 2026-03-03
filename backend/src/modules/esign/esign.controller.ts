@@ -1133,6 +1133,49 @@ export class ESignController {
   }
 
   /**
+   * 测试合同签署通知功能
+   * 用于手动触发通知测试，验证微信订阅消息是否能正常发送
+   */
+  @Public()
+  @Post('test-notification/:contractId')
+  async testNotification(@Param('contractId') contractId: string) {
+    this.logger.log(`📧 测试通知 - 合同ID: ${contractId}`);
+
+    try {
+      // 查找合同
+      const contract = await this.contractsService.findOne(contractId);
+      if (!contract) {
+        return { success: false, message: '合同不存在' };
+      }
+
+      // 发送测试通知
+      const result = await this.contractSignNotificationService.sendContractSignedNotification(
+        {
+          _id: contract._id.toString(),
+          contractNumber: contract.contractNumber || contract.esignContractNo,
+          customerName: contract.customerName,
+          workerName: contract.workerName,
+          customerServiceFee: contract.customerServiceFee,
+          createdBy: contract.createdBy,
+        },
+        'both'
+      );
+
+      return {
+        success: true,
+        message: '测试通知已发送',
+        result,
+      };
+    } catch (error) {
+      this.logger.error(`测试通知失败:`, error);
+      return {
+        success: false,
+        message: error.message || '发送失败',
+      };
+    }
+  }
+
+  /**
    * 爱签合同状态回调
    * 当合同状态变化时，爱签会调用这个接口
    *

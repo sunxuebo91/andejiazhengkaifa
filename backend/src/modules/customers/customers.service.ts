@@ -288,28 +288,20 @@ export class CustomersService {
     if (currentUserId) {
       const currentUser = await this.userModel.findById(currentUserId).select('role').lean();
       const role = (currentUser as any)?.role;
-      if (role === 'employee') {
+      // 检查是否是普通员工（兼容 'employee' 和 '普通员工'）
+      const isEmployee = role === 'employee' || role === '普通员工';
+      if (isEmployee) {
         // 员工默认仅能看到自己负责或自己创建的客户
-        if (!searchConditions.assignedTo) {
-          searchConditions.$and = (searchConditions.$and || []).concat([
-            {
-              $or: [
-                { assignedTo: new Types.ObjectId(currentUserId) },
-                { createdBy: currentUserId },
-              ],
-            },
-          ]);
-        } else {
-          // 即使传入了 assignedTo，如果不是本人，则仍然限制为本人可见范围
-          searchConditions.$and = (searchConditions.$and || []).concat([
-            {
-              $or: [
-                { assignedTo: new Types.ObjectId(currentUserId) },
-                { createdBy: currentUserId },
-              ],
-            },
-          ]);
-        }
+        searchConditions.$and = (searchConditions.$and || []).concat([
+          {
+            $or: [
+              { assignedTo: new Types.ObjectId(currentUserId) },
+              { assignedTo: currentUserId },
+              { createdBy: new Types.ObjectId(currentUserId) },
+              { createdBy: currentUserId },
+            ],
+          },
+        ]);
       }
     }
 

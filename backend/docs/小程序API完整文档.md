@@ -20,6 +20,17 @@
   - [创建员工评价](#创建员工评价)
   - [获取评价列表](#获取评价列表)
   - [获取评价统计](#获取评价统计)
+- [👥 客户管理](#客户管理)
+  - [获取客户统计信息](#获取客户统计信息)
+  - [获取客户列表](#获取客户列表)
+  - [创建客户](#创建客户)
+  - [获取客户详情](#获取客户详情)
+  - [更新客户](#更新客户)
+  - [分配客户](#分配客户)
+  - [新增跟进记录](#新增跟进记录)
+  - [获取跟进记录](#获取跟进记录)
+  - [获取分配历史](#获取分配历史)
+  - [获取员工列表用于分配](#获取员工列表用于分配)
 - [� 合同管理](#合同管理)
   - [获取合同列表](#获取合同列表)
   - [获取合同详情](#获取合同详情)
@@ -127,6 +138,7 @@ Content-Type: application/json
 | 文章内容 | ❌ 无需认证 | - |
 | 简历管理 | ✅ 需要JWT（self-register除外） | ✅ 普通员工仅自己数据 |
 | 员工评价 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
+| 客户管理 | ✅ 需要JWT | ✅ 普通员工仅自己负责客户 |
 | 合同管理 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
 | 保险保单管理 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
 
@@ -3979,6 +3991,498 @@ wx.request({
 
 ---
 
+## 👥 客户管理
+
+小程序端客户管理接口，支持客户列表和统计数据查询，可用于列表筛选和顶部统计卡片联动。
+
+**路由前缀**: `/api/customers/miniprogram/`  
+**认证要求**: ✅ 需要 JWT 认证 + 角色权限验证  
+**数据隔离**: 普通员工仅统计/查看自己负责的客户（后端会强制覆盖 `assignedTo` 为当前用户）
+
+### 接口列表
+
+| 接口 | 方法 | 路径 | 说明 |
+|------|------|------|------|
+| 获取客户统计信息 | GET | `/api/customers/miniprogram/statistics` | 统计卡片接口（支持筛选） |
+| 获取客户列表 | GET | `/api/customers/miniprogram/list` | 客户分页列表 |
+| 创建客户 | POST | `/api/customers/miniprogram/create` | 新增客户 |
+| 获取客户详情 | GET | `/api/customers/miniprogram/:id` | 客户详情 |
+| 更新客户 | PATCH | `/api/customers/miniprogram/:id` | 编辑客户 |
+| 分配客户 | PATCH | `/api/customers/miniprogram/:id/assign` | 指定负责人 |
+| 新增跟进记录 | POST | `/api/customers/miniprogram/:id/follow-ups` | 写入跟进 |
+| 获取跟进记录 | GET | `/api/customers/miniprogram/:id/follow-ups` | 跟进列表 |
+| 获取分配历史 | GET | `/api/customers/miniprogram/:id/assignment-logs` | 分配历史 |
+| 获取员工列表 | GET | `/api/customers/miniprogram/employees/list` | 分配弹窗员工数据 |
+
+### 获取客户统计信息
+
+按筛选条件返回客户统计结果，适合小程序顶部统计数字使用。
+
+#### 请求
+
+```http
+GET /api/customers/miniprogram/statistics?search=张三&assignedTo=67c6d07f9e8b5c0012f8abcd&leadLevel=A类&leadStatus=已流转
+Authorization: Bearer {token}
+```
+
+#### 查询参数（均为可选）
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `search` | string | 搜索关键词，匹配客户姓名或手机号（模糊） |
+| `assignedTo` | string | 归属人 ID（普通员工会被后端忽略并替换为本人） |
+| `leadLevel` | string | 线索等级：`O类`、`A类`、`B类`、`C类`、`D类`、`流失` |
+| `leadStatus` | string | 线索状态：`已流转`、`未流转`（通过 `transferCount` 判断） |
+
+#### 成功响应（管理员/经理）
+
+```json
+{
+  "success": true,
+  "message": "统计信息获取成功",
+  "data": {
+    "total": 4,
+    "byContractStatus": {
+      "匹配中": 2,
+      "已签约": 1,
+      "流失客户": 1
+    },
+    "byLeadSource": {
+      "抖音": 2,
+      "转介绍": 1,
+      "美团": 1
+    },
+    "byServiceCategory": {
+      "月嫂": 3,
+      "住家保姆": 1
+    }
+  },
+  "timestamp": 1772612000000
+}
+```
+
+#### 成功响应（普通员工）
+
+```json
+{
+  "success": true,
+  "message": "统计信息获取成功",
+  "data": {
+    "total": 4,
+    "myCustomers": 4,
+    "byContractStatus": {
+      "匹配中": 2,
+      "已签约": 1,
+      "流失客户": 1
+    }
+  },
+  "timestamp": 1772612000000
+}
+```
+
+#### 小程序调用示例
+
+```javascript
+// 统计卡片筛选联动
+wx.request({
+  url: `${BASE_URL}/customers/miniprogram/statistics`,
+  method: 'GET',
+  header: {
+    Authorization: `Bearer ${token}`
+  },
+  data: {
+    search: '张三',
+    assignedTo: selectedUserId, // 普通员工传了也会被后端覆盖为本人
+    leadLevel: 'A类',
+    leadStatus: '已流转'
+  },
+  success: (res) => {
+    if (res.data.success) {
+      const stats = res.data.data;
+      this.setData({
+        total: stats.total || 0,
+        byContractStatus: stats.byContractStatus || {}
+      });
+    }
+  }
+});
+```
+
+### 获取客户列表
+
+获取客户分页列表，支持条件筛选。小程序列表页建议与统计页使用同一组筛选参数。
+
+#### 请求
+
+```http
+GET /api/customers/miniprogram/list?page=1&limit=10&search=张三&assignedTo=67c6d07f9e8b5c0012f8abcd&leadLevel=A类
+Authorization: Bearer {token}
+```
+
+#### 常用查询参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `page` | number | 页码，默认 `1` |
+| `limit` | number | 每页条数，默认 `10` |
+| `search` | string | 搜索关键词（姓名、手机号、微信号） |
+| `assignedTo` | string | 负责人 ID（普通员工会被后端覆盖为本人） |
+| `contractStatus` | string | 客户状态：`已签约`、`匹配中`、`已面试`、`流失客户`、`已退款`、`退款中`、`待定` |
+| `leadLevel` | string | 线索等级：`O类`、`A类`、`B类`、`C类`、`D类`、`流失` |
+
+#### 成功响应（示例）
+
+```json
+{
+  "success": true,
+  "message": "客户列表获取成功",
+  "data": {
+    "customers": [
+      {
+        "_id": "67c6d07f9e8b5c0012f8abcd",
+        "customerId": "CUS260304001",
+        "name": "张三",
+        "phone": "13800138000",
+        "contractStatus": "匹配中",
+        "leadLevel": "A类",
+        "assignedToUser": {
+          "name": "销售一组",
+          "username": "xiaoshou01"
+        }
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1,
+    "hasMore": false
+  },
+  "timestamp": 1772612000000
+}
+```
+
+### 创建客户
+
+创建新的客户线索，支持 `Idempotency-Key` 防重复提交。
+
+#### 请求
+
+```http
+POST /api/customers/miniprogram/create
+Authorization: Bearer {token}
+Content-Type: application/json
+Idempotency-Key: {unique-key}   # 可选
+```
+
+#### 请求体（核心字段）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `name` | string | ✅ | 客户姓名 |
+| `phone` | string | 条件必填 | 手机号（与 `wechatId` 至少二选一） |
+| `wechatId` | string | 条件必填 | 微信号（与 `phone` 至少二选一） |
+| `leadSource` | string | ✅ | 线索来源 |
+| `contractStatus` | string | ✅ | 客户状态 |
+| `leadLevel` | string | ✅ | 线索等级 |
+| `assignedTo` | string | ❌ | 指定负责人 ID（管理员/经理常用） |
+| `assignmentReason` | string | ❌ | 分配原因 |
+
+#### 成功响应（201）
+
+```json
+{
+  "success": true,
+  "message": "客户创建成功",
+  "data": {
+    "id": "67c6d07f9e8b5c0012f8abcd",
+    "customerId": "CUS260304001",
+    "createdAt": "2026-03-04T16:30:00.000Z",
+    "action": "CREATED",
+    "customer": {
+      "_id": "67c6d07f9e8b5c0012f8abcd",
+      "name": "张三",
+      "phone": "13800138000",
+      "leadLevel": "A类",
+      "contractStatus": "匹配中"
+    }
+  }
+}
+```
+
+#### 常见失败
+
+- `DUPLICATE_PHONE`: 手机号已存在
+- `MISSING_CONTACT`: 手机号和微信号都未填写
+
+### 获取客户详情
+
+按客户 ID 获取详情，自动按角色做权限控制与字段脱敏。
+
+#### 请求
+
+```http
+GET /api/customers/miniprogram/{id}
+Authorization: Bearer {token}
+```
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 客户 MongoDB `_id` |
+
+#### 成功响应（200）
+
+```json
+{
+  "success": true,
+  "message": "客户详情获取成功",
+  "data": {
+    "_id": "67c6d07f9e8b5c0012f8abcd",
+    "customerId": "CUS260304001",
+    "name": "张三",
+    "phone": "13800138000",
+    "contractStatus": "匹配中",
+    "assignedToName": "销售一组",
+    "assignedByName": "王经理",
+    "createdByName": "王经理"
+  }
+}
+```
+
+### 更新客户
+
+更新客户信息（部分字段更新即可）。
+
+#### 请求
+
+```http
+PATCH /api/customers/miniprogram/{id}
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "contractStatus": "已签约",
+  "leadLevel": "O类",
+  "remarks": "客户已签约，等待上户"
+}
+```
+
+#### 成功响应（200）
+
+```json
+{
+  "success": true,
+  "message": "客户信息更新成功",
+  "data": {
+    "_id": "67c6d07f9e8b5c0012f8abcd",
+    "name": "张三",
+    "contractStatus": "已签约",
+    "leadLevel": "O类"
+  }
+}
+```
+
+### 分配客户
+
+为客户指定新的负责人（仅管理员/经理）。
+
+#### 请求
+
+```http
+PATCH /api/customers/miniprogram/{id}/assign
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "assignedTo": "67c6d07f9e8b5c0012f8beef",
+  "assignmentReason": "线索重分配"
+}
+```
+
+#### 请求体字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `assignedTo` | string | ✅ | 新负责人 ID |
+| `assignmentReason` | string | ❌ | 分配原因，最多 200 字 |
+
+#### 成功响应（200）
+
+```json
+{
+  "success": true,
+  "message": "客户分配成功",
+  "data": {
+    "customerId": "67c6d07f9e8b5c0012f8abcd",
+    "assignedTo": "67c6d07f9e8b5c0012f8beef",
+    "assignedAt": "2026-03-04T16:35:00.000Z",
+    "notificationData": {
+      "assignedToId": "67c6d07f9e8b5c0012f8beef",
+      "customerName": "张三",
+      "source": "线索重分配"
+    }
+  }
+}
+```
+
+### 新增跟进记录
+
+为客户添加一条跟进记录。
+
+#### 请求
+
+```http
+POST /api/customers/miniprogram/{id}/follow-ups
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "type": "phone",
+  "content": "电话沟通客户需求，预算 9000 左右"
+}
+```
+
+#### 请求体字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `type` | string | ✅ | 跟进方式：`phone`、`wechat`、`visit`、`other` |
+| `content` | string | ✅ | 跟进内容，最多 1000 字 |
+
+#### 成功响应（200）
+
+```json
+{
+  "success": true,
+  "message": "跟进记录创建成功",
+  "data": {
+    "_id": "67c6d07f9e8b5c0012f8c111",
+    "customerId": "67c6d07f9e8b5c0012f8abcd",
+    "type": "phone",
+    "content": "电话沟通客户需求，预算 9000 左右",
+    "createdBy": "67c6d07f9e8b5c0012f8beef",
+    "createdAt": "2026-03-04T16:40:00.000Z"
+  }
+}
+```
+
+### 获取跟进记录
+
+查询指定客户的跟进记录列表（按时间倒序）。
+
+#### 请求
+
+```http
+GET /api/customers/miniprogram/{id}/follow-ups
+Authorization: Bearer {token}
+```
+
+#### 成功响应（200）
+
+```json
+{
+  "success": true,
+  "message": "跟进记录获取成功",
+  "data": [
+    {
+      "_id": "67c6d07f9e8b5c0012f8c111",
+      "type": "phone",
+      "content": "电话沟通客户需求，预算 9000 左右",
+      "createdBy": {
+        "name": "王销售",
+        "username": "wangxiao"
+      },
+      "createdAt": "2026-03-04T16:40:00.000Z"
+    }
+  ]
+}
+```
+
+### 获取分配历史
+
+查询客户的负责人变更日志（仅管理员/经理）。
+
+#### 请求
+
+```http
+GET /api/customers/miniprogram/{id}/assignment-logs
+Authorization: Bearer {token}
+```
+
+#### 成功响应（200）
+
+```json
+{
+  "success": true,
+  "message": "分配历史获取成功",
+  "data": [
+    {
+      "_id": "67c6d07f9e8b5c0012f8d222",
+      "oldAssignedToUser": { "name": "李销售", "username": "li01" },
+      "newAssignedToUser": { "name": "王销售", "username": "wang01" },
+      "assignedByUser": { "name": "赵经理", "username": "zhao01" },
+      "assignedAt": "2026-03-04T15:10:00.000Z"
+    }
+  ]
+}
+```
+
+### 获取员工列表用于分配
+
+用于“分配负责人”下拉选择。不同角色看到的数据范围不同：
+
+- 系统管理员：全部活跃员工
+- 经理：本部门活跃员工
+- 普通员工：仅自己
+
+#### 请求
+
+```http
+GET /api/customers/miniprogram/employees/list
+Authorization: Bearer {token}
+```
+
+#### 成功响应（200）
+
+```json
+{
+  "success": true,
+  "message": "获取员工列表成功",
+  "data": [
+    {
+      "_id": "67c6d07f9e8b5c0012f8beef",
+      "name": "王销售",
+      "role": "employee",
+      "department": "销售一组",
+      "phone": "13800000000",
+      "email": "wang@demo.com",
+      "status": "active"
+    }
+  ]
+}
+```
+
+#### 小程序调用建议
+
+客户列表与统计接口应使用同一组筛选参数，避免“列表数量”和“统计数字”不一致：
+
+```javascript
+const filters = {
+  search: this.data.search || '',
+  assignedTo: this.data.assignedTo || '',
+  leadLevel: this.data.leadLevel || '',
+  leadStatus: this.data.leadStatus || ''
+};
+
+// 1) 先拉统计
+api.get('/customers/miniprogram/statistics', filters);
+// 2) 再拉列表
+api.get('/customers/miniprogram/list', { ...filters, page: 1, limit: 10 });
+```
+
+---
+
 ## 📝 合同管理
 
 小程序端合同管理接口，支持合同创建、查询、更新、换人、保险同步、电子签章等完整操作流程。
@@ -5579,4 +6083,3 @@ export async function payForPolicy(policyRef) {
 - ✅ 提供完整的小程序调用示例和页面代码
 - ✅ 支持文章搜索、分页和状态筛选
 - ✅ 支持富文本渲染和图片展示
-

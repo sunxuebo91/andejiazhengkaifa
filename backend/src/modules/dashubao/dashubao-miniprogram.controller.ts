@@ -154,26 +154,82 @@ export class DashubaoMiniprogramController {
 
   @Post('policy/payment/:policyRef')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '【小程序】创建支付订单（微信小程序支付）' })
+  @ApiOperation({ summary: '【小程序】创建支付订单（小程序支付）' })
   @ApiParam({ name: 'policyRef', description: '保单号或商户单号' })
   @ApiResponse({ status: 200, description: '获取支付信息成功' })
   async createPaymentOrder(
     @Param('policyRef') policyRef: string,
-    @Body() body: { openId?: string; openid?: string },
+    @Body() body: { openId?: string; openid?: string; code?: string },
     @Query('openId') queryOpenId?: string,
     @Request() req?,
   ) {
+    const configuredAppId = process.env.MINIPROGRAM_APPID || 'wx49e364f40a26e5a9';
+
     try {
-      // 获取 openId（优先客户端传参，其次JWT里的openid）
-      const openId = body?.openId || body?.openid || queryOpenId || req?.user?.openid;
-      if (!openId) {
-        return { success: false, data: null, message: '缺少openId参数，且JWT中无openid，小程序支付必须传递openId' };
+      // 获取 openId
+      let openId = body?.openId || body?.openid || queryOpenId || req?.user?.openid;
+      let openIdSource = 'param';
+
+      // 如果传了 code，用 code 换取 openId
+      if (body?.code) {
+        try {
+          const appId = process.env.MINIPROGRAM_APPID;
+          const appSecret = process.env.MINIPROGRAM_APPSECRET;
+          const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${appSecret}&js_code=${body.code}&grant_type=authorization_code`;
+          const axios = require('axios');
+          const wxRes = await axios.get(url);
+          if (wxRes.data?.openid) {
+            openId = wxRes.data.openid;
+            openIdSource = 'code_exchange';
+            console.log(`[支付] 通过code换取openId成功`);
+          }
+        } catch (e) {
+          console.error(`[支付] 通过code换取openId失败:`, e.message);
+        }
       }
-      // 小程序固定使用 MINI 支付方式
+
+      if (!openId) {
+        return {
+          success: false,
+          data: null,
+          message: '缺少openId参数，小程序支付必须传递openId或code'
+        };
+      }
+
+      // 脱敏 openId
+      const maskedOpenId = openId.length > 10
+        ? `${openId.substring(0, 6)}****${openId.substring(openId.length - 4)}`
+        : openId;
+
+      console.log(`[支付] 使用小程序支付(MINI)`);
+      console.log(`[支付] AppId: ${configuredAppId}`);
+      console.log(`[支付] OpenId: ${maskedOpenId} (来源: ${openIdSource})`);
+
+      // 调用小程序支付
       const result = await this.dashubaoService.createPaymentOrder(policyRef, 'MINI', openId);
-      return { success: true, data: result, message: '获取支付信息成功' };
+
+      return {
+        success: true,
+        data: result,
+        message: result.Success === 'true' ? '获取支付参数成功' : result.Message,
+        paymentType: 'MINI',
+        debug: {
+          configuredAppId,
+          maskedOpenId,
+          openIdSource,
+          dashubaoSuccess: result.Success,
+          dashubaoMessage: result.Message,
+          orderId: result.OrderId,
+          wechatAppId: result.WeChatAppId || '未返回'
+        }
+      };
+
     } catch (error) {
-      return { success: false, data: null, message: error.message || '获取支付信息失败' };
+      return {
+        success: false,
+        data: null,
+        message: error.message || '获取支付信息失败'
+      };
     }
   }
 
@@ -184,7 +240,16 @@ export class DashubaoMiniprogramController {
   async cancelPolicy(@Body() dto: CancelPolicyDto) {
     try {
       const result = await this.dashubaoService.cancelPolicy(dto);
-      return { success: true, data: result, message: '注销成功' };
+      // 根据大树保返回的 Success 字段判断注销是否成功
+      if (result.Success === 'true') {
+        return { success: true, data: result, message: '注销成功' };
+      } else {
+        return {
+          success: false,
+          data: result,
+          message: result.Message || '注销失败（保单状态不允许注销或已注销）'
+        };
+      }
     } catch (error) {
       return { success: false, data: null, message: error.message || '注销失败' };
     }
@@ -197,7 +262,17 @@ export class DashubaoMiniprogramController {
   async surrenderPolicy(@Body() dto: SurrenderPolicyDto) {
     try {
       const result = await this.dashubaoService.surrenderPolicy(dto);
-      return { success: true, data: result, message: '退保成功' };
+      // 根据大树保返回的 Success 字段判断退保是否成功
+      if (result.Success === 'true') {
+        return { success: true, data: result, message: '退保成功' };
+      } else {
+        // 大树保业务失败，返回失败信息
+        return {
+          success: false,
+          data: result,
+          message: result.Message || '退保失败（保单状态不允许退保或已退保）'
+        };
+      }
     } catch (error) {
       return { success: false, data: null, message: error.message || '退保失败' };
     }

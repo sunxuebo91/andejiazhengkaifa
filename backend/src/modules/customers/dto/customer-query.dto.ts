@@ -38,6 +38,10 @@ export class CustomerQueryDto {
   @IsEnum(['O类', 'A类', 'B类', 'C类', 'D类', '流失'])
   leadLevel?: string;
 
+  @IsOptional()
+  @IsEnum(['已流转', '未流转'])
+  leadStatus?: string; // 线索状态（通过 transferCount 判断）
+
   // 按负责人过滤（我的客户/指定负责人）
   @IsOptional()
   @IsMongoId()

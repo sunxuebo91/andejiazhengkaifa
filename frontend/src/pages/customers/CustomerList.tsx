@@ -74,6 +74,7 @@ const CustomerList: React.FC = () => {
     serviceCategory: string | undefined;
     contractStatus: string | undefined;
     leadLevel: string | undefined;
+    leadStatus: string | undefined;
     assignedTo: string | undefined;
     startDate: string;
     endDate: string;
@@ -87,6 +88,7 @@ const CustomerList: React.FC = () => {
     serviceCategory: undefined,
     contractStatus: undefined,
     leadLevel: undefined,
+    leadStatus: undefined,
     assignedTo: undefined,
     startDate: '',
     endDate: '',
@@ -153,6 +155,7 @@ const CustomerList: React.FC = () => {
       serviceCategory: undefined,
       contractStatus: undefined,
       leadLevel: undefined,
+      leadStatus: undefined,
       assignedTo: undefined,
       startDate: '',
       endDate: '',
@@ -493,8 +496,11 @@ const CustomerList: React.FC = () => {
       title: '更新时间',
       dataIndex: 'updatedAt',
       key: 'updatedAt',
-      width: 120,
-      render: (date: string) => new Date(date).toLocaleDateString(),
+      width: 150,
+      render: (date: string) => {
+        const d = new Date(date);
+        return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      },
     },
     {
       title: '操作',
@@ -549,8 +555,9 @@ const CustomerList: React.FC = () => {
       <Card title="客户管理" style={{ marginBottom: '24px' }}>
         {/* 搜索筛选和操作区域 */}
         <div style={{ marginBottom: '16px' }}>
+          {/* 第一行：搜索框 + 下拉筛选 + 搜索/重置按钮 */}
           <Row gutter={[12, 8]} align="middle">
-            <Col span={5}>
+            <Col span={4}>
               <Search
                 placeholder="搜索客户姓名、电话、微信号"
                 allowClear
@@ -615,6 +622,18 @@ const CustomerList: React.FC = () => {
             </Col>
             <Col span={3}>
               <Select
+                placeholder="线索状态"
+                allowClear
+                style={{ width: '100%' }}
+                value={searchFilters.leadStatus}
+                onChange={(value) => setSearchFilters({ ...searchFilters, leadStatus: value })}
+              >
+                <Option value="已流转">已流转</Option>
+                <Option value="未流转">未流转</Option>
+              </Select>
+            </Col>
+            <Col span={3}>
+              <Select
                 placeholder="线索归属人"
                 allowClear
                 style={{ width: '100%' }}
@@ -636,7 +655,7 @@ const CustomerList: React.FC = () => {
                 ))}
               </Select>
             </Col>
-            <Col span={4}>
+            <Col span={2}>
               <Space>
                 <Button type="primary" onClick={handleSearch}>
                   搜索
@@ -647,6 +666,7 @@ const CustomerList: React.FC = () => {
               </Space>
             </Col>
           </Row>
+          {/* 第二行：日期筛选 + 操作按钮 */}
           <Row gutter={[12, 8]} align="middle" style={{ marginTop: '8px' }}>
             <Col span={5}>
               <RangePicker

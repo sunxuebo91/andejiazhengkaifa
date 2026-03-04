@@ -97,6 +97,11 @@ export class CustomersController {
       updatedAt: customer.updatedAt,
       assignedTo: customer.assignedTo,
       assignedToUser: customer.assignedToUser,
+      // 线索流转相关字段
+      transferCount: customer.transferCount || 0,
+      lastTransferredAt: customer.lastTransferredAt,
+      autoTransferEnabled: customer.autoTransferEnabled,
+      lastActivityAt: customer.lastActivityAt,
     };
 
     // 判断是否是自己负责的客户
@@ -560,36 +565,27 @@ export class CustomersController {
   @ApiOperation({ summary: '小程序获取客户统计信息（基于角色权限）' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
-  async getStatisticsForMiniprogram(@Request() req): Promise<ApiResponse> {
+  async getStatisticsForMiniprogram(@Query() query: CustomerQueryDto, @Request() req): Promise<ApiResponse> {
     try {
       const userRole = this.mapRoleToChineseRole(req.user.role);
       const userId = req.user.userId;
+      const filteredQuery: any = { ...query };
 
       let stats;
       if (userRole === '普通员工') {
         // 普通员工只能看自己负责的客户统计
-        const query = { assignedTo: userId };
-        const result = await this.customersService.findAll(query, userId);
+        filteredQuery.assignedTo = userId;
+        const filteredStats = await this.customersService.getFilteredStatisticsForMiniprogram(filteredQuery);
 
         // 简化的统计信息
         stats = {
-          total: result.total,
-          myCustomers: result.total,
-          byContractStatus: this.calculateStatusStats(result.customers),
+          total: filteredStats.total,
+          myCustomers: filteredStats.total,
+          byContractStatus: filteredStats.byContractStatus,
         };
       } else {
         // 管理员和经理可以看全局统计
-        stats = await this.customersService.getStatistics();
-
-        // 为经理和管理员添加更详细的统计信息
-        if (userRole === '经理' || userRole === '系统管理员') {
-          const allCustomers = await this.customersService.findAll({}, userId);
-          stats = {
-            ...stats,
-            byLeadSource: this.calculateLeadSourceStats(allCustomers.customers),
-            byServiceCategory: this.calculateServiceCategoryStats(allCustomers.customers),
-          };
-        }
+        stats = await this.customersService.getFilteredStatisticsForMiniprogram(filteredQuery);
       }
 
       return this.createResponse(true, '统计信息获取成功', stats);

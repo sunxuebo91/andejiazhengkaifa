@@ -4,6 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import axios, { AxiosInstance } from 'axios';
 import { Contract, ContractDocument } from '../contracts/models/contract.model';
+import { Customer, CustomerDocument } from '../customers/models/customer.model';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -52,7 +53,8 @@ export class ESignService {
 
   constructor(
     private configService: ConfigService,
-    @InjectModel(Contract.name) private contractModel: Model<ContractDocument> // 注入合同模型
+    @InjectModel(Contract.name) private contractModel: Model<ContractDocument>, // 注入合同模型
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>
   ) {
     // 爱签OpenAPI配置 - 使用正确的域名
     const defaultPrivateKey = `MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=`;
@@ -5213,6 +5215,11 @@ export class ESignService {
 
       this.logger.log(`✅ 合同状态已更新: ${contract._id}`);
 
+      // 签约完成后，同步客户姓名为合同中的真实姓名（合同发起姓名）
+      if (status === 2 || status === '2') {
+        await this.syncCustomerNameBySignedContract(contract);
+      }
+
       // 🔔 如果状态变为 active，触发保险同步
       // 注意：这里不能直接注入 ContractsService（会造成循环依赖）
       // 保险同步会在 ContractsService.update() 方法中自动触发
@@ -5225,6 +5232,59 @@ export class ESignService {
       this.logger.error('❌ 处理爱签回调失败:', error);
       throw error;
     }
+  }
+
+  private async syncCustomerNameBySignedContract(contract: ContractDocument): Promise<void> {
+    const realName = contract.customerName?.trim();
+    if (!realName) {
+      this.logger.warn(`⚠️ 合同 ${contract.contractNumber} 缺少 customerName，跳过客户姓名同步`);
+      return;
+    }
+
+    // 优先按 customerId 精准更新
+    if (contract.customerId) {
+      const customer = await this.customerModel.findById(contract.customerId).select('_id name phone').exec();
+      if (customer) {
+        if ((customer.name || '').trim() === realName) {
+          this.logger.log(`ℹ️ 客户姓名已是真实姓名，无需更新: ${customer._id}`);
+          return;
+        }
+
+        await this.customerModel.findByIdAndUpdate(customer._id, {
+          name: realName,
+          updatedAt: new Date(),
+          lastActivityAt: new Date(),
+        }).exec();
+
+        this.logger.log(`✅ 已同步客户姓名: ${customer._id}, "${customer.name}" -> "${realName}"`);
+        return;
+      }
+    }
+
+    // 兜底：按合同手机号更新（历史脏数据可能没有 customerId）
+    if (contract.customerPhone) {
+      const customer = await this.customerModel.findOne({ phone: contract.customerPhone }).select('_id name phone').exec();
+      if (!customer) {
+        this.logger.warn(`⚠️ 未找到可同步姓名的客户，contractNo=${contract.contractNumber}, phone=${contract.customerPhone}`);
+        return;
+      }
+
+      if ((customer.name || '').trim() === realName) {
+        this.logger.log(`ℹ️ 客户姓名已是真实姓名，无需更新: ${customer._id}`);
+        return;
+      }
+
+      await this.customerModel.findByIdAndUpdate(customer._id, {
+        name: realName,
+        updatedAt: new Date(),
+        lastActivityAt: new Date(),
+      }).exec();
+
+      this.logger.log(`✅ 已按手机号同步客户姓名: ${customer._id}, "${customer.name}" -> "${realName}"`);
+      return;
+    }
+
+    this.logger.warn(`⚠️ 合同 ${contract.contractNumber} 缺少 customerId/customerPhone，无法同步客户姓名`);
   }
 
 }

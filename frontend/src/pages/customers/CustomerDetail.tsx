@@ -437,6 +437,19 @@ const CustomerDetail: React.FC = () => {
                     {customer.contractStatus}
                   </Tag>
                 </Descriptions.Item>
+
+                {/* O类线索不显示线索状态 */}
+                {customer.leadLevel !== 'O类' && (() => {
+                  const transferCount = customer.transferCount || 0;
+                  const isTransferring = transferCount > 0 && customer.lastTransferredAt;
+                  return (
+                    <Descriptions.Item label="线索状态" span={1}>
+                      <Tag color={isTransferring ? 'processing' : 'default'}>
+                        {isTransferring ? '流转中' : '未流转'}
+                      </Tag>
+                    </Descriptions.Item>
+                  );
+                })()}
               </Descriptions>
             </Card>
           </Col>

@@ -272,13 +272,29 @@ export class CustomersService {
       }
     }
 
+    // 线索状态筛选：通过 transferCount 判断
+    if (filters.leadStatus === '已流转') {
+      searchConditions.transferCount = { $gt: 0 };
+      delete filters.leadStatus;
+    } else if (filters.leadStatus === '未流转') {
+      searchConditions.$and = (searchConditions.$and || []).concat([
+        {
+          $or: [
+            { transferCount: { $exists: false } },
+            { transferCount: 0 },
+          ],
+        },
+      ]);
+      delete filters.leadStatus;
+    }
+
     // 其他筛选条件（包含 assignedTo 等）
     Object.keys(filters).forEach((key) => {
       if (filters[key]) {
         // 如果是 assignedTo，需要转换为 ObjectId
         if (key === 'assignedTo') {
           searchConditions[key] = new Types.ObjectId(filters[key]);
-        } else {
+        } else if (key !== 'leadStatus') {
           searchConditions[key] = filters[key];
         }
       }
@@ -687,6 +703,83 @@ export class CustomersService {
       this.customerModel.aggregate([
         { $match: { inPublicPool: false } },
         { $group: { _id: '$serviceCategory', count: { $sum: 1 } } }
+      ]).exec(),
+    ]);
+
+    return {
+      total,
+      byContractStatus: byContractStatus.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      byLeadSource: byLeadSource.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      byServiceCategory: byServiceCategory.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+    };
+  }
+
+  // 小程序统计：基于筛选条件统计客户数据
+  async getFilteredStatisticsForMiniprogram(query: Partial<CustomerQueryDto>): Promise<{
+    total: number;
+    byContractStatus: Record<string, number>;
+    byLeadSource: Record<string, number>;
+    byServiceCategory: Record<string, number>;
+  }> {
+    const searchConditions: any = {
+      inPublicPool: false,
+    };
+
+    // 关键词搜索：仅姓名、手机号
+    if (query.search && query.search.trim()) {
+      const keyword = query.search.trim();
+      searchConditions.$or = [
+        { name: { $regex: keyword, $options: 'i' } },
+        { phone: { $regex: keyword, $options: 'i' } },
+      ];
+    }
+
+    // 指定归属人
+    if (query.assignedTo) {
+      searchConditions.assignedTo = new Types.ObjectId(query.assignedTo);
+    }
+
+    // 线索等级筛选
+    if (query.leadLevel) {
+      searchConditions.leadLevel = query.leadLevel;
+    }
+
+    // 线索状态筛选：通过 transferCount 判断
+    if ((query as any).leadStatus === '已流转') {
+      searchConditions.transferCount = { $gt: 0 };
+    } else if ((query as any).leadStatus === '未流转') {
+      searchConditions.$and = (searchConditions.$and || []).concat([
+        {
+          $or: [
+            { transferCount: { $exists: false } },
+            { transferCount: 0 },
+          ],
+        },
+      ]);
+    }
+
+    const [total, byContractStatus, byLeadSource, byServiceCategory] = await Promise.all([
+      this.customerModel.countDocuments(searchConditions).exec(),
+      this.customerModel.aggregate([
+        { $match: searchConditions },
+        { $group: { _id: '$contractStatus', count: { $sum: 1 } } },
+      ]).exec(),
+      this.customerModel.aggregate([
+        { $match: searchConditions },
+        { $group: { _id: '$leadSource', count: { $sum: 1 } } },
+      ]).exec(),
+      this.customerModel.aggregate([
+        { $match: searchConditions },
+        { $group: { _id: '$serviceCategory', count: { $sum: 1 } } },
       ]).exec(),
     ]);
 

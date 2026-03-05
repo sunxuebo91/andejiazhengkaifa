@@ -53,8 +53,15 @@ const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
 
 // 格式化日期为大树保格式 (yyyyMMddHHmmss)
-const formatDateForApi = (date: dayjs.Dayjs): string => {
-  return date.format('YYYYMMDDHHmmss');
+// 生效日期: 当天 00:00:00
+// 结束日期: 当天 23:59:59
+const formatDateForApi = (date: dayjs.Dayjs, isExpireDate: boolean = false): string => {
+  if (isExpireDate) {
+    // 结束日期需要设置为当天的 23:59:59
+    return date.endOf('day').format('YYYYMMDDHHmmss');
+  }
+  // 生效日期默认为当天 00:00:00
+  return date.startOf('day').format('YYYYMMDDHHmmss');
 };
 
 // 从身份证号提取出生日期和性别
@@ -478,11 +485,12 @@ const CreateInsurance: React.FC = () => {
     setLoading(true);
     try {
       // 构建请求数据
+      // 🔥 重要：生效日期 00:00:00，结束日期 23:59:59
       const policyData: CreatePolicyData = {
         productCode: selectedPlan?.productCode,
         planCode: values.planCode,
-        effectiveDate: formatDateForApi(values.effectiveDate),
-        expireDate: formatDateForApi(values.expireDate),
+        effectiveDate: formatDateForApi(values.effectiveDate, false),  // 生效日期 00:00:00
+        expireDate: formatDateForApi(values.expireDate, true),         // 结束日期 23:59:59
         groupSize: values.insuredList.length,
         totalPremium: values.totalPremium,
         serviceAddress: values.serviceAddress,

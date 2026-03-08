@@ -1,10 +1,11 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import axios, { AxiosInstance } from 'axios';
 import { Contract, ContractDocument } from '../contracts/models/contract.model';
 import { Customer, CustomerDocument } from '../customers/models/customer.model';
+import { NotificationGateway } from '../notification/notification.gateway';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -54,7 +55,9 @@ export class ESignService {
   constructor(
     private configService: ConfigService,
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>, // 注入合同模型
-    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    @Inject(forwardRef(() => NotificationGateway))
+    private notificationGateway: NotificationGateway,
   ) {
     // 爱签OpenAPI配置 - 使用正确的域名
     const defaultPrivateKey = `MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=`;
@@ -3433,7 +3436,8 @@ export class ESignService {
           // 个人用户：创建新账户
           const signerAccount = `account_${Date.now()}_${index}`;
 
-          await this.addStranger({
+          // 🔥 修复：检查 addStranger 的返回结果
+          const addStrangerResult = await this.addStranger({
             account: signerAccount,
             userType: 2, // 个人用户
             name: signer.name,
@@ -3442,6 +3446,14 @@ export class ESignService {
             isNotice: 0, // 🔕 不发送短信通知
             isSignPwdNotice: 0 // 不通知签约密码
           });
+
+          // 🔥 检查用户创建是否成功（爱签返回100000表示成功，100049表示用户已存在也算成功）
+          if (addStrangerResult && addStrangerResult.code !== 100000 && addStrangerResult.code !== 100049) {
+            const errorMsg = addStrangerResult?.msg || '添加陌生用户失败';
+            const errorCode = addStrangerResult?.code || 'UNKNOWN';
+            console.error(`❌ 爱签添加陌生用户失败: code=${errorCode}, msg=${errorMsg}`);
+            throw new Error(`爱签添加签署人失败: ${errorMsg} (错误码: ${errorCode})`);
+          }
 
           signerAccounts.push({
             name: signer.name,
@@ -3453,25 +3465,47 @@ export class ESignService {
         }
       }
 
-      // 步骤2：创建合同
-      const createResult = await this.createContractWithTemplate({
-        contractNo: params.contractNo,
-        contractName: params.contractName,
-        templateNo: params.templateNo,
-        templateParams: params.templateParams,
-        validityTime: params.validityTime,
-        signOrder: params.signOrder,
-        notifyUrl: this.config.notifyUrl // 🔥 添加回调URL，确保爱签在合同状态变化时通知我们
-      });
+      // 步骤2：创建合同（🔥 支持合同编号重复时自动重试）
+      let contractNo = params.contractNo;
+      let createResult: any = null;
+      const maxContractRetries = 3; // 最多重试3次
 
-      // 🔥 检查合同创建是否成功
-      if (!createResult || createResult.code !== 100000) {
-        const errorMsg = createResult?.msg || '创建合同失败';
-        const errorCode = createResult?.code || 'UNKNOWN';
-        console.error(`❌ 爱签创建合同失败: code=${errorCode}, msg=${errorMsg}`);
-        throw new Error(`爱签创建合同失败: ${errorMsg} (错误码: ${errorCode})`);
+      for (let retryCount = 0; retryCount < maxContractRetries; retryCount++) {
+        createResult = await this.createContractWithTemplate({
+          contractNo: contractNo,
+          contractName: params.contractName,
+          templateNo: params.templateNo,
+          templateParams: params.templateParams,
+          validityTime: params.validityTime,
+          signOrder: params.signOrder,
+          notifyUrl: this.config.notifyUrl // 🔥 添加回调URL，确保爱签在合同状态变化时通知我们
+        });
+
+        // 🔥 检查是否是合同编号重复错误（100055）
+        if (createResult?.code === 100055) {
+          // 生成新的合同编号并重试
+          const timestamp = Date.now().toString();
+          const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+          contractNo = `CON${timestamp.slice(-10)}${random}`;
+          console.log(`⚠️ 合同编号重复，重新生成编号: ${contractNo} (重试 ${retryCount + 1}/${maxContractRetries})`);
+          continue;
+        }
+
+        // 检查其他错误
+        if (!createResult || createResult.code !== 100000) {
+          const errorMsg = createResult?.msg || '创建合同失败';
+          const errorCode = createResult?.code || 'UNKNOWN';
+          console.error(`❌ 爱签创建合同失败: code=${errorCode}, msg=${errorMsg}`);
+          throw new Error(`爱签创建合同失败: ${errorMsg} (错误码: ${errorCode})`);
+        }
+
+        // 成功创建合同
+        console.log(`✅ 步骤2完成：合同创建成功，合同编号: ${contractNo}`);
+        break;
       }
-      console.log('✅ 步骤2完成：合同创建成功');
+
+      // 🔥 更新params中的合同编号（可能已经被重新生成）
+      params.contractNo = contractNo;
 
       // 步骤3：添加所有签署方（使用模板坐标签章）
       const signerResult = await this.addSimpleContractSigners({
@@ -5218,6 +5252,61 @@ export class ESignService {
       // 签约完成后，同步客户姓名为合同中的真实姓名（合同发起姓名）
       if (status === 2 || status === '2') {
         await this.syncCustomerNameBySignedContract(contract);
+
+        // 🆕 更新客户状态为"已签约"和线索等级为"O类"
+        if (contract.customerId) {
+          try {
+            const customerId = contract.customerId.toString();
+            this.logger.log(`🔄 合同签约完成，更新客户状态: ${customerId}`);
+
+            // 调用客户服务更新状态
+            const customerModel = this.contractModel.db.model('Customer');
+            const customer = await customerModel.findById(customerId).exec();
+
+            if (customer) {
+              const oldStatus = customer.contractStatus;
+              const oldLeadLevel = customer.leadLevel;
+
+              // 更新客户状态和线索等级
+              await customerModel.findByIdAndUpdate(customerId, {
+                contractStatus: '已签约',
+                leadLevel: 'O类',
+                lastActivityAt: new Date(),
+              }).exec();
+
+              this.logger.log(`✅ 客户状态已更新: ${oldStatus} -> 已签约, ${oldLeadLevel} -> O类`);
+
+              // 记录操作日志
+              const operationLogModel = this.contractModel.db.model('CustomerOperationLog');
+              await operationLogModel.create({
+                customerId: customerId,
+                operatorId: 'system',
+                operationType: 'update',
+                operationDescription: '合同签约成功，自动更新客户状态',
+                details: {
+                  before: { contractStatus: oldStatus, leadLevel: oldLeadLevel },
+                  after: { contractStatus: '已签约', leadLevel: 'O类' },
+                },
+                operatedAt: new Date(),
+              });
+
+              // 🔔 广播刷新事件，通知前端更新客户列表
+              try {
+                await this.notificationGateway.broadcastRefresh('customerList', {
+                  customerId: customerId,
+                  contractNumber: contract.contractNumber,
+                  action: 'statusUpdate',
+                });
+                this.logger.log('✅ 已广播客户列表刷新事件');
+              } catch (error) {
+                this.logger.error(`❌ 广播刷新事件失败: ${error.message}`);
+              }
+            }
+          } catch (error) {
+            this.logger.error(`❌ 更新客户状态失败: ${error.message}`);
+            // 不抛出异常，避免影响合同流程
+          }
+        }
       }
 
       // 🔔 如果状态变为 active，触发保险同步

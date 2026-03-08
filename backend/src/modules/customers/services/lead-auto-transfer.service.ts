@@ -7,6 +7,7 @@ import { LeadTransferRule, LeadTransferRuleDocument } from '../models/lead-trans
 import { LeadTransferRecord, LeadTransferRecordDocument } from '../models/lead-transfer-record.model';
 import { CustomerAssignmentLog } from '../models/customer-assignment-log.model';
 import { CustomerFollowUp } from '../models/customer-follow-up.entity';
+import { CustomerOperationLog } from '../models/customer-operation-log.model';
 import { LeadTransferRuleService } from './lead-transfer-rule.service';
 import { User } from '../../users/models/user.entity';
 import { NotificationHelperService } from '../../notification/notification-helper.service';
@@ -21,6 +22,7 @@ export class LeadAutoTransferService implements OnModuleInit {
     @InjectModel(LeadTransferRecord.name) private recordModel: Model<LeadTransferRecordDocument>,
     @InjectModel(CustomerAssignmentLog.name) private assignmentLogModel: Model<CustomerAssignmentLog>,
     @InjectModel(CustomerFollowUp.name) private followUpModel: Model<CustomerFollowUp>,
+    @InjectModel(CustomerOperationLog.name) private operationLogModel: Model<CustomerOperationLog>,
     @InjectModel(User.name) private userModel: Model<User>,
     private ruleService: LeadTransferRuleService,
     private schedulerRegistry: SchedulerRegistry,
@@ -599,12 +601,22 @@ export class LeadAutoTransferService implements OnModuleInit {
       transferredAt: now,
     });
 
-    // 4. 创建系统跟进记录
-    await this.followUpModel.create({
+    // 4. 创建客户操作日志（不是跟进记录）
+    await this.operationLogModel.create({
       customerId: customer._id,
-      type: 'other',
-      content: `系统自动流转：因${inactiveHours}小时无跟进，从${(oldUser as any)?.name || '未知'}流转至${(newUser as any)?.name || '未知'}`,
-      createdBy: new Types.ObjectId(targetUserId),
+      operatorId: new Types.ObjectId(targetUserId),
+      operationType: 'assign',
+      operationName: '系统自动流转',
+      details: {
+        description: `系统自动流转：因${inactiveHours}小时无跟进，从${(oldUser as any)?.name || '未知'}流转至${(newUser as any)?.name || '未知'}`,
+        before: {
+          assignedTo: (oldUser as any)?.name || '未知',
+        },
+        after: {
+          assignedTo: (newUser as any)?.name || '未知',
+        },
+      },
+      operatedAt: now,
     });
 
     this.logger.log(

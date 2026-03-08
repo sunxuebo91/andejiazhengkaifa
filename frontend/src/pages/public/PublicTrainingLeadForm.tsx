@@ -15,7 +15,6 @@ import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { trainingLeadService } from '../../services/trainingLeadService';
 import {
-  LEAD_LEVEL_OPTIONS,
   LEAD_SOURCE_OPTIONS,
   TRAINING_TYPE_OPTIONS,
   INTENDED_COURSES_OPTIONS,
@@ -123,6 +122,7 @@ const PublicTrainingLeadForm: React.FC = () => {
               label="手机号"
               name="phone"
               rules={[
+                { required: true, message: '请输入手机号' },
                 { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号' }
               ]}
             >
@@ -136,18 +136,7 @@ const PublicTrainingLeadForm: React.FC = () => {
               <Input placeholder="请输入微信号" size="large" />
             </Form.Item>
 
-            <Form.Item
-              label="客户分级"
-              name="leadLevel"
-              rules={[{ required: true, message: '请选择客户分级' }]}
-              initialValue="C类"
-            >
-              <Select placeholder="请选择客户分级" size="large">
-                {LEAD_LEVEL_OPTIONS.map(opt => (
-                  <Option key={opt.value} value={opt.value}>{opt.label}</Option>
-                ))}
-              </Select>
-            </Form.Item>
+
 
             <Form.Item
               label="线索来源"

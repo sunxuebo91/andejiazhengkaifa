@@ -340,4 +340,35 @@ export const contractService = {
     const response = await apiService.post(`/api/contracts/${contractId}/sync-insurance`);
     return response.data || response;
   },
+
+  // 获取可分配的员工列表
+  async getAssignableUsers(): Promise<{
+    success: boolean;
+    data?: Array<{ _id: string; name: string; username: string; role: string }>;
+    message?: string;
+  }> {
+    const response = await apiService.get('/api/contracts/assignable-users');
+    return {
+      success: response.success,
+      data: response.data,
+      message: response.message,
+    };
+  },
+
+  // 分配合同给指定用户
+  async assignContract(contractId: string, assignedTo: string, reason?: string): Promise<{
+    success: boolean;
+    message?: string;
+    data?: Contract;
+  }> {
+    const response = await apiService.patch(`/api/contracts/${contractId}/assign`, {
+      assignedTo,
+      reason,
+    });
+    return {
+      success: response.success,
+      message: response.message,
+      data: response.data,
+    };
+  },
 };

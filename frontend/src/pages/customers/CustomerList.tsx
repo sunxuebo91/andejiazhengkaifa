@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Table,
@@ -31,6 +31,7 @@ import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
 import AssignCustomerModal from '../../components/AssignCustomerModal';
 import BatchAssignCustomerModal from '../../components/BatchAssignCustomerModal';
 import Authorized from '../../components/Authorized';
+import notificationSocketService from '../../services/notification-socket.service';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -43,6 +44,10 @@ const CustomerList: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // 自动刷新相关
+  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [followUpModal, setFollowUpModal] = useState({
     visible: false,
     customerId: '',
@@ -130,6 +135,91 @@ const CustomerList: React.FC = () => {
     loadCustomers();
     loadUsers();
   }, []);
+
+  // 监听页面可见性变化，页面重新可见时刷新数据
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const shouldRefresh = localStorage.getItem('shouldRefreshCustomerList');
+        if (shouldRefresh === 'true') {
+          console.log('页面可见，检测到需要刷新客户列表');
+          localStorage.removeItem('shouldRefreshCustomerList');
+          // 延迟一小会确保数据已更新
+          setTimeout(() => {
+            loadCustomers(currentPage, pageSize);
+          }, 100);
+        }
+      }
+    };
+
+    // 立即检查是否需要刷新（用于页面刷新或直接导航的情况）
+    const checkImmediate = () => {
+      const shouldRefresh = localStorage.getItem('shouldRefreshCustomerList');
+      if (shouldRefresh === 'true') {
+        console.log('页面加载时检测到需要刷新客户列表');
+        localStorage.removeItem('shouldRefreshCustomerList');
+        setTimeout(() => {
+          loadCustomers(currentPage, pageSize);
+        }, 100);
+      }
+    };
+
+    // 页面加载时立即检查
+    checkImmediate();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentPage, pageSize]);
+
+  // 添加定时刷新功能
+  useEffect(() => {
+    // 清除之前的定时器
+    if (autoRefreshIntervalRef.current) {
+      clearInterval(autoRefreshIntervalRef.current);
+      autoRefreshIntervalRef.current = null;
+    }
+
+    // 只有在启用自动刷新且没有复杂筛选条件时才设置定时器
+    const hasFilters = Object.entries(searchFilters).some(([key, value]) =>
+      key !== 'search' && value !== '' && value !== undefined
+    );
+
+    if (autoRefreshEnabled && !hasFilters) {
+      console.log('启动客户列表定时刷新...');
+      // 设置定时器，每2分钟刷新一次数据
+      autoRefreshIntervalRef.current = setInterval(() => {
+        console.log('定时刷新客户列表...');
+        loadCustomers(currentPage, pageSize);
+      }, 120000); // 2分钟刷新一次
+    }
+
+    // 组件卸载时清除定时器
+    return () => {
+      if (autoRefreshIntervalRef.current) {
+        clearInterval(autoRefreshIntervalRef.current);
+        autoRefreshIntervalRef.current = null;
+      }
+    };
+  }, [autoRefreshEnabled, searchFilters, currentPage, pageSize]);
+
+  // 监听WebSocket刷新事件
+  useEffect(() => {
+    const handleRefreshEvent = (data: { eventType: string; data?: any; timestamp: number }) => {
+      if (data.eventType === 'customerList') {
+        console.log('🔄 收到客户列表刷新事件，立即刷新数据');
+        loadCustomers(currentPage, pageSize);
+      }
+    };
+
+    notificationSocketService.on('refresh', handleRefreshEvent);
+
+    return () => {
+      notificationSocketService.off('refresh', handleRefreshEvent);
+    };
+  }, [currentPage, pageSize]);
 
   // 获取用户列表
   const loadUsers = async () => {
@@ -471,6 +561,25 @@ const CustomerList: React.FC = () => {
           {status}
         </Tag>
       ),
+    },
+    {
+      title: '跟进状态',
+      dataIndex: 'followUpStatus',
+      key: 'followUpStatus',
+      width: 110,
+      render: (followUpStatus: string | null) => {
+        if (!followUpStatus) return null;
+
+        // 根据不同状态显示不同颜色
+        let color = '#52c41a'; // 默认绿色（已跟进）
+        if (followUpStatus === '新客未跟进') {
+          color = '#ff4d4f'; // 红色
+        } else if (followUpStatus === '流转未跟进') {
+          color = '#faad14'; // 橙色
+        }
+
+        return <Tag color={color}>{followUpStatus}</Tag>;
+      }
     },
     {
       title: '线索等级',

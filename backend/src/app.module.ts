@@ -13,6 +13,7 @@ import { AppService } from './app.service';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { RolesModule } from './modules/roles/roles.module';
 import { FollowUpModule } from './modules/follow-up/follow-up.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
@@ -62,6 +63,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
     TasksModule,
     UsersModule,
     AuthModule,
+    RolesModule,
     FollowUpModule,
     CustomersModule,
     ContractsModule,

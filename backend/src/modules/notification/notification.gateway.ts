@@ -133,6 +133,14 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
   }
 
   /**
+   * 广播刷新事件给所有在线用户
+   */
+  async broadcastRefresh(eventType: string, data?: any) {
+    this.server.emit('refresh', { eventType, data, timestamp: Date.now() });
+    this.logger.log(`广播刷新事件: ${eventType}`);
+  }
+
+  /**
    * 客户端订阅消息 - 请求未读数量
    */
   @SubscribeMessage('getUnreadCount')

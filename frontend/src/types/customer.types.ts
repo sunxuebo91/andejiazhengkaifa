@@ -48,6 +48,8 @@ export interface Customer {
   lastTransferredAt?: string;
   createdAt: string;
   updatedAt: string;
+  // 跟进状态
+  followUpStatus?: string | null; // '新客未跟进' | '流转未跟进' | null
 }
 
 export interface CreateCustomerData {

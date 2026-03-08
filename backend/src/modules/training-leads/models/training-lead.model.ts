@@ -4,15 +4,6 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export type TrainingLeadDocument = TrainingLead & Document;
 
-// 客户分级枚举
-export enum LeadLevel {
-  A = 'A类',
-  B = 'B类',
-  C = 'C类',
-  D = 'D类',
-  CLOSED = '0-成交'
-}
-
 // 线索状态枚举
 export enum LeadStatus {
   NEW = '新线索',
@@ -30,9 +21,9 @@ export enum IntentionLevel {
 
 @Schema({ timestamps: true, collection: 'training_leads' })
 export class TrainingLead {
-  @ApiProperty({ description: '线索编号（自动生成）' })
+  @ApiProperty({ description: '学员编号（自动生成）' })
   @Prop({ unique: true })
-  leadId: string;
+  studentId: string;
 
   @ApiProperty({ description: '客户姓名' })
   @Prop({ required: true })
@@ -45,14 +36,6 @@ export class TrainingLead {
   @ApiProperty({ description: '微信号（与手机号二选一）' })
   @Prop()
   wechatId: string;
-
-  @ApiProperty({ description: '客户分级', enum: LeadLevel })
-  @Prop({
-    required: true,
-    enum: Object.values(LeadLevel),
-    default: LeadLevel.D
-  })
-  leadLevel: string;
 
   @ApiProperty({ description: '线索来源' })
   @Prop({
@@ -84,6 +67,24 @@ export class TrainingLead {
   })
   intendedCourses: string[];
 
+  @ApiProperty({ description: '已报证书（多选）', type: [String] })
+  @Prop({
+    type: [String],
+    enum: [
+      '高级母婴护理师',
+      '高级催乳师',
+      '高级产后修复师',
+      '月子餐营养师',
+      '高级育婴师',
+      '早教指导师',
+      '辅食营养师',
+      '小儿推拿师',
+      '高级养老护理师',
+      '早教精英班'
+    ]
+  })
+  reportedCertificates: string[];
+
   @ApiProperty({ description: '意向程度', enum: IntentionLevel })
   @Prop({
     enum: Object.values(IntentionLevel)
@@ -101,6 +102,14 @@ export class TrainingLead {
   @ApiProperty({ description: '所在地区' })
   @Prop()
   address: string;
+
+  @ApiProperty({ description: '是否报征' })
+  @Prop({ default: false })
+  isReported: boolean;
+
+  @ApiProperty({ description: '学员归属（负责该学员的人员ID）' })
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  studentOwner: Types.ObjectId;
 
   @ApiProperty({ description: '备注信息' })
   @Prop()
@@ -141,10 +150,11 @@ export const TrainingLeadSchema = SchemaFactory.createForClass(TrainingLead);
 
 // 创建索引
 TrainingLeadSchema.index({ phone: 1 }, { unique: true, sparse: true });
-TrainingLeadSchema.index({ leadLevel: 1 });
 TrainingLeadSchema.index({ status: 1 });
 TrainingLeadSchema.index({ createdBy: 1 });
 TrainingLeadSchema.index({ assignedTo: 1 });
 TrainingLeadSchema.index({ referredBy: 1 });
+TrainingLeadSchema.index({ studentOwner: 1 });
+TrainingLeadSchema.index({ isReported: 1 });
 TrainingLeadSchema.index({ createdAt: -1 });
 

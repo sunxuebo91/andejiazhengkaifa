@@ -3,6 +3,7 @@ import { PageContainer } from '@ant-design/pro-components';
 import { Card, Table, Button, Space, Tag, Popconfirm, Input, App } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
+import roleService from '../../services/role.service';
 
 interface Role {
   id: string;
@@ -15,19 +16,34 @@ interface Role {
 
 // 权限映射表
 const permissionMap: Record<string, { text: string; color: string }> = {
+  // 系统管理
   'admin:all': { text: '系统管理(全部)', color: 'red' },
+  'admin:roles': { text: '角色管理', color: 'purple' },
+  'admin:settings': { text: '系统设置', color: 'red' },
+  // 阿姨管理
   'resume:all': { text: '阿姨管理(全部)', color: 'orange' },
-  'user:all': { text: '用户管理(全部)', color: 'green' },
   'resume:view': { text: '查看阿姨简历', color: 'blue' },
   'resume:create': { text: '创建阿姨简历', color: 'green' },
   'resume:edit': { text: '编辑阿姨简历', color: 'cyan' },
   'resume:delete': { text: '删除阿姨简历', color: 'red' },
+  // 客户管理
+  'customer:all': { text: '客户管理(全部)', color: 'gold' },
+  'customer:view': { text: '查看客户', color: 'blue' },
+  'customer:create': { text: '创建客户', color: 'green' },
+  'customer:edit': { text: '编辑客户', color: 'cyan' },
+  'customer:delete': { text: '删除客户', color: 'red' },
+  // 合同管理
+  'contract:all': { text: '合同管理(全部)', color: 'magenta' },
+  'contract:view': { text: '查看合同', color: 'blue' },
+  'contract:create': { text: '创建合同', color: 'green' },
+  'contract:edit': { text: '编辑合同', color: 'cyan' },
+  'contract:delete': { text: '删除合同', color: 'red' },
+  // 用户管理
+  'user:all': { text: '用户管理(全部)', color: 'green' },
   'user:view': { text: '查看用户', color: 'blue' },
   'user:create': { text: '创建用户', color: 'green' },
   'user:edit': { text: '编辑用户', color: 'cyan' },
   'user:delete': { text: '删除用户', color: 'red' },
-  'admin:roles': { text: '角色管理', color: 'purple' },
-  'admin:settings': { text: '系统设置', color: 'red' },
 };
 
 // 获取权限的颜色和文本
@@ -42,52 +58,51 @@ const RoleList: React.FC = () => {
   const navigate = useNavigate();
   const { message } = App.useApp();
 
-  // 模拟获取角色列表
-  const fetchRoles = () => {
-    setLoading(true);
-    // 模拟后端数据
-    const mockRoles = [
-      {
-        id: '1',
-        name: '系统管理员',
-        description: '拥有系统所有权限',
-        permissions: ['admin:all', 'resume:all', 'user:all'],
-        createdAt: '2023-01-01 12:00:00',
-        usersCount: 1
-      },
-      {
-        id: '2',
-        name: '经理',
-        description: '可以管理团队和阿姨资源',
-        permissions: ['resume:all', 'user:view'],
-        createdAt: '2023-01-02 10:00:00',
-        usersCount: 3
-      },
-      {
-        id: '3',
-        name: '普通员工',
-        description: '只能管理自己创建的阿姨资源',
-        permissions: ['resume:view', 'resume:create'],
-        createdAt: '2023-01-03 09:00:00',
-        usersCount: 10
+  // 获取角色列表
+  const fetchRoles = async () => {
+    try {
+      setLoading(true);
+      const response = await roleService.getList({ page: 1, pageSize: 100 });
+      if (response.success && response.data) {
+        // 将后端返回的数据转换为前端需要的格式
+        const formattedRoles = response.data.items.map((role: any) => ({
+          id: role._id,
+          name: role.name,
+          description: role.description,
+          permissions: role.permissions || [],
+          createdAt: new Date(role.createdAt).toLocaleString('zh-CN'),
+          usersCount: role.usersCount || 0
+        }));
+        setRoles(formattedRoles);
+      } else {
+        message.error('获取角色列表失败');
       }
-    ];
-
-    setTimeout(() => {
-      setRoles(mockRoles);
+    } catch (error: any) {
+      console.error('获取角色列表失败:', error);
+      message.error('获取角色列表失败：' + (error.message || '未知错误'));
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
-  // 模拟删除角色
-  const handleDelete = (id: string) => {
-    setLoading(true);
-    // 模拟API调用
-    setTimeout(() => {
-      setRoles(roles.filter(role => role.id !== id));
-      message.success('角色删除成功');
+  // 删除角色
+  const handleDelete = async (id: string) => {
+    try {
+      setLoading(true);
+      const response = await roleService.remove(id);
+      if (response.success) {
+        message.success('角色删除成功');
+        // 重新获取角色列表
+        await fetchRoles();
+      } else {
+        message.error('角色删除失败：' + (response.message || '未知错误'));
+      }
+    } catch (error: any) {
+      console.error('删除角色失败:', error);
+      message.error('删除角色失败：' + (error.message || '未知错误'));
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   // 搜索角色

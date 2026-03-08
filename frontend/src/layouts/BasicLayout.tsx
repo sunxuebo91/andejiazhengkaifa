@@ -208,7 +208,7 @@ const BasicLayout = () => {
       routes: [
         {
           path: '/training-leads',
-          name: '培训线索',
+          name: '学员线索',
           icon: <UnorderedListOutlined />,
         },
         {

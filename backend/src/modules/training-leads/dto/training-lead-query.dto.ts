@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsEnum, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsNumber, Min, IsBoolean, IsMongoId } from 'class-validator';
 import { Type } from 'class-transformer';
-import { LeadLevel, LeadStatus } from '../models/training-lead.model';
+import { LeadStatus } from '../models/training-lead.model';
 
 export class TrainingLeadQueryDto {
   @ApiPropertyOptional({ description: '页码', example: 1, default: 1 })
@@ -18,19 +18,10 @@ export class TrainingLeadQueryDto {
   @Min(1)
   pageSize?: number = 10;
 
-  @ApiPropertyOptional({ description: '搜索关键词（姓名、手机号、微信号）', example: '张三' })
+  @ApiPropertyOptional({ description: '搜索关键词（姓名、手机号、微信号、学员编号）', example: '张三' })
   @IsOptional()
   @IsString()
   search?: string;
-
-  @ApiPropertyOptional({
-    description: '客户分级筛选',
-    enum: LeadLevel,
-    example: LeadLevel.A
-  })
-  @IsOptional()
-  @IsEnum(LeadLevel)
-  leadLevel?: string;
 
   @ApiPropertyOptional({
     description: '状态筛选',
@@ -78,5 +69,16 @@ export class TrainingLeadQueryDto {
   @IsOptional()
   @IsString()
   createdBy?: string;
+
+  @ApiPropertyOptional({ description: '是否报征筛选', example: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isReported?: boolean;
+
+  @ApiPropertyOptional({ description: '学员归属筛选（负责该学员的人员ID）' })
+  @IsOptional()
+  @IsMongoId()
+  studentOwner?: string;
 }
 

@@ -7,6 +7,7 @@ import {
   Delete,
   Query,
   Put,
+  Patch,
   UseGuards,
   Request,
   ForbiddenException,
@@ -360,6 +361,63 @@ export class ContractsController {
       return {
         success: false,
         message: error.message || '合同删除失败',
+      };
+    }
+  }
+
+  // 分配合同给指定用户（仅管理员和经理）
+  @Patch(':id/assign')
+  async assignContract(
+    @Param('id') id: string,
+    @Body() body: { assignedTo: string; reason?: string },
+    @Request() req,
+  ) {
+    try {
+      if (!this.isManagerOrAdmin(req.user)) {
+        throw new ForbiddenException('只有管理员或经理可以分配合同');
+      }
+
+      this.logger.log(`👥 管理员 ${req.user.name} 分配合同 ${id} 给 ${body.assignedTo}`);
+
+      const contract = await this.contractsService.assignContract(
+        id,
+        body.assignedTo,
+        req.user.userId,
+        body.reason,
+      );
+
+      return {
+        success: true,
+        data: contract,
+        message: '合同分配成功',
+      };
+    } catch (error) {
+      this.logger.error(`分配合同失败: ${error.message}`);
+      return {
+        success: false,
+        message: error.message || '合同分配失败',
+      };
+    }
+  }
+
+  // 获取可分配的员工列表
+  @Get('assignable-users')
+  async getAssignableUsers(@Request() req) {
+    try {
+      if (!this.isManagerOrAdmin(req.user)) {
+        throw new ForbiddenException('只有管理员或经理可以查看员工列表');
+      }
+
+      const users = await this.contractsService.getAssignableUsers();
+      return {
+        success: true,
+        data: users,
+        message: '获取成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '获取员工列表失败',
       };
     }
   }

@@ -14,6 +14,7 @@ export interface UserWithoutPassword {
   permissions: string[];
   active: boolean;
   suspended?: boolean; // 账号是否被暂停
+  monthlyTask?: number; // 本月任务（数量）
   // 微信相关字段
   wechatOpenId?: string;
   wechatNickname?: string;
@@ -57,6 +58,9 @@ export class User extends Document {
 
   @Prop({ default: false })
   suspended?: boolean; // 账号是否被暂停
+
+  @Prop()
+  monthlyTask?: number; // 本月任务（数量）
 
   // 微信相关字段
   @Prop()

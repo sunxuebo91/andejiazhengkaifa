@@ -1,12 +1,3 @@
-// 客户分级枚举
-export enum LeadLevel {
-  A = 'A类',
-  B = 'B类',
-  C = 'C类',
-  D = 'D类',
-  CLOSED = '0-成交'
-}
-
 // 线索状态枚举
 export enum LeadStatus {
   NEW = '新线索',
@@ -40,18 +31,20 @@ export interface UserInfo {
 // 培训线索接口
 export interface TrainingLead {
   _id: string;
-  leadId: string;
+  studentId: string;
   name: string;
   phone?: string;
   wechatId?: string;
-  leadLevel: string;
   leadSource?: string;
   trainingType?: string;
   intendedCourses?: string[];
+  reportedCertificates?: string[];
   intentionLevel?: string;
   expectedStartDate?: string;
   budget?: number;
   address?: string;
+  isReported?: boolean;
+  studentOwner?: UserInfo | string;
   remarks?: string;
   status: string;
   createdBy: UserInfo | string;
@@ -61,6 +54,7 @@ export interface TrainingLead {
   createdAt: string;
   updatedAt: string;
   followUps?: TrainingLeadFollowUp[];
+  followUpStatus?: string | null; // 跟进状态：'新客未跟进' | '流转未跟进' | null
 }
 
 // 跟进记录接口
@@ -80,14 +74,16 @@ export interface CreateTrainingLeadDto {
   name: string;
   phone?: string;
   wechatId?: string;
-  leadLevel: string;
   leadSource?: string;
   trainingType?: string;
   intendedCourses?: string[];
+  reportedCertificates?: string[];
   intentionLevel?: string;
   expectedStartDate?: string;
   budget?: number;
   address?: string;
+  isReported?: boolean;
+  studentOwner?: string;
   remarks?: string;
 }
 
@@ -99,13 +95,14 @@ export interface TrainingLeadQuery {
   page?: number;
   pageSize?: number;
   search?: string;
-  leadLevel?: string;
   status?: string;
   leadSource?: string;
   trainingType?: string;
   startDate?: string;
   endDate?: string;
   assignedTo?: string;
+  isReported?: boolean;
+  studentOwner?: string;
 }
 
 // 列表响应
@@ -133,14 +130,6 @@ export interface ShareTokenResponse {
 }
 
 // 选项配置
-export const LEAD_LEVEL_OPTIONS = [
-  { label: 'A类', value: LeadLevel.A, color: '#f5222d' },
-  { label: 'B类', value: LeadLevel.B, color: '#fa8c16' },
-  { label: 'C类', value: LeadLevel.C, color: '#1890ff' },
-  { label: 'D类', value: LeadLevel.D, color: '#8c8c8c' },
-  { label: '0-成交', value: LeadLevel.CLOSED, color: '#52c41a' }
-];
-
 export const LEAD_STATUS_OPTIONS = [
   { label: '新线索', value: LeadStatus.NEW, color: '#1890ff' },
   { label: '跟进中', value: LeadStatus.FOLLOWING, color: '#fa8c16' },

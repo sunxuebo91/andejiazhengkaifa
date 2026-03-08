@@ -12,14 +12,16 @@ import {
   Row,
   Col,
   Space,
-  Spin
+  Spin,
+  Switch,
+  Divider
 } from 'antd';
-import { SaveOutlined, RollbackOutlined } from '@ant-design/icons';
+import { SaveOutlined, RollbackOutlined, UserOutlined, BookOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { trainingLeadService } from '../../services/trainingLeadService';
+import apiService from '../../services/api';
 import {
   UpdateTrainingLeadDto,
-  LEAD_LEVEL_OPTIONS,
   LEAD_SOURCE_OPTIONS,
   TRAINING_TYPE_OPTIONS,
   INTENDED_COURSES_OPTIONS,
@@ -35,6 +37,22 @@ const EditTrainingLead: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [users, setUsers] = useState<any[]>([]);
+
+  // 加载用户列表
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await apiService.get('/api/users', { page: 1, pageSize: 1000 });
+        if (response.success && response.data) {
+          setUsers(response.data.items || []);
+        }
+      } catch (error: any) {
+        console.error('获取用户列表失败:', error);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   // 加载线索数据
   useEffect(() => {
@@ -97,200 +115,265 @@ const EditTrainingLead: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Card title="编辑培训线索">
+    <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
+      <Card
+        title={
+          <Space>
+            <UserOutlined />
+            <span>编辑学员信息</span>
+          </Space>
+        }
+        extra={
+          <Space>
+            <Button
+              icon={<RollbackOutlined />}
+              onClick={() => navigate('/training-leads')}
+            >
+              返回列表
+            </Button>
+          </Space>
+        }
+      >
         <Form
           form={form}
           layout="vertical"
           onFinish={handleSubmit}
         >
-          <Row gutter={24}>
-            {/* 基本信息 */}
-            <Col span={24}>
-              <h3 style={{ marginBottom: 16 }}>基本信息</h3>
-            </Col>
-
-            <Col span={8}>
-              <Form.Item
-                label="客户姓名"
-                name="name"
-                rules={[
-                  { required: true, message: '请输入客户姓名' },
-                  { max: 50, message: '客户姓名不能超过50个字符' }
-                ]}
-              >
-                <Input placeholder="请输入客户姓名" />
-              </Form.Item>
-            </Col>
-
-            <Col span={8}>
-              <Form.Item
-                label="手机号"
-                name="phone"
-                rules={[
-                  { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确' }
-                ]}
-              >
-                <Input placeholder="与微信号二选一" />
-              </Form.Item>
-            </Col>
-
-            <Col span={8}>
-              <Form.Item
-                label="微信号"
-                name="wechatId"
-                rules={[
-                  { max: 50, message: '微信号不能超过50个字符' }
-                ]}
-              >
-                <Input placeholder="与手机号二选一" />
-              </Form.Item>
-            </Col>
-
-            <Col span={8}>
-              <Form.Item
-                label="客户分级"
-                name="leadLevel"
-                rules={[{ required: true, message: '请选择客户分级' }]}
-              >
-                <Select placeholder="请选择客户分级">
-                  {LEAD_LEVEL_OPTIONS.map(opt => (
-                    <Option key={opt.value} value={opt.value}>{opt.label}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-
-            {/* 培训信息 */}
-            <Col span={24}>
-              <h3 style={{ marginTop: 16, marginBottom: 16 }}>培训信息</h3>
-            </Col>
-
-            <Col span={8}>
-              <Form.Item label="培训类型" name="trainingType">
-                <Select placeholder="请选择培训类型" allowClear>
-                  {TRAINING_TYPE_OPTIONS.map(opt => (
-                    <Option key={opt.value} value={opt.value}>{opt.label}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-
-            <Col span={16}>
-              <Form.Item label="意向课程" name="intendedCourses">
-                <Select
-                  mode="multiple"
-                  placeholder="请选择意向课程（可多选）"
-                  allowClear
-                  maxTagCount="responsive"
+          {/* 基本信息 */}
+          <div style={{ marginBottom: '24px' }}>
+            <Divider orientation="left">
+              <Space>
+                <UserOutlined style={{ color: '#1890ff' }} />
+                <span style={{ fontSize: '16px', fontWeight: 500 }}>基本信息</span>
+              </Space>
+            </Divider>
+            <Row gutter={[16, 0]}>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="客户姓名"
+                  name="name"
+                  rules={[
+                    { required: true, message: '请输入客户姓名' },
+                    { max: 50, message: '客户姓名不能超过50个字符' }
+                  ]}
                 >
-                  {INTENDED_COURSES_OPTIONS.map(opt => (
-                    <Option key={opt.value} value={opt.value}>{opt.label}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
+                  <Input placeholder="请输入客户姓名" prefix={<UserOutlined />} />
+                </Form.Item>
+              </Col>
 
-            <Col span={8}>
-              <Form.Item label="意向程度" name="intentionLevel">
-                <Select placeholder="请选择意向程度" allowClear>
-                  {INTENTION_LEVEL_OPTIONS.map(opt => (
-                    <Option key={opt.value} value={opt.value}>{opt.label}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="手机号"
+                  name="phone"
+                  rules={[
+                    { required: true, message: '请输入手机号' },
+                    { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确' }
+                  ]}
+                >
+                  <Input placeholder="请输入手机号" />
+                </Form.Item>
+              </Col>
 
-            <Col span={8}>
-              <Form.Item label="期望开课时间" name="expectedStartDate">
-                <DatePicker style={{ width: '100%' }} placeholder="请选择期望开课时间" />
-              </Form.Item>
-            </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="微信号"
+                  name="wechatId"
+                  rules={[
+                    { max: 50, message: '微信号不能超过50个字符' }
+                  ]}
+                >
+                  <Input placeholder="请输入微信号" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
 
-            <Col span={8}>
-              <Form.Item
-                label="预算金额"
-                name="budget"
-                rules={[
-                  { type: 'number', min: 0, message: '预算金额不能为负数' }
-                ]}
-              >
-                <InputNumber
-                  style={{ width: '100%' }}
-                  placeholder="请输入预算金额"
-                  min={0}
-                  precision={0}
-                  addonAfter="元"
-                />
-              </Form.Item>
-            </Col>
+          {/* 培训信息 */}
+          <div style={{ marginBottom: '24px' }}>
+            <Divider orientation="left">
+              <Space>
+                <BookOutlined style={{ color: '#52c41a' }} />
+                <span style={{ fontSize: '16px', fontWeight: 500 }}>培训信息</span>
+              </Space>
+            </Divider>
+            <Row gutter={[16, 0]}>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="培训类型" name="trainingType">
+                  <Select placeholder="请选择培训类型" allowClear>
+                    {TRAINING_TYPE_OPTIONS.map(opt => (
+                      <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
 
-            {/* 其他信息 */}
-            <Col span={24}>
-              <h3 style={{ marginTop: 16, marginBottom: 16 }}>其他信息</h3>
-            </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="意向程度" name="intentionLevel">
+                  <Select placeholder="请选择意向程度" allowClear>
+                    {INTENTION_LEVEL_OPTIONS.map(opt => (
+                      <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
 
-            <Col span={8}>
-              <Form.Item label="线索来源" name="leadSource">
-                <Select placeholder="请选择线索来源" allowClear>
-                  {LEAD_SOURCE_OPTIONS.map(opt => (
-                    <Option key={opt.value} value={opt.value}>{opt.label}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="期望开课时间" name="expectedStartDate">
+                  <DatePicker style={{ width: '100%' }} placeholder="请选择期望开课时间" />
+                </Form.Item>
+              </Col>
 
-            <Col span={16}>
-              <Form.Item
-                label="所在地区"
-                name="address"
-                rules={[
-                  { max: 100, message: '所在地区不能超过100个字符' }
-                ]}
-              >
-                <Input placeholder="请输入所在地区" />
-              </Form.Item>
-            </Col>
-
-            <Col span={24}>
-              <Form.Item
-                label="备注信息"
-                name="remarks"
-                rules={[
-                  { max: 500, message: '备注信息不能超过500个字符' }
-                ]}
-              >
-                <TextArea
-                  rows={4}
-                  placeholder="请输入备注信息"
-                  showCount
-                  maxLength={500}
-                />
-              </Form.Item>
-            </Col>
-
-            {/* 按钮 */}
-            <Col span={24}>
-              <Form.Item>
-                <Space>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    icon={<SaveOutlined />}
-                    loading={loading}
+              <Col xs={24} sm={24} md={12}>
+                <Form.Item label="意向课程" name="intendedCourses">
+                  <Select
+                    mode="multiple"
+                    placeholder="请选择意向课程（可多选）"
+                    allowClear
+                    maxTagCount="responsive"
                   >
-                    保存
-                  </Button>
-                  <Button
-                    icon={<RollbackOutlined />}
-                    onClick={() => navigate('/training-leads')}
+                    {INTENDED_COURSES_OPTIONS.map(opt => (
+                      <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={24} md={12}>
+                <Form.Item label="已报证书" name="reportedCertificates">
+                  <Select
+                    mode="multiple"
+                    placeholder="请选择已报证书（可多选）"
+                    allowClear
+                    maxTagCount="responsive"
                   >
-                    返回
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Col>
-          </Row>
+                    {INTENDED_COURSES_OPTIONS.map(opt => (
+                      <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="预算金额"
+                  name="budget"
+                  rules={[
+                    { type: 'number', min: 0, message: '预算金额不能为负数' }
+                  ]}
+                >
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    placeholder="请输入预算金额"
+                    min={0}
+                    precision={0}
+                    addonAfter="元"
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+
+          {/* 其他信息 */}
+          <div style={{ marginBottom: '24px' }}>
+            <Divider orientation="left">
+              <Space>
+                <InfoCircleOutlined style={{ color: '#faad14' }} />
+                <span style={{ fontSize: '16px', fontWeight: 500 }}>其他信息</span>
+              </Space>
+            </Divider>
+            <Row gutter={[16, 0]}>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="线索来源" name="leadSource">
+                  <Select placeholder="请选择线索来源" allowClear>
+                    {LEAD_SOURCE_OPTIONS.map(opt => (
+                      <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="学员归属"
+                  name="studentOwner"
+                >
+                  <Select
+                    placeholder="请选择学员归属"
+                    allowClear
+                    showSearch
+                    filterOption={(input, option) =>
+                      String(option?.children || '').toLowerCase().includes(input.toLowerCase())
+                    }
+                  >
+                    {users.map(user => (
+                      <Option key={user._id} value={user._id}>{user.name}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="是否报征"
+                  name="isReported"
+                  valuePropName="checked"
+                >
+                  <Switch checkedChildren="是" unCheckedChildren="否" />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={24} md={16}>
+                <Form.Item
+                  label="所在地区"
+                  name="address"
+                  rules={[
+                    { max: 100, message: '所在地区不能超过100个字符' }
+                  ]}
+                >
+                  <Input placeholder="请输入所在地区" />
+                </Form.Item>
+              </Col>
+
+              <Col span={24}>
+                <Form.Item
+                  label="备注信息"
+                  name="remarks"
+                  rules={[
+                    { max: 500, message: '备注信息不能超过500个字符' }
+                  ]}
+                >
+                  <TextArea
+                    rows={4}
+                    placeholder="请输入备注信息"
+                    showCount
+                    maxLength={500}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+
+          {/* 按钮区域 */}
+          <div style={{ textAlign: 'center', paddingTop: '16px', borderTop: '1px solid #f0f0f0' }}>
+            <Space size="large">
+              <Button
+                type="primary"
+                htmlType="submit"
+                icon={<SaveOutlined />}
+                loading={loading}
+                size="large"
+              >
+                保存
+              </Button>
+              <Button
+                icon={<RollbackOutlined />}
+                onClick={() => navigate('/training-leads')}
+                size="large"
+              >
+                取消
+              </Button>
+            </Space>
+          </div>
         </Form>
       </Card>
     </div>

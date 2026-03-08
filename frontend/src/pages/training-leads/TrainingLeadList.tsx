@@ -24,7 +24,6 @@ import apiService from '../../services/api';
 import {
   TrainingLead,
   TrainingLeadQuery,
-  LEAD_LEVEL_OPTIONS,
   LEAD_STATUS_OPTIONS,
   LEAD_SOURCE_OPTIONS,
   TRAINING_TYPE_OPTIONS
@@ -68,16 +67,32 @@ const TrainingLeadList: React.FC = () => {
     expireAt: string;
   } | null>(null);
 
+  // 用户列表（用于学员归属筛选）
+  const [users, setUsers] = useState<any[]>([]);
+
   // 搜索条件
   const [searchFilters, setSearchFilters] = useState<TrainingLeadQuery>({
     search: '',
-    leadLevel: undefined,
     status: undefined,
     leadSource: undefined,
     trainingType: undefined,
     startDate: undefined,
-    endDate: undefined
+    endDate: undefined,
+    isReported: undefined,
+    studentOwner: undefined
   });
+
+  // 加载用户列表
+  const fetchUsers = async () => {
+    try {
+      const response = await apiService.get('/api/users', { page: 1, pageSize: 1000 });
+      if (response.success && response.data) {
+        setUsers(response.data.items || []);
+      }
+    } catch (error: any) {
+      console.error('获取用户列表失败:', error);
+    }
+  };
 
   // 加载数据
   const fetchLeads = async () => {
@@ -99,6 +114,7 @@ const TrainingLeadList: React.FC = () => {
 
   useEffect(() => {
     fetchLeads();
+    fetchUsers();
   }, [currentPage, pageSize]);
 
   // 搜索
@@ -111,12 +127,13 @@ const TrainingLeadList: React.FC = () => {
   const handleReset = () => {
     setSearchFilters({
       search: '',
-      leadLevel: undefined,
       status: undefined,
       leadSource: undefined,
       trainingType: undefined,
       startDate: undefined,
-      endDate: undefined
+      endDate: undefined,
+      isReported: undefined,
+      studentOwner: undefined
     });
     setCurrentPage(1);
     setTimeout(() => fetchLeads(), 0);
@@ -263,12 +280,6 @@ const TrainingLeadList: React.FC = () => {
     }
   };
 
-  // 获取客户分级颜色
-  const getLeadLevelColor = (level: string) => {
-    const option = LEAD_LEVEL_OPTIONS.find(opt => opt.value === level);
-    return option?.color || '#8c8c8c';
-  };
-
   // 获取状态颜色
   const getStatusColor = (status: string) => {
     const option = LEAD_STATUS_OPTIONS.find(opt => opt.value === status);
@@ -305,9 +316,9 @@ const TrainingLeadList: React.FC = () => {
   // 表格列定义
   const columns = [
     {
-      title: '线索编号',
-      dataIndex: 'leadId',
-      key: 'leadId',
+      title: '学员编号',
+      dataIndex: 'studentId',
+      key: 'studentId',
       width: 120,
       render: (text: string, record: TrainingLead) => (
         <Link to={`/standalone/training-leads/${record._id}`} target="_blank" rel="noopener noreferrer">{text}</Link>
@@ -334,15 +345,6 @@ const TrainingLeadList: React.FC = () => {
       render: (text: string) => text || '-'
     },
     {
-      title: '客户分级',
-      dataIndex: 'leadLevel',
-      key: 'leadLevel',
-      width: 80,
-      render: (text: string) => (
-        <Tag color={getLeadLevelColor(text)}>{text}</Tag>
-      )
-    },
-    {
       title: '培训类型',
       dataIndex: 'trainingType',
       key: 'trainingType',
@@ -357,6 +359,46 @@ const TrainingLeadList: React.FC = () => {
       render: (text: string) => (
         <Tag color={getStatusColor(text)}>{text}</Tag>
       )
+    },
+    {
+      title: '跟进状态',
+      dataIndex: 'followUpStatus',
+      key: 'followUpStatus',
+      width: 110,
+      render: (followUpStatus: string | null) => {
+        if (!followUpStatus) return null;
+
+        // 根据不同状态显示不同颜色
+        let color = '#52c41a'; // 默认绿色（已跟进）
+        if (followUpStatus === '新客未跟进') {
+          color = '#ff4d4f'; // 红色
+        } else if (followUpStatus === '流转未跟进') {
+          color = '#faad14'; // 橙色
+        }
+
+        return <Tag color={color}>{followUpStatus}</Tag>;
+      }
+    },
+    {
+      title: '是否报征',
+      dataIndex: 'isReported',
+      key: 'isReported',
+      width: 100,
+      render: (isReported: boolean) => (
+        <Tag color={isReported ? '#52c41a' : '#8c8c8c'}>
+          {isReported ? '是' : '否'}
+        </Tag>
+      )
+    },
+    {
+      title: '学员归属',
+      dataIndex: 'studentOwner',
+      key: 'studentOwner',
+      width: 100,
+      render: (studentOwner: any) => {
+        if (!studentOwner) return '-';
+        return typeof studentOwner === 'object' ? studentOwner.name : '-';
+      }
     },
     {
       title: '最后跟进',
@@ -434,25 +476,12 @@ const TrainingLeadList: React.FC = () => {
           <Row gutter={[16, 16]}>
             <Col span={6}>
               <Search
-                placeholder="搜索姓名、手机号、微信号、线索编号"
+                placeholder="搜索姓名、手机号、微信号、学员编号"
                 value={searchFilters.search}
                 onChange={(e) => setSearchFilters({ ...searchFilters, search: e.target.value })}
                 onSearch={handleSearch}
                 allowClear
               />
-            </Col>
-            <Col span={4}>
-              <Select
-                placeholder="客户分级"
-                value={searchFilters.leadLevel}
-                onChange={(value) => setSearchFilters({ ...searchFilters, leadLevel: value })}
-                allowClear
-                style={{ width: '100%' }}
-              >
-                {LEAD_LEVEL_OPTIONS.map(opt => (
-                  <Option key={opt.value} value={opt.value}>{opt.label}</Option>
-                ))}
-              </Select>
             </Col>
             <Col span={4}>
               <Select
@@ -490,6 +519,35 @@ const TrainingLeadList: React.FC = () => {
               >
                 {TRAINING_TYPE_OPTIONS.map(opt => (
                   <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+                ))}
+              </Select>
+            </Col>
+            <Col span={4}>
+              <Select
+                placeholder="是否报征"
+                value={searchFilters.isReported}
+                onChange={(value) => setSearchFilters({ ...searchFilters, isReported: value })}
+                allowClear
+                style={{ width: '100%' }}
+              >
+                <Option value={true}>是</Option>
+                <Option value={false}>否</Option>
+              </Select>
+            </Col>
+            <Col span={4}>
+              <Select
+                placeholder="学员归属"
+                value={searchFilters.studentOwner}
+                onChange={(value) => setSearchFilters({ ...searchFilters, studentOwner: value })}
+                allowClear
+                showSearch
+                filterOption={(input, option) =>
+                  String(option?.children || '').toLowerCase().includes(input.toLowerCase())
+                }
+                style={{ width: '100%' }}
+              >
+                {users.map(user => (
+                  <Option key={user._id} value={user._id}>{user.name}</Option>
                 ))}
               </Select>
             </Col>
@@ -539,7 +597,7 @@ const TrainingLeadList: React.FC = () => {
             dataSource={leads}
             rowKey="_id"
             loading={loading}
-            scroll={{ x: 1400 }}
+            scroll={{ x: 1500 }}
             pagination={{
               current: currentPage,
               pageSize: pageSize,

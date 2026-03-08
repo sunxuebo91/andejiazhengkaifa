@@ -19,7 +19,6 @@ import { trainingLeadService } from '../../services/trainingLeadService';
 import {
   TrainingLead,
   TrainingLeadFollowUp,
-  LEAD_LEVEL_OPTIONS,
   LEAD_STATUS_OPTIONS,
   FOLLOW_UP_TYPE_OPTIONS
 } from '../../types/training-lead.types';
@@ -82,12 +81,6 @@ const TrainingLeadDetail: React.FC = () => {
   const handleFollowUpSuccess = () => {
     handleCloseFollowUp();
     fetchLeadDetail();
-  };
-
-  // 获取客户分级颜色
-  const getLeadLevelColor = (level: string) => {
-    const option = LEAD_LEVEL_OPTIONS.find(opt => opt.value === level);
-    return option?.color || '#8c8c8c';
   };
 
   // 获取状态颜色
@@ -156,15 +149,19 @@ const TrainingLeadDetail: React.FC = () => {
         {/* 基本信息 */}
         <Card title="基本信息">
           <Descriptions bordered column={2}>
-            <Descriptions.Item label="线索编号">{lead.leadId}</Descriptions.Item>
+            <Descriptions.Item label="学员编号">{lead.studentId}</Descriptions.Item>
             <Descriptions.Item label="客户姓名">{lead.name}</Descriptions.Item>
             <Descriptions.Item label="手机号">{lead.phone || '-'}</Descriptions.Item>
             <Descriptions.Item label="微信号">{lead.wechatId || '-'}</Descriptions.Item>
-            <Descriptions.Item label="客户分级">
-              <Tag color={getLeadLevelColor(lead.leadLevel)}>{lead.leadLevel}</Tag>
-            </Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Tag color={getStatusColor(lead.status)}>{lead.status}</Tag>
+              <Space>
+                <Tag color={getStatusColor(lead.status)}>{lead.status}</Tag>
+                {lead.followUpStatus && (
+                  <Tag color={lead.followUpStatus === '新客未跟进' ? '#ff4d4f' : '#faad14'}>
+                    {lead.followUpStatus}
+                  </Tag>
+                )}
+              </Space>
             </Descriptions.Item>
             <Descriptions.Item label="培训类型">{lead.trainingType || '-'}</Descriptions.Item>
             <Descriptions.Item label="意向课程" span={2}>
@@ -172,6 +169,15 @@ const TrainingLeadDetail: React.FC = () => {
                 <Space wrap>
                   {lead.intendedCourses.map((course, index) => (
                     <Tag key={index} color="blue">{course}</Tag>
+                  ))}
+                </Space>
+              ) : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="已报证书" span={2}>
+              {lead.reportedCertificates && lead.reportedCertificates.length > 0 ? (
+                <Space wrap>
+                  {lead.reportedCertificates.map((cert, index) => (
+                    <Tag key={index} color="green">{cert}</Tag>
                   ))}
                 </Space>
               ) : '-'}
@@ -185,6 +191,12 @@ const TrainingLeadDetail: React.FC = () => {
             </Descriptions.Item>
             <Descriptions.Item label="线索来源">{lead.leadSource || '-'}</Descriptions.Item>
             <Descriptions.Item label="所在地区">{lead.address || '-'}</Descriptions.Item>
+            <Descriptions.Item label="是否报征">
+              <Tag color={lead.isReported ? '#52c41a' : '#8c8c8c'}>
+                {lead.isReported ? '是' : '否'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="学员归属">{formatUser(lead.studentOwner)}</Descriptions.Item>
             <Descriptions.Item label="创建人">{formatUser(lead.createdBy)}</Descriptions.Item>
             <Descriptions.Item label="分配给">{formatUser(lead.assignedTo)}</Descriptions.Item>
             <Descriptions.Item label="创建时间">

@@ -188,9 +188,10 @@ export class UsersService {
       case 'admin':
         return ['*']; // 管理员拥有所有权限
       case 'manager':
-        return ['resume:all', 'customer:all', 'user:view'];
+        return ['resume:all', 'customer:all', 'contract:all', 'user:view'];
       case 'employee':
-        return ['resume:view', 'resume:create', 'customer:view', 'customer:create'];
+        // 🔥 修复：员工需要管理自己客户的合同，添加合同权限
+        return ['resume:view', 'resume:create', 'customer:view', 'customer:create', 'contract:view', 'contract:create'];
       default:
         return ['resume:view', 'customer:view'];
     }

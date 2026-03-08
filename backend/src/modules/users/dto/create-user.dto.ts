@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsEnum, IsArray, MinLength, Matches } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsEnum, IsArray, MinLength, Matches, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateUserDto {
@@ -40,4 +40,9 @@ export class CreateUserDto {
   @ApiPropertyOptional({ description: '是否激活', example: true })
   @IsOptional()
   active?: boolean;
-} 
+
+  @ApiPropertyOptional({ description: '本月任务（数量）', example: 100 })
+  @IsNumber({}, { message: '本月任务必须是数字' })
+  @IsOptional()
+  monthlyTask?: number;
+}

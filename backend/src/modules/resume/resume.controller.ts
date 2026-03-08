@@ -534,12 +534,12 @@ export class ResumeController {
       let pageSize = 10;
       let maxAge: number | undefined = undefined;
 
-      // 权限控制：管理员和经理可以看到所有简历，普通员工只能看自己创建的
+      // 🆕 权限控制调整：所有用户都能看到所有简历，但已签约的简历只有合同归属人能看到
       const user = req?.user;
-      const createdBy = this.isManagerOrAdmin(user) ? undefined : user?.userId;
+      const currentUserId = user?.userId;
 
       // 详细记录请求信息
-      this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}, createdBy=${createdBy}`);
+      this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}, currentUserId=${currentUserId}`);
 
       // 安全地解析页码
       try {
@@ -589,7 +589,7 @@ export class ResumeController {
         maxAge,
         nativePlace,
         ethnicity,
-        createdBy
+        currentUserId
       );
 
       return {
@@ -1725,11 +1725,15 @@ export class ResumeController {
   @Get(':id')
   @ApiOperation({ summary: '获取简历详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string, @Req() req?: any) {
     try {
       this.logger.log(`🔧 Controller获取简历详情: id=${id}`);
       this.logger.log(`🔧 准备调用ResumeService.findOne`);
-      const resume = await this.resumeService.findOne(id);
+
+      // 🆕 获取当前用户ID，用于权限检查
+      const currentUserId = req?.user?.userId;
+
+      const resume = await this.resumeService.findOne(id, currentUserId);
       this.logger.log(`🔧 ResumeService.findOne执行完成，结果类型: ${typeof resume}`);
       this.logger.log(`🔧 返回的lastUpdatedBy类型: ${typeof resume?.lastUpdatedBy}`);
 

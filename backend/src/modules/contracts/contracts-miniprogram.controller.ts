@@ -77,50 +77,54 @@ export class ContractsMiniProgramController {
         createdByFilter,
       );
 
-      // 🔥 如果需要同步状态，批量查询爱签API获取最新状态
-      if (syncStatus === 'true' && result.contracts && result.contracts.length > 0) {
-        this.logger.log(`🔄 开始同步 ${result.contracts.length} 个合同的爱签状态...`);
+      // 🔥 处理合同数据，添加 creatorName 字段
+      const processedContracts = await Promise.all(
+        result.contracts.map(async (contract: any) => {
+          // 将 Mongoose 文档转换为普通对象，以便添加新字段
+          const contractObj = contract.toObject ? contract.toObject() : { ...contract };
 
-        // 并发查询所有合同的爱签状态
-        const contractsWithStatus = await Promise.all(
-          result.contracts.map(async (contract: any) => {
-            // 🔥 将 Mongoose 文档转换为普通对象，以便添加新字段
-            const contractObj = contract.toObject ? contract.toObject() : { ...contract };
+          // 🔥 添加创建人姓名字段（从 populate 的 createdBy 对象中提取）
+          if (contractObj.createdBy && typeof contractObj.createdBy === 'object' && contractObj.createdBy.name) {
+            contractObj.creatorName = contractObj.createdBy.name;
+          } else {
+            contractObj.creatorName = null;
+          }
 
-            // 如果有爱签合同编号，查询最新状态
-            if (contractObj.esignContractNo) {
-              try {
-                const statusResponse = await this.esignService.getContractStatus(contractObj.esignContractNo);
+          // 如果需要同步状态且有爱签合同编号，查询最新状态
+          if (syncStatus === 'true' && contractObj.esignContractNo) {
+            try {
+              const statusResponse = await this.esignService.getContractStatus(contractObj.esignContractNo);
 
-                if (statusResponse && statusResponse.data) {
-                  const latestEsignStatus = statusResponse.data.status?.toString();
+              if (statusResponse && statusResponse.data) {
+                const latestEsignStatus = statusResponse.data.status?.toString();
 
-                  // 更新合同对象中的状态（不写入数据库，只返回给前端）
-                  contractObj.esignStatus = latestEsignStatus;
-                  contractObj.esignStatusText = this.getStatusText(latestEsignStatus);
+                // 更新合同对象中的状态（不写入数据库，只返回给前端）
+                contractObj.esignStatus = latestEsignStatus;
+                contractObj.esignStatusText = this.getStatusText(latestEsignStatus);
 
-                  // 🔥 根据爱签状态推断本地状态
-                  if (latestEsignStatus === '2') {
-                    contractObj.contractStatus = 'active'; // 已签约
-                  } else if (latestEsignStatus === '0' || latestEsignStatus === '1') {
-                    contractObj.contractStatus = 'signing'; // 签约中
-                  } else if (latestEsignStatus === '6' || latestEsignStatus === '7') {
-                    contractObj.contractStatus = 'cancelled'; // 已作废/撤销
-                  }
-
-                  this.logger.log(`✅ 合同 ${contractObj.contractNumber} 状态已同步: ${latestEsignStatus} (${contractObj.esignStatusText})`);
+                // 🔥 根据爱签状态推断本地状态
+                if (latestEsignStatus === '2') {
+                  contractObj.contractStatus = 'active'; // 已签约
+                } else if (latestEsignStatus === '0' || latestEsignStatus === '1') {
+                  contractObj.contractStatus = 'signing'; // 签约中
+                } else if (latestEsignStatus === '6' || latestEsignStatus === '7') {
+                  contractObj.contractStatus = 'cancelled'; // 已作废/撤销
                 }
-              } catch (error) {
-                this.logger.warn(`⚠️  查询合同 ${contractObj.contractNumber} 爱签状态失败: ${error.message}`);
-                // 查询失败时保留原有状态
+
+                this.logger.log(`✅ 合同 ${contractObj.contractNumber} 状态已同步: ${latestEsignStatus} (${contractObj.esignStatusText})`);
               }
+            } catch (error) {
+              this.logger.warn(`⚠️  查询合同 ${contractObj.contractNumber} 爱签状态失败: ${error.message}`);
+              // 查询失败时保留原有状态
             }
+          }
 
-            return contractObj;
-          })
-        );
+          return contractObj;
+        })
+      );
 
-        result.contracts = contractsWithStatus;
+      result.contracts = processedContracts;
+      if (syncStatus === 'true') {
         this.logger.log(`✅ 合同状态同步完成`);
       }
 
@@ -139,7 +143,14 @@ export class ContractsMiniProgramController {
   async getContractDetail(@Param('id') id: string) {
     try {
       const contract = await this.contractsService.findOne(id);
-      return { success: true, data: contract, message: '获取合同详情成功' };
+      // 🔥 添加 creatorName 字段
+      const contractData = contract.toObject ? contract.toObject() : { ...contract };
+      if (contractData.createdBy && typeof contractData.createdBy === 'object' && contractData.createdBy.name) {
+        contractData.creatorName = contractData.createdBy.name;
+      } else {
+        contractData.creatorName = null;
+      }
+      return { success: true, data: contractData, message: '获取合同详情成功' };
     } catch (error) {
       return { success: false, message: error.message || '获取合同详情失败' };
     }
@@ -154,7 +165,14 @@ export class ContractsMiniProgramController {
   async getByContractNumber(@Param('contractNumber') contractNumber: string) {
     try {
       const contract = await this.contractsService.findByContractNumber(contractNumber);
-      return { success: true, data: contract, message: '获取合同详情成功' };
+      // 🔥 添加 creatorName 字段
+      const contractData: any = (contract as any).toObject ? (contract as any).toObject() : { ...contract };
+      if (contractData.createdBy && typeof contractData.createdBy === 'object' && contractData.createdBy.name) {
+        contractData.creatorName = contractData.createdBy.name;
+      } else {
+        contractData.creatorName = null;
+      }
+      return { success: true, data: contractData, message: '获取合同详情成功' };
     } catch (error) {
       return { success: false, message: error.message || '获取合同详情失败' };
     }

@@ -10,6 +10,7 @@ import { PublicPoolLog, PublicPoolLogSchema } from './models/public-pool-log.mod
 import { CustomerOperationLog, CustomerOperationLogSchema } from './models/customer-operation-log.model';
 import { LeadTransferRule, LeadTransferRuleSchema } from './models/lead-transfer-rule.model';
 import { LeadTransferRecord, LeadTransferRecordSchema } from './models/lead-transfer-record.model';
+import { Contract, ContractSchema } from '../contracts/models/contract.model';
 import { WeChatModule } from '../wechat/wechat.module';
 import { WeixinModule } from '../weixin/weixin.module';
 import { UsersModule } from '../users/users.module';
@@ -30,6 +31,7 @@ import { LeadTransferRecordService } from './services/lead-transfer-record.servi
       { name: LeadTransferRule.name, schema: LeadTransferRuleSchema },
       { name: LeadTransferRecord.name, schema: LeadTransferRecordSchema },
       { name: CustomerOperationLog.name, schema: CustomerOperationLogSchema },
+      { name: Contract.name, schema: ContractSchema },
     ]),
     WeChatModule,
     WeixinModule,

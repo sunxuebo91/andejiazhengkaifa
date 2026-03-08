@@ -207,9 +207,9 @@ export class ResumeService {
     return OrderStatus.SIGNED;
   }
 
-  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, createdBy?: string) {
+  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string) {
     try {
-      this.logger.log(`🔥 [SORT-FIX-FINAL] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}, createdBy: ${createdBy}`);
+      this.logger.log(`🔥 [SORT-FIX-FINAL] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}, currentUserId: ${currentUserId}`);
       console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
 
       // 首次查询时检查updatedAt字段
@@ -221,30 +221,16 @@ export class ResumeService {
       // 构建查询条件
       const query: any = {};
 
-      // 按创建人过滤（用于普通员工只看自己的简历）
-      if (createdBy) {
-        query.$or = [
-          { userId: new Types.ObjectId(createdBy) },
-          { userId: createdBy }
-        ];
-      }
+      // 🆕 权限逻辑调整：默认所有用户都能看到所有简历，不再按创建人过滤
+      // 特殊情况：已签约的简历只有合同归属人能看到（在后续逻辑中处理）
 
       // 关键词搜索
       if (keyword) {
-        const keywordConditions = [
+        query.$or = [
           { name: { $regex: keyword, $options: 'i' } },
           { phone: { $regex: keyword, $options: 'i' } },
           { expectedPosition: { $regex: keyword, $options: 'i' } }
         ];
-        if (query.$or) {
-          // 已有 createdBy 的 $or 条件，需要用 $and 组合
-          query.$and = query.$and || [];
-          query.$and.push({ $or: query.$or });
-          query.$and.push({ $or: keywordConditions });
-          delete query.$or;
-        } else {
-          query.$or = keywordConditions;
-        }
       }
 
       // 工种筛选
@@ -328,6 +314,50 @@ export class ResumeService {
         ));
       }
 
+      // 🆕 权限过滤：已签约的简历只有合同归属人能看到
+      if (items.length > 0) {
+        const resumeIds = items.map((item: any) => item._id);
+
+        // 查询所有有active合同的简历及其合同归属人
+        const activeContracts = await this.contractModel.find({
+          workerId: { $in: resumeIds },
+          contractStatus: 'active',
+        }).select('workerId createdBy').lean().exec();
+
+        // 构建Map：resumeId -> contractCreatedBy
+        const contractOwnerMap = new Map<string, string>();
+        activeContracts.forEach((contract: any) => {
+          const workerId = contract.workerId?.toString();
+          const ownerId = contract.createdBy?.toString();
+          if (workerId && ownerId) {
+            contractOwnerMap.set(workerId, ownerId);
+          }
+        });
+
+        // 过滤items：对于有active合同的简历，只保留当前用户是合同归属人的简历
+        const filteredItems = items.filter((item: any) => {
+          const resumeId = item._id?.toString();
+          const contractOwnerId = contractOwnerMap.get(resumeId);
+
+          // 如果没有active合同，所有人都能看到
+          if (!contractOwnerId) {
+            return true;
+          }
+
+          // 如果有active合同
+          if (currentUserId) {
+            // 如果有当前用户ID，只有合同归属人能看到
+            return contractOwnerId === currentUserId;
+          } else {
+            // 如果没有当前用户ID（公开接口），隐藏所有已签约的简历
+            return false;
+          }
+        });
+
+        items = filteredItems;
+        this.logger.log(`🔒 [权限过滤] 原始数量: ${resumeIds.length}, 过滤后数量: ${items.length}, active合同数: ${activeContracts.length}`);
+      }
+
       this.logger.log(`🔥 [SORT-FIX-FINAL] 查询完成 - 返回 ${items.length} 条记录`);
 
       // 验证强制排序结果
@@ -373,7 +403,7 @@ export class ResumeService {
     }
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, currentUserId?: string) {
     const resume = await this.resumeModel
       .findById(new Types.ObjectId(id))
       .populate('userId', 'username name')
@@ -381,6 +411,21 @@ export class ResumeService {
 
     if (!resume) {
       throw new NotFoundException('简历不存在');
+    }
+
+    // 🆕 权限检查：如果简历有active合同，只有合同归属人能查看
+    if (currentUserId) {
+      const activeContract = await this.contractModel.findOne({
+        workerId: new Types.ObjectId(id),
+        contractStatus: 'active',
+      }).select('createdBy').lean().exec();
+
+      if (activeContract) {
+        const contractOwnerId = activeContract.createdBy?.toString();
+        if (contractOwnerId && contractOwnerId !== currentUserId) {
+          throw new NotFoundException('简历不存在');
+        }
+      }
     }
 
     // 手动获取lastUpdatedBy用户信息

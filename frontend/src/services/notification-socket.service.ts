@@ -54,6 +54,12 @@ class NotificationSocketService {
       console.log('🔔 Unread count updated:', count);
       this.emit('unreadCount', count);
     });
+
+    // 监听刷新事件
+    this.socket.on('refresh', (data: { eventType: string; data?: any; timestamp: number }) => {
+      console.log('🔄 Refresh event received:', data);
+      this.emit('refresh', data);
+    });
   }
 
   /**

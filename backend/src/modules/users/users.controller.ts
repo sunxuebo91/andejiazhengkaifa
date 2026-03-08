@@ -222,4 +222,77 @@ export class UsersController {
       }, HttpStatus.BAD_REQUEST);
     }
   }
+
+  @Patch(':id/monthly-task')
+  @ApiOperation({ summary: '更新员工本月任务' })
+  @ApiResponse({ status: 200, description: '更新成功' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
+  async updateMonthlyTask(
+    @Param('id') id: string,
+    @Body('monthlyTask') monthlyTask: number
+  ) {
+    try {
+      const user = await this.usersService.update(id, { monthlyTask });
+      return {
+        success: true,
+        data: user,
+        message: '本月任务更新成功'
+      };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw new HttpException({
+          success: false,
+          message: '用户不存在',
+          error: 'USER_NOT_FOUND'
+        }, HttpStatus.NOT_FOUND);
+      }
+      throw new HttpException({
+        success: false,
+        message: error.message || '更新本月任务失败',
+        error: 'UPDATE_FAILED'
+      }, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Get(':id/monthly-task')
+  @ApiOperation({ summary: '获取员工本月任务（小程序用）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
+  async getMonthlyTask(@Param('id') id: string) {
+    try {
+      const user = await this.usersService.findById(id);
+      if (!user) {
+        throw new HttpException({
+          success: false,
+          message: '用户不存在',
+          error: 'USER_NOT_FOUND'
+        }, HttpStatus.NOT_FOUND);
+      }
+
+      return {
+        success: true,
+        data: {
+          userId: user._id,
+          name: user.name,
+          monthlyTask: user.monthlyTask || 0,
+          role: user.role,
+          department: user.department
+        },
+        message: '获取本月任务成功'
+      };
+    } catch (error) {
+      if (error.message.includes('not found') || error.status === HttpStatus.NOT_FOUND) {
+        throw new HttpException({
+          success: false,
+          message: '用户不存在',
+          error: 'USER_NOT_FOUND'
+        }, HttpStatus.NOT_FOUND);
+      }
+      throw new HttpException({
+        success: false,
+        message: error.message || '获取本月任务失败',
+        error: 'FETCH_FAILED'
+      }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
 }

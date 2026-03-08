@@ -10,7 +10,7 @@ import { Model, Types } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
-import { TrainingLead, TrainingLeadDocument, LeadLevel, LeadStatus } from './models/training-lead.model';
+import { TrainingLead, TrainingLeadDocument, LeadStatus } from './models/training-lead.model';
 import { TrainingLeadFollowUp, TrainingLeadFollowUpDocument } from './models/training-lead-follow-up.model';
 import { CreateTrainingLeadDto } from './dto/create-training-lead.dto';
 import { UpdateTrainingLeadDto } from './dto/update-training-lead.dto';
@@ -30,12 +30,12 @@ export class TrainingLeadsService {
   ) {}
 
   /**
-   * 生成线索编号
+   * 生成学员编号
    */
-  private generateLeadId(): string {
+  private generateStudentId(): string {
     const timestamp = Date.now().toString().slice(-8);
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    return `TL${timestamp}${random}`;
+    return `ST${timestamp}${random}`;
   }
 
   /**
@@ -57,14 +57,15 @@ export class TrainingLeadsService {
       }
     }
 
-    // 生成线索编号
-    const leadId = this.generateLeadId();
+    // 生成学员编号
+    const studentId = this.generateStudentId();
 
     // 处理日期字段
     const leadData: any = {
       ...createDto,
-      leadId,
+      studentId,
       createdBy: new Types.ObjectId(userId),
+      status: LeadStatus.NEW
     };
 
     // 如果提供了归属用户ID，设置referredBy字段
@@ -76,25 +77,58 @@ export class TrainingLeadsService {
       leadData.expectedStartDate = new Date(createDto.expectedStartDate);
     }
 
-    // 如果客户分级是"0-成交"，自动设置状态为"已成交"
-    if (createDto.leadLevel === LeadLevel.CLOSED) {
-      leadData.status = LeadStatus.CLOSED;
-    } else {
-      leadData.status = LeadStatus.NEW;
+    // 处理学员归属
+    if (createDto.studentOwner) {
+      leadData.studentOwner = new Types.ObjectId(createDto.studentOwner);
     }
 
     const lead = new this.trainingLeadModel(leadData);
     const saved = await lead.save();
 
-    this.logger.log(`培训线索创建成功: ${saved.leadId}`);
+    this.logger.log(`培训线索创建成功: ${saved.studentId}`);
     return saved;
+  }
+
+  /**
+   * 计算线索的跟进状态
+   * @param lead 线索对象
+   * @param followUps 跟进记录列表
+   * @returns 跟进状态标签：'新客未跟进' | '流转未跟进' | null
+   */
+  private calculateFollowUpStatus(lead: any, followUps: any[]): string | null {
+    // 如果没有任何跟进记录，显示"新客未跟进"
+    if (!followUps || followUps.length === 0) {
+      return '新客未跟进';
+    }
+
+    // 如果有学员归属，检查当前归属人是否做过跟进
+    if (lead.studentOwner) {
+      const studentOwnerId = typeof lead.studentOwner === 'object'
+        ? lead.studentOwner._id?.toString()
+        : lead.studentOwner.toString();
+
+      // 检查是否有当前归属人创建的跟进记录
+      const hasOwnerFollowUp = followUps.some(followUp => {
+        const createdById = typeof followUp.createdBy === 'object'
+          ? followUp.createdBy._id?.toString()
+          : followUp.createdBy.toString();
+        return createdById === studentOwnerId;
+      });
+
+      // 如果当前归属人没有做过跟进，显示"流转未跟进"
+      if (!hasOwnerFollowUp) {
+        return '流转未跟进';
+      }
+    }
+
+    return null;
   }
 
   /**
    * 查询培训线索列表
    */
   async findAll(query: TrainingLeadQueryDto): Promise<any> {
-    const { page = 1, pageSize = 10, search, leadLevel, status, leadSource, trainingType, startDate, endDate, assignedTo, createdBy } = query;
+    const { page = 1, pageSize = 10, search, status, leadSource, trainingType, startDate, endDate, assignedTo, createdBy, isReported, studentOwner } = query;
 
     const filter: any = {};
     const andConditions: any[] = [];
@@ -116,7 +150,7 @@ export class TrainingLeadsService {
           { name: { $regex: search, $options: 'i' } },
           { phone: { $regex: search, $options: 'i' } },
           { wechatId: { $regex: search, $options: 'i' } },
-          { leadId: { $regex: search, $options: 'i' } }
+          { studentId: { $regex: search, $options: 'i' } }
         ]
       });
     }
@@ -127,11 +161,12 @@ export class TrainingLeadsService {
     }
 
     // 筛选条件
-    if (leadLevel) filter.leadLevel = leadLevel;
     if (status) filter.status = status;
     if (leadSource) filter.leadSource = leadSource;
     if (trainingType) filter.trainingType = trainingType;
     if (assignedTo) filter.assignedTo = new Types.ObjectId(assignedTo);
+    if (isReported !== undefined) filter.isReported = isReported;
+    if (studentOwner) filter.studentOwner = new Types.ObjectId(studentOwner);
 
     // 日期范围
     if (startDate || endDate) {
@@ -148,6 +183,7 @@ export class TrainingLeadsService {
         .populate('createdBy', 'name username')
         .populate('assignedTo', 'name username')
         .populate('referredBy', 'name username')
+        .populate('studentOwner', 'name username')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(pageSize)
@@ -156,8 +192,28 @@ export class TrainingLeadsService {
       this.trainingLeadModel.countDocuments(filter)
     ]);
 
+    // 为每个线索计算跟进状态
+    const itemsWithFollowUpStatus = await Promise.all(
+      items.map(async (lead) => {
+        // 获取该线索的跟进记录
+        const followUps = await this.followUpModel
+          .find({ leadId: lead._id })
+          .populate('createdBy', '_id name username')
+          .lean()
+          .exec();
+
+        // 计算跟进状态
+        const followUpStatus = this.calculateFollowUpStatus(lead, followUps);
+
+        return {
+          ...lead,
+          followUpStatus
+        };
+      })
+    );
+
     return {
-      items,
+      items: itemsWithFollowUpStatus,
       total,
       page,
       pageSize,
@@ -174,6 +230,7 @@ export class TrainingLeadsService {
       .populate('createdBy', 'name username')
       .populate('assignedTo', 'name username')
       .populate('referredBy', 'name username')
+      .populate('studentOwner', 'name username')
       .lean()
       .exec();
 
@@ -189,9 +246,13 @@ export class TrainingLeadsService {
       .lean()
       .exec();
 
+    // 计算跟进状态
+    const followUpStatus = this.calculateFollowUpStatus(lead, followUps);
+
     return {
       ...lead,
-      followUps
+      followUps,
+      followUpStatus
     };
   }
 
@@ -220,15 +281,15 @@ export class TrainingLeadsService {
       updateData.expectedStartDate = new Date(updateDto.expectedStartDate);
     }
 
-    // 如果客户分级改为"0-成交"，自动设置状态为"已成交"
-    if (updateDto.leadLevel === LeadLevel.CLOSED) {
-      updateData.status = LeadStatus.CLOSED;
+    // 处理学员归属
+    if (updateDto.studentOwner) {
+      updateData.studentOwner = new Types.ObjectId(updateDto.studentOwner);
     }
 
     Object.assign(lead, updateData);
     const updated = await lead.save();
 
-    this.logger.log(`培训线索更新成功: ${updated.leadId}`);
+    this.logger.log(`培训线索更新成功: ${updated.studentId}`);
     return updated;
   }
 
@@ -249,7 +310,7 @@ export class TrainingLeadsService {
     // 删除线索
     await this.trainingLeadModel.findByIdAndDelete(id);
 
-    this.logger.log(`培训线索删除成功: ${lead.leadId}`);
+    this.logger.log(`培训线索删除成功: ${lead.studentId}`);
   }
 
   /**
@@ -436,21 +497,6 @@ export class TrainingLeadsService {
    * 将Excel行数据映射到培训线索DTO
    */
   private mapExcelRowToLeadDto(rowData: Record<string, any>, userId: string): CreateTrainingLeadDto {
-    // 客户分级映射
-    const leadLevelMap: Record<string, LeadLevel> = {
-      'A类': LeadLevel.A,
-      'A': LeadLevel.A,
-      'B类': LeadLevel.B,
-      'B': LeadLevel.B,
-      'C类': LeadLevel.C,
-      'C': LeadLevel.C,
-      'D类': LeadLevel.D,
-      'D': LeadLevel.D,
-      '0-成交': LeadLevel.CLOSED,
-      '成交': LeadLevel.CLOSED,
-      '0': LeadLevel.CLOSED
-    };
-
     // 意向程度映射
     const intentionLevelMap: Record<string, string> = {
       '高': '高',
@@ -460,8 +506,7 @@ export class TrainingLeadsService {
 
     // 创建基本数据
     const dto: any = {
-      name: rowData['姓名']?.toString().trim(),
-      leadLevel: leadLevelMap[rowData['客户分级']?.toString().trim()] || LeadLevel.D
+      name: rowData['姓名']?.toString().trim()
     };
 
     // 手机号（可选）
@@ -518,6 +563,12 @@ export class TrainingLeadsService {
     // 所在地区
     if (rowData['所在地区']) {
       dto.address = rowData['所在地区']?.toString().trim();
+    }
+
+    // 是否报征
+    if (rowData['是否报征']) {
+      const value = rowData['是否报征']?.toString().trim().toLowerCase();
+      dto.isReported = value === '是' || value === 'true' || value === '1';
     }
 
     // 备注信息

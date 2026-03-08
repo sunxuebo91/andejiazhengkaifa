@@ -84,6 +84,9 @@ const CustomerDetail: React.FC = () => {
   // 🆕 分配历史展开/折叠状态
   const [showAllAssignments, setShowAllAssignments] = useState(false);
 
+  // 🆕 跟进记录展开/折叠状态
+  const [showAllFollowUps, setShowAllFollowUps] = useState(false);
+
   // 🆕 操作日志状态（仅管理员可见）
   const [operationLogs, setOperationLogs] = useState<any[]>([]);
   const [operationLogsLoading, setOperationLogsLoading] = useState(false);
@@ -423,7 +426,14 @@ const CustomerDetail: React.FC = () => {
                 </Descriptions.Item>
 
                 <Descriptions.Item label="线索来源" span={1}>
-                  <Tag>{customer.leadSource}</Tag>
+                  <Space>
+                    <Tag>{customer.leadSource}</Tag>
+                    {customer.followUpStatus && (
+                      <Tag color={customer.followUpStatus === '新客未跟进' ? '#ff4d4f' : '#faad14'}>
+                        {customer.followUpStatus}
+                      </Tag>
+                    )}
+                  </Space>
                 </Descriptions.Item>
 
                 <Descriptions.Item label="线索等级" span={1}>
@@ -640,6 +650,9 @@ const CustomerDetail: React.FC = () => {
                 <Space>
                   <ClockCircleOutlined />
                   <span>跟进记录</span>
+                  {customer.followUps && customer.followUps.length > 2 && (
+                    <Tag color="blue">{customer.followUps.length} 条记录</Tag>
+                  )}
                 </Space>
               }
               extra={
@@ -655,29 +668,42 @@ const CustomerDetail: React.FC = () => {
               style={{ marginBottom: '16px' }}
             >
               {customer.followUps && customer.followUps.length > 0 ? (
-                <Timeline
-                  mode="left"
-                  items={customer.followUps.map((followUp, index) => ({
-                    key: followUp._id,
-                    color: index === 0 ? 'green' : 'blue',
-                    label: formatDateTime(followUp.createdAt),
-                    children: (
-                      <Card size="small" style={{ backgroundColor: '#fafafa' }}>
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          <Space>
-                            <Tag color="blue">{getFollowUpTypeLabel(followUp.type)}</Tag>
-                            <span style={{ fontSize: '12px', color: '#666' }}>
-                              by {String(followUp.createdBy?.name || followUp.createdBy?.username || followUp.createdBy || '未知')}
-                            </span>
+                <>
+                  <Timeline
+                    mode="left"
+                    items={(showAllFollowUps ? customer.followUps : customer.followUps.slice(0, 2)).map((followUp, index) => ({
+                      key: followUp._id,
+                      color: index === 0 ? 'green' : 'blue',
+                      label: formatDateTime(followUp.createdAt),
+                      children: (
+                        <Card size="small" style={{ backgroundColor: '#fafafa' }}>
+                          <Space direction="vertical" style={{ width: '100%' }}>
+                            <Space>
+                              <Tag color="blue">{getFollowUpTypeLabel(followUp.type)}</Tag>
+                              <span style={{ fontSize: '12px', color: '#666' }}>
+                                by {String(followUp.createdBy?.name || followUp.createdBy?.username || followUp.createdBy || '未知')}
+                              </span>
+                            </Space>
+                            <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                              {followUp.content}
+                            </div>
                           </Space>
-                          <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-                            {followUp.content}
-                          </div>
-                        </Space>
-                      </Card>
-                    )
-                  }))}
-                />
+                        </Card>
+                      )
+                    }))}
+                  />
+                  {customer.followUps.length > 2 && (
+                    <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                      <Button
+                        type="link"
+                        onClick={() => setShowAllFollowUps(!showAllFollowUps)}
+                        icon={showAllFollowUps ? <UpOutlined /> : <DownOutlined />}
+                      >
+                        {showAllFollowUps ? '收起记录' : `查看全部 ${customer.followUps.length} 条记录`}
+                      </Button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <Empty
                   description="暂无跟进记录"

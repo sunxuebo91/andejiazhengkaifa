@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { 
-  Card, 
-  Form, 
-  Input, 
-  Button, 
-  Space, 
-  Alert, 
-  Checkbox, 
+import {
+  Card,
+  Form,
+  Input,
+  Button,
+  Space,
+  Alert,
+  Checkbox,
   Divider,
   Typography,
   App
 } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
+import roleService, { UpdateRoleDto, CreateRoleDto } from '../../services/role.service';
 
 const { TextArea } = Input;
 const { Title } = Typography;
@@ -23,7 +24,7 @@ interface Permission {
   description: string;
 }
 
-// 模拟权限数据
+// 权限数据定义
 const permissionsData: Permission[] = [
   // 阿姨管理权限
   { key: 'resume:view', label: '查看阿姨简历', description: '允许查看阿姨简历列表和详情' },
@@ -31,14 +32,28 @@ const permissionsData: Permission[] = [
   { key: 'resume:edit', label: '编辑阿姨简历', description: '允许编辑阿姨简历' },
   { key: 'resume:delete', label: '删除阿姨简历', description: '允许删除阿姨简历' },
   { key: 'resume:all', label: '阿姨管理(全部)', description: '阿姨管理全部权限，包含查看、创建、编辑、删除' },
-  
+
+  // 客户管理权限
+  { key: 'customer:view', label: '查看客户', description: '允许查看客户列表和详情' },
+  { key: 'customer:create', label: '创建客户', description: '允许创建新客户' },
+  { key: 'customer:edit', label: '编辑客户', description: '允许编辑客户信息' },
+  { key: 'customer:delete', label: '删除客户', description: '允许删除客户' },
+  { key: 'customer:all', label: '客户管理(全部)', description: '客户管理全部权限，包含查看、创建、编辑、删除' },
+
+  // 合同管理权限
+  { key: 'contract:view', label: '查看合同', description: '允许查看合同列表和详情' },
+  { key: 'contract:create', label: '创建合同', description: '允许创建新合同' },
+  { key: 'contract:edit', label: '编辑合同', description: '允许编辑合同信息' },
+  { key: 'contract:delete', label: '删除合同', description: '允许删除合同' },
+  { key: 'contract:all', label: '合同管理(全部)', description: '合同管理全部权限，包含查看、创建、编辑、删除' },
+
   // 用户管理权限
   { key: 'user:view', label: '查看用户', description: '允许查看用户列表' },
   { key: 'user:create', label: '创建用户', description: '允许创建新用户' },
   { key: 'user:edit', label: '编辑用户', description: '允许编辑用户信息' },
   { key: 'user:delete', label: '删除用户', description: '允许删除用户' },
   { key: 'user:all', label: '用户管理(全部)', description: '用户管理全部权限，包含查看、创建、编辑、删除' },
-  
+
   // 系统管理权限
   { key: 'admin:roles', label: '角色管理', description: '允许管理角色和权限' },
   { key: 'admin:settings', label: '系统设置', description: '允许修改系统设置' },
@@ -47,17 +62,25 @@ const permissionsData: Permission[] = [
 
 // 按类别分组权限
 const permissionGroups = [
-  { 
-    title: '阿姨管理', 
-    permissions: permissionsData.filter(p => p.key.startsWith('resume:')) 
+  {
+    title: '阿姨管理',
+    permissions: permissionsData.filter(p => p.key.startsWith('resume:'))
   },
-  { 
-    title: '用户管理', 
-    permissions: permissionsData.filter(p => p.key.startsWith('user:')) 
+  {
+    title: '客户管理',
+    permissions: permissionsData.filter(p => p.key.startsWith('customer:'))
   },
-  { 
-    title: '系统管理', 
-    permissions: permissionsData.filter(p => p.key.startsWith('admin:')) 
+  {
+    title: '合同管理',
+    permissions: permissionsData.filter(p => p.key.startsWith('contract:'))
+  },
+  {
+    title: '用户管理',
+    permissions: permissionsData.filter(p => p.key.startsWith('user:'))
+  },
+  {
+    title: '系统管理',
+    permissions: permissionsData.filter(p => p.key.startsWith('admin:'))
   },
 ];
 
@@ -71,53 +94,62 @@ const EditRole: React.FC = () => {
   const isEdit = id !== 'new';
   const { message } = App.useApp();
 
-  // 模拟获取角色详情
+  // 获取角色详情
   const fetchRoleDetail = async (roleId: string) => {
-    setLoading(true);
-    // 模拟后端API调用
-    setTimeout(() => {
-      // 模拟数据
-      if (roleId === '1') {
-        // 系统管理员
+    try {
+      setLoading(true);
+      setError('');
+      const response = await roleService.getOne(roleId);
+      if (response.success && response.data) {
         setInitialValues({
-          name: '系统管理员',
-          description: '拥有系统所有权限',
-          permissions: ['admin:all', 'resume:all', 'user:all']
+          name: response.data.name,
+          description: response.data.description,
+          permissions: response.data.permissions || []
         });
-      } else if (roleId === '2') {
-        // 经理
-        setInitialValues({
-          name: '经理',
-          description: '可以管理团队和阿姨资源',
-          permissions: ['resume:all', 'user:view']
-        });
-      } else if (roleId === '3') {
-        // 普通员工
-        setInitialValues({
-          name: '普通员工',
-          description: '只能管理自己创建的阿姨资源',
-          permissions: ['resume:view', 'resume:create']
+        // 设置表单初始值
+        form.setFieldsValue({
+          name: response.data.name,
+          description: response.data.description,
+          permissions: response.data.permissions || []
         });
       } else {
-        // 新建角色
-        setInitialValues({
-          name: '',
-          description: '',
-          permissions: []
-        });
+        setError('获取角色详情失败');
       }
+    } catch (err: any) {
+      console.error('获取角色详情失败:', err);
+      setError('获取角色详情失败：' + (err.message || '未知错误'));
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
-  // 模拟保存角色
+  // 保存角色
   const saveRole = async (values: any) => {
     console.log('保存角色:', values);
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        resolve();
-      }, 500);
-    });
+    if (id) {
+      // 更新角色
+      const updateData: UpdateRoleDto = {
+        name: values.name,
+        description: values.description,
+        permissions: values.permissions || []
+      };
+      const response = await roleService.update(id, updateData);
+      if (!response.success) {
+        throw new Error(response.message || '更新角色失败');
+      }
+    } else {
+      // 创建角色
+      const createData: CreateRoleDto = {
+        name: values.name,
+        description: values.description,
+        permissions: values.permissions || [],
+        active: true
+      };
+      const response = await roleService.create(createData);
+      if (!response.success) {
+        throw new Error(response.message || '创建角色失败');
+      }
+    }
   };
 
   useEffect(() => {

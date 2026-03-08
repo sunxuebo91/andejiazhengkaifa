@@ -73,8 +73,19 @@ export class CustomersController {
       // 经理可以访问部门内的客户（这里简化为所有客户，实际应该根据部门过滤）
       return true;
     } else if (userRole === '普通员工') {
-      // 普通员工只能访问自己负责的客户
-      return customer.assignedTo?.toString() === user.userId;
+      // 🔥 修复：普通员工只能访问自己负责的客户
+      // assignedTo 可能是 ObjectId、ObjectId字符串、或 populate 后的对象
+      let assignedToId: string | undefined;
+      if (customer.assignedTo) {
+        if (typeof customer.assignedTo === 'string') {
+          assignedToId = customer.assignedTo;
+        } else if (customer.assignedTo._id) {
+          assignedToId = customer.assignedTo._id?.toString?.() || customer.assignedTo._id;
+        } else {
+          assignedToId = customer.assignedTo.toString?.() || String(customer.assignedTo);
+        }
+      }
+      return assignedToId === user.userId;
     }
     return false;
   }
@@ -104,8 +115,21 @@ export class CustomersController {
       lastActivityAt: customer.lastActivityAt,
     };
 
-    // 判断是否是自己负责的客户
-    const isOwnCustomer = customer.assignedTo?.toString() === userId;
+    // 🔥 修复：判断是否是自己负责的客户
+    // assignedTo 可能是 ObjectId、ObjectId字符串、或 populate 后的对象 {_id, name, username}
+    let assignedToId: string | undefined;
+    if (customer.assignedTo) {
+      if (typeof customer.assignedTo === 'string') {
+        assignedToId = customer.assignedTo;
+      } else if (customer.assignedTo._id) {
+        // populate 后的对象
+        assignedToId = customer.assignedTo._id?.toString?.() || customer.assignedTo._id;
+      } else {
+        // 原始 ObjectId
+        assignedToId = customer.assignedTo.toString?.() || String(customer.assignedTo);
+      }
+    }
+    const isOwnCustomer = assignedToId === userId;
 
     if (userRole === '普通员工') {
       // 普通员工：自己的客户显示完整信息，其他客户脱敏
@@ -113,12 +137,19 @@ export class CustomersController {
         ...baseData,
         phone: isOwnCustomer ? customer.phone : this.maskPhoneNumber(customer.phone),
         wechatId: isOwnCustomer ? customer.wechatId : undefined,
+        idCardNumber: isOwnCustomer ? customer.idCardNumber : undefined, // 🔥 添加身份证号
         address: isOwnCustomer ? customer.address : undefined,
         salaryBudget: isOwnCustomer ? customer.salaryBudget : undefined,
         expectedStartDate: isOwnCustomer ? customer.expectedStartDate : undefined,
         homeArea: isOwnCustomer ? customer.homeArea : undefined,
         familySize: isOwnCustomer ? customer.familySize : undefined,
         restSchedule: isOwnCustomer ? customer.restSchedule : undefined,
+        ageRequirement: isOwnCustomer ? customer.ageRequirement : undefined,
+        genderRequirement: isOwnCustomer ? customer.genderRequirement : undefined,
+        originRequirement: isOwnCustomer ? customer.originRequirement : undefined,
+        educationRequirement: isOwnCustomer ? customer.educationRequirement : undefined,
+        expectedDeliveryDate: isOwnCustomer ? customer.expectedDeliveryDate : undefined,
+        dealAmount: isOwnCustomer ? customer.dealAmount : undefined, // 成交金额
         remarks: isOwnCustomer ? customer.remarks : undefined,
       };
     } else if (userRole === '经理') {
@@ -127,6 +158,7 @@ export class CustomersController {
         ...baseData,
         phone: customer.phone,
         wechatId: customer.wechatId,
+        idCardNumber: customer.idCardNumber, // 🔥 添加身份证号
         address: customer.address,
         salaryBudget: customer.salaryBudget,
         expectedStartDate: customer.expectedStartDate,
@@ -138,6 +170,7 @@ export class CustomersController {
         originRequirement: customer.originRequirement,
         educationRequirement: customer.educationRequirement,
         expectedDeliveryDate: customer.expectedDeliveryDate,
+        dealAmount: customer.dealAmount, // 成交金额
         remarks: customer.remarks,
       };
     } else {
@@ -474,7 +507,18 @@ export class CustomersController {
     } catch (error) {
       return this.createResponse(false, '跟进记录获取失败', null, error.message);
     }
+  }
 
+  // 获取客户跟进状态
+  @Get(':id/follow-up-status')
+  @ApiOperation({ summary: '获取客户跟进状态（新客未跟进/流转未跟进）' })
+  async getFollowUpStatus(@Param('id') id: string): Promise<ApiResponse> {
+    try {
+      const status = await this.customersService.getFollowUpStatus(id);
+      return this.createResponse(true, '跟进状态获取成功', status);
+    } catch (error) {
+      return this.createResponse(false, '跟进状态获取失败', null, error.message);
+    }
   }
 
   // 分配客户归属人
@@ -591,6 +635,48 @@ export class CustomersController {
       return this.createResponse(true, '统计信息获取成功', stats);
     } catch (error) {
       return this.createResponse(false, '统计信息获取失败', null, error.message);
+    }
+  }
+
+  @Get('miniprogram/today-todo-stats')
+  @ApiOperation({ summary: '小程序获取今日待办统计' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  async getTodayTodoStatsForMiniprogram(@Request() req): Promise<ApiResponse> {
+    try {
+      const userId = req.user.userId;
+      const stats = await this.customersService.getTodayTodoStats(userId);
+      return this.createResponse(true, '今日待办统计获取成功', stats);
+    } catch (error) {
+      return this.createResponse(false, '今日待办统计获取失败', null, error.message);
+    }
+  }
+
+  @Get('miniprogram/performance-progress')
+  @ApiOperation({ summary: '小程序获取业绩进度' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  async getPerformanceProgressForMiniprogram(@Request() req): Promise<ApiResponse> {
+    try {
+      const userId = req.user.userId;
+      const progress = await this.customersService.getPerformanceProgress(userId);
+      return this.createResponse(true, '业绩进度获取成功', progress);
+    } catch (error) {
+      return this.createResponse(false, '业绩进度获取失败', null, error.message);
+    }
+  }
+
+  @Get('miniprogram/contract-stats')
+  @ApiOperation({ summary: '小程序获取合同统计' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  async getContractStatsForMiniprogram(@Request() req): Promise<ApiResponse> {
+    try {
+      const userId = req.user.userId;
+      const stats = await this.customersService.getContractStats(userId);
+      return this.createResponse(true, '合同统计获取成功', stats);
+    } catch (error) {
+      return this.createResponse(false, '合同统计获取失败', null, error.message);
     }
   }
 

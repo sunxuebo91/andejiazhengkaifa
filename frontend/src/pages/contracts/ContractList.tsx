@@ -15,8 +15,9 @@ import {
   Statistic,
   Modal,
   Badge,
+  Form,
 } from 'antd';
-import { SearchOutlined, EyeOutlined, PlusOutlined, DeleteOutlined, AuditOutlined } from '@ant-design/icons';
+import { SearchOutlined, EyeOutlined, PlusOutlined, DeleteOutlined, AuditOutlined, UserSwitchOutlined } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { Contract, ContractType, CONTRACT_TYPES } from '../../types/contract.types';
 import ContractStatusMini from '../../components/ContractStatusMini';
@@ -49,8 +50,16 @@ const ContractList: React.FC = () => {
     cancelled: 0,
   });
 
+  // 合同分配相关状态
+  const [assignModalVisible, setAssignModalVisible] = useState(false);
+  const [assigningContract, setAssigningContract] = useState<Contract | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<Array<{ _id: string; name: string; username: string; role: string }>>([]);
+  const [assignForm] = Form.useForm();
+  const [assignLoading, setAssignLoading] = useState(false);
+
   // 权限检查 - 支持多种管理员角色标识
   const isAdmin = user?.role === '系统管理员' || user?.role === 'admin' || user?.role === '管理员';
+  const isManagerOrAdmin = isAdmin || user?.role === '经理' || user?.role === 'manager';
 
   useEffect(() => {
     fetchContracts();
@@ -161,6 +170,49 @@ const ContractList: React.FC = () => {
         }
       },
     });
+  };
+
+  // 打开分配弹窗
+  const handleOpenAssignModal = async (record: Contract) => {
+    setAssigningContract(record);
+    setAssignModalVisible(true);
+    assignForm.resetFields();
+
+    // 加载可分配的员工列表
+    try {
+      const response = await contractService.getAssignableUsers();
+      if (response.success && response.data) {
+        setAssignableUsers(response.data);
+      }
+    } catch (error) {
+      message.error('获取员工列表失败');
+    }
+  };
+
+  // 提交分配
+  const handleAssignSubmit = async () => {
+    try {
+      const values = await assignForm.validateFields();
+      setAssignLoading(true);
+
+      const response = await contractService.assignContract(
+        assigningContract!._id!,
+        values.assignedTo,
+        values.reason
+      );
+
+      if (response.success) {
+        message.success('合同分配成功');
+        setAssignModalVisible(false);
+        fetchContracts(); // 刷新列表
+      } else {
+        message.error(response.message || '分配失败');
+      }
+    } catch (error: any) {
+      message.error(error.message || '分配失败');
+    } finally {
+      setAssignLoading(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -282,6 +334,17 @@ const ContractList: React.FC = () => {
       ),
     },
     {
+      title: '服务费',
+      dataIndex: 'customerServiceFee',
+      key: 'customerServiceFee',
+      width: 120,
+      render: (fee: number) => (
+        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+          {fee ? `¥${fee.toLocaleString()}` : '-'}
+        </span>
+      ),
+    },
+    {
       title: '状态',
       key: 'status',
       width: 150,
@@ -316,10 +379,10 @@ const ContractList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 180,
+      width: 240,
       fixed: 'right' as const,
       render: (_: any, record: Contract) => (
-        <Space>
+        <Space wrap>
           <Button
             type="primary"
             size="small"
@@ -328,6 +391,15 @@ const ContractList: React.FC = () => {
           >
             查看
           </Button>
+          {isManagerOrAdmin && (
+            <Button
+              size="small"
+              icon={<UserSwitchOutlined />}
+              onClick={() => handleOpenAssignModal(record)}
+            >
+              分配
+            </Button>
+          )}
           <Button
             danger
             size="small"
@@ -483,8 +555,55 @@ const ContractList: React.FC = () => {
           scroll={{ x: 1200 }}
         />
       </Card>
+
+      {/* 合同分配弹窗 */}
+      <Modal
+        title="分配合同"
+        open={assignModalVisible}
+        onCancel={() => setAssignModalVisible(false)}
+        onOk={handleAssignSubmit}
+        confirmLoading={assignLoading}
+        okText="确认分配"
+        cancelText="取消"
+      >
+        {assigningContract && (
+          <div style={{ marginBottom: 16 }}>
+            <p><strong>合同编号：</strong>{assigningContract.contractNumber}</p>
+            <p><strong>客户姓名：</strong>{assigningContract.customerName}</p>
+            <p><strong>服务人员：</strong>{assigningContract.workerName}</p>
+          </div>
+        )}
+        <Form form={assignForm} layout="vertical">
+          <Form.Item
+            name="assignedTo"
+            label="分配给"
+            rules={[{ required: true, message: '请选择负责人' }]}
+          >
+            <Select
+              placeholder="选择员工"
+              showSearch
+              optionFilterProp="children"
+              filterOption={(input, option) =>
+                (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+              }
+            >
+              {assignableUsers.map(user => (
+                <Select.Option key={user._id} value={user._id}>
+                  {user.name} ({user.username}) - {user.role === 'admin' ? '管理员' : user.role === 'manager' ? '经理' : '员工'}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="分配原因"
+          >
+            <Input.TextArea rows={3} placeholder="请输入分配原因（可选）" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };
 
-export default ContractList; 
+export default ContractList;

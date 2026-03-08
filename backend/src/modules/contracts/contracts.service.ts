@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Contract, ContractDocument } from './models/contract.model';
@@ -941,6 +941,94 @@ export class ContractsService {
     } catch (error) {
       this.logger.warn(`⚠️ 查找新合同失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 分配合同给指定用户（修改归属人）
+   * 仅管理员可操作
+   */
+  async assignContract(
+    contractId: string,
+    newOwnerId: string,
+    adminUserId: string,
+    reason?: string
+  ): Promise<Contract> {
+    this.logger.log(`📝 分配合同 ${contractId} 给用户 ${newOwnerId}`);
+
+    // 验证管理员权限
+    const adminUser = await this.userModel.findById(adminUserId).select('role name username').lean();
+    if (!adminUser || !['admin', 'manager'].includes((adminUser as any).role)) {
+      throw new ForbiddenException('只有管理员或经理可以分配合同');
+    }
+
+    // 验证合同
+    const contract = await this.contractModel.findById(contractId).exec();
+    if (!contract) {
+      throw new NotFoundException('合同不存在');
+    }
+
+    // 验证目标用户
+    const targetUser = await this.userModel.findById(newOwnerId).select('name username role active').lean();
+    if (!targetUser) {
+      throw new NotFoundException('指定的负责人不存在');
+    }
+    if ((targetUser as any).active === false) {
+      throw new ConflictException('指定的负责人未激活');
+    }
+
+    const oldCreatedBy = contract.createdBy;
+
+    // 更新合同归属人
+    const updatedContract = await this.contractModel.findByIdAndUpdate(
+      contractId,
+      {
+        createdBy: new Types.ObjectId(newOwnerId),
+        lastUpdatedBy: new Types.ObjectId(adminUserId),
+      },
+      { new: true }
+    ).exec();
+
+    this.logger.log(`✅ 合同 ${contract.contractNumber} 已分配给 ${(targetUser as any).name}`);
+
+    // 记录操作日志（如果合同关联了客户）
+    if (contract.customerId) {
+      try {
+        const oldOwner = oldCreatedBy ? await this.userModel.findById(oldCreatedBy).select('name').lean() : null;
+        await this.logCustomerOperation(
+          contract.customerId.toString(),
+          adminUserId,
+          'contract_assign',
+          '合同分配',
+          {
+            contractNumber: contract.contractNumber,
+            before: { owner: (oldOwner as any)?.name || '未知' },
+            after: { owner: (targetUser as any).name },
+            reason: reason || '管理员分配',
+          }
+        );
+      } catch (e) {
+        this.logger.warn(`记录操作日志失败: ${e.message}`);
+      }
+    }
+
+    return updatedContract;
+  }
+
+  /**
+   * 获取可分配的员工列表
+   */
+  async getAssignableUsers(): Promise<Array<{ _id: string; name: string; username: string; role: string }>> {
+    const users = await this.userModel.find({
+      active: true,
+      role: { $in: ['admin', 'manager', 'employee'] }
+    }).select('_id name username role').lean();
+
+    return users.map(u => ({
+      _id: (u as any)._id.toString(),
+      name: u.name,
+      username: u.username,
+      role: u.role,
+    }));
   }
 
   // 获取统计信息（只统计有效合同）

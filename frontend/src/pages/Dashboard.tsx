@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Row, Col, Statistic, Spin, App, Progress, Typography, Alert, DatePicker, Select, Space, Button, Table, Tag } from 'antd';
+import { Card, Row, Col, Statistic, Spin, App, Progress, Typography, Alert, DatePicker, Select, Space, Button, Table, Tag, InputNumber, Tooltip } from 'antd';
 import {
   UserOutlined,
   FileAddOutlined,
@@ -22,10 +22,14 @@ import {
   ThunderboltOutlined,
   ReloadOutlined,
   FunnelPlotOutlined,
-  TrophyOutlined
+  TrophyOutlined,
+  EditOutlined,
+  CheckOutlined,
+  CloseOutlined
 } from '@ant-design/icons';
 import dashboardService from '../services/dashboardService';
-import type { DashboardStats } from '../types/dashboard.types';
+import { apiService } from '../services/api';
+import type { DashboardStats, SalesFunnelItem } from '../types/dashboard.types';
 import dayjs, { Dayjs } from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -52,6 +56,42 @@ const Dashboard: React.FC = () => {
   const [customDateRange, setCustomDateRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { message: messageApi } = App.useApp();
+
+  // 本月任务编辑状态
+  const [editingTaskUserId, setEditingTaskUserId] = useState<string | null>(null);
+  const [editingTaskValue, setEditingTaskValue] = useState<number>(0);
+  const [savingTask, setSavingTask] = useState(false);
+
+  // 更新员工本月任务
+  const handleUpdateMonthlyTask = async (userId: string, newValue: number) => {
+    setSavingTask(true);
+    try {
+      const response = await apiService.patch(`/api/users/${userId}/monthly-task`, { monthlyTask: newValue });
+      if (response.success) {
+        messageApi.success('本月任务更新成功');
+        // 更新本地状态
+        if (stats) {
+          const updatedList = stats.salesFunnel.salesFunnelList.map((item: SalesFunnelItem) =>
+            item.userId === userId ? { ...item, monthlyTask: newValue } : item
+          );
+          setStats({
+            ...stats,
+            salesFunnel: {
+              ...stats.salesFunnel,
+              salesFunnelList: updatedList
+            }
+          });
+        }
+        setEditingTaskUserId(null);
+      } else {
+        messageApi.error(response.message || '更新失败');
+      }
+    } catch (err: any) {
+      messageApi.error(err.message || '更新本月任务失败');
+    } finally {
+      setSavingTask(false);
+    }
+  };
 
   // 获取时间范围的开始和结束日期
   const getDateRange = (range: string): [string, string] => {
@@ -765,6 +805,73 @@ const Dashboard: React.FC = () => {
               width: 100,
               fixed: 'left',
               render: (text) => <Text strong>{text}</Text>
+            },
+            {
+              title: '本月任务',
+              dataIndex: 'monthlyTask',
+              key: 'monthlyTask',
+              width: 150,
+              align: 'right',
+              sorter: (a, b) => (a.monthlyTask || 0) - (b.monthlyTask || 0),
+              render: (value: number, record: SalesFunnelItem) => {
+                const isEditing = editingTaskUserId === record.userId;
+                if (isEditing) {
+                  return (
+                    <Space size="small">
+                      <InputNumber
+                        size="small"
+                        value={editingTaskValue}
+                        onChange={(val) => setEditingTaskValue(val || 0)}
+                        min={0}
+                        step={10000}
+                        formatter={(val) => `¥ ${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        parser={(val) => Number(val?.replace(/¥\s?|(,*)/g, '') || 0)}
+                        style={{ width: 120 }}
+                        disabled={savingTask}
+                      />
+                      <Tooltip title="保存">
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<CheckOutlined />}
+                          loading={savingTask}
+                          onClick={() => handleUpdateMonthlyTask(record.userId, editingTaskValue)}
+                          style={{ color: '#52c41a', padding: 0 }}
+                        />
+                      </Tooltip>
+                      <Tooltip title="取消">
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<CloseOutlined />}
+                          onClick={() => setEditingTaskUserId(null)}
+                          disabled={savingTask}
+                          style={{ color: '#ff4d4f', padding: 0 }}
+                        />
+                      </Tooltip>
+                    </Space>
+                  );
+                }
+                return (
+                  <Space size="small">
+                    <Text style={{ color: '#1890ff' }}>
+                      ¥{(value || 0).toLocaleString('zh-CN')}
+                    </Text>
+                    <Tooltip title="编辑本月任务">
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => {
+                          setEditingTaskUserId(record.userId);
+                          setEditingTaskValue(value || 0);
+                        }}
+                        style={{ padding: 0 }}
+                      />
+                    </Tooltip>
+                  </Space>
+                );
+              }
             },
             {
               title: '主要渠道',

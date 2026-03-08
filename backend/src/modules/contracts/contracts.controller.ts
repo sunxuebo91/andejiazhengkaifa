@@ -254,6 +254,31 @@ export class ContractsController {
     }
   }
 
+  /**
+   * 获取可分配的员工列表
+   * 注意：此路由必须放在 @Get(':id') 之前，否则会被当作 ID 参数处理
+   */
+  @Get('assignable-users')
+  async getAssignableUsers(@Request() req) {
+    try {
+      if (!this.isManagerOrAdmin(req.user)) {
+        throw new ForbiddenException('只有管理员或经理可以查看员工列表');
+      }
+
+      const users = await this.contractsService.getAssignableUsers();
+      return {
+        success: true,
+        data: users,
+        message: '获取成功',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || '获取员工列表失败',
+      };
+    }
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     console.log('🚨🚨🚨 [CONTRACTS API CALLED] 收到合同详情请求, ID:', id);
@@ -396,28 +421,6 @@ export class ContractsController {
       return {
         success: false,
         message: error.message || '合同分配失败',
-      };
-    }
-  }
-
-  // 获取可分配的员工列表
-  @Get('assignable-users')
-  async getAssignableUsers(@Request() req) {
-    try {
-      if (!this.isManagerOrAdmin(req.user)) {
-        throw new ForbiddenException('只有管理员或经理可以查看员工列表');
-      }
-
-      const users = await this.contractsService.getAssignableUsers();
-      return {
-        success: true,
-        data: users,
-        message: '获取成功',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message || '获取员工列表失败',
       };
     }
   }

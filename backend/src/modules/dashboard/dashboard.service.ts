@@ -589,6 +589,7 @@ export class DashboardService {
           $project: {
             userId: '$_id',
             userName: { $ifNull: ['$userInfo.name', '未知'] },
+            monthlyTask: { $ifNull: ['$userInfo.monthlyTask', 0] },  // 添加本月任务字段
             totalLeads: 1,
             oLevel: 1,
             aLevel: 1,
@@ -633,6 +634,7 @@ export class DashboardService {
         return {
           userId: item.userId.toString(),
           userName: item.userName,
+          monthlyTask: item.monthlyTask || 0,  // 添加本月任务
           mainLeadSource,
           totalLeads: item.totalLeads,
           oLevel: item.oLevel,

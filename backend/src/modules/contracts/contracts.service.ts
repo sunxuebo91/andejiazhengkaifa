@@ -759,6 +759,37 @@ export class ContractsService {
       contractObj.templateParams = {};
     }
 
+    // 🔥 如果 createdBy 是字符串（非 ObjectId），手动查询用户信息
+    if (rawContract.createdBy && typeof rawContract.createdBy === 'string' && !contractObj.createdBy?.name) {
+      try {
+        const creatorId = rawContract.createdBy;
+        // 尝试用字符串 ID 查询用户
+        const creator = await this.userModel.findById(creatorId).select('name username').lean().exec();
+        if (creator) {
+          contractObj.createdBy = { _id: creatorId, name: creator.name, username: creator.username };
+          console.log('✅ [CONTRACTS SERVICE] 手动查询创建人成功:', creator.name);
+        } else {
+          console.warn('⚠️ [CONTRACTS SERVICE] 创建人不存在, ID:', creatorId);
+        }
+      } catch (error) {
+        console.error('❌ [CONTRACTS SERVICE] 手动查询创建人失败:', error.message);
+      }
+    }
+
+    // 🔥 如果 lastUpdatedBy 是字符串（非 ObjectId），手动查询用户信息
+    if (rawContract.lastUpdatedBy && typeof rawContract.lastUpdatedBy === 'string' && !contractObj.lastUpdatedBy?.name) {
+      try {
+        const updaterId = rawContract.lastUpdatedBy;
+        const updater = await this.userModel.findById(updaterId).select('name username').lean().exec();
+        if (updater) {
+          contractObj.lastUpdatedBy = { _id: updaterId, name: updater.name, username: updater.username };
+          console.log('✅ [CONTRACTS SERVICE] 手动查询更新人成功:', updater.name);
+        }
+      } catch (error) {
+        console.error('❌ [CONTRACTS SERVICE] 手动查询更新人失败:', error.message);
+      }
+    }
+
     return contractObj;
   }
 

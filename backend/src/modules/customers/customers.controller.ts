@@ -639,16 +639,17 @@ export class CustomersController {
   }
 
   @Get('miniprogram/today-todo-stats')
-  @ApiOperation({ summary: '小程序获取今日待办统计' })
+  @ApiOperation({ summary: '小程序获取客户信息统计' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
   async getTodayTodoStatsForMiniprogram(@Request() req): Promise<ApiResponse> {
     try {
       const userId = req.user.userId;
-      const stats = await this.customersService.getTodayTodoStats(userId);
-      return this.createResponse(true, '今日待办统计获取成功', stats);
+      const userRole = req.user.role;  // 传递用户角色用于权限判断
+      const stats = await this.customersService.getTodayTodoStats(userId, userRole);
+      return this.createResponse(true, '客户信息统计获取成功', stats);
     } catch (error) {
-      return this.createResponse(false, '今日待办统计获取失败', null, error.message);
+      return this.createResponse(false, '客户信息统计获取失败', null, error.message);
     }
   }
 
@@ -659,7 +660,8 @@ export class CustomersController {
   async getPerformanceProgressForMiniprogram(@Request() req): Promise<ApiResponse> {
     try {
       const userId = req.user.userId;
-      const progress = await this.customersService.getPerformanceProgress(userId);
+      const userRole = req.user.role;  // 传递用户角色用于权限判断
+      const progress = await this.customersService.getPerformanceProgress(userId, userRole);
       return this.createResponse(true, '业绩进度获取成功', progress);
     } catch (error) {
       return this.createResponse(false, '业绩进度获取失败', null, error.message);
@@ -673,7 +675,8 @@ export class CustomersController {
   async getContractStatsForMiniprogram(@Request() req): Promise<ApiResponse> {
     try {
       const userId = req.user.userId;
-      const stats = await this.customersService.getContractStats(userId);
+      const userRole = req.user.role;
+      const stats = await this.customersService.getContractStats(userId, userRole);
       return this.createResponse(true, '合同统计获取成功', stats);
     } catch (error) {
       return this.createResponse(false, '合同统计获取失败', null, error.message);

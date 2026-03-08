@@ -74,6 +74,7 @@ export interface EfficiencyMetrics {
 export interface SalesFunnelItem {
   userId: string;
   userName: string;
+  monthlyTask: number;     // 本月任务（可编辑）
   mainLeadSource: string;
   totalLeads: number;
   oLevel: number;

@@ -2066,7 +2066,9 @@ export class CustomersService {
   // ==================== 小程序首页统计相关方法 ====================
 
   // 今日待办统计
-  async getTodayTodoStats(userId: string): Promise<any> {
+  // @param userId 当前用户ID
+  // @param userRole 用户角色（admin/manager看全部，employee看自己）
+  async getTodayTodoStats(userId: string, userRole?: string): Promise<any> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
@@ -2076,133 +2078,232 @@ export class CustomersService {
     thisMonthStart.setDate(1);
     thisMonthStart.setHours(0, 0, 0, 0);
 
-    // 今日待跟进客户数（今天需要跟进的客户）
-    const todayFollowUpCount = await this.customerModel.countDocuments({
-      assignedTo: new Types.ObjectId(userId),
-      nextFollowUpDate: {
-        $gte: todayStart,
-        $lte: todayEnd,
-      },
-    });
+    // 判断是否是管理员/经理（看全部数据）
+    const isAdmin = userRole && ['admin', 'manager', '系统管理员', '经理'].includes(userRole);
 
-    // 今日已跟进客户数（今天已经跟进过的客户）
-    const todayFollowedCount = await this.customerFollowUpModel.countDocuments({
-      createdBy: new Types.ObjectId(userId),
-      createdAt: {
-        $gte: todayStart,
-        $lte: todayEnd,
-      },
-    });
+    // 基础条件：排除公海客户
+    const baseCondition = { inPublicPool: false };
 
-    // 待处理线索数（新分配给我但还未跟进的客户）
-    const pendingLeadsCount = await this.customerModel.countDocuments({
-      assignedTo: new Types.ObjectId(userId),
-      lastFollowUpDate: null,
-    });
+    // 1. 线索总量：管理员看所有非公海客户，员工看自己的客户
+    const totalLeadsQuery: any = { ...baseCondition };
+    if (!isAdmin) {
+      totalLeadsQuery.assignedTo = new Types.ObjectId(userId);
+    }
+    const totalLeads = await this.customerModel.countDocuments(totalLeadsQuery);
 
-    // 本月分配客户数（本月分配给该用户的客户）
-    const monthAssigned = await this.customerModel.countDocuments({
-      assignedTo: new Types.ObjectId(userId),
-      assignedAt: { $gte: thisMonthStart },
-    });
+    // 2. 本月分配
+    let monthAssigned = 0;
+    if (isAdmin) {
+      // 管理员：本月新建的所有线索（排除公海）
+      monthAssigned = await this.customerModel.countDocuments({
+        ...baseCondition,
+        createdAt: { $gte: thisMonthStart },
+      });
+    } else {
+      // 员工：本月管理分配的未流转过的线索 + 本月自建的线索
+      monthAssigned = await this.customerModel.countDocuments({
+        ...baseCondition,
+        $or: [
+          // 本月自建线索（createdBy是自己）
+          {
+            createdBy: new Types.ObjectId(userId),
+            createdAt: { $gte: thisMonthStart },
+          },
+          // 本月管理分配的且未流转过的线索
+          {
+            assignedTo: new Types.ObjectId(userId),
+            assignedAt: { $gte: thisMonthStart },
+            lastFollowUpDate: null,
+          },
+        ],
+      });
+    }
 
-    // 今日分配客户数（今天分配给该用户的客户）
-    const todayAssigned = await this.customerModel.countDocuments({
-      assignedTo: new Types.ObjectId(userId),
-      assignedAt: {
-        $gte: todayStart,
-        $lte: todayEnd,
-      },
-    });
+    // 3. 今日分配
+    let todayAssigned = 0;
+    if (isAdmin) {
+      // 管理员：今天新建的所有线索（排除公海）
+      todayAssigned = await this.customerModel.countDocuments({
+        ...baseCondition,
+        createdAt: {
+          $gte: todayStart,
+          $lte: todayEnd,
+        },
+      });
+    } else {
+      // 员工：今天管理分配的未流转过的线索 + 今天自建的线索
+      todayAssigned = await this.customerModel.countDocuments({
+        ...baseCondition,
+        $or: [
+          // 今天自建线索
+          {
+            createdBy: new Types.ObjectId(userId),
+            createdAt: {
+              $gte: todayStart,
+              $lte: todayEnd,
+            },
+          },
+          // 今天管理分配的且未流转过的线索
+          {
+            assignedTo: new Types.ObjectId(userId),
+            assignedAt: {
+              $gte: todayStart,
+              $lte: todayEnd,
+            },
+            lastFollowUpDate: null,
+          },
+        ],
+      });
+    }
+
+    // 4. 待跟进 = 非公海，未跟进的线索
+    const pendingLeadsQuery: any = {
+      ...baseCondition,              // 排除公海
+      lastFollowUpDate: null,        // 未跟进过
+    };
+    if (!isAdmin) {
+      pendingLeadsQuery.assignedTo = new Types.ObjectId(userId); // 员工只看自己的
+    }
+    const pendingLeads = await this.customerModel.countDocuments(pendingLeadsQuery);
 
     // 今日签约合同数（今天该用户签约的合同）
-    const todaySigned = await this.contractModel.countDocuments({
-      createdBy: new Types.ObjectId(userId),
+    const todaySignedQuery: any = {
       contractStatus: 'active',
       createdAt: {
         $gte: todayStart,
         $lte: todayEnd,
       },
-    });
+    };
+    if (!isAdmin) {
+      todaySignedQuery.createdBy = new Types.ObjectId(userId);
+    }
+    const todaySigned = await this.contractModel.countDocuments(todaySignedQuery);
 
     return {
-      todayFollowUpCount,
-      todayFollowedCount,
-      pendingLeadsCount,
-      monthAssigned,
-      todayAssigned,
-      todaySigned,
+      totalLeads,        // 线索总量
+      monthAssigned,     // 本月分配
+      todayAssigned,     // 今日分配
+      pendingLeads,      // 待跟进
+      todaySigned,       // 今日签约
+      isAdmin,           // 是否管理员视角
     };
   }
 
   // 业绩进度统计
-  async getPerformanceProgress(userId: string): Promise<any> {
+  // @param userId 当前用户ID
+  // @param userRole 用户角色（admin/manager看全部，employee看自己）
+  async getPerformanceProgress(userId: string, userRole?: string): Promise<any> {
     const thisMonthStart = new Date();
     thisMonthStart.setDate(1);
     thisMonthStart.setHours(0, 0, 0, 0);
 
-    // 本月签约数（统计本月创建的active状态合同）
-    const monthlySignedCount = await this.contractModel.countDocuments({
-      createdBy: new Types.ObjectId(userId),
-      contractStatus: 'active',
-      createdAt: { $gte: thisMonthStart },
-    });
+    // 判断是否是管理员/经理（看全部数据）
+    const isAdmin = userRole && ['admin', 'manager', '系统管理员', '经理'].includes(userRole);
 
-    // 本月业绩金额（统计本月创建的active状态合同的客户服务费总和）
-    const monthlyContracts = await this.contractModel.find({
-      createdBy: new Types.ObjectId(userId),
+    // 构建查询条件
+    const contractQuery: any = {
       contractStatus: 'active',
       createdAt: { $gte: thisMonthStart },
-    }).select('customerServiceFee').lean().exec();
+    };
+
+    // 非管理员只能看自己的数据
+    if (!isAdmin) {
+      contractQuery.createdBy = new Types.ObjectId(userId);
+    }
+
+    // 本月签约数
+    const monthlySignedCount = await this.contractModel.countDocuments(contractQuery);
+
+    // 本月业绩金额（本月已签约合同的服务费总和）
+    const monthlyContracts = await this.contractModel.find(contractQuery)
+      .select('customerServiceFee').lean().exec();
 
     const monthlyPerformance = monthlyContracts.reduce((sum, contract) => sum + (contract.customerServiceFee || 0), 0);
 
-    // 本月目标（可以从用户配置或固定值获取）
-    const monthlyTarget = 100000; // 默认10万，后续可以配置化
+    // 计算本月目标
+    let monthlyTarget = 0;
+
+    if (isAdmin) {
+      // 管理员：汇总所有员工的本月任务（移除status条件，因为数据库中用户没有status字段）
+      const allUsers = await this.userModel.find({
+        role: { $in: ['employee', 'manager', '普通员工', '经理', 'admin'] }
+      }).select('monthlyTask').lean().exec();
+      monthlyTarget = allUsers.reduce((sum, user) => sum + (user.monthlyTask || 0), 0);
+      // 如果没有设置任何任务，给一个默认值
+      if (monthlyTarget === 0) {
+        monthlyTarget = 100000 * allUsers.length || 100000;
+      }
+    } else {
+      // 普通员工：获取自己的本月任务
+      const user = await this.userModel.findById(userId).select('monthlyTask').lean().exec();
+      monthlyTarget = user?.monthlyTask || 100000;
+    }
 
     // 完成率
     const completionRate = monthlyTarget > 0 ? (monthlyPerformance / monthlyTarget) * 100 : 0;
 
     return {
       monthlySignedCount,
-      monthlyPerformance,
-      monthlyTarget,
-      completionRate: Math.round(completionRate * 100) / 100, // 保留2位小数
+      monthlyPerformance,      // 本月达成（本月已签约合同的服务费总额）
+      monthlyTarget,           // 本月目标
+      completionRate: Math.round(completionRate * 100) / 100, // 完成率，保留2位小数
+      isAdmin,                 // 是否是管理员视角
     };
   }
 
   // 合同统计
-  async getContractStats(userId: string): Promise<any> {
-    // 总合同数（该用户创建的所有合同）
-    const totalContracts = await this.contractModel.countDocuments({
-      createdBy: new Types.ObjectId(userId),
+  // @param userId 当前用户ID
+  // @param userRole 用户角色（admin/manager看全部，employee看自己）
+  async getContractStats(userId: string, userRole?: string): Promise<any> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const thisMonthStart = new Date();
+    thisMonthStart.setDate(1);
+    thisMonthStart.setHours(0, 0, 0, 0);
+
+    // 判断是否是管理员/经理（看全部数据）
+    const isAdmin = userRole && ['admin', 'manager', '系统管理员', '经理'].includes(userRole);
+
+    // 基础查询条件（已签约状态）
+    const baseQuery: any = { contractStatus: 'active' };
+    if (!isAdmin) {
+      baseQuery.createdBy = new Types.ObjectId(userId);
+    }
+
+    // 1. 合同总量 = 已签约状态的合同总数
+    const totalContracts = await this.contractModel.countDocuments(baseQuery);
+
+    // 2. 本月签约 = 本月已签约的合同总数
+    const monthlySignedCount = await this.contractModel.countDocuments({
+      ...baseQuery,
+      createdAt: { $gte: thisMonthStart },
     });
 
-    // 进行中的合同（active状态）
-    const activeContracts = await this.contractModel.countDocuments({
-      createdBy: new Types.ObjectId(userId),
-      contractStatus: 'active',
+    // 3. 今日签约 = 今日已签约的合同总数
+    const todaySigned = await this.contractModel.countDocuments({
+      ...baseQuery,
+      createdAt: {
+        $gte: todayStart,
+        $lte: todayEnd,
+      },
     });
 
-    // 已完成的合同（这里假设结束日期已过的active合同为已完成，或者可以根据实际业务逻辑调整）
-    const now = new Date();
-    const completedContracts = await this.contractModel.countDocuments({
-      createdBy: new Types.ObjectId(userId),
-      contractStatus: 'active',
-      endDate: { $lt: now },
-    });
-
-    // 待签约的合同（draft或signing状态）
-    const pendingContracts = await this.contractModel.countDocuments({
-      createdBy: new Types.ObjectId(userId),
-      contractStatus: { $in: ['draft', 'signing'] },
-    });
+    // 4. 签约金额 = 已签约合同的服务费总金额
+    const contracts = await this.contractModel.find(baseQuery)
+      .select('customerServiceFee')
+      .lean()
+      .exec();
+    const totalAmount = contracts.reduce((sum, contract) => sum + (contract.customerServiceFee || 0), 0);
 
     return {
-      totalContracts,
-      activeContracts,
-      completedContracts,
-      pendingContracts,
+      totalContracts,      // 合同总量
+      monthlySignedCount,  // 本月签约
+      todaySigned,         // 今日签约
+      totalAmount,         // 签约金额
+      isAdmin,             // 是否管理员视角
     };
   }
 }

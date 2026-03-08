@@ -75,6 +75,7 @@ export interface EfficiencyMetrics {
 export interface SalesFunnelItem {
   userId: string;                      // 销售人员ID
   userName: string;                    // 销售人员姓名
+  monthlyTask: number;                 // 本月任务（可编辑）
   mainLeadSource: string;              // 主要线索渠道
   totalLeads: number;                  // 线索总量
   oLevel: number;                      // O类数量

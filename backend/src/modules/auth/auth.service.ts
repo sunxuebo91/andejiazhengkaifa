@@ -23,6 +23,18 @@ export class AuthService {
     @InjectModel(LoginLog.name) private loginLogModel: Model<LoginLog>,
   ) {}
 
+  /**
+   * 清除指定用户的登录限制（临时管理方法）
+   */
+  clearLoginAttempts(username: string): { success: boolean; message: string } {
+    const had = this.loginAttempts.has(username);
+    this.loginAttempts.delete(username);
+    return {
+      success: true,
+      message: had ? `已清除用户 ${username} 的登录限制` : `用户 ${username} 没有登录限制记录`
+    };
+  }
+
   private async logLoginAttempt(userId: string | null, ip: string, userAgent: string, status: 'success' | 'failed'): Promise<void> {
     try {
       await this.loginLogModel.create({

@@ -119,6 +119,29 @@ export class ContractsMiniProgramController {
             }
           }
 
+          // 🔥 统一日期显示：优先使用 templateParams 中的日期（与CRM端保持一致）
+          const templateParams = contractObj.templateParams || {};
+          const templateStartDate = templateParams['合同开始时间'] || templateParams['服务开始时间'];
+          const templateEndDate = templateParams['合同结束时间'] || templateParams['服务结束时间'];
+
+          const parseTemplateDate = (dateStr: string): string | null => {
+            if (!dateStr) return null;
+            const chineseMatch = dateStr.match(/(\d{4})年(\d{2})月(\d{2})日/);
+            if (chineseMatch) {
+              return `${chineseMatch[1]}-${chineseMatch[2]}-${chineseMatch[3]}`;
+            }
+            const isoMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (isoMatch) {
+              return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+            }
+            return null;
+          };
+
+          contractObj.displayStartDate = parseTemplateDate(templateStartDate) ||
+            (contractObj.startDate ? new Date(contractObj.startDate).toISOString().split('T')[0] : null);
+          contractObj.displayEndDate = parseTemplateDate(templateEndDate) ||
+            (contractObj.endDate ? new Date(contractObj.endDate).toISOString().split('T')[0] : null);
+
           return contractObj;
         })
       );
@@ -150,6 +173,37 @@ export class ContractsMiniProgramController {
       } else {
         contractData.creatorName = null;
       }
+
+      // 🔥 统一日期显示：优先使用 templateParams 中的日期（与CRM端保持一致）
+      // 解决小程序端显示的日期与CRM端不一致的问题
+      const templateParams = contractData.templateParams || {};
+
+      // 获取 templateParams 中的日期（格式可能是 "2026年03月10日" 或 "2026-03-10"）
+      const templateStartDate = templateParams['合同开始时间'] || templateParams['服务开始时间'];
+      const templateEndDate = templateParams['合同结束时间'] || templateParams['服务结束时间'];
+
+      // 解析日期的辅助函数
+      const parseTemplateDate = (dateStr: string): string | null => {
+        if (!dateStr) return null;
+        // 处理 "2026年03月10日" 格式
+        const chineseMatch = dateStr.match(/(\d{4})年(\d{2})月(\d{2})日/);
+        if (chineseMatch) {
+          return `${chineseMatch[1]}-${chineseMatch[2]}-${chineseMatch[3]}`;
+        }
+        // 处理 "2026-03-10" 格式
+        const isoMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (isoMatch) {
+          return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+        }
+        return null;
+      };
+
+      // 添加统一的显示日期字段
+      contractData.displayStartDate = parseTemplateDate(templateStartDate) ||
+        (contractData.startDate ? new Date(contractData.startDate).toISOString().split('T')[0] : null);
+      contractData.displayEndDate = parseTemplateDate(templateEndDate) ||
+        (contractData.endDate ? new Date(contractData.endDate).toISOString().split('T')[0] : null);
+
       return { success: true, data: contractData, message: '获取合同详情成功' };
     } catch (error) {
       return { success: false, message: error.message || '获取合同详情失败' };

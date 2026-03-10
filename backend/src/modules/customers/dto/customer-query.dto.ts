@@ -42,6 +42,10 @@ export class CustomerQueryDto {
   @IsEnum(['已流转', '未流转'])
   leadStatus?: string; // 线索状态（通过 transferCount 判断）
 
+  @IsOptional()
+  @IsEnum(['新客未跟进', '流转未跟进', '已跟进'])
+  followUpStatus?: string; // 跟进状态筛选
+
   // 按负责人过滤（我的客户/指定负责人）
   @IsOptional()
   @IsMongoId()

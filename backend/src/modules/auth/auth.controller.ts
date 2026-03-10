@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Get, Req, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Get, Req, UseInterceptors, UploadedFile, BadRequestException, Param } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
@@ -73,6 +73,14 @@ export class AuthController {
     } catch (error) {
       return { success: false, data: null, message: error.message || '获取用户信息失败' };
     }
+  }
+
+  @Public()
+  @Post('clear-login-limit/:username')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '清除用户登录限制（临时接口）' })
+  async clearLoginLimit(@Param('username') username: string) {
+    return this.authService.clearLoginAttempts(username);
   }
 
   @Post('avatar')

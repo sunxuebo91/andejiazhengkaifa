@@ -341,6 +341,7 @@ export class CustomersService {
       createdEndDate,
       assignedStartDate,
       assignedEndDate,
+      followUpStatus, // 🆕 跟进状态筛选参数
       ...filters
     } = query as any;
 
@@ -469,8 +470,13 @@ export class CustomersService {
     const skip = (page - 1) * limit;
 
     // 🔥 [CUSTOMER-SORT-FIX] 强制按更新时间倒序排序，与简历列表保持一致
-    console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 开始查询客户列表 - page: ${page}, limit: ${limit}, sortBy: ${sortBy}`);
+    console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 开始查询客户列表 - page: ${page}, limit: ${limit}, sortBy: ${sortBy}, followUpStatus: ${followUpStatus}`);
     console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 查询条件:`, JSON.stringify(searchConditions));
+
+    // 🆕 如果有 followUpStatus 筛选，使用聚合管道在数据库层面筛选
+    if (followUpStatus) {
+      return this.findAllWithFollowUpStatusFilter(searchConditions, followUpStatus, page, limit, skip);
+    }
 
     const findQuery = this.customerModel
       .find(searchConditions)
@@ -506,7 +512,7 @@ export class CustomersService {
         const assignedToId = customer.assignedTo?._id?.toString() || customer.assignedTo?.toString();
 
         // 计算跟进状态，传入正确的 assignedToId
-        const followUpStatus = this.calculateFollowUpStatus(customer, followUps, assignedToId);
+        const calculatedFollowUpStatus = this.calculateFollowUpStatus(customer, followUps, assignedToId);
 
         return {
           ...customer,
@@ -514,13 +520,184 @@ export class CustomersService {
             name: customer.assignedTo.name,
             username: customer.assignedTo.username
           } : null,
-          followUpStatus
+          followUpStatus: calculatedFollowUpStatus
         };
       })
     );
 
     return {
       customers: customersWithFollowUpStatus,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * 🆕 使用聚合管道按跟进状态筛选客户列表
+   * - 新客未跟进：客户没有任何跟进记录
+   * - 流转未跟进：客户有跟进记录，但当前归属人没有跟进过
+   * - 已跟进：当前归属人跟进过该客户
+   */
+  private async findAllWithFollowUpStatusFilter(
+    searchConditions: any,
+    followUpStatus: string,
+    page: number,
+    limit: number,
+    skip: number
+  ): Promise<{
+    customers: Customer[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    // 系统自动记录的关键词（用于过滤无效跟进）
+    const systemKeywords = ['创建', '分配', '领取', '释放', '流转', '自动', '系统'];
+    const systemKeywordRegex = systemKeywords.join('|');
+
+    // 构建聚合管道
+    const pipeline: any[] = [
+      // 1. 基础筛选条件
+      { $match: searchConditions },
+
+      // 2. LEFT JOIN 跟进记录表
+      {
+        $lookup: {
+          from: 'customer_follow_ups',
+          localField: '_id',
+          foreignField: 'customerId',
+          as: 'allFollowUps'
+        }
+      },
+
+      // 3. 过滤掉系统自动生成的跟进记录，只保留有效跟进
+      {
+        $addFields: {
+          validFollowUps: {
+            $filter: {
+              input: '$allFollowUps',
+              as: 'f',
+              cond: {
+                $not: {
+                  $regexMatch: {
+                    input: { $ifNull: ['$$f.content', ''] },
+                    regex: systemKeywordRegex,
+                    options: 'i'
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // 4. 检查当前归属人是否有跟进记录
+      {
+        $addFields: {
+          hasAnyFollowUp: { $gt: [{ $size: '$validFollowUps' }, 0] },
+          hasOwnerFollowUp: {
+            $gt: [
+              {
+                $size: {
+                  $filter: {
+                    input: '$validFollowUps',
+                    as: 'f',
+                    cond: { $eq: ['$$f.createdBy', '$assignedTo'] }
+                  }
+                }
+              },
+              0
+            ]
+          },
+          transferCountVal: { $ifNull: ['$transferCount', 0] }
+        }
+      },
+
+      // 5. 计算跟进状态
+      {
+        $addFields: {
+          calculatedFollowUpStatus: {
+            $cond: {
+              if: '$hasOwnerFollowUp',
+              then: '已跟进',
+              else: {
+                $cond: {
+                  if: { $gt: ['$transferCountVal', 0] },
+                  then: '流转未跟进',
+                  else: '新客未跟进'
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // 6. 按跟进状态筛选
+      { $match: { calculatedFollowUpStatus: followUpStatus } },
+    ];
+
+    // 获取总数的管道
+    const countPipeline = [...pipeline, { $count: 'total' }];
+
+    // 获取分页数据的管道
+    const dataPipeline = [
+      ...pipeline,
+      { $sort: { updatedAt: -1, createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      // JOIN 用户表获取 assignedTo 详情
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'assignedTo',
+          foreignField: '_id',
+          as: 'assignedToInfo'
+        }
+      },
+      {
+        $addFields: {
+          assignedTo: { $arrayElemAt: ['$assignedToInfo', 0] }
+        }
+      },
+      // 移除临时字段
+      {
+        $project: {
+          allFollowUps: 0,
+          validFollowUps: 0,
+          hasAnyFollowUp: 0,
+          hasOwnerFollowUp: 0,
+          transferCountVal: 0,
+          assignedToInfo: 0
+        }
+      }
+    ];
+
+    // 并行执行统计和数据查询
+    const [countResult, customers] = await Promise.all([
+      this.customerModel.aggregate(countPipeline).exec(),
+      this.customerModel.aggregate(dataPipeline).exec()
+    ]);
+
+    const total = countResult[0]?.total || 0;
+
+    // 格式化返回数据
+    const formattedCustomers = customers.map((customer: any) => ({
+      ...customer,
+      followUpStatus: customer.calculatedFollowUpStatus,
+      assignedToUser: customer.assignedTo ? {
+        _id: customer.assignedTo._id,
+        name: customer.assignedTo.name,
+        username: customer.assignedTo.username
+      } : null,
+      calculatedFollowUpStatus: undefined // 移除临时字段
+    }));
+
+    console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] followUpStatus筛选结果: total=${total}, returned=${formattedCustomers.length}`);
+
+    return {
+      customers: formattedCustomers,
       total,
       page,
       limit,
@@ -2110,10 +2287,14 @@ export class CustomersService {
             createdAt: { $gte: thisMonthStart },
           },
           // 本月管理分配的且未流转过的线索
+          // 🔧 修正：使用正确的字段名 lastFollowUpTime
           {
             assignedTo: new Types.ObjectId(userId),
             assignedAt: { $gte: thisMonthStart },
-            lastFollowUpDate: null,
+            $or: [
+              { lastFollowUpTime: null },
+              { lastFollowUpTime: { $exists: false } }
+            ]
           },
         ],
       });
@@ -2144,22 +2325,30 @@ export class CustomersService {
             },
           },
           // 今天管理分配的且未流转过的线索
+          // 🔧 修正：使用正确的字段名 lastFollowUpTime
           {
             assignedTo: new Types.ObjectId(userId),
             assignedAt: {
               $gte: todayStart,
               $lte: todayEnd,
             },
-            lastFollowUpDate: null,
+            $or: [
+              { lastFollowUpTime: null },
+              { lastFollowUpTime: { $exists: false } }
+            ]
           },
         ],
       });
     }
 
     // 4. 待跟进 = 非公海，未跟进的线索
+    // 🔧 修正：使用正确的字段名 lastFollowUpTime（而不是 lastFollowUpDate）
     const pendingLeadsQuery: any = {
       ...baseCondition,              // 排除公海
-      lastFollowUpDate: null,        // 未跟进过
+      $or: [
+        { lastFollowUpTime: null },         // lastFollowUpTime 为 null
+        { lastFollowUpTime: { $exists: false } }  // 或者字段不存在
+      ]
     };
     if (!isAdmin) {
       pendingLeadsQuery.assignedTo = new Types.ObjectId(userId); // 员工只看自己的

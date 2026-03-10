@@ -998,6 +998,31 @@ export class CustomersController {
     }
   }
 
+  @Post('miniprogram/:id/release-to-pool')
+  @ApiOperation({ summary: '小程序释放客户到公海' })
+  @ApiParam({ name: 'id', description: '客户ID' })
+  @ApiBody({ type: ReleaseToPoolDto })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  async releaseToPoolForMiniprogram(
+    @Param('id') id: string,
+    @Body() dto: ReleaseToPoolDto,
+    @Request() req,
+  ): Promise<ApiResponse> {
+    try {
+      console.log(`📤 小程序释放客户到公海 ${id}, 原因: ${dto.reason}`);
+
+      // 调用现有的 releaseToPool 方法
+      const customer = await this.customersService.releaseToPool(id, dto.reason, req.user.userId);
+
+      console.log(`✅ 小程序释放客户成功: ${id}`);
+      return this.createResponse(true, '客户已释放到公海', customer);
+    } catch (error) {
+      console.error(`❌ 小程序释放客户失败: ${error.message}`);
+      return this.createResponse(false, error.message || '释放失败', null, error.message);
+    }
+  }
+
   @Get('miniprogram/employees/list')
   @ApiOperation({ summary: '小程序获取员工列表（用于分配客户）' })
   @UseGuards(JwtAuthGuard, RolesGuard)

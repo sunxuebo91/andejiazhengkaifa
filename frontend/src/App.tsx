@@ -70,6 +70,7 @@ const PublicForm = React.lazy(() => import('./pages/public/PublicForm'));
 const PublicTrainingLeadForm = React.lazy(() => import('./pages/public/PublicTrainingLeadForm'));
 // 背调管理
 const BackgroundCheckPage = React.lazy(() => import('./pages/background-check/BackgroundCheckPage'));
+const BackgroundCheckDetail = React.lazy(() => import('./pages/background-check/BackgroundCheckDetail'));
 // H5 移动端合同页面（用于小程序 WebView 内嵌）
 // const MobileContractCreate = React.lazy(() => import('./pages/mobile/contract/MobileContractCreate'));
 
@@ -350,10 +351,16 @@ export default function App({ children }: AppProps) {
                   />
 
                   {/* 背调管理 - 所有登录用户可访问 */}
-                  <Route
-                    path="background-check"
-                    element={<AuthorizedRoute element={<BackgroundCheckPage />} />}
-                  />
+                  <Route path="background-check">
+                    <Route
+                      index
+                      element={<AuthorizedRoute element={<BackgroundCheckPage />} />}
+                    />
+                    <Route
+                      path=":id"
+                      element={<AuthorizedRoute element={<BackgroundCheckDetail />} />}
+                    />
+                  </Route>
 
                   {/* 面试间管理 - 所有登录用户可访问 */}
                   <Route

@@ -6054,7 +6054,7 @@ export async function payForPolicy(policyRef) {
 
 ### 📱 一句话总结
 
-**小程序调用背调接口非常简单：（1）先调用 `POST /api/zmdb/miniprogram/prepare-auth` 传入 `{workerName}` 获取授权书URL；（2）调用 `POST /api/zmdb/miniprogram/reports` 传入 `{name, mobile, idNo?, authStuffUrl, esignContractNo, position?, packageType?}` 发起背调；（3）使用 `GET /api/zmdb/miniprogram/reports/by-idno/:idNo` 根据身份证号查询背调结果（状态4或16表示通过，状态3或15表示未通过）；（4）背调完成后使用 `wx.downloadFile` 调用 `GET /api/zmdb/miniprogram/reports/:reportId/download` 获取临时文件路径，再用 `wx.openDocument({filePath, fileType:'pdf'})` 直接打开PDF阅读器查看报告。所有接口都需要JWT认证，普通员工只能看到自己发起的背调记录。**
+**小程序调用背调接口非常简单：（1）先调用 `POST /api/zmdb/miniprogram/prepare-auth` 传入 `{workerName}` 获取授权书URL；（2）调用 `POST /api/zmdb/miniprogram/reports` 传入 `{name, mobile, idNo?, authStuffUrl, esignContractNo, position?, packageType?}` 发起背调；（3）使用 `GET /api/zmdb/miniprogram/reports/by-idno/:idNo` 根据身份证号查询背调结果（状态4或16表示通过，状态3或15表示未通过）；（4）使用 `GET /api/zmdb/miniprogram/reports/:id` 获取背调详情页数据（含风险评估结果reportResult、各维度风险dimensions、关联合同contractId、回调历史callbackHistory）；（5）背调完成后使用 `wx.downloadFile` 调用 `GET /api/zmdb/miniprogram/reports/:reportId/download?token=xxx` 获取临时文件路径，再用 `wx.openDocument({filePath, fileType:'pdf'})` 直接打开PDF阅读器查看报告。所有接口都需要JWT认证，普通员工只能看到自己发起的背调记录。**
 
 ---
 
@@ -6064,9 +6064,11 @@ export async function payForPolicy(policyRef) {
 |------|------|------|------|
 | 获取背调列表 | GET | `/api/zmdb/miniprogram/reports` | 分页获取背调记录 |
 | 根据身份证号查询 | GET | `/api/zmdb/miniprogram/reports/by-idno/:idNo` | 查询指定身份证号的背调记录 |
+| 获取背调详情 | GET | `/api/zmdb/miniprogram/reports/:id` | 获取背调详情（含风险评估结果） |
 | 准备授权书 | POST | `/api/zmdb/miniprogram/prepare-auth` | 上传授权书到芝麻背调平台 |
 | 发起背调 | POST | `/api/zmdb/miniprogram/reports` | 发起新的背调请求 |
 | 取消背调 | POST | `/api/zmdb/miniprogram/reports/:id/cancel` | 取消进行中的背调 |
+| 拉取风险数据 | POST | `/api/zmdb/miniprogram/reports/:reportId/fetch-result` | 主动拉取报告风险数据 |
 | 下载报告 | GET | `/api/zmdb/miniprogram/reports/:reportId/download` | 下载PDF格式的背调报告 |
 
 ---
@@ -6171,6 +6173,114 @@ Authorization: Bearer {token}
   "message": "未找到背调记录"
 }
 ```
+
+---
+
+### 获取背调详情
+
+获取单条背调记录的完整详情，包括风险评估结果、各维度风险详情、回调历史等。此接口用于背调详情页展示。
+
+#### 请求
+
+```http
+GET /api/zmdb/miniprogram/reports/698a1234567890abcdef1234
+Authorization: Bearer {token}
+```
+
+**认证**: ✅ 需要JWT认证 + 角色权限
+
+#### 路径参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 背调记录ID（MongoDB ObjectId） |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "698a1234567890abcdef1234",
+    "reportId": "ZMDB_RPT_20260316_001",
+    "name": "张三",
+    "mobile": "13800138000",
+    "idNo": "110101199001011234",
+    "position": "月嫂",
+    "status": 4,
+    "packageType": "1",
+    "authStuffUrl": "https://zmdb.com/auth/doc/xxx",
+    "esignContractNo": "LOCAL_PRIVACY_DOC",
+    "contractId": {
+      "_id": "698a5678901234567890abcd",
+      "contractNumber": "HT20260316001",
+      "customerName": "李先生",
+      "workerName": "张三",
+      "esignContractNo": "ESIGN_20260316_001"
+    },
+    "createdBy": {
+      "_id": "user123",
+      "name": "操作员小王",
+      "username": "xiaowang"
+    },
+    "reportResult": {
+      "riskLevel": "pass",
+      "riskScore": 85,
+      "riskSummary": "无风险",
+      "dimensions": [
+        {
+          "name": "身份核验",
+          "result": "通过",
+          "riskLevel": "pass",
+          "details": []
+        },
+        {
+          "name": "犯罪记录",
+          "result": "无记录",
+          "riskLevel": "pass",
+          "details": []
+        },
+        {
+          "name": "法院诉讼",
+          "result": "无记录",
+          "riskLevel": "pass",
+          "details": []
+        },
+        {
+          "name": "金融风险",
+          "result": "低风险",
+          "riskLevel": "pass",
+          "details": []
+        }
+      ],
+      "fetchedAt": "2026-03-16T12:00:00.000Z"
+    },
+    "callbackHistory": [
+      {
+        "notifyType": 2,
+        "status": 4,
+        "receivedAt": "2026-03-16T12:00:00.000Z"
+      }
+    ],
+    "createdAt": "2026-03-16T10:00:00.000Z",
+    "updatedAt": "2026-03-16T12:00:00.000Z"
+  },
+  "message": "获取成功"
+}
+```
+
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `reportResult` | object | 风险评估结果（背调完成后才有） |
+| `reportResult.riskLevel` | string | 风险等级：`pass`=通过, `reject`=不通过, `review`=需审核 |
+| `reportResult.riskScore` | number | 风险评分（0-100，越高越安全） |
+| `reportResult.riskSummary` | string | 风险摘要 |
+| `reportResult.dimensions` | array | 各维度风险详情 |
+| `contractId` | object | 关联合同信息（通过身份证号自动匹配） |
+| `createdBy` | object | 创建人信息 |
+| `callbackHistory` | array | 回调历史记录 |
 
 ---
 
@@ -6306,6 +6416,36 @@ Authorization: Bearer {token}
 
 ---
 
+### 拉取风险数据
+
+主动拉取报告的风险评估数据。通常系统会在背调完成时自动拉取，此接口用于手动刷新风险数据。
+
+#### 请求
+
+```http
+POST /api/zmdb/miniprogram/reports/ZMDB_RPT_20260316_001/fetch-result
+Authorization: Bearer {token}
+```
+
+**认证**: ✅ 需要JWT认证 + 角色权限
+
+#### 路径参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `reportId` | string | 是 | 芝麻报告ID（reportId字段的值） |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "message": "风险数据拉取成功"
+}
+```
+
+---
+
 ### 下载/查看背调报告
 
 下载或直接查看已完成背调的PDF报告。仅当背调状态为"已完成"（状态4或16）时可操作。
@@ -6331,32 +6471,42 @@ Authorization: Bearer {token}
 - **Content-Type**: `application/pdf`
 - **Content-Disposition**: `attachment; filename="bgcheck_report_ZMDB_RPT_20260316_001.pdf"`
 
-#### 📱 小程序直接查看报告（推荐）
+#### 📱 小程序查看报告方式
 
-小程序使用 `wx.downloadFile` + `wx.openDocument` 可以**直接打开PDF预览**，无需手动下载：
+接口支持两种认证方式：
+1. **Header认证**：`Authorization: Bearer {token}`（用于wx.downloadFile）
+2. **URL参数认证**：`?token=xxx`（用于web-view直接打开）
+
+---
+
+**方式一：web-view直接打开（最简单，推荐）**
 
 ```javascript
-/**
- * 直接查看背调报告（推荐方式）
- * 调用后自动打开系统PDF阅读器，支持缩放、搜索、分享
- */
+// 直接用web-view打开PDF，无需任何下载代码
+const token = wx.getStorageSync('token');
+const url = `https://crm.andejiazheng.com/api/zmdb/miniprogram/reports/${reportId}/download?token=${token}`;
+
+// 跳转到web-view页面
+wx.navigateTo({ url: `/pages/webview/index?url=${encodeURIComponent(url)}` });
+```
+
+**方式二：downloadFile + openDocument**
+
+```javascript
 export function viewBackgroundCheckReport(reportId) {
   return new Promise((resolve, reject) => {
     const token = wx.getStorageSync('token');
-
     wx.showLoading({ title: '加载中...' });
 
     wx.downloadFile({
-      url: `https://crm.andejiazheng.com/api/zmdb/miniprogram/reports/${reportId}/download`,
-      header: { 'Authorization': `Bearer ${token}` },
+      url: `https://crm.andejiazheng.com/api/zmdb/miniprogram/reports/${reportId}/download?token=${token}`,
       success(res) {
         wx.hideLoading();
         if (res.statusCode === 200) {
-          // 直接打开PDF，无需手动下载
           wx.openDocument({
             filePath: res.tempFilePath,
             fileType: 'pdf',
-            showMenu: true,  // 允许分享
+            showMenu: true,
             success: resolve,
             fail: reject
           });
@@ -6371,11 +6521,6 @@ export function viewBackgroundCheckReport(reportId) {
     });
   });
 }
-
-// 使用示例
-viewBackgroundCheckReport('ZMDB_RPT_20260316_001')
-  .then(() => console.log('报告已打开'))
-  .catch(err => wx.showToast({ title: '查看失败', icon: 'error' }));
 ```
 
 ---
@@ -6554,9 +6699,15 @@ export function getBackgroundCheckStatusText(status) {
 
 如有问题或建议，请联系技术团队。
 
-**文档版本**: v1.10.0
+**文档版本**: v1.11.0
 **最后更新**: 2026-03-16
 **维护团队**: 安得家政技术团队
+
+**v1.11.0 更新内容**:
+- ✅ 新增背调详情API：`GET /api/zmdb/miniprogram/reports/:id`
+- ✅ 支持获取完整背调详情（含风险评估结果、各维度风险、关联合同、回调历史）
+- ✅ 新增拉取风险数据API：`POST /api/zmdb/miniprogram/reports/:reportId/fetch-result`
+- ✅ 背调管理接口增加到8个
 
 **v1.10.0 更新内容**:
 - ✅ 新增背调管理API（6个接口）

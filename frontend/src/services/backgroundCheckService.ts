@@ -50,4 +50,13 @@ export const backgroundCheckService = {
     const response = await apiService.get<any>(`/api/zmdb/reports/by-idno/${idNo}`);
     return response.data;
   },
+
+  async getById(id: string): Promise<BackgroundCheck | null> {
+    const response = await apiService.get<any>(`/api/zmdb/reports/${id}/detail`);
+    return response.data;
+  },
+
+  async fetchReportResult(reportId: string): Promise<void> {
+    await apiService.post(`/api/zmdb/reports/${reportId}/fetch-result`, {});
+  },
 };

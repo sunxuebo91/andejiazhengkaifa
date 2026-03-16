@@ -462,13 +462,24 @@ export class ZmdbService {
     this.logger.log(`发起背调响应: ${JSON.stringify(result)}`);
     const reportId: string = result.reportId;
 
+    // 🔍 如果没有传 stuffId，尝试从 authStuffUrl 中提取
+    // authStuffUrl 格式通常是: https://file.zhimabc.com/{stuffId}
+    let extractedStuffId = dto.stuffId;
+    if (!extractedStuffId && dto.authStuffUrl) {
+      const urlMatch = dto.authStuffUrl.match(/\/([a-zA-Z0-9_-]+)(?:\.[a-z]+)?$/);
+      if (urlMatch) {
+        extractedStuffId = urlMatch[1];
+        this.logger.log(`从 authStuffUrl 提取 stuffId: ${extractedStuffId}`);
+      }
+    }
+
     const record = await this.bgCheckModel.create({
       reportId,
       name: dto.name,
       mobile: dto.mobile,
       idNo: dto.idNo,
       position: dto.position,
-      stuffId: dto.stuffId,
+      stuffId: extractedStuffId,
       authStuffUrl: dto.authStuffUrl,
       esignContractNo: dto.esignContractNo,
       packageType: dto.packageType || '1',
@@ -536,6 +547,61 @@ export class ZmdbService {
   }
 
   /**
+   * 获取报告结构化数据（调用芝麻背调 get_report_info 接口）
+   * 并将风险摘要字段存入数据库
+   */
+  async fetchAndSaveReportResult(reportId: string): Promise<void> {
+    this.logger.log(`拉取报告结构化数据: reportId=${reportId}`);
+    try {
+      const data = await this.requestForm('/platform_report_api/get_report_info', {
+        reportId,
+        userId: this.platformUserId,
+      });
+
+      if (!data) {
+        this.logger.warn(`get_report_info 返回空数据: reportId=${reportId}`);
+        return;
+      }
+
+      const digest = data.creditReportDigest || {};
+      const digestList: Array<{ name: string; risk: string; result: string; remark: string }> = [];
+      const rawList = data.outline?.digestMap?.digestListInfo;
+      if (Array.isArray(rawList)) {
+        for (const item of rawList) {
+          digestList.push({
+            name: item.name || '',
+            risk: item.risk || '',
+            result: item.result || '',
+            remark: item.remark || '',
+          });
+        }
+      }
+
+      const reportResult = {
+        riskLevel: digest.riskLevel || data.reportInfo?.riskLevel || '',
+        riskScore: digest.riskScore ?? null,
+        failNum: digest.failNum ?? 0,
+        summary: data.summary || '',
+        identityRiskLevel: digest.identityRiskLevel || '',
+        socialRiskLevel: digest.socialRiskLevel || '',
+        courtRiskLevel: digest.courtRiskLevel || '',
+        financeRiskLevel: digest.financeRiskLevel || '',
+        digestList,
+        fetchedAt: new Date(),
+      };
+
+      await this.bgCheckModel.findOneAndUpdate(
+        { reportId },
+        { $set: { reportResult } },
+      );
+      this.logger.log(`报告风险数据保存成功: reportId=${reportId}, riskLevel=${reportResult.riskLevel}`);
+    } catch (error) {
+      this.logger.error(`拉取报告数据失败: reportId=${reportId}, error=${error.message}`);
+      // 不抛出，避免影响回调响应
+    }
+  }
+
+  /**
    * 处理 ZMDB 状态回调
    */
   async handleCallback(body: { reportId: string; notifyType: number; status?: number }): Promise<void> {
@@ -552,6 +618,11 @@ export class ZmdbService {
     }
 
     await this.bgCheckModel.findOneAndUpdate({ reportId }, update);
+
+    // 报告完成时自动拉取结构化风险数据
+    if (status === 4 || status === 16) {
+      await this.fetchAndSaveReportResult(reportId);
+    }
   }
 
   /**
@@ -578,6 +649,19 @@ export class ZmdbService {
     ]);
 
     return { data: data as any, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  /**
+   * 根据记录 ID 查询单条背调（含 reportResult）
+   */
+  async findOne(id: string): Promise<BackgroundCheck | null> {
+    const record = await this.bgCheckModel
+      .findById(id)
+      .populate('createdBy', 'name username')
+      .populate('contractId', 'contractNumber customerName workerName esignContractNo')
+      .lean()
+      .exec();
+    return record as any;
   }
 
   /**

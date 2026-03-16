@@ -37,6 +37,7 @@ const ContractCreate = lazy(() => import('./pages/contracts/ContractCreate'));
 const MiniProgramContractList = lazy(() => import('./pages/contracts/MiniProgramContractList'));
 // 背调管理相关页面
 const BackgroundCheckPage = lazy(() => import('./pages/background-check/BackgroundCheckPage'));
+const BackgroundCheckDetail = lazy(() => import('./pages/background-check/BackgroundCheckDetail'));
 // 表单管理相关页面
 import FormList from './pages/forms/FormList';
 import FormEditor from './pages/forms/FormEditor';
@@ -267,6 +268,11 @@ export const basicLayoutRoutes: RouteConfig[] = [
         path: 'background-check',
         name: '背调管理',
         element: <BackgroundCheckPage />,
+      },
+      {
+        path: 'background-check/:id',
+        name: '背调详情',
+        element: <BackgroundCheckDetail />,
       },
       // 表单管理
       {

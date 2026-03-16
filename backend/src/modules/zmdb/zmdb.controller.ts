@@ -67,6 +67,20 @@ export class ZmdbController {
     };
   }
 
+  /** 手动拉取报告结构化数据（仅 status=4/16 时有效） */
+  @Post('reports/:reportId/fetch-result')
+  async fetchReportResult(@Param('reportId') reportId: string) {
+    await this.zmdbService.fetchAndSaveReportResult(reportId);
+    return { success: true, message: '报告数据拉取完成' };
+  }
+
+  /** 根据记录 ID 查询单条背调（含 reportResult） */
+  @Get('reports/:id/detail')
+  async findOne(@Param('id') id: string) {
+    const record = await this.zmdbService.findOne(id);
+    return { success: true, data: record };
+  }
+
   /** 取消背调 */
   @Delete('reports/:id/cancel')
   async cancelReport(@Param('id') id: string) {

@@ -11,14 +11,17 @@ import {
   Logger,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { JwtService } from '@nestjs/jwt';
 import { ZmdbService } from './zmdb.service';
 import { CreateBackgroundCheckDto } from './dto/create-background-check.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('小程序-背调管理')
 @Controller('zmdb/miniprogram')
@@ -27,7 +30,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class ZmdbMiniprogramController {
   private readonly logger = new Logger(ZmdbMiniprogramController.name);
 
-  constructor(private readonly zmdbService: ZmdbService) {}
+  constructor(
+    private readonly zmdbService: ZmdbService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   // 辅助方法：角色映射
   private mapRoleToChineseRole(role: string): string {
@@ -73,6 +79,35 @@ export class ZmdbMiniprogramController {
       data: record,
       message: record ? '查询成功' : '未找到背调记录',
     };
+  }
+
+  /**
+   * 获取背调详情（包含风险评估结果）
+   */
+  @Get('reports/:id')
+  @ApiOperation({ summary: '【小程序】获取背调详情' })
+  @ApiParam({ name: 'id', description: '背调记录ID（MongoDB ObjectId）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async getDetail(@Param('id') id: string) {
+    const record = await this.zmdbService.findOne(id);
+    if (!record) {
+      return { success: false, data: null, message: '背调记录不存在' };
+    }
+    return { success: true, data: record, message: '获取成功' };
+  }
+
+  /**
+   * 主动拉取报告风险数据（报告完成后调用）
+   */
+  @Post('reports/:reportId/fetch-result')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '【小程序】拉取报告风险数据' })
+  @ApiParam({ name: 'reportId', description: '芝麻报告ID' })
+  @ApiResponse({ status: 200, description: '拉取成功' })
+  async fetchReportResult(@Param('reportId') reportId: string) {
+    this.logger.log(`【小程序】主动拉取报告风险数据: reportId=${reportId}`);
+    await this.zmdbService.fetchAndSaveReportResult(reportId);
+    return { success: true, message: '风险数据拉取成功' };
   }
 
   // ==================== 背调操作接口 ====================
@@ -124,12 +159,43 @@ export class ZmdbMiniprogramController {
 
   /**
    * 下载背调报告PDF
+   * 支持两种认证方式：
+   * 1. Header中的Authorization: Bearer {token}
+   * 2. URL参数 ?token=xxx（用于小程序web-view直接打开）
    */
   @Get('reports/:reportId/download')
-  @ApiOperation({ summary: '【小程序】下载背调报告PDF' })
+  @Public() // 标记为公开，手动验证token
+  @ApiOperation({ summary: '【小程序】下载/查看背调报告PDF' })
   @ApiParam({ name: 'reportId', description: '芝麻报告ID' })
+  @ApiQuery({ name: 'token', required: false, description: 'JWT Token（URL参数方式认证，用于web-view）' })
   @ApiResponse({ status: 200, description: '下载成功' })
-  async downloadReport(@Param('reportId') reportId: string, @Res() res: Response) {
+  async downloadReport(
+    @Param('reportId') reportId: string,
+    @Query('token') urlToken: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    // 验证token：优先使用URL参数中的token，其次使用Header中的Authorization
+    let token = urlToken;
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+
+    if (!token) {
+      throw new UnauthorizedException('缺少认证信息，请提供token参数或Authorization头');
+    }
+
+    // 验证JWT token
+    try {
+      this.jwtService.verify(token);
+    } catch (error) {
+      this.logger.warn(`Token验证失败: ${error.message}`);
+      throw new UnauthorizedException('Token无效或已过期');
+    }
+
     const buffer = await this.zmdbService.downloadReport(reportId);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="bgcheck_report_${reportId}.pdf"`);

@@ -9,6 +9,7 @@ export interface BackgroundCheck {
   stuffId?: string;
   authStuffUrl?: string;
   esignContractNo?: string;
+  packageType?: string;
   status: number;
   createdBy: string | { _id: string; name?: string; username?: string };
   callbackHistory: Array<{ notifyType: number; status: number; receivedAt: string }>;
@@ -20,6 +21,18 @@ export interface BackgroundCheck {
     customerName: string;
     workerName: string;
     esignContractNo?: string;
+  };
+  reportResult?: {
+    riskLevel: string;
+    riskScore: number | null;
+    failNum: number;
+    summary: string;
+    identityRiskLevel: string;
+    socialRiskLevel: string;
+    courtRiskLevel: string;
+    financeRiskLevel: string;
+    digestList: Array<{ name: string; risk: string; result: string; remark: string }>;
+    fetchedAt: string;
   };
 }
 

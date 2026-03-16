@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Table, Button, Tag, Space, Modal, Form, Input, message,
-  Steps, Spin, Typography, Empty, Descriptions, Timeline, Select,
+  Steps, Spin, Typography, Empty, Select,
 } from 'antd';
 import { SearchOutlined, DownloadOutlined, StopOutlined, PlusOutlined, CheckCircleOutlined, EyeOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 
 // 背调套餐配置
 const BG_PACKAGE_OPTIONS = [
@@ -30,21 +31,12 @@ interface ResumeItem {
   gender?: string;
 }
 
-// 回调类型映射
-const NOTIFY_TYPE_MAP: Record<number, string> = {
-  1: '授权通知',
-  2: '报告完成通知',
-  3: '报告阶段版通知',
-  4: '报告终止通知',
-};
-
 export default function BackgroundCheckPage() {
   // 列表状态
   const [records, setRecords] = useState<BackgroundCheck[]>([]);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
-
-  // Modal 状态
+  const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
   const [step, setStep] = useState(0);
 
@@ -60,16 +52,6 @@ export default function BackgroundCheckPage() {
   // 第二步：候选人表单
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
-
-  // 详情弹窗状态
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailRecord, setDetailRecord] = useState<BackgroundCheck | null>(null);
-
-  // 打开详情弹窗
-  const openDetail = (record: BackgroundCheck) => {
-    setDetailRecord(record);
-    setDetailOpen(true);
-  };
 
   // ── 列表加载 ────────────────────────────────────────────────
   const fetchRecords = useCallback(async (page = 1, pageSize = 10) => {
@@ -288,6 +270,23 @@ export default function BackgroundCheckPage() {
       },
     },
     {
+      title: '背调结果',
+      dataIndex: 'reportResult',
+      width: 110,
+      render: (reportResult: BackgroundCheck['reportResult'], record: BackgroundCheck) => {
+        if (![4, 16].includes(record.status)) return <Tag color="default">-</Tag>;
+        if (!reportResult?.riskLevel) return <Tag color="processing">待获取</Tag>;
+        const level = reportResult.riskLevel;
+        const colorMap: Record<string, string> = {
+          '无风险': 'success',
+          '一般风险': 'warning',
+          '关注': 'warning',
+          '风险': 'error',
+        };
+        return <Tag color={colorMap[level] || 'default'}>{level}</Tag>;
+      },
+    },
+    {
       title: '发起时间',
       dataIndex: 'createdAt',
       width: 140,
@@ -302,7 +301,7 @@ export default function BackgroundCheckPage() {
             type="link"
             size="small"
             icon={<EyeOutlined />}
-            onClick={() => openDetail(record)}
+            onClick={() => navigate(`/background-check/${record._id}`)}
           >
             详情
           </Button>
@@ -538,115 +537,7 @@ export default function BackgroundCheckPage() {
         )}
       </Modal>
 
-      {/* 详情弹窗 */}
-      <Modal
-        title="背调详情"
-        open={detailOpen}
-        onCancel={() => setDetailOpen(false)}
-        footer={<Button onClick={() => setDetailOpen(false)}>关闭</Button>}
-        width={800}
-      >
-        {detailRecord && (
-          <div>
-            {/* 基本信息 */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#1890ff' }}>
-                👤 候选人信息
-              </div>
-              <Descriptions column={2} bordered size="small">
-                <Descriptions.Item label="姓名">{detailRecord.name}</Descriptions.Item>
-                <Descriptions.Item label="手机号">{detailRecord.mobile}</Descriptions.Item>
-                <Descriptions.Item label="身份证号">{detailRecord.idNo || '-'}</Descriptions.Item>
-                <Descriptions.Item label="职位">{detailRecord.position || '-'}</Descriptions.Item>
-                <Descriptions.Item label="状态">
-                  <Tag color={BG_STATUS_MAP[detailRecord.status]?.color || 'default'}>
-                    {BG_STATUS_MAP[detailRecord.status]?.text || `状态${detailRecord.status}`}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="芝麻报告ID">
-                  <Text copyable={!!detailRecord.reportId}>{detailRecord.reportId || '未生成'}</Text>
-                </Descriptions.Item>
-              </Descriptions>
-            </div>
-
-            {/* 合同信息 */}
-            {detailRecord.contractId && typeof detailRecord.contractId === 'object' && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#52c41a' }}>
-                  📄 关联合同信息
-                </div>
-                <Descriptions column={2} bordered size="small">
-                  <Descriptions.Item label="合同编号">
-                    <Text copyable>{detailRecord.contractId.contractNumber}</Text>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="客户姓名">
-                    {detailRecord.contractId.customerName}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="服务人员">
-                    {detailRecord.contractId.workerName}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="爱签合同号">
-                    <Text copyable={!!detailRecord.contractId.esignContractNo}>
-                      {detailRecord.contractId.esignContractNo || '-'}
-                    </Text>
-                  </Descriptions.Item>
-                </Descriptions>
-              </div>
-            )}
-
-            {/* 授权书信息 */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#fa8c16' }}>
-                📋 授权书信息
-              </div>
-              <Descriptions column={2} bordered size="small">
-                <Descriptions.Item label="授权书文件ID">{detailRecord.stuffId || '-'}</Descriptions.Item>
-                <Descriptions.Item label="授权书地址">
-                  {detailRecord.stuffId ? (
-                    <a href={`/api/zmdb/auth-doc/${detailRecord.stuffId}/download`} download={`authorization_${detailRecord.stuffId}.jpg`}>
-                      下载授权书图片
-                    </a>
-                  ) : '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="发起时间">
-                  {dayjs(detailRecord.createdAt).format('YYYY-MM-DD HH:mm:ss')}
-                </Descriptions.Item>
-                <Descriptions.Item label="更新时间">
-                  {dayjs(detailRecord.updatedAt).format('YYYY-MM-DD HH:mm:ss')}
-                </Descriptions.Item>
-              </Descriptions>
-            </div>
-
-            {/* 回调历史记录 */}
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#722ed1' }}>
-                📞 回调历史记录
-              </div>
-              {(!detailRecord.callbackHistory || detailRecord.callbackHistory.length === 0) ? (
-                <div style={{ color: '#999', padding: '12px', background: '#fafafa', borderRadius: 4, textAlign: 'center' }}>
-                  暂无回调记录
-                </div>
-              ) : (
-                <Timeline style={{ marginTop: 12 }}>
-                  {detailRecord.callbackHistory.map((cb, idx) => (
-                    <Timeline.Item key={idx} color={cb.status === 4 || cb.status === 16 ? 'green' : 'blue'}>
-                      <div>
-                        <Tag>{NOTIFY_TYPE_MAP[cb.notifyType] || `类型${cb.notifyType}`}</Tag>
-                        <Tag color={BG_STATUS_MAP[cb.status]?.color || 'default'}>
-                          {BG_STATUS_MAP[cb.status]?.text || `状态${cb.status}`}
-                        </Tag>
-                      </div>
-                      <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
-                        {dayjs(cb.receivedAt).format('YYYY-MM-DD HH:mm:ss')}
-                      </div>
-                    </Timeline.Item>
-                  ))}
-                </Timeline>
-              )}
-            </div>
-          </div>
-        )}
-      </Modal>
+      {/* 详情弹窗已迁移为独立页面 /background-check/:id */}
     </div>
   );
 }

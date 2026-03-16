@@ -40,7 +40,9 @@ import {
 import { contractService } from '../../services/contractService';
 import { customerService } from '../../services/customerService';
 import { resumeService } from '../../services/resume.service';
+import { backgroundCheckService } from '../../services/backgroundCheckService';
 import { Contract, ContractType } from '../../types/contract.types';
+import { BackgroundCheck, BG_STATUS_MAP } from '../../types/background-check.types';
 import EditContractModal from '../../components/EditContractModal';
 import ContractStatusCard, { ContractStatusInfo } from '../../components/ContractStatusCard';
 import { useAuth } from '../../contexts/AuthContext';
@@ -83,6 +85,10 @@ const ContractDetail: React.FC = () => {
 
   // 🆕 新增：保险同步状态
   const [syncInsuranceLoading, setSyncInsuranceLoading] = useState(false);
+
+  // 🆕 新增：背调信息
+  const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheck | null>(null);
+  const [bgCheckLoading, setBgCheckLoading] = useState(false);
 
   // 最后更新人信息已在fetchContractDetail中直接处理
 
@@ -127,6 +133,11 @@ const ContractDetail: React.FC = () => {
 
     // 🆕 获取服务人员联系地址
     fetchWorkerAddress();
+
+    // 🆕 获取背调信息（依赖身份证号）
+    if (contract.workerIdCard) {
+      fetchBackgroundCheck();
+    }
   }, [contract]);
 
   // 🆕 获取客户服务地址
@@ -198,6 +209,34 @@ const ContractDetail: React.FC = () => {
 
     // 未找到地址
     setWorkerAddress(null);
+  };
+
+  // 🆕 获取背调信息
+  const fetchBackgroundCheck = async () => {
+    if (!contract?.workerIdCard) {
+      console.log('⚠️ 缺少服务人员身份证号，跳过背调信息获取');
+      return;
+    }
+
+    try {
+      setBgCheckLoading(true);
+      console.log('🔍 开始获取背调信息:', contract.workerIdCard);
+
+      const record = await backgroundCheckService.getByIdNo(contract.workerIdCard);
+
+      if (record) {
+        setBackgroundCheck(record);
+        console.log('✅ 背调信息获取成功:', record);
+      } else {
+        setBackgroundCheck(null);
+        console.log('📝 未找到背调记录');
+      }
+    } catch (error) {
+      console.warn('获取背调信息失败:', error);
+      setBackgroundCheck(null);
+    } finally {
+      setBgCheckLoading(false);
+    }
   };
 
   // 不再需要独立的useEffect获取用户信息，已在fetchContractDetail中处理
@@ -1484,6 +1523,35 @@ const ContractDetail: React.FC = () => {
 
                 <Descriptions.Item label="联系地址">
                   {workerAddress || '未提供'}
+                </Descriptions.Item>
+
+                <Descriptions.Item label="背调信息">
+                  {bgCheckLoading ? (
+                    <Spin size="small" />
+                  ) : backgroundCheck ? (
+                    <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                      <Space>
+                        <Tag color={BG_STATUS_MAP[backgroundCheck.status]?.color || 'default'}>
+                          {BG_STATUS_MAP[backgroundCheck.status]?.text || '未知状态'}
+                        </Tag>
+                        {backgroundCheck.status === 4 || backgroundCheck.status === 16 ? (
+                          <Tag color="success" icon={<CheckCircleOutlined />}>通过</Tag>
+                        ) : backgroundCheck.status === 3 || backgroundCheck.status === 15 ? (
+                          <Tag color="error" icon={<CloseOutlined />}>未通过</Tag>
+                        ) : null}
+                      </Space>
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={() => navigate('/background-check')}
+                        style={{ padding: 0 }}
+                      >
+                        查看详情 →
+                      </Button>
+                    </Space>
+                  ) : (
+                    <span style={{ color: '#999' }}>暂无背调记录</span>
+                  )}
                 </Descriptions.Item>
               </Descriptions>
             </Card>

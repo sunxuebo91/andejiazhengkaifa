@@ -606,9 +606,11 @@ export class ContractsService {
         // 安全地填充 createdBy
         if (contract.createdBy && isValidObjectId(contract.createdBy)) {
           const user = userMap.get(contract.createdBy.toString());
-          result.createdBy = user || null;
+          // 如果能找到用户，返回用户对象；否则保留原始 createdBy（可能是字符串姓名）
+          result.createdBy = user || contract.createdBy || null;
         } else {
-          result.createdBy = null;
+          // 兼容旧数据：如果 createdBy 不是有效的 ObjectId（例如直接存了姓名），保留原值
+          result.createdBy = contract.createdBy || null;
         }
 
         return result;

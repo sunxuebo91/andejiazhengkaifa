@@ -260,7 +260,7 @@ export class TrainingLeadsService {
    * 更新培训线索
    */
   async update(id: string, updateDto: UpdateTrainingLeadDto): Promise<TrainingLead> {
-    this.logger.log(`更新培训线索: ${id}`);
+    this.logger.log(`更新培训线索: ${id}, 数据: ${JSON.stringify(updateDto)}`);
 
     const lead = await this.trainingLeadModel.findById(id);
     if (!lead) {

@@ -54,7 +54,8 @@ const BannerList = React.lazy(() => import('./pages/baobei/BannerList'));
 const BannerForm = React.lazy(() => import('./pages/baobei/BannerForm'));
 const ArticleList = React.lazy(() => import('./pages/baobei/ArticleList'));
 const ArticleForm = React.lazy(() => import('./pages/baobei/ArticleForm'));
-	const MiniProgramUserList = React.lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
+const CrawlerSourceList = React.lazy(() => import('./pages/baobei/CrawlerSourceList'));
+const MiniProgramUserList = React.lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
 // 培训线索相关组件
 const TrainingLeadList = React.lazy(() => import('./pages/training-leads/TrainingLeadList'));
 const CreateTrainingLead = React.lazy(() => import('./pages/training-leads/CreateTrainingLead'));
@@ -67,6 +68,8 @@ const FormSubmissions = React.lazy(() => import('./pages/forms/FormSubmissions')
 const FormSubmissionList = React.lazy(() => import('./pages/forms/FormSubmissionList'));
 const PublicForm = React.lazy(() => import('./pages/public/PublicForm'));
 const PublicTrainingLeadForm = React.lazy(() => import('./pages/public/PublicTrainingLeadForm'));
+// 背调管理
+const BackgroundCheckPage = React.lazy(() => import('./pages/background-check/BackgroundCheckPage'));
 // H5 移动端合同页面（用于小程序 WebView 内嵌）
 // const MobileContractCreate = React.lazy(() => import('./pages/mobile/contract/MobileContractCreate'));
 
@@ -346,6 +349,12 @@ export default function App({ children }: AppProps) {
                     element={<AuthorizedRoute element={<TestSortableUpload />} />}
                   />
 
+                  {/* 背调管理 - 所有登录用户可访问 */}
+                  <Route
+                    path="background-check"
+                    element={<AuthorizedRoute element={<BackgroundCheckPage />} />}
+                  />
+
                   {/* 面试间管理 - 所有登录用户可访问 */}
                   <Route
                     path="interview/rooms"
@@ -387,10 +396,14 @@ export default function App({ children }: AppProps) {
                       path="articles/edit/:id"
                       element={<AuthorizedRoute element={<ArticleForm />} role={["admin", "manager"]} />}
                     />
-						<Route
-							path="miniprogram-users"
-							element={<AuthorizedRoute element={<MiniProgramUserList />} role={["admin", "manager"]} />}
-						/>
+                    <Route
+                      path="crawler-sources"
+                      element={<AuthorizedRoute element={<CrawlerSourceList />} role={["admin", "manager"]} />}
+                    />
+                    <Route
+                      path="miniprogram-users"
+                      element={<AuthorizedRoute element={<MiniProgramUserList />} role={["admin", "manager"]} />}
+                    />
                     <Route
                       path="banner/create"
                       element={<AuthorizedRoute element={<BannerForm />} role={["admin", "manager"]} />}

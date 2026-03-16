@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined, AppstoreOutlined, PictureOutlined, BookOutlined, FormOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined, AppstoreOutlined, PictureOutlined, BookOutlined, FormOutlined, SearchOutlined, RobotOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps, Space } from 'antd';
 import { useMemo, useEffect } from 'react';
@@ -256,6 +256,13 @@ const BasicLayout = () => {
     };
     baseMenus.push(interviewMenu);
 
+    // 背调管理菜单 - 所有用户可见
+    baseMenus.push({
+      path: '/background-check',
+      name: '背调管理',
+      icon: <SearchOutlined />,
+    });
+
     // 褓贝后台菜单 - 管理员和经理可见
     if (hasRole('admin') || hasRole('manager')) {
       const baobeiMenu: MenuRoute = {
@@ -272,6 +279,11 @@ const BasicLayout = () => {
             path: '/baobei/articles',
             name: '文章管理',
             icon: <FileTextOutlined />,
+          },
+          {
+            path: '/baobei/crawler-sources',
+            name: '爬虫来源管理',
+            icon: <RobotOutlined />,
           },
           {
             path: '/baobei/miniprogram-users',

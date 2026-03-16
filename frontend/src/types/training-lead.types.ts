@@ -42,6 +42,8 @@ export interface TrainingLead {
   intentionLevel?: string;
   expectedStartDate?: string;
   budget?: number;
+  courseAmount?: number;
+  serviceFeeAmount?: number;
   address?: string;
   isReported?: boolean;
   studentOwner?: UserInfo | string;
@@ -81,6 +83,8 @@ export interface CreateTrainingLeadDto {
   intentionLevel?: string;
   expectedStartDate?: string;
   budget?: number;
+  courseAmount?: number;
+  serviceFeeAmount?: number;
   address?: string;
   isReported?: boolean;
   studentOwner?: string;
@@ -143,6 +147,7 @@ export const LEAD_SOURCE_OPTIONS = [
   { label: '快手', value: '快手' },
   { label: '小红书', value: '小红书' },
   { label: '转介绍', value: '转介绍' },
+  { label: '幼亲舒', value: '幼亲舒' },
   { label: '其他', value: '其他' }
 ];
 
@@ -179,4 +184,3 @@ export const FOLLOW_UP_TYPE_OPTIONS = [
   { label: '到店', value: FollowUpType.VISIT, icon: '🏠' },
   { label: '其他', value: FollowUpType.OTHER, icon: '📝' }
 ];
-

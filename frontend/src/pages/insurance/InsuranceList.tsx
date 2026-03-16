@@ -372,6 +372,13 @@ const InsuranceList: React.FC = () => {
       width: 120,
     },
     {
+      title: '保险购买人',
+      dataIndex: ['policyHolder', 'policyHolderName'],
+      key: 'policyHolderName',
+      width: 150,
+      render: (_, record) => record.policyHolder?.policyHolderName || '-',
+    },
+    {
       title: '被保险人',
       key: 'insured',
       width: 150,
@@ -805,4 +812,3 @@ const InsuranceList: React.FC = () => {
 };
 
 export default InsuranceList;
-

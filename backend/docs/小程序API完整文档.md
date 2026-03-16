@@ -50,7 +50,7 @@
   - [获取爱签信息](#获取爱签信息)
   - [重新获取签署链接](#重新获取签署链接)
   - [下载已签署合同](#下载已签署合同)
-- [�🛡️ 保险保单管理](#保险保单管理)
+- [🛡️ 保险保单管理](#保险保单管理)
   - [获取保单列表](#获取保单列表)
   - [根据身份证号查询保单](#根据身份证号查询保单)
   - [获取保单详情](#获取保单详情)
@@ -65,6 +65,13 @@
   - [批改保单（替换被保险人）](#批改保单替换被保险人)
   - [批增（增加被保险人）](#批增增加被保险人)
   - [同步保单状态](#同步保单状态)
+- [🔍 背调管理](#背调管理)
+  - [获取背调列表](#获取背调列表)
+  - [根据身份证号查询背调](#根据身份证号查询背调)
+  - [准备授权书](#准备授权书)
+  - [发起背调](#发起背调)
+  - [取消背调](#取消背调)
+  - [下载背调报告](#下载背调报告)
 - [文件上传](#文件上传)
 - [数据字典](#数据字典)
 - [错误码说明](#错误码说明)
@@ -141,6 +148,7 @@ Content-Type: application/json
 | 客户管理 | ✅ 需要JWT | ✅ 普通员工仅自己负责客户 |
 | 合同管理 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
 | 保险保单管理 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
+| 背调管理 | ✅ 需要JWT | ✅ 普通员工仅自己数据 |
 
 ---
 
@@ -6040,13 +6048,522 @@ export async function payForPolicy(policyRef) {
 
 ---
 
+## 🔍 背调管理
+
+小程序可以调用背调接口发起员工背景调查，查询背调状态，下载背调报告。背调服务使用芝麻背调（ZMDB）平台。
+
+### 📱 一句话总结
+
+**小程序调用背调接口非常简单：（1）先调用 `POST /api/zmdb/miniprogram/prepare-auth` 传入 `{workerName}` 获取授权书URL；（2）调用 `POST /api/zmdb/miniprogram/reports` 传入 `{name, mobile, idNo?, authStuffUrl, esignContractNo, position?, packageType?}` 发起背调；（3）使用 `GET /api/zmdb/miniprogram/reports/by-idno/:idNo` 根据身份证号查询背调结果（状态4或16表示通过，状态3或15表示未通过）；（4）背调完成后使用 `wx.downloadFile` 调用 `GET /api/zmdb/miniprogram/reports/:reportId/download` 获取临时文件路径，再用 `wx.openDocument({filePath, fileType:'pdf'})` 直接打开PDF阅读器查看报告。所有接口都需要JWT认证，普通员工只能看到自己发起的背调记录。**
+
+---
+
+### 📋 接口列表
+
+| 接口 | 方法 | 路径 | 说明 |
+|------|------|------|------|
+| 获取背调列表 | GET | `/api/zmdb/miniprogram/reports` | 分页获取背调记录 |
+| 根据身份证号查询 | GET | `/api/zmdb/miniprogram/reports/by-idno/:idNo` | 查询指定身份证号的背调记录 |
+| 准备授权书 | POST | `/api/zmdb/miniprogram/prepare-auth` | 上传授权书到芝麻背调平台 |
+| 发起背调 | POST | `/api/zmdb/miniprogram/reports` | 发起新的背调请求 |
+| 取消背调 | POST | `/api/zmdb/miniprogram/reports/:id/cancel` | 取消进行中的背调 |
+| 下载报告 | GET | `/api/zmdb/miniprogram/reports/:reportId/download` | 下载PDF格式的背调报告 |
+
+---
+
+### 获取背调列表
+
+分页获取背调记录列表。
+
+#### 请求
+
+```http
+GET /api/zmdb/miniprogram/reports?page=1&limit=10
+Authorization: Bearer {token}
+```
+
+**认证**: ✅ 需要JWT认证 + 角色权限
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `page` | number | 否 | 页码，默认1 |
+| `limit` | number | 否 | 每页条数，默认10 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "698a1234567890abcdef1234",
+      "reportId": "ZMDB_RPT_20260316_001",
+      "name": "张三",
+      "mobile": "13800138000",
+      "idNo": "110101199001011234",
+      "position": "月嫂",
+      "status": 4,
+      "packageType": "1",
+      "authStuffUrl": "https://zmdb.com/auth/xxx",
+      "esignContractNo": "LOCAL_PRIVACY_DOC",
+      "contractId": "698a5678901234567890abcd",
+      "createdAt": "2026-03-16T10:00:00.000Z",
+      "updatedAt": "2026-03-16T12:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 10,
+  "message": "获取成功"
+}
+```
+
+---
+
+### 根据身份证号查询背调
+
+根据身份证号查询最新的背调记录。此接口用于在合同详情、简历详情等页面显示关联的背调状态。
+
+#### 请求
+
+```http
+GET /api/zmdb/miniprogram/reports/by-idno/110101199001011234
+Authorization: Bearer {token}
+```
+
+**认证**: ✅ 需要JWT认证 + 角色权限
+
+#### 路径参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `idNo` | string | 是 | 身份证号 |
+
+#### 响应
+
+**有记录时**:
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "698a1234567890abcdef1234",
+    "reportId": "ZMDB_RPT_20260316_001",
+    "name": "张三",
+    "mobile": "13800138000",
+    "idNo": "110101199001011234",
+    "position": "月嫂",
+    "status": 4,
+    "packageType": "1",
+    "createdAt": "2026-03-16T10:00:00.000Z",
+    "updatedAt": "2026-03-16T12:00:00.000Z"
+  },
+  "message": "查询成功"
+}
+```
+
+**无记录时**:
+```json
+{
+  "success": true,
+  "data": null,
+  "message": "未找到背调记录"
+}
+```
+
+---
+
+### 准备授权书
+
+在发起背调前，需要先调用此接口准备授权书。系统会使用本地隐私协议模板生成授权书并上传到芝麻背调平台。
+
+#### 请求
+
+```http
+POST /api/zmdb/miniprogram/prepare-auth
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "workerName": "张三",
+  "esignContractNo": "LOCAL_PRIVACY_DOC"
+}
+```
+
+**认证**: ✅ 需要JWT认证 + 角色权限
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `workerName` | string | 是 | 被调人姓名 |
+| `esignContractNo` | string | 否 | 爱签合同编号（可选，默认使用本地隐私协议） |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "stuffId": "ZMDB_STUFF_123456",
+    "authStuffUrl": "https://zmdb.com/auth/doc/xxx",
+    "esignContractNo": "LOCAL_PRIVACY_DOC"
+  },
+  "message": "授权书准备成功"
+}
+```
+
+---
+
+### 发起背调
+
+发起新的背景调查请求。需要先调用"准备授权书"接口获取 `authStuffUrl`。
+
+#### 请求
+
+```http
+POST /api/zmdb/miniprogram/reports
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "name": "张三",
+  "mobile": "13800138000",
+  "idNo": "110101199001011234",
+  "authStuffUrl": "https://zmdb.com/auth/doc/xxx",
+  "esignContractNo": "LOCAL_PRIVACY_DOC",
+  "position": "月嫂",
+  "packageType": "1"
+}
+```
+
+**认证**: ✅ 需要JWT认证 + 角色权限
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `name` | string | 是 | 被调人姓名 |
+| `mobile` | string | 是 | 手机号码（11位） |
+| `idNo` | string | 否 | 身份证号（18位，用于关联合同） |
+| `authStuffUrl` | string | 是 | 授权书URL（从prepare-auth接口获取） |
+| `esignContractNo` | string | 是 | 爱签合同编号（或LOCAL_PRIVACY_DOC） |
+| `position` | string | 否 | 职位（如：月嫂、育儿嫂等） |
+| `packageType` | string | 否 | 套餐类型：`1`=标准版（默认），`2`=深度版 |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "698a1234567890abcdef1234",
+    "reportId": "ZMDB_RPT_20260316_001",
+    "name": "张三",
+    "mobile": "13800138000",
+    "idNo": "110101199001011234",
+    "position": "月嫂",
+    "status": 1,
+    "packageType": "1",
+    "authStuffUrl": "https://zmdb.com/auth/doc/xxx",
+    "esignContractNo": "LOCAL_PRIVACY_DOC",
+    "createdAt": "2026-03-16T10:00:00.000Z"
+  },
+  "message": "背调发起成功"
+}
+```
+
+---
+
+### 取消背调
+
+取消进行中的背调请求。
+
+#### 请求
+
+```http
+POST /api/zmdb/miniprogram/reports/698a1234567890abcdef1234/cancel
+Authorization: Bearer {token}
+```
+
+**认证**: ✅ 需要JWT认证 + 角色权限
+
+#### 路径参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 背调记录ID（MongoDB ObjectId） |
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "message": "背调已取消"
+}
+```
+
+---
+
+### 下载/查看背调报告
+
+下载或直接查看已完成背调的PDF报告。仅当背调状态为"已完成"（状态4或16）时可操作。
+
+#### 请求
+
+```http
+GET /api/zmdb/miniprogram/reports/ZMDB_RPT_20260316_001/download
+Authorization: Bearer {token}
+```
+
+**认证**: ✅ 需要JWT认证 + 角色权限
+
+#### 路径参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `reportId` | string | 是 | 芝麻报告ID（reportId字段的值） |
+
+#### 响应
+
+直接返回PDF文件流：
+- **Content-Type**: `application/pdf`
+- **Content-Disposition**: `attachment; filename="bgcheck_report_ZMDB_RPT_20260316_001.pdf"`
+
+#### 📱 小程序直接查看报告（推荐）
+
+小程序使用 `wx.downloadFile` + `wx.openDocument` 可以**直接打开PDF预览**，无需手动下载：
+
+```javascript
+/**
+ * 直接查看背调报告（推荐方式）
+ * 调用后自动打开系统PDF阅读器，支持缩放、搜索、分享
+ */
+export function viewBackgroundCheckReport(reportId) {
+  return new Promise((resolve, reject) => {
+    const token = wx.getStorageSync('token');
+
+    wx.showLoading({ title: '加载中...' });
+
+    wx.downloadFile({
+      url: `https://crm.andejiazheng.com/api/zmdb/miniprogram/reports/${reportId}/download`,
+      header: { 'Authorization': `Bearer ${token}` },
+      success(res) {
+        wx.hideLoading();
+        if (res.statusCode === 200) {
+          // 直接打开PDF，无需手动下载
+          wx.openDocument({
+            filePath: res.tempFilePath,
+            fileType: 'pdf',
+            showMenu: true,  // 允许分享
+            success: resolve,
+            fail: reject
+          });
+        } else {
+          reject(new Error('加载报告失败'));
+        }
+      },
+      fail(err) {
+        wx.hideLoading();
+        reject(err);
+      }
+    });
+  });
+}
+
+// 使用示例
+viewBackgroundCheckReport('ZMDB_RPT_20260316_001')
+  .then(() => console.log('报告已打开'))
+  .catch(err => wx.showToast({ title: '查看失败', icon: 'error' }));
+```
+
+---
+
+### 背调状态说明
+
+| 状态值 | 说明 | 结果判定 |
+|--------|------|----------|
+| `0` | 待发起 | - |
+| `1` | 授权中 | - |
+| `2` | 背调中 | - |
+| `3` | 已取消 | ❌ 未通过 |
+| `4` | 已完成 | ✅ 通过 |
+| `15` | 终止 | ❌ 未通过 |
+| `16` | 完成（深度版） | ✅ 通过 |
+
+**判断逻辑**：
+- 状态为 `4` 或 `16` → 背调**通过**（显示绿色标签）
+- 状态为 `3` 或 `15` → 背调**未通过**（显示红色标签）
+- 其他状态 → 背调**进行中**
+
+---
+
+### 小程序调用示例
+
+```javascript
+// utils/background-check-api.js
+const BASE_URL = 'https://crm.andejiazheng.com/api';
+
+/** 获取请求头（含JWT认证） */
+function getAuthHeader() {
+  const token = wx.getStorageSync('token');
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+}
+
+/**
+ * 根据身份证号查询背调记录
+ */
+export function getBackgroundCheckByIdNo(idNo) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/zmdb/miniprogram/reports/by-idno/${idNo}`,
+      method: 'GET',
+      header: getAuthHeader(),
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/**
+ * 准备授权书
+ */
+export function prepareAuth(workerName) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/zmdb/miniprogram/prepare-auth`,
+      method: 'POST',
+      header: getAuthHeader(),
+      data: { workerName },
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/**
+ * 发起背调
+ */
+export function createBackgroundCheck(data) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE_URL}/zmdb/miniprogram/reports`,
+      method: 'POST',
+      header: getAuthHeader(),
+      data,
+      success(res) {
+        if (res.data.success) resolve(res.data.data);
+        else reject(new Error(res.data.message));
+      },
+      fail: reject
+    });
+  });
+}
+
+/**
+ * 下载背调报告（返回临时文件路径）
+ */
+export function downloadBackgroundCheckReport(reportId) {
+  return new Promise((resolve, reject) => {
+    const token = wx.getStorageSync('token');
+    wx.downloadFile({
+      url: `${BASE_URL}/zmdb/miniprogram/reports/${reportId}/download`,
+      header: { 'Authorization': `Bearer ${token}` },
+      success(res) {
+        if (res.statusCode === 200) {
+          resolve(res.tempFilePath);
+        } else {
+          reject(new Error('下载失败'));
+        }
+      },
+      fail: reject
+    });
+  });
+}
+
+/**
+ * 完整的背调流程示例
+ */
+export async function startBackgroundCheck(workerInfo) {
+  try {
+    // 1. 准备授权书
+    const authResult = await prepareAuth(workerInfo.name);
+
+    // 2. 发起背调
+    const bgCheckResult = await createBackgroundCheck({
+      name: workerInfo.name,
+      mobile: workerInfo.mobile,
+      idNo: workerInfo.idNo,
+      authStuffUrl: authResult.authStuffUrl,
+      esignContractNo: authResult.esignContractNo || 'LOCAL_PRIVACY_DOC',
+      position: workerInfo.position || '月嫂',
+      packageType: '1'  // 标准版
+    });
+
+    return bgCheckResult;
+  } catch (error) {
+    console.error('发起背调失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 判断背调是否通过
+ */
+export function isBackgroundCheckPassed(status) {
+  return status === 4 || status === 16;
+}
+
+/**
+ * 判断背调是否未通过
+ */
+export function isBackgroundCheckFailed(status) {
+  return status === 3 || status === 15;
+}
+
+/**
+ * 获取背调状态文本
+ */
+export function getBackgroundCheckStatusText(status) {
+  const statusMap = {
+    0: '待发起',
+    1: '授权中',
+    2: '背调中',
+    3: '已取消',
+    4: '已完成',
+    15: '终止',
+    16: '已完成'
+  };
+  return statusMap[status] || '未知状态';
+}
+```
+
+---
+
 ## 📞 技术支持
 
 如有问题或建议，请联系技术团队。
 
-**文档版本**: v1.9.0
-**最后更新**: 2026-02-28
+**文档版本**: v1.10.0
+**最后更新**: 2026-03-16
 **维护团队**: 安得家政技术团队
+
+**v1.10.0 更新内容**:
+- ✅ 新增背调管理API（6个接口）
+- ✅ 支持发起背调、查询背调状态、下载背调报告
+- ✅ 支持根据身份证号查询关联的背调记录
+- ✅ 背调记录与合同自动关联（通过身份证号匹配）
+- ✅ 实施 RBAC 角色权限控制，普通员工仅可查看自己发起的背调
 
 **v1.9.0 更新内容（安全加固）**:
 - 🔒 **合同模块**：移除所有 `@Public()` 装饰器，新增 JWT 认证 + 角色权限控制（24个接口）

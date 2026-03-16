@@ -204,6 +204,11 @@ export class ContractsMiniProgramController {
       contractData.displayEndDate = parseTemplateDate(templateEndDate) ||
         (contractData.endDate ? new Date(contractData.endDate).toISOString().split('T')[0] : null);
 
+      // 🔥 添加 templateNo 字段（从 esignTemplateNo 映射，方便小程序使用）
+      if (contractData.esignTemplateNo) {
+        contractData.templateNo = contractData.esignTemplateNo;
+      }
+
       return { success: true, data: contractData, message: '获取合同详情成功' };
     } catch (error) {
       return { success: false, message: error.message || '获取合同详情失败' };
@@ -390,7 +395,7 @@ export class ContractsMiniProgramController {
   @Post('create')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】创建合同' })
-  async createContract(@Body() body: any) {
+  async createContract(@Body() body: any, @Request() req?) {
     try {
       // 🔥 打印接收到的原始数据，用于调试
       this.logger.log(`📥 收到创建合同请求，字段数量: ${Object.keys(body || {}).length}`);
@@ -425,9 +430,13 @@ export class ContractsMiniProgramController {
 
       // ✅ 数据验证通过，创建合同（不自动触发爱签流程）
       this.logger.log(`✅ 数据验证通过，开始创建合同（不自动触发爱签）`);
+
+      // 使用当前登录用户作为创建人，避免使用固定占位ID导致无法关联创建人
+      const currentUserId = (body && body.createdBy) || (req?.user?.userId as string) || undefined;
+
       const contract = await this.contractsService.create(
         body as CreateContractDto,  // 🔥 使用 body（包含所有字段，包括中文字段）
-        'miniprogram-user',
+        currentUserId,
         { autoInitiateEsign: false }  // 🔥 不自动触发爱签流程
       );
 
@@ -1274,4 +1283,3 @@ export class ContractsMiniProgramController {
     }
   }
 }
-

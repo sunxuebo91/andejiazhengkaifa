@@ -2029,9 +2029,16 @@ const ESignatureStepPage: React.FC = () => {
                     else if (fieldKey.includes('结束') && (fieldKey.includes('年') || fieldKey.includes('月') || fieldKey.includes('日') || fieldKey.includes('时间'))) {
                       shouldDisable = true;
                     }
-                    // 3. 首次匹配费禁用（包括大写）
+                    // 3. 首次匹配费禁用（包括大写）- 🔥 修复：只有原合同有该字段时才禁用
                     else if (fieldKey.includes('首次匹配费') || fieldLabel.includes('首次匹配费')) {
-                      shouldDisable = true;
+                      // 检查原合同是否包含首次匹配费字段
+                      const hasMatchFeeInOriginal = originalContractData?.templateParams && (
+                        originalContractData.templateParams['首次匹配费'] !== undefined ||
+                        Object.keys(originalContractData.templateParams).some((k: string) =>
+                          k.toLowerCase().includes('首次匹配费')
+                        )
+                      );
+                      shouldDisable = hasMatchFeeInOriginal;
                     }
                     // 4. 服务费禁用（包括大写）
                     else if (fieldKey.includes('服务费') || fieldLabel.includes('服务费')) {
@@ -2510,6 +2517,23 @@ const ESignatureStepPage: React.FC = () => {
                     return '365'; // 固定365天
                   }
                   
+                  // 🔥 修复：首次匹配费字段默认值（不论字段类型，因为模板中可能定义为文本类型）
+                  // 当原合同没有首次匹配费字段时，提供默认值让用户选择
+                  if (fieldKey.includes('首次匹配费') && !fieldKey.includes('大写')) {
+                    // 换人模式下，如果原合同没有这个字段，提供默认值1000
+                    if (isChangeMode && originalContractData?.templateParams) {
+                      const hasFieldInOriginal = originalContractData.templateParams['首次匹配费'] !== undefined ||
+                        Object.keys(originalContractData.templateParams).some((k: string) =>
+                          k.toLowerCase().includes('首次匹配费') && !k.toLowerCase().includes('大写')
+                        );
+                      if (!hasFieldInOriginal) {
+                        console.log('🔥 换人模式：原合同无首次匹配费字段，设置默认值1000');
+                        return 1000; // 原合同没有此字段时，提供默认值
+                      }
+                    }
+                    return 1000; // 默认1000元
+                  }
+
                   // 根据字段类型和名称提供合理默认值
                   if (field.type === 'date') {
                     return new Date().toISOString().split('T')[0];
@@ -2529,7 +2553,7 @@ const ESignatureStepPage: React.FC = () => {
                       return '';
                     }
                   }
-                  
+
                   // 其他字段返回空值，让用户自己填写
                   return undefined;
                 };
@@ -2755,6 +2779,14 @@ const ESignatureStepPage: React.FC = () => {
 
                                   // 🔥 特殊处理：首次匹配费字段 - 使用下拉选择并自动转换为大写
                                   if (fieldKey === '首次匹配费' || fieldKey.includes('首次匹配费') && !fieldKey.includes('大写')) {
+                                    // 🔥 修复：判断原合同是否包含首次匹配费字段，只有包含时才禁用
+                                    const hasMatchFeeInOriginal = isChangeMode && originalContractData?.templateParams && (
+                                      originalContractData.templateParams['首次匹配费'] !== undefined ||
+                                      Object.keys(originalContractData.templateParams).some((k: string) =>
+                                        k.toLowerCase().includes('首次匹配费') && !k.toLowerCase().includes('大写')
+                                      )
+                                    );
+
                                     return (
                                       <Col span={12} key={`${field.key}-${rowIndex}-${fieldIndex}`}>
                                         <Form.Item
@@ -2766,7 +2798,7 @@ const ESignatureStepPage: React.FC = () => {
                                         >
                                           <Select
                                             placeholder="请选择匹配费"
-                                            disabled={isChangeMode}
+                                            disabled={hasMatchFeeInOriginal}
                                             onChange={(value) => {
                                               const chineseAmount = convertToChineseAmount(value);
 	                                              // 按模板的“真实字段key”写入，避免 key 有隐藏空白/不同写法导致 UI 不显示

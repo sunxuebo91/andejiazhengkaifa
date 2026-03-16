@@ -187,7 +187,13 @@ const TrainingLeadDetail: React.FC = () => {
               {lead.expectedStartDate ? dayjs(lead.expectedStartDate).format('YYYY-MM-DD') : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="预算金额">
-              {lead.budget ? `¥${lead.budget}` : '-'}
+              {lead.budget != null ? `¥${lead.budget}` : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="报课金额">
+              {lead.courseAmount != null ? `¥${lead.courseAmount}` : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="服务费金额">
+              {lead.serviceFeeAmount != null ? `¥${lead.serviceFeeAmount}` : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="线索来源">{lead.leadSource || '-'}</Descriptions.Item>
             <Descriptions.Item label="所在地区">{lead.address || '-'}</Descriptions.Item>
@@ -258,4 +264,3 @@ const TrainingLeadDetail: React.FC = () => {
 };
 
 export default TrainingLeadDetail;
-

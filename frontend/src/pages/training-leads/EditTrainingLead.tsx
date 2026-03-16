@@ -270,6 +270,42 @@ const EditTrainingLead: React.FC = () => {
                   />
                 </Form.Item>
               </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="报课金额"
+                  name="courseAmount"
+                  rules={[
+                    { type: 'number', min: 0, message: '报课金额不能为负数' }
+                  ]}
+                >
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    placeholder="请输入报课金额"
+                    min={0}
+                    precision={0}
+                    addonAfter="元"
+                  />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="服务费金额"
+                  name="serviceFeeAmount"
+                  rules={[
+                    { type: 'number', min: 0, message: '服务费金额不能为负数' }
+                  ]}
+                >
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    placeholder="请输入服务费金额"
+                    min={0}
+                    precision={0}
+                    addonAfter="元"
+                  />
+                </Form.Item>
+              </Col>
             </Row>
           </div>
 
@@ -381,4 +417,3 @@ const EditTrainingLead: React.FC = () => {
 };
 
 export default EditTrainingLead;
-

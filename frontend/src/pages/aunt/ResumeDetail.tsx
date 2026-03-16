@@ -24,13 +24,19 @@ import {
   EditOutlined,
   FilePdfOutlined,
   PlusOutlined,
-  StarFilled
+  StarFilled,
+  CheckCircleOutlined,
+  CloseOutlined,
+  DownloadOutlined,
+  SafetyOutlined
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import apiService from '../../services/api';
 import { getCurrentUser } from '@/services/auth';
 import { createFollowUp, getFollowUpsByResumeId, deleteFollowUp, followUpTypeMap, type FollowUpRecord } from '@/services/followUp.service';
+import { backgroundCheckService } from '../../services/backgroundCheckService';
+import { BackgroundCheck, BG_STATUS_MAP } from '../../types/background-check.types';
 import { isPdfFile } from '../../utils/uploadHelper';
 import AvailabilityCalendar from '@/components/AvailabilityCalendar';
 import { getDistrictLabel } from '../../constants/beijingDistricts';
@@ -490,6 +496,10 @@ const ResumeDetail = () => {
   const [evaluationForm] = Form.useForm();
   const [evaluationLoading, setEvaluationLoading] = useState(false);
 
+  // 背调信息相关状态
+  const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheck | null>(null);
+  const [bgCheckLoading, setBgCheckLoading] = useState(false);
+
   // 更新日期格式化函数
   const formatDateToChinese = (dateStr: string): string => {
     if (!dateStr || dateStr === '-') return '-';
@@ -592,6 +602,41 @@ const ResumeDetail = () => {
       fetchFollowUpRecords();
     }
   }, [resume?._id]);
+
+  // 组件加载时获取背调信息
+  useEffect(() => {
+    if (resume?.idNumber) {
+      fetchBackgroundCheck();
+    }
+  }, [resume?.idNumber]);
+
+  // 获取背调信息
+  const fetchBackgroundCheck = async () => {
+    if (!resume?.idNumber) {
+      console.log('⚠️ 缺少身份证号，跳过背调信息获取');
+      return;
+    }
+
+    try {
+      setBgCheckLoading(true);
+      console.log('🔍 开始获取背调信息:', resume.idNumber);
+
+      const record = await backgroundCheckService.getByIdNo(resume.idNumber);
+
+      if (record) {
+        setBackgroundCheck(record);
+        console.log('✅ 背调信息获取成功:', record);
+      } else {
+        setBackgroundCheck(null);
+        console.log('📝 未找到背调记录');
+      }
+    } catch (error) {
+      console.warn('获取背调信息失败:', error);
+      setBackgroundCheck(null);
+    } finally {
+      setBgCheckLoading(false);
+    }
+  };
 
   // 处理编辑操作
   const handleEdit = () => {
@@ -2007,7 +2052,7 @@ const ResumeDetail = () => {
               {(() => {
                 const displayedUrls = new Set<string>();
                 const reportElements: React.ReactNode[] = [];
-                
+
                 // 首先显示新格式体检报告
                 resume?.reports?.forEach((report: FileInfo, index: number) => {
                   displayedUrls.add(report.url);
@@ -2017,7 +2062,7 @@ const ResumeDetail = () => {
                     </div>
                   );
                 });
-                
+
                 // 然后显示旧格式中未重复的体检报告
                 resume?.medicalReportUrls?.filter(Boolean).forEach((url: FileUrl, index: number) => {
                   if (!displayedUrls.has(url)) {
@@ -2029,17 +2074,17 @@ const ResumeDetail = () => {
                     );
                   }
                 });
-                
+
                 return reportElements;
               })()}
-              
+
               {/* 如果没有任何体检报告，显示提示信息 */}
-              {(!resume?.reports || resume.reports.length === 0) && 
+              {(!resume?.reports || resume.reports.length === 0) &&
                (!resume?.medicalReportUrls || resume.medicalReportUrls.length === 0) && (
-                <div style={{ 
-                  padding: '40px', 
-                  textAlign: 'center', 
-                  border: '1px dashed #d9d9d9', 
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  border: '1px dashed #d9d9d9',
                   borderRadius: '6px',
                   color: '#999',
                   width: '100%'
@@ -2048,6 +2093,122 @@ const ResumeDetail = () => {
                 </div>
               )}
             </div>
+          </Card>
+
+          {/* 背调报告 */}
+          <Card
+            title={
+              <Space>
+                <SafetyOutlined />
+                <span>背调报告</span>
+              </Space>
+            }
+            style={{ marginBottom: 24 }}
+          >
+            {bgCheckLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <Spin tip="加载背调信息中..." />
+              </div>
+            ) : backgroundCheck ? (
+              <div>
+                <Descriptions bordered column={2} size="small">
+                  <Descriptions.Item label="候选人姓名">
+                    {backgroundCheck.name}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="手机号">
+                    {backgroundCheck.mobile}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="身份证号">
+                    {backgroundCheck.idNo ?
+                      `${backgroundCheck.idNo.slice(0, 6)}****${backgroundCheck.idNo.slice(-4)}` :
+                      '-'
+                    }
+                  </Descriptions.Item>
+                  <Descriptions.Item label="职位">
+                    {backgroundCheck.position || '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="背调状态">
+                    <Space>
+                      <Tag color={BG_STATUS_MAP[backgroundCheck.status]?.color || 'default'}>
+                        {BG_STATUS_MAP[backgroundCheck.status]?.text || '未知状态'}
+                      </Tag>
+                      {backgroundCheck.status === 4 || backgroundCheck.status === 16 ? (
+                        <Tag color="success" icon={<CheckCircleOutlined />}>通过</Tag>
+                      ) : backgroundCheck.status === 3 || backgroundCheck.status === 15 ? (
+                        <Tag color="error" icon={<CloseOutlined />}>未通过</Tag>
+                      ) : null}
+                    </Space>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="芝麻报告ID">
+                    {backgroundCheck.reportId || '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="发起时间">
+                    {backgroundCheck.createdAt ?
+                      dayjs(backgroundCheck.createdAt).format('YYYY-MM-DD HH:mm:ss') :
+                      '-'
+                    }
+                  </Descriptions.Item>
+                  <Descriptions.Item label="更新时间">
+                    {backgroundCheck.updatedAt ?
+                      dayjs(backgroundCheck.updatedAt).format('YYYY-MM-DD HH:mm:ss') :
+                      '-'
+                    }
+                  </Descriptions.Item>
+                </Descriptions>
+
+                {/* 操作按钮 */}
+                <div style={{ marginTop: 16, textAlign: 'right' }}>
+                  <Space>
+                    {backgroundCheck.reportId && (backgroundCheck.status === 4 || backgroundCheck.status === 16) && (
+                      <Button
+                        type="primary"
+                        icon={<DownloadOutlined />}
+                        onClick={async () => {
+                          try {
+                            const blob = await backgroundCheckService.downloadReport(backgroundCheck.reportId!);
+                            const url = window.URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `背调报告_${backgroundCheck.name}_${backgroundCheck.reportId}.pdf`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            window.URL.revokeObjectURL(url);
+                            messageApi.success('报告下载成功');
+                          } catch (error) {
+                            console.error('下载报告失败:', error);
+                            messageApi.error('下载报告失败');
+                          }
+                        }}
+                      >
+                        下载报告
+                      </Button>
+                    )}
+                    <Button onClick={() => navigate('/background-check')}>
+                      查看详情
+                    </Button>
+                  </Space>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                padding: '40px',
+                textAlign: 'center',
+                border: '1px dashed #d9d9d9',
+                borderRadius: '6px',
+                color: '#999',
+                width: '100%'
+              }}>
+                <SafetyOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 16 }} />
+                <p>暂无背调记录</p>
+                <Button
+                  type="link"
+                  onClick={() => navigate('/background-check')}
+                >
+                  前往发起背调 →
+                </Button>
+              </div>
+            )}
           </Card>
 
           {/* 月子餐照片 */}

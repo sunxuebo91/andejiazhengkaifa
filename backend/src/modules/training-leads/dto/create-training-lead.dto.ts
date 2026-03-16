@@ -37,13 +37,13 @@ export class CreateTrainingLeadDto {
 
   @ApiPropertyOptional({
     description: '线索来源',
-    enum: ['美团', '抖音', '快手', '小红书', '转介绍', '其他'],
+    enum: ['美团', '抖音', '快手', '小红书', '转介绍', '幼亲舒', '其他'],
     example: '美团'
   })
   @IsOptional()
   @IsString()
-  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '其他'], {
-    message: '线索来源必须是：美团、抖音、快手、小红书、转介绍、其他之一'
+  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '幼亲舒', '其他'], {
+    message: '线索来源必须是：美团、抖音、快手、小红书、转介绍、幼亲舒、其他之一'
   })
   leadSource?: string;
 
@@ -127,6 +127,18 @@ export class CreateTrainingLeadDto {
   @Min(0, { message: '预算金额不能为负数' })
   budget?: number;
 
+  @ApiPropertyOptional({ description: '报课金额', example: 8000 })
+  @IsOptional()
+  @IsNumber({}, { message: '报课金额必须是数字' })
+  @Min(0, { message: '报课金额不能为负数' })
+  courseAmount?: number;
+
+  @ApiPropertyOptional({ description: '服务费金额', example: 1000 })
+  @IsOptional()
+  @IsNumber({}, { message: '服务费金额必须是数字' })
+  @Min(0, { message: '服务费金额不能为负数' })
+  serviceFeeAmount?: number;
+
   @ApiPropertyOptional({ description: '所在地区', example: '杭州市西湖区' })
   @IsOptional()
   @IsString()
@@ -149,4 +161,3 @@ export class CreateTrainingLeadDto {
   @MaxLength(500, { message: '备注信息不能超过500个字符' })
   remarks?: string;
 }
-

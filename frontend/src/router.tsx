@@ -29,11 +29,14 @@ const BannerList = lazy(() => import('./pages/baobei/BannerList'));
 const BannerForm = lazy(() => import('./pages/baobei/BannerForm'));
 const ArticleList = lazy(() => import('./pages/baobei/ArticleList'));
 const ArticleForm = lazy(() => import('./pages/baobei/ArticleForm'));
+const CrawlerSourceList = lazy(() => import('./pages/baobei/CrawlerSourceList'));
 const MiniProgramUserList = lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
 // 合同管理相关页面
 const ContractList = lazy(() => import('./pages/contracts/ContractList'));
 const ContractCreate = lazy(() => import('./pages/contracts/ContractCreate'));
 const MiniProgramContractList = lazy(() => import('./pages/contracts/MiniProgramContractList'));
+// 背调管理相关页面
+const BackgroundCheckPage = lazy(() => import('./pages/background-check/BackgroundCheckPage'));
 // 表单管理相关页面
 import FormList from './pages/forms/FormList';
 import FormEditor from './pages/forms/FormEditor';
@@ -195,6 +198,15 @@ export const basicLayoutRoutes: RouteConfig[] = [
         }
       },
       {
+        path: 'baobei/crawler-sources',
+        name: '爬虫来源管理',
+        element: <CrawlerSourceList />,
+        meta: {
+          title: '爬虫来源管理',
+          description: '配置自动抓取文章的来源网站'
+        }
+      },
+      {
         path: 'baobei/banner/create',
         name: '新建Banner',
         element: <BannerForm />,
@@ -249,6 +261,12 @@ export const basicLayoutRoutes: RouteConfig[] = [
           title: '小程序合同',
           description: '查看和管理小程序端创建的合同'
         }
+      },
+      // 背调管理
+      {
+        path: 'background-check',
+        name: '背调管理',
+        element: <BackgroundCheckPage />,
       },
       // 表单管理
       {

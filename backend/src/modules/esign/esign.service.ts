@@ -2855,53 +2855,22 @@ export class ESignService {
         console.log(`🔍 处理签署人 ${index + 1}/${params.signers.length}: ${signer.name}`);
         console.log(`📋 templateParams存在: ${!!params.templateParams}`);
 
-        // 🔥 已通过 componentData 处理的多选控件字段，不能出现在 receiverFillStrategyList 中
-        const COMPONENT_DATA_FIELDS = ['服务内容'];
+        // 🔥🔥🔥 2025-03-11 关键修复：移除 receiverFillStrategyList 逻辑
+        // 原因：receiverFillStrategyList 用于"签署时填充"场景，要求模板中配置"签署方可填充"控件。
+        // 当前模板 TN84E8C106BFE74FD3AE36AC2CA33A44DE 没有此类控件，所有字段都是预填充的。
+        // 如果设置了 receiverFillStrategyList，爱签会报错 100629: "此合同附件无该用户的填充策略"
+        //
+        // 正确做法：所有字段数据应通过 createContractWithTemplate 的 fillData 参数预填充，
+        // 而不是在添加签署方时通过 receiverFillStrategyList 填充。
+        //
+        // 如果将来需要"签署时填充"功能，需要：
+        // 1. 在爱签模板中配置"签署方可填充"控件
+        // 2. 在 receiverFillStrategyList 中指定对应字段的 key
+        // 3. 设置 fillStage=1（待签署时填充）或 fillStage=2（即时填充）
 
-        if (index === 0 && params.templateParams) {
-          console.log(`✅ 开始处理第一个签署人的模板填充策略`);
-
-          Object.entries(params.templateParams).forEach(([key, value]) => {
-            console.log(`🔍 检查字段: ${key} = ${typeof value === 'string' ? value.substring(0, 30) + '...' : value}`);
-
-            // 🔥 跳过已由 componentData 处理的多选控件字段
-            if (COMPONENT_DATA_FIELDS.includes(key)) {
-              console.log(`⏭️ 跳过字段"${key}"：已在 componentData 中作为多选控件处理`);
-              return;
-            }
-
-            if (key === '服务备注' || key.includes('服务备注') || key.includes('服务项目')) {
-              console.log(`✅ 字段匹配: ${key}`);
-
-              if (value && typeof value === 'string' && value.trim()) {
-                console.log(`✅ 值有效: ${typeof value}, 长度: ${value.length}`);
-
-                // 对于多行文本，将分号分隔的内容转换为换行符分隔
-                const multiLineContent = value.split('；')
-                  .filter(item => item.trim())
-                  .join('\n'); // 使用换行符连接多个服务项目
-
-                receiverFillStrategyList.push({
-                  attachNo: 1, // 合同附件序号
-                  key: key, // 模板中的字段key
-                  value: multiLineContent, // 多行文本内容
-                  fillStage: 2 // 2=即时填充（接口调用时填充）
-                });
-
-                console.log(`🔄 添加多行文本填充策略: ${key} -> ${multiLineContent.substring(0, 50)}...`);
-                console.log(`📝 完整的多行文本内容:\n${multiLineContent}`);
-              } else {
-                console.log(`❌ 值无效: ${typeof value}, 值: "${value}"`);
-              }
-            } else {
-              console.log(`❌ 字段不匹配: ${key}`);
-            }
-          });
-        } else {
-          console.log(`❌ 跳过填充策略处理: index=${index}, templateParams=${!!params.templateParams}`);
-        }
-        
-        console.log(`📊 最终receiverFillStrategyList长度: ${receiverFillStrategyList.length}`);
+        console.log(`📋 签署人 ${index + 1}/${params.signers.length}: ${signer.name}`);
+        console.log(`⚠️ 不设置 receiverFillStrategyList（当前模板没有"签署方可填充"控件，所有字段已通过 fillData 预填充）`);
+        console.log(`📊 receiverFillStrategyList长度: ${receiverFillStrategyList.length}（保持为空）`);
 
         // 构建签署人数据，严格按照爱签官方文档格式
         const signerData: any = {

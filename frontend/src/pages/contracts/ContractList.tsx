@@ -323,17 +323,6 @@ const ContractList: React.FC = () => {
       },
     },
     {
-      title: '工资',
-      dataIndex: 'workerSalary',
-      key: 'workerSalary',
-      width: 120,
-      render: (salary: number) => (
-        <span style={{ fontWeight: 'bold', color: '#52c41a' }}>
-          ¥{salary?.toLocaleString()}
-        </span>
-      ),
-    },
-    {
       title: '服务费',
       dataIndex: 'customerServiceFee',
       key: 'customerServiceFee',
@@ -367,6 +356,26 @@ const ContractList: React.FC = () => {
         return (
           <Tag color={getStatusColor(statusText)}>{statusText}</Tag>
         );
+      },
+    },
+    {
+      title: '创建人',
+      dataIndex: 'createdBy',
+      key: 'createdBy',
+      width: 150,
+      render: (_: any, record: Contract) => {
+        const creator = record.createdBy as any;
+        if (!creator) {
+          return '-';
+        }
+        if (typeof creator === 'string') {
+          // 隐藏占位值或仅有 ObjectId 的情况
+          if (creator === 'temp' || /^[a-fA-F0-9]{24}$/.test(creator)) {
+            return '-';
+          }
+          return creator;
+        }
+        return creator.name || creator.username || '-';
       },
     },
     {

@@ -99,6 +99,14 @@ export class TrainingLead {
   @Prop({ min: 0 })
   budget: number;
 
+  @ApiProperty({ description: '报课金额' })
+  @Prop({ min: 0 })
+  courseAmount: number;
+
+  @ApiProperty({ description: '服务费金额' })
+  @Prop({ min: 0 })
+  serviceFeeAmount: number;
+
   @ApiProperty({ description: '所在地区' })
   @Prop()
   address: string;
@@ -157,4 +165,3 @@ TrainingLeadSchema.index({ referredBy: 1 });
 TrainingLeadSchema.index({ studentOwner: 1 });
 TrainingLeadSchema.index({ isReported: 1 });
 TrainingLeadSchema.index({ createdAt: -1 });
-

@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { message, Button, Input, Select, Form } from 'antd';
+import { message, Button, Input, Select, Form, Spin } from 'antd';
+import { WifiOutlined, ReloadOutlined, WarningOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import DeviceDetector from '../../utils/deviceDetector';
@@ -26,6 +27,18 @@ const postMessageToMiniProgram = (data: any) => {
       console.error('向小程序发送消息失败:', error);
     }
   }
+};
+
+// ==================== 新增：连接状态类型 ====================
+type ConnectionState = 'connected' | 'disconnected' | 'reconnecting' | 'failed';
+
+// 网络质量等级对应的颜色
+const networkQualityColors: Record<string, string> = {
+  excellent: '#52c41a',
+  good: '#52c41a',
+  fair: '#faad14',
+  poor: '#ff4d4f',
+  unknown: '#999',
 };
 
 interface JoinFormValues {
@@ -55,6 +68,13 @@ const JoinInterviewMobile: React.FC = () => {
   // const [deviceInfo, setDeviceInfo] = useState<any>(null);
   const [networkQuality, setNetworkQuality] = useState<string>('unknown');
 
+  // ==================== 新增：断线重连状态 ====================
+  const [connectionState, setConnectionState] = useState<ConnectionState>('connected');
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const maxReconnectAttempts = 5; // 最大重连次数
+  const reconnectInterval = 3000; // 重连间隔（毫秒）
+
   // 🚀 初始化设备检测
   useEffect(() => {
     // const info = DeviceDetector.getDeviceInfo();
@@ -63,7 +83,33 @@ const JoinInterviewMobile: React.FC = () => {
 
     // 检测网络质量
     checkNetworkQuality();
-  }, []);
+
+    // ==================== 新增：监听网络状态变化 ====================
+    const handleOnline = () => {
+      console.log('📶 网络已恢复');
+      message.success('网络已恢复');
+      if (connectionState === 'disconnected' || connectionState === 'reconnecting') {
+        attemptReconnect();
+      }
+    };
+
+    const handleOffline = () => {
+      console.log('📶 网络已断开');
+      message.warning('网络已断开，正在尝试重连...');
+      setConnectionState('disconnected');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+    };
+  }, [connectionState]);
 
   // 🎯 检查是否有缓存的访客信息，如果有则自动加入
   useEffect(() => {
@@ -140,6 +186,77 @@ const JoinInterviewMobile: React.FC = () => {
       console.error('网络质量检测失败:', error);
       setNetworkQuality('unknown');
     }
+  };
+
+  // ==================== 新增：断线重连逻辑 ====================
+  const attemptReconnect = useCallback(async () => {
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      setConnectionState('failed');
+      message.error('重连失败，请刷新页面重试');
+      return;
+    }
+
+    if (!guestInfo || !roomId) {
+      console.log('❌ 缺少访客信息，无法重连');
+      return;
+    }
+
+    setConnectionState('reconnecting');
+    setReconnectAttempts(prev => prev + 1);
+    console.log(`🔄 尝试第 ${reconnectAttempts + 1} 次重连...`);
+
+    try {
+      // 先检测网络质量
+      await checkNetworkQuality();
+
+      // 销毁旧的 ZEGO 实例
+      if (zegoInstanceRef.current) {
+        try {
+          zegoInstanceRef.current.destroy();
+          zegoInstanceRef.current = null;
+        } catch (e) {
+          console.warn('销毁旧实例失败:', e);
+        }
+      }
+
+      // 重新生成 Token
+      const { token: baseToken, appId } = await generateGuestToken(
+        guestInfo.guestId,
+        guestInfo.userName,
+        guestInfo.role as 'customer' | 'helper'
+      );
+
+      // 重新生成 Kit Token
+      const kitToken = ZegoUIKitPrebuilt.generateKitTokenForProduction(
+        appId,
+        baseToken,
+        roomId,
+        guestInfo.guestId,
+        guestInfo.userName
+      );
+
+      setZegoToken(kitToken);
+      setConnectionState('connected');
+      setReconnectAttempts(0);
+      message.success('重连成功！');
+      console.log('✅ 重连成功');
+
+      // 触发重新初始化 ZEGO
+      // 由于 zegoToken 变化，useEffect 会自动重新初始化
+    } catch (error: any) {
+      console.error('重连失败:', error);
+
+      // 设置延迟重试
+      reconnectTimerRef.current = setTimeout(() => {
+        attemptReconnect();
+      }, reconnectInterval);
+    }
+  }, [reconnectAttempts, guestInfo, roomId]);
+
+  // 手动重连按钮
+  const handleManualReconnect = () => {
+    setReconnectAttempts(0);
+    attemptReconnect();
   };
 
   // 生成访客 Token
@@ -310,6 +427,8 @@ const JoinInterviewMobile: React.FC = () => {
           onJoinRoom: () => {
             console.log('✅ 移动端访客成功加入房间');
             message.success('已加入视频面试');
+            setConnectionState('connected');
+            setReconnectAttempts(0);
 
             // 通知小程序加入成功
             postMessageToMiniProgram({
@@ -324,6 +443,7 @@ const JoinInterviewMobile: React.FC = () => {
             setInMeeting(false);
             setGuestInfo(null);
             zegoInstanceRef.current = null;
+            setConnectionState('connected');
           },
           onUserJoin: (users: any[]) => {
             console.log('✅ 用户加入房间:', users);
@@ -384,6 +504,93 @@ const JoinInterviewMobile: React.FC = () => {
       <div className="join-interview-mobile">
         {/* 视频容器 - ZEGO 会在这里渲染完整的 UI，包括所有控制按钮 */}
         <div className="video-container-mobile" ref={meetingContainerRef}></div>
+
+        {/* ==================== 新增：网络状态指示器 ==================== */}
+        <div className="network-indicator" style={{
+          position: 'fixed',
+          top: 8,
+          right: 8,
+          zIndex: 1000,
+          padding: '4px 8px',
+          borderRadius: 4,
+          background: 'rgba(0,0,0,0.6)',
+          color: '#fff',
+          fontSize: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}>
+          <WifiOutlined style={{ color: networkQualityColors[networkQuality] || '#999' }} />
+          <span style={{ color: networkQualityColors[networkQuality] || '#999' }}>
+            {networkQuality === 'excellent' ? '极佳' :
+             networkQuality === 'good' ? '良好' :
+             networkQuality === 'fair' ? '一般' :
+             networkQuality === 'poor' ? '较差' : '检测中'}
+          </span>
+        </div>
+
+        {/* ==================== 新增：断线重连遮罩层 ==================== */}
+        {(connectionState === 'disconnected' || connectionState === 'reconnecting' || connectionState === 'failed') && (
+          <div className="reconnect-overlay" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            color: '#fff',
+          }}>
+            {connectionState === 'reconnecting' && (
+              <>
+                <Spin size="large" />
+                <p style={{ marginTop: 16, fontSize: 16 }}>
+                  正在重新连接... ({reconnectAttempts}/{maxReconnectAttempts})
+                </p>
+                <p style={{ color: '#999', fontSize: 12 }}>请保持网络畅通</p>
+              </>
+            )}
+
+            {connectionState === 'disconnected' && (
+              <>
+                <WarningOutlined style={{ fontSize: 48, color: '#faad14' }} />
+                <p style={{ marginTop: 16, fontSize: 16 }}>网络已断开</p>
+                <Button
+                  type="primary"
+                  icon={<ReloadOutlined />}
+                  onClick={handleManualReconnect}
+                  style={{ marginTop: 16 }}
+                >
+                  立即重连
+                </Button>
+              </>
+            )}
+
+            {connectionState === 'failed' && (
+              <>
+                <WarningOutlined style={{ fontSize: 48, color: '#ff4d4f' }} />
+                <p style={{ marginTop: 16, fontSize: 16 }}>重连失败</p>
+                <p style={{ color: '#999', fontSize: 12 }}>已尝试 {maxReconnectAttempts} 次</p>
+                <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                  <Button
+                    type="primary"
+                    icon={<ReloadOutlined />}
+                    onClick={handleManualReconnect}
+                  >
+                    再试一次
+                  </Button>
+                  <Button onClick={() => window.location.reload()}>
+                    刷新页面
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     );
   }

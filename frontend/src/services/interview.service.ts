@@ -6,6 +6,11 @@ export interface CreateRoomParams {
   roomName: string;
   hostName: string;
   hostZegoUserId: string;
+  // 简历关联（可选）
+  resumeId?: string;
+  candidateName?: string;
+  candidatePhone?: string;
+  candidatePosition?: string;
 }
 
 export interface QueryRoomsParams {

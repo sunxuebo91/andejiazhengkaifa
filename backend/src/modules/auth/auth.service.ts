@@ -107,18 +107,27 @@ export class AuthService {
     }
   }
 
-  async login(username: string, password: string, ip: string, userAgent: string) {
+  async login(username: string, password: string, ip: string, userAgent: string, openid?: string) {
     try {
       const user = await this.validateUser(username, password, ip, userAgent);
       if (!user) {
         throw new UnauthorizedException('用户名或密码错误');
       }
 
+      // 如果传入了 openid，自动更新用户的 wechatOpenId（小程序登录时使用）
+      if (openid && user.wechatOpenId !== openid) {
+        console.log(`[登录] 更新用户 ${user.name}(${user.username}) 的 wechatOpenId: ${user.wechatOpenId || '无'} → ${openid}`);
+        await this.usersService.updateWeChatInfo(user._id.toString(), {
+          openId: openid,
+        });
+      }
+
       const payload = {
         username: user.username,
         sub: user._id,
         role: user.role,
-        permissions: user.permissions || []
+        permissions: user.permissions || [],
+        openid: openid || user.wechatOpenId,
       };
       const token = this.jwtService.sign(payload);
 
@@ -156,14 +165,23 @@ export class AuthService {
         throw new UnauthorizedException('手机号未注册，请联系管理员');
       }
 
-      // 3. 记录登录日志
+      // 3. 自动更新用户的 wechatOpenId（确保订阅消息能正常发送）
+      const newOpenid = openidResult.openid;
+      if (newOpenid && user.wechatOpenId !== newOpenid) {
+        console.log(`[小程序登录] 更新用户 ${user.name}(${phone}) 的 wechatOpenId: ${user.wechatOpenId || '无'} → ${newOpenid}`);
+        await this.usersService.updateWeChatInfo(user._id.toString(), {
+          openId: newOpenid,
+        });
+      }
+
+      // 4. 记录登录日志
       await this.logLoginAttempt(user._id.toString(), ip, userAgent, 'success');
 
-      // 4. 生成JWT token
+      // 5. 生成JWT token
       const payload = {
         username: user.username,
         sub: user._id,
-        openid: openidResult.openid,
+        openid: newOpenid,
         role: user.role,
         permissions: user.permissions || []
       };
@@ -184,7 +202,7 @@ export class AuthService {
             department: user.department || null,
             permissions: user.permissions
           },
-          openid: openidResult.openid
+          openid: newOpenid
         },
         message: '小程序登录成功'
       };

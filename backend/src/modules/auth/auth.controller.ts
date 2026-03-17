@@ -24,11 +24,12 @@ export class AuthController {
   async login(
     @Body('username') username: string,
     @Body('password') password: string,
-    @Req() req,
+    @Body('openid') openid?: string,
+    @Req() req?,
   ) {
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.headers['user-agent'];
-    return this.authService.login(username, password, ip, userAgent);
+    return this.authService.login(username, password, ip, userAgent, openid);
   }
 
   @Public()

@@ -21,13 +21,13 @@ export class InterviewService {
    * 创建面试间
    */
   async createRoom(userId: string, dto: CreateRoomDto): Promise<InterviewRoom> {
-    this.logger.log(`创建面试间: ${dto.roomId}, 主持人: ${userId}`);
+    this.logger.log(`创建面试间: ${dto.roomId}, 主持人: ${userId}, 关联简历: ${dto.resumeId || '无'}`);
 
     // 🔥 第一步：自动关闭该用户所有活跃的面试间
     await this.autoCloseUserActiveRooms(userId, dto.hostZegoUserId);
 
-    // 🔥 第二步：创建新的面试间
-    const room = new this.interviewRoomModel({
+    // 🔥 第二步：创建新的面试间（包含简历关联信息）
+    const roomData: any = {
       roomId: dto.roomId,
       roomName: dto.roomName,
       hostUserId: new Types.ObjectId(userId),
@@ -43,10 +43,25 @@ export class InterviewService {
           joinedAt: new Date(),
         },
       ],
-    });
+    };
 
+    // 添加简历关联信息（如果有）
+    if (dto.resumeId) {
+      roomData.resumeId = new Types.ObjectId(dto.resumeId);
+    }
+    if (dto.candidateName) {
+      roomData.candidateName = dto.candidateName;
+    }
+    if (dto.candidatePhone) {
+      roomData.candidatePhone = dto.candidatePhone;
+    }
+    if (dto.candidatePosition) {
+      roomData.candidatePosition = dto.candidatePosition;
+    }
+
+    const room = new this.interviewRoomModel(roomData);
     const savedRoom = await room.save();
-    this.logger.log(`面试间创建成功: ${savedRoom.roomId}`);
+    this.logger.log(`面试间创建成功: ${savedRoom.roomId}, 关联简历: ${savedRoom.resumeId || '无'}`);
 
     // 🔥 第三步：在 ZegoService 内存中注册房间（用于定时清理任务）
     try {

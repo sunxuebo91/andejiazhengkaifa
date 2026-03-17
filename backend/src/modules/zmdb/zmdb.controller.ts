@@ -46,13 +46,21 @@ export class ZmdbController {
     return { success: true, data: record };
   }
 
-  /** 背调列表（分页） */
+  /** 背调列表（分页+搜索） */
   @Get('reports')
   async findAll(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
+    @Query('keyword') keyword?: string,
+    @Query('name') name?: string,
+    @Query('mobile') mobile?: string,
+    @Query('idNo') idNo?: string,
   ) {
-    const result = await this.zmdbService.findAll(parseInt(page), parseInt(limit));
+    const result = await this.zmdbService.findAll(
+      parseInt(page),
+      parseInt(limit),
+      { keyword, name, mobile, idNo }
+    );
     return { success: true, ...result };
   }
 

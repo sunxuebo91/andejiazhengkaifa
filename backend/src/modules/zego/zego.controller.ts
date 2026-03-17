@@ -9,6 +9,7 @@ import { PushTeleprompterDto, ControlTeleprompterDto, GetTeleprompterDto, QuickS
 import { KickUserDto } from './dto/kick-user.dto';
 import { RemoteControlDto } from './dto/remote-control.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
 import { InterviewService } from '../interview/interview.service';
 
 @Controller('zego')
@@ -66,6 +67,7 @@ export class ZegoController {
    * 生成访客 Token（公开接口，无需认证）
    * 用于访客（客户/阿姨）通过邀请链接加入视频面试
    */
+  @Public()
   @Post('generate-guest-token')
   async generateGuestToken(@Body() dto: GenerateGuestTokenDto) {
     console.log('🔍 生成访客Token请求:', {

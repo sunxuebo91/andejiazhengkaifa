@@ -22,7 +22,14 @@ export const backgroundCheckService = {
     return response.data;
   },
 
-  async getReports(params: { page?: number; limit?: number } = {}): Promise<{
+  async getReports(params: {
+    page?: number;
+    limit?: number;
+    keyword?: string;
+    name?: string;
+    mobile?: string;
+    idNo?: string;
+  } = {}): Promise<{
     data: BackgroundCheck[];
     total: number;
     page: number;

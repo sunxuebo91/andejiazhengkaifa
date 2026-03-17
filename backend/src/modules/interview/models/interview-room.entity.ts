@@ -63,6 +63,26 @@ export class InterviewRoom extends Document {
 
   @Prop({ type: [ParticipantSchema], default: [] })
   participants: Participant[]; // 参与者列表
+
+  // ==================== 新增：简历关联 ====================
+  @Prop({ type: Types.ObjectId, ref: 'Resume', index: true })
+  resumeId?: Types.ObjectId; // 关联的简历ID
+
+  @Prop()
+  candidateName?: string; // 候选人姓名（冗余存储，方便显示）
+
+  @Prop()
+  candidatePhone?: string; // 候选人手机号（冗余存储）
+
+  @Prop()
+  candidatePosition?: string; // 候选人应聘职位（冗余存储）
+
+  // ==================== 新增：面试评价 ====================
+  @Prop({ type: Number, min: 1, max: 5 })
+  rating?: number; // 面试评分（1-5星）
+
+  @Prop()
+  interviewNote?: string; // 面试备注/评价
 }
 
 export const InterviewRoomSchema = SchemaFactory.createForClass(InterviewRoom);
@@ -70,4 +90,4 @@ export const InterviewRoomSchema = SchemaFactory.createForClass(InterviewRoom);
 // 创建索引
 InterviewRoomSchema.index({ hostUserId: 1, status: 1 });
 InterviewRoomSchema.index({ createdAt: -1 });
-
+InterviewRoomSchema.index({ resumeId: 1 }); // 简历关联索引

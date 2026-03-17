@@ -1,6 +1,6 @@
 import React from 'react';
-import { Card, Button, Space, Descriptions, Modal, message } from 'antd';
-import { LinkOutlined } from '@ant-design/icons';
+import { Card, Button, Space, Descriptions, Modal, message, Tag } from 'antd';
+import { LinkOutlined, UserOutlined, PhoneOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { InterviewRoom } from '../../../types/interview.types';
 import RoomStatusBadge from './RoomStatusBadge';
@@ -153,6 +153,22 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onRejoin, onEnd, onViewDetail
       style={{ marginBottom: 16 }}
     >
       <Descriptions column={2} size="small">
+        {/* 候选人信息（如果有关联简历） */}
+        {room.candidateName && (
+          <Descriptions.Item label={<><UserOutlined /> 候选人</>} span={2}>
+            <Space>
+              <span style={{ fontWeight: 500 }}>{room.candidateName}</span>
+              {room.candidatePhone && (
+                <span style={{ color: '#666' }}>
+                  <PhoneOutlined /> {room.candidatePhone}
+                </span>
+              )}
+              {room.candidatePosition && (
+                <Tag color="blue">{room.candidatePosition}</Tag>
+              )}
+            </Space>
+          </Descriptions.Item>
+        )}
         <Descriptions.Item label="创建时间">
           {dayjs(room.createdAt).format('YYYY-MM-DD HH:mm:ss')}
         </Descriptions.Item>
@@ -169,6 +185,17 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onRejoin, onEnd, onViewDetail
         <Descriptions.Item label="参与者" span={2}>
           {formatParticipants(room.participants)}
         </Descriptions.Item>
+        {/* 面试评价（如果有） */}
+        {room.rating && (
+          <Descriptions.Item label="面试评分">
+            {'⭐'.repeat(room.rating)}
+          </Descriptions.Item>
+        )}
+        {room.interviewNote && (
+          <Descriptions.Item label="面试备注" span={2}>
+            {room.interviewNote}
+          </Descriptions.Item>
+        )}
       </Descriptions>
 
       <div style={{ marginTop: 16, textAlign: 'right' }}>

@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>CRM完整项目文档</title>
+  <style>
+    html {
+      font-family: Microsoft YaHei;
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<h1 id="安得家政-crm-系统---完整项目文档">安得家政 CRM 系统 -
+完整项目文档</h1>
+<blockquote>
+<p><strong>版本</strong>: 2.0.0<br />
+<strong>更新日期</strong>: 2026-03-16<br />
+<strong>项目地址</strong>: https://crm.andejiazheng.com<br />
+<strong>API文档</strong>: https://crm.andejiazheng.com/api/docs<br />
+<strong>技术栈</strong>: NestJS + React + MongoDB + PM2</p>
+</blockquote>
+<hr />
+<h2 id="目录">目录</h2>
+<ol type="1">
+<li><a href="#一项目概述">项目概述</a></li>
+<li><a href="#二技术架构">技术架构</a></li>
+<li><a href="#三功能模块详解">功能模块详解</a></li>
+<li><a href="#四数据库设计">数据库设计</a></li>
+<li><a href="#五api接口文档">API接口文档</a></li>
+<li><a href="#六第三方服务集成">第三方服务集成</a></li>
+<li><a href="#七小程序集成">小程序集成</a></li>
+<li><a href="#八部署运维">部署运维</a></li>
+<li><a href="#九更新日志">更新日志</a></li>
+</ol>
+<hr />
+<h2 id="一项目概述">一、项目概述</h2>
+<h3 id="系统简介">1.1 系统简介</h3>
+<p>安得家政 CRM
+系统是一套面向家政服务行业的现代化客户关系管理平台，提供从客户获取、阿姨简历管理、智能匹配、合同签约、保险投保到视频面试的全流程数字化解决方案。</p>
+<h3 id="核心价值">1.2 核心价值</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 25%" />
+<col style="width: 41%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>价值点</th>
+<th>描述</th>
+<th>实现方式</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>客户全生命周期管理</strong></td>
+<td>从线索获取到签约服务的完整跟踪</td>
+<td>状态流转机制、跟进记录、自动流转规则</td>
+</tr>
+<tr class="even">
+<td><strong>数字化签约</strong></td>
+<td>在线电子合同签署</td>
+<td>集成爱签电子签约平台</td>
+</tr>
+<tr class="odd">
+<td><strong>智能匹配</strong></td>
+<td>客户需求与阿姨档期自动匹配</td>
+<td>档期日历系统、多维度筛选</td>
+</tr>
+<tr class="even">
+<td><strong>视频面试</strong></td>
+<td>远程视频面试，提升沟通效率</td>
+<td>集成ZEGO即构音视频SDK</td>
+</tr>
+<tr class="odd">
+<td><strong>保险服务</strong></td>
+<td>家政人员保险一键投保</td>
+<td>集成大树保保险平台</td>
+</tr>
+<tr class="even">
+<td><strong>多端协同</strong></td>
+<td>CRM后台 + 微信小程序协同工作</td>
+<td>统一API接口、数据同步</td>
+</tr>
+</tbody>
+</table>
+<h3 id="目标用户与权限矩阵">1.3 目标用户与权限矩阵</h3>
+<table>
+<thead>
+<tr class="header">
+<th>角色</th>
+<th>使用场景</th>
+<th>核心权限</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>超级管理员</strong></td>
+<td>系统配置、用户管理</td>
+<td>所有模块完整权限、角色配置</td>
+</tr>
+<tr class="even">
+<td><strong>运营经理</strong></td>
+<td>客户分配、数据统计</td>
+<td>客户管理、统计报表、线索分配</td>
+</tr>
+<tr class="odd">
+<td><strong>销售顾问</strong></td>
+<td>客户跟进、签约</td>
+<td>分配客户管理、合同创建、跟进记录</td>
+</tr>
+<tr class="even">
+<td><strong>简历管理员</strong></td>
+<td>阿姨简历维护</td>
+<td>简历增删改查、档期管理</td>
+</tr>
+<tr class="odd">
+<td><strong>阿姨/家政员</strong></td>
+<td>自助注册、档期管理</td>
+<td>小程序端：个人简历、档期设置</td>
+</tr>
+<tr class="even">
+<td><strong>客户</strong></td>
+<td>查看阿姨、签约</td>
+<td>小程序端：阿姨列表、视频面试、在线签约</td>
+</tr>
+</tbody>
+</table>
+<h3 id="项目结构">1.4 项目结构</h3>
+<pre><code>andejiazhengcrm/
+├── backend/                    # NestJS 后端服务
+│   ├── src/
+│   │   ├── auth/              # 认证模块
+│   │   ├── customers/         # 客户管理模块
+│   │   ├── resumes/           # 简历管理模块
+│   │   ├── contracts/         # 合同管理模块
+│   │   ├── insurance/         # 保险管理模块
+│   │   ├── interview/         # 视频面试模块
+│   │   ├── users/             # 用户管理模块
+│   │   ├── roles/             # 角色权限模块
+│   │   ├── docs/              # 技术文档
+│   │   │   ├── API_SPEC.md    # API 规范
+│   │   │   └── DATABASE_SCHEMA.md  # 数据库结构
+│   │   └── ...
+│   ├── docs/                  # 产品文档
+│   └── ...
+├── frontend/                   # React 前端
+│   ├── src/
+│   │   ├── pages/             # 页面组件
+│   │   ├── components/        # 公共组件
+│   │   ├── services/          # API 服务
+│   │   ├── utils/             # 工具函数
+│   │   └── ...
+│   └── ...
+├── miniprogram-pages/          # 微信小程序页面
+├── docs/                      # 项目文档
+├── scripts/                   # 管理脚本
+└── ...</code></pre>
+<hr />
+<h2 id="二技术架构">二、技术架构</h2>
+<h3 id="技术栈">2.1 技术栈</h3>
+<table>
+<thead>
+<tr class="header">
+<th>层级</th>
+<th>技术选型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>后端框架</strong></td>
+<td>NestJS</td>
+<td>Node.js 企业级框架</td>
+</tr>
+<tr class="even">
+<td><strong>数据库</strong></td>
+<td>MongoDB</td>
+<td>NoSQL 文档数据库</td>
+</tr>
+<tr class="odd">
+<td><strong>ORM</strong></td>
+<td>TypeORM/Mongoose</td>
+<td>数据持久化</td>
+</tr>
+<tr class="even">
+<td><strong>前端框架</strong></td>
+<td>React 18</td>
+<td>UI 框架</td>
+</tr>
+<tr class="odd">
+<td><strong>构建工具</strong></td>
+<td>Vite</td>
+<td>快速构建</td>
+</tr>
+<tr class="even">
+<td><strong>UI 组件库</strong></td>
+<td>Ant Design</td>
+<td>企业级组件库</td>
+</tr>
+<tr class="odd">
+<td><strong>状态管理</strong></td>
+<td>Redux Toolkit</td>
+<td>状态管理</td>
+</tr>
+<tr class="even">
+<td><strong>进程管理</strong></td>
+<td>PM2</td>
+<td>生产环境进程管理</td>
+</tr>
+<tr class="odd">
+<td><strong>Web服务器</strong></td>
+<td>Nginx</td>
+<td>反向代理</td>
+</tr>
+</tbody>
+</table>
+<h3 id="系统架构图">2.2 系统架构图</h3>
+<pre><code>┌─────────────────────────────────────────────────────────────────────────┐
+│                              客户端层                                   │
+├─────────────────┬──────────────────┬────────────────────────────────────┤
+│   CRM Web 端    │   微信小程序      │        阿姨/客户小程序             │
+│   React + Vite  │   微信原生        │        微信原生                    │
+└────────┬────────┴────────┬─────────┴──────────────┬───────────────────────┘
+         │                │                        │
+         └────────────────┼────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            API 网关层                                    │
+│                         Nginx (反向代理)                                 │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           应用服务层                                      │
+├─────────────┬─────────────┬─────────────┬─────────────┬─────────────────┤
+│  客户管理    │   简历管理   │   合同管理   │   保险管理   │   视频面试      │
+│  Customers  │   Resumes   │  Contracts  │  Insurance  │   Interview     │
+└─────────────┴─────────────┴─────────────┴─────────────┴─────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            数据存储层                                    │
+├──────────────────────────┬───────────────────────────────────────────────┤
+│     MongoDB             │              腾讯云 COS                      │
+│     主数据库            │              文件存储                          │
+└──────────────────────────┴───────────────────────────────────────────────┘</code></pre>
+<h3 id="服务端口配置">2.3 服务端口配置</h3>
+<table>
+<thead>
+<tr class="header">
+<th>服务</th>
+<th>端口</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>前端开发</td>
+<td>4173</td>
+<td>Vite 开发服务器</td>
+</tr>
+<tr class="even">
+<td>前端生产</td>
+<td>80/443</td>
+<td>Nginx</td>
+</tr>
+<tr class="odd">
+<td>后端 API</td>
+<td>3000</td>
+<td>NestJS 服务</td>
+</tr>
+<tr class="even">
+<td>数据库</td>
+<td>27017</td>
+<td>MongoDB</td>
+</tr>
+<tr class="odd">
+<td>PM2 管理</td>
+<td>-</td>
+<td>进程管理</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="三功能模块详解">三、功能模块详解</h2>
+<h3 id="客户管理模块-customers">3.1 客户管理模块 (customers)</h3>
+<h4 id="模块概述">模块概述</h4>
+<p>客户管理是CRM系统的核心模块，管理所有客户的全生命周期数据。</p>
+<h4 id="核心功能">核心功能</h4>
+<ul>
+<li>客户信息管理（姓名、手机、微信号、身份证）</li>
+<li>线索来源跟踪（美团、抖音、小红书、转介绍等）</li>
+<li>客户状态流转（新线索 → 匹配中 → 已面试 → 已签约）</li>
+<li>线索等级评定（O类、A类、B类、C类、D类）</li>
+<li>公海池机制（自动流转、重新分配）</li>
+<li>跟进记录管理</li>
+</ul>
+<h4 id="字段详解">字段详解</h4>
+<table>
+<thead>
+<tr class="header">
+<th>字段名</th>
+<th>类型</th>
+<th>必填</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>name</td>
+<td>String</td>
+<td>✅</td>
+<td>客户姓名</td>
+</tr>
+<tr class="even">
+<td>phone</td>
+<td>String</td>
+<td>❌</td>
+<td>手机号</td>
+</tr>
+<tr class="odd">
+<td>wechatId</td>
+<td>String</td>
+<td>❌</td>
+<td>微信号</td>
+</tr>
+<tr class="even">
+<td>idCardNumber</td>
+<td>String</td>
+<td>❌</td>
+<td>身份证号</td>
+</tr>
+<tr class="odd">
+<td>leadSource</td>
+<td>String</td>
+<td>✅</td>
+<td>线索来源</td>
+</tr>
+<tr class="even">
+<td>serviceCategory</td>
+<td>String</td>
+<td>❌</td>
+<td>需求服务品类</td>
+</tr>
+<tr class="odd">
+<td>contractStatus</td>
+<td>String</td>
+<td>✅</td>
+<td>客户状态</td>
+</tr>
+<tr class="even">
+<td>leadLevel</td>
+<td>String</td>
+<td>✅</td>
+<td>线索等级</td>
+</tr>
+<tr class="odd">
+<td>salaryBudget</td>
+<td>Number</td>
+<td>❌</td>
+<td>薪资预算</td>
+</tr>
+<tr class="even">
+<td>expectedStartDate</td>
+<td>Date</td>
+<td>❌</td>
+<td>期望上户日期</td>
+</tr>
+<tr class="odd">
+<td>assignedTo</td>
+<td>ObjectId</td>
+<td>❌</td>
+<td>当前负责人</td>
+</tr>
+<tr class="even">
+<td>inPublicPool</td>
+<td>Boolean</td>
+<td>❌</td>
+<td>是否在公海中</td>
+</tr>
+</tbody>
+</table>
+<h4 id="枚举值">枚举值</h4>
+<p><strong>线索来源</strong>:
+美团、抖音、快手、小红书、转介绍、杭州同馨、握个手平台、线索购买、莲心、美家、天机鹿、孕妈联盟、高阁、星星、妈妈网、犀牛、宝宝网、其他</p>
+<p><strong>客户状态</strong>:
+已签约、匹配中、已面试、流失客户、已退款、退款中、待定</p>
+<p><strong>线索等级</strong>: - O类: 超高意向，立即签约 - A类:
+高意向，近期签约 - B类: 中等意向 - C类: 低意向 - D类: 待定</p>
+<p><strong>需求品类</strong>:
+月嫂、住家育儿嫂、保洁、住家保姆、养宠、小时工、白班育儿、白班保姆、住家护老</p>
+<h3 id="简历管理模块-resumes">3.2 简历管理模块 (resumes)</h3>
+<h4 id="模块概述-1">模块概述</h4>
+<p>管理家政服务人员（阿姨）的完整简历信息，包括基本信息、工作经历、技能证书、照片、档期等。</p>
+<h4 id="核心功能-1">核心功能</h4>
+<ul>
+<li>阿姨基本信息管理</li>
+<li>多工种支持（月嫂、育儿嫂、保姆、保洁等）</li>
+<li>技能标签管理</li>
+<li>档期管理（可接单、不可接单、已占用）</li>
+<li>工作经验记录</li>
+<li>证书照片管理</li>
+<li>体检报告管理</li>
+<li>月嫂档位评级（初级→皇冠）</li>
+</ul>
+<h4 id="基本信息字段">基本信息字段</h4>
+<table>
+<thead>
+<tr class="header">
+<th>字段名</th>
+<th>类型</th>
+<th>必填</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>name</td>
+<td>String</td>
+<td>✅</td>
+<td>姓名</td>
+</tr>
+<tr class="even">
+<td>phone</td>
+<td>String</td>
+<td>✅</td>
+<td>手机号</td>
+</tr>
+<tr class="odd">
+<td>gender</td>
+<td>Enum</td>
+<td>✅</td>
+<td>性别</td>
+</tr>
+<tr class="even">
+<td>age</td>
+<td>Number</td>
+<td>✅</td>
+<td>年龄</td>
+</tr>
+<tr class="odd">
+<td>jobType</td>
+<td>Enum</td>
+<td>✅</td>
+<td>工种</td>
+</tr>
+<tr class="even">
+<td>education</td>
+<td>Enum</td>
+<td>✅</td>
+<td>学历</td>
+</tr>
+<tr class="odd">
+<td>experienceYears</td>
+<td>Number</td>
+<td>✅</td>
+<td>工作经验年限</td>
+</tr>
+<tr class="even">
+<td>nativePlace</td>
+<td>String</td>
+<td>✅</td>
+<td>籍贯</td>
+</tr>
+<tr class="odd">
+<td>idNumber</td>
+<td>String</td>
+<td>❌</td>
+<td>身份证号</td>
+</tr>
+<tr class="even">
+<td>expectedSalary</td>
+<td>Number</td>
+<td>❌</td>
+<td>期望薪资</td>
+</tr>
+<tr class="odd">
+<td>maternityNurseLevel</td>
+<td>Enum</td>
+<td>❌</td>
+<td>月嫂档位</td>
+</tr>
+<tr class="even">
+<td>skills</td>
+<td>Array</td>
+<td>❌</td>
+<td>技能列表</td>
+</tr>
+<tr class="odd">
+<td>serviceArea</td>
+<td>Array</td>
+<td>❌</td>
+<td>服务区域</td>
+</tr>
+</tbody>
+</table>
+<h4 id="工种枚举">工种枚举</h4>
+<table>
+<thead>
+<tr class="header">
+<th>枚举值</th>
+<th>中文名称</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>yuexin</td>
+<td>月嫂</td>
+</tr>
+<tr class="even">
+<td>zhujia-yuer</td>
+<td>住家育儿嫂</td>
+</tr>
+<tr class="odd">
+<td>baiban-yuer</td>
+<td>白班育儿嫂</td>
+</tr>
+<tr class="even">
+<td>baojie</td>
+<td>保洁</td>
+</tr>
+<tr class="odd">
+<td>baiban-baomu</td>
+<td>白班保姆</td>
+</tr>
+<tr class="even">
+<td>zhujia-baomu</td>
+<td>住家保姆</td>
+</tr>
+<tr class="odd">
+<td>yangchong</td>
+<td>养宠</td>
+</tr>
+<tr class="even">
+<td>xiaoshi</td>
+<td>小时工</td>
+</tr>
+<tr class="odd">
+<td>zhujia-hulao</td>
+<td>住家护老</td>
+</tr>
+</tbody>
+</table>
+<h4 id="月嫂档位">月嫂档位</h4>
+<table>
+<thead>
+<tr class="header">
+<th>档位</th>
+<th>薪资范围</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>junior (初级)</td>
+<td>8000-12000</td>
+</tr>
+<tr class="even">
+<td>silver (银牌)</td>
+<td>12000-15000</td>
+</tr>
+<tr class="odd">
+<td>gold (金牌)</td>
+<td>15000-18000</td>
+</tr>
+<tr class="even">
+<td>platinum (铂金)</td>
+<td>18000-22000</td>
+</tr>
+<tr class="odd">
+<td>diamond (钻石)</td>
+<td>22000-28000</td>
+</tr>
+<tr class="even">
+<td>crown (皇冠)</td>
+<td>28000+</td>
+</tr>
+</tbody>
+</table>
+<h4 id="技能标签">技能标签</h4>
+<p>产后修复、特殊婴儿护理、医疗背景、育婴、早教、辅食添加、小儿推拿、外语、中餐烹饪、西餐烹饪、面食制作、家务整理、收纳整理、母婴护理、催乳、月子餐、营养配餐、理疗康复、双胎护理、养老护理</p>
+<h3 id="合同管理模块-contracts">3.3 合同管理模块 (contracts)</h3>
+<h4 id="模块概述-2">模块概述</h4>
+<p>管理客户与家政服务人员之间的服务合同，支持电子签约、换人功能、合同历史追溯。</p>
+<h4 id="核心功能-2">核心功能</h4>
+<ul>
+<li>电子合同创建与签署</li>
+<li>合同模板管理</li>
+<li>合同状态跟踪</li>
+<li>换人功能</li>
+<li>合同历史记录</li>
+<li>自动提醒功能</li>
+</ul>
+<h4 id="字段详解-1">字段详解</h4>
+<table>
+<thead>
+<tr class="header">
+<th>字段名</th>
+<th>类型</th>
+<th>必填</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>contractNumber</td>
+<td>String</td>
+<td>✅</td>
+<td>合同编号</td>
+</tr>
+<tr class="even">
+<td>customerName</td>
+<td>String</td>
+<td>✅</td>
+<td>客户姓名</td>
+</tr>
+<tr class="odd">
+<td>customerPhone</td>
+<td>String</td>
+<td>✅</td>
+<td>客户手机号</td>
+</tr>
+<tr class="even">
+<td>contractType</td>
+<td>Enum</td>
+<td>✅</td>
+<td>合同类型</td>
+</tr>
+<tr class="odd">
+<td>startDate</td>
+<td>Date</td>
+<td>✅</td>
+<td>开始日期</td>
+</tr>
+<tr class="even">
+<td>endDate</td>
+<td>Date</td>
+<td>✅</td>
+<td>结束日期</td>
+</tr>
+<tr class="odd">
+<td>workerName</td>
+<td>String</td>
+<td>✅</td>
+<td>服务人员姓名</td>
+</tr>
+<tr class="even">
+<td>workerPhone</td>
+<td>String</td>
+<td>✅</td>
+<td>服务人员电话</td>
+</tr>
+<tr class="odd">
+<td>workerSalary</td>
+<td>Number</td>
+<td>✅</td>
+<td>家政员工资</td>
+</tr>
+<tr class="even">
+<td>customerServiceFee</td>
+<td>Number</td>
+<td>✅</td>
+<td>客户服务费</td>
+</tr>
+<tr class="odd">
+<td>deposit</td>
+<td>Number</td>
+<td>❌</td>
+<td>定金</td>
+</tr>
+</tbody>
+</table>
+<h4 id="合同状态">合同状态</h4>
+<p>draft → signing → signed → executing → completed / cancelled</p>
+<h3 id="保险管理模块-insurance">3.4 保险管理模块 (insurance)</h3>
+<h4 id="模块概述-3">模块概述</h4>
+<p>集成大树保保险平台，提供家政人员保险在线投保服务。</p>
+<h4 id="核心功能-3">核心功能</h4>
+<ul>
+<li>保险产品查询</li>
+<li>在线投保</li>
+<li>保单管理</li>
+<li>理赔进度查询</li>
+</ul>
+<h3 id="视频面试模块-interview">3.5 视频面试模块 (interview)</h3>
+<h4 id="模块概述-4">模块概述</h4>
+<p>集成 ZEGO 即构科技音视频服务，提供远程视频面试功能。</p>
+<h4 id="核心功能-4">核心功能</h4>
+<ul>
+<li>视频面试房间创建</li>
+<li>实时音视频通话</li>
+<li>面试记录保存</li>
+<li>美颜功能</li>
+<li>提词器功能</li>
+</ul>
+<h3 id="背景调查模块-background-check">3.6 背景调查模块
+(background-check)</h3>
+<h4 id="模块概述-5">模块概述</h4>
+<p>集成芝麻背调服务，提供候选人背景调查功能。</p>
+<h4 id="核心功能-5">核心功能</h4>
+<ul>
+<li>身份信息核验</li>
+<li>社会风险查询</li>
+<li>诉讼及处罚风险查询</li>
+<li>金融信用风险查询</li>
+<li>报告生成</li>
+</ul>
+<h3 id="用户权限模块-usersroles">3.7 用户权限模块 (users/roles)</h3>
+<h4 id="模块概述-6">模块概述</h4>
+<p>系统用户管理和角色权限控制。</p>
+<h4 id="角色定义">角色定义</h4>
+<ul>
+<li>admin: 超级管理员</li>
+<li>manager: 运营经理</li>
+<li>employee: 普通员工</li>
+</ul>
+<hr />
+<h2 id="四数据库设计">四、数据库设计</h2>
+<h3 id="核心集合">4.1 核心集合</h3>
+<h4 id="customers客户集合">customers（客户集合）</h4>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">_id</span><span class="op">:</span> ObjectId<span class="op">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">name</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>           <span class="co">// 客户姓名</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">phone</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>         <span class="co">// 手机号</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">wechatId</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>       <span class="co">// 微信号</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">idCardNumber</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>   <span class="co">// 身份证号</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">leadSource</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>     <span class="co">// 线索来源</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">serviceCategory</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span><span class="co">// 需求品类</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">contractStatus</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span> <span class="co">// 客户状态</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">leadLevel</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>      <span class="co">// 线索等级</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">salaryBudget</span><span class="op">:</span> <span class="bu">Number</span><span class="op">,</span>   <span class="co">// 薪资预算</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">expectedStartDate</span><span class="op">:</span> <span class="bu">Date</span><span class="op">,</span><span class="co">// 期望上户日期</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">familySize</span><span class="op">:</span> <span class="bu">Number</span><span class="op">,</span>     <span class="co">// 家庭人口</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>  <span class="dt">address</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>        <span class="co">// 地址</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  <span class="dt">assignedTo</span><span class="op">:</span> ObjectId<span class="op">,</span>  <span class="co">// 负责人</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>  <span class="dt">lastActivityAt</span><span class="op">:</span> <span class="bu">Date</span><span class="op">,</span>  <span class="co">// 最后活动时间</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>  <span class="dt">autoTransferEnabled</span><span class="op">:</span> <span class="bu">Boolean</span><span class="op">,</span> <span class="co">// 自动流转</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>  <span class="dt">inPublicPool</span><span class="op">:</span> <span class="bu">Boolean</span><span class="op">,</span> <span class="co">// 公海池</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  <span class="dt">createdAt</span><span class="op">:</span> <span class="bu">Date</span><span class="op">,</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>  <span class="dt">updatedAt</span><span class="op">:</span> <span class="bu">Date</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h4 id="resumes简历集合">resumes（简历集合）</h4>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">_id</span><span class="op">:</span> ObjectId<span class="op">,</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">name</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>           <span class="co">// 姓名</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">phone</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>          <span class="co">// 手机号</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">gender</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>         <span class="co">// 性别</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">age</span><span class="op">:</span> <span class="bu">Number</span><span class="op">,</span>            <span class="co">// 年龄</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">jobType</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>        <span class="co">// 工种</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">education</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>      <span class="co">// 学历</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">experienceYears</span><span class="op">:</span> <span class="bu">Number</span><span class="op">,</span><span class="co">// 工作经验</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">nativePlace</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>    <span class="co">// 籍贯</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">idNumber</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>       <span class="co">// 身份证号</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">expectedSalary</span><span class="op">:</span> <span class="bu">Number</span><span class="op">,</span> <span class="co">// 期望薪资</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">maternityNurseLevel</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span> <span class="co">// 月嫂档位</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>  <span class="dt">skills</span><span class="op">:</span> <span class="bu">String</span>[]<span class="op">,</span>       <span class="co">// 技能列表</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>  <span class="dt">serviceArea</span><span class="op">:</span> <span class="bu">String</span>[]<span class="op">,</span>   <span class="co">// 服务区域</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>  <span class="dt">orderStatus</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>    <span class="co">// 接单状态</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>  <span class="dt">photoUrls</span><span class="op">:</span> <span class="bu">String</span>[]<span class="op">,</span>    <span class="co">// 照片</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>  <span class="dt">certificateUrls</span><span class="op">:</span> <span class="bu">String</span>[]<span class="op">,</span> <span class="co">// 证书</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>  <span class="dt">workExperience</span><span class="op">:</span> <span class="bu">Object</span>[]<span class="op">,</span> <span class="co">// 工作经验</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>  <span class="dt">availability</span><span class="op">:</span> <span class="bu">Object</span>[]<span class="op">,</span> <span class="co">// 档期</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>  <span class="dt">createdAt</span><span class="op">:</span> <span class="bu">Date</span><span class="op">,</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>  <span class="dt">updatedAt</span><span class="op">:</span> <span class="bu">Date</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h4 id="contracts合同集合">contracts（合同集合）</h4>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">_id</span><span class="op">:</span> ObjectId<span class="op">,</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">contractNumber</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span> <span class="co">// 合同编号</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">customerName</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>   <span class="co">// 客户姓名</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">customerPhone</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>  <span class="co">// 客户手机号</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">contractType</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>   <span class="co">// 合同类型</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">startDate</span><span class="op">:</span> <span class="bu">Date</span><span class="op">,</span>        <span class="co">// 开始日期</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">endDate</span><span class="op">:</span> <span class="bu">Date</span><span class="op">,</span>          <span class="co">// 结束日期</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">workerName</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>     <span class="co">// 服务人员</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">workerPhone</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>    <span class="co">// 服务人员电话</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">workerSalary</span><span class="op">:</span> <span class="bu">Number</span><span class="op">,</span>   <span class="co">// 家政员工资</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">customerServiceFee</span><span class="op">:</span> <span class="bu">Number</span><span class="op">,</span> <span class="co">// 客户服务费</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">status</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>         <span class="co">// 合同状态</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  <span class="dt">esignContractId</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span> <span class="co">// 爱签合同ID</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>  <span class="dt">createdAt</span><span class="op">:</span> <span class="bu">Date</span><span class="op">,</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>  <span class="dt">updatedAt</span><span class="op">:</span> <span class="bu">Date</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h4 id="users用户集合">users（用户集合）</h4>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">_id</span><span class="op">:</span> ObjectId<span class="op">,</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">username</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>       <span class="co">// 用户名</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">password</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>      <span class="co">// 密码（加密）</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">name</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>          <span class="co">// 姓名</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">email</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>         <span class="co">// 邮箱</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">phone</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>         <span class="co">// 手机号</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">role</span><span class="op">:</span> <span class="bu">String</span><span class="op">,</span>          <span class="co">// 角色</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">permissions</span><span class="op">:</span> <span class="bu">String</span>[]<span class="op">,</span> <span class="co">// 权限列表</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">active</span><span class="op">:</span> <span class="bu">Boolean</span><span class="op">,</span>       <span class="co">// 是否激活</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">createdAt</span><span class="op">:</span> <span class="bu">Date</span><span class="op">,</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">updatedAt</span><span class="op">:</span> <span class="bu">Date</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<hr />
+<h2 id="五api接口文档">五、API接口文档</h2>
+<h3 id="通用响应格式">5.1 通用响应格式</h3>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;success&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;data&quot;</span><span class="fu">:</span> <span class="fu">{},</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;message&quot;</span><span class="fu">:</span> <span class="st">&quot;操作成功&quot;</span><span class="fu">,</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;error&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;code&quot;</span><span class="fu">:</span> <span class="st">&quot;ERROR_CODE&quot;</span><span class="fu">,</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;details&quot;</span><span class="fu">:</span> <span class="fu">{}</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;timestamp&quot;</span><span class="fu">:</span> <span class="dv">1626342025123</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h3 id="状态码说明">5.2 状态码说明</h3>
+<table>
+<thead>
+<tr class="header">
+<th>状态码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>200</td>
+<td>请求成功</td>
+</tr>
+<tr class="even">
+<td>201</td>
+<td>创建成功</td>
+</tr>
+<tr class="odd">
+<td>400</td>
+<td>请求参数错误</td>
+</tr>
+<tr class="even">
+<td>401</td>
+<td>未授权</td>
+</tr>
+<tr class="odd">
+<td>403</td>
+<td>禁止访问</td>
+</tr>
+<tr class="even">
+<td>404</td>
+<td>资源不存在</td>
+</tr>
+<tr class="odd">
+<td>500</td>
+<td>服务器内部错误</td>
+</tr>
+</tbody>
+</table>
+<h3 id="认证接口">5.3 认证接口</h3>
+<h4 id="登录">登录</h4>
+<ul>
+<li>URL: <code>/api/auth/login</code></li>
+<li>Method: POST</li>
+<li>Body: <code>{ "username": "xxx", "password": "xxx" }</code></li>
+</ul>
+<h4 id="获取当前用户">获取当前用户</h4>
+<ul>
+<li>URL: <code>/api/auth/me</code></li>
+<li>Method: GET</li>
+<li>Header: <code>Authorization: Bearer [token]</code></li>
+</ul>
+<h4 id="上传头像">上传头像</h4>
+<ul>
+<li>URL: <code>/api/auth/avatar</code></li>
+<li>Method: POST</li>
+<li>Header: <code>Authorization: Bearer [token]</code></li>
+</ul>
+<h3 id="简历管理接口">5.4 简历管理接口</h3>
+<table>
+<thead>
+<tr class="header">
+<th>接口</th>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>/api/resumes</td>
+<td>GET</td>
+<td>获取所有简历</td>
+</tr>
+<tr class="even">
+<td>/api/resumes/:id</td>
+<td>GET</td>
+<td>获取简历详情</td>
+</tr>
+<tr class="odd">
+<td>/api/resumes</td>
+<td>POST</td>
+<td>创建简历</td>
+</tr>
+<tr class="even">
+<td>/api/resumes/:id</td>
+<td>PUT</td>
+<td>更新简历</td>
+</tr>
+<tr class="odd">
+<td>/api/resumes/:id</td>
+<td>DELETE</td>
+<td>删除简历</td>
+</tr>
+</tbody>
+</table>
+<h3 id="客户管理接口">5.5 客户管理接口</h3>
+<table>
+<thead>
+<tr class="header">
+<th>接口</th>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>/api/customers</td>
+<td>GET</td>
+<td>获取所有客户</td>
+</tr>
+<tr class="even">
+<td>/api/customers/:id</td>
+<td>GET</td>
+<td>获取客户详情</td>
+</tr>
+<tr class="odd">
+<td>/api/customers</td>
+<td>POST</td>
+<td>创建客户</td>
+</tr>
+<tr class="even">
+<td>/api/customers/:id</td>
+<td>PUT</td>
+<td>更新客户</td>
+</tr>
+<tr class="odd">
+<td>/api/customers/:id</td>
+<td>DELETE</td>
+<td>删除客户</td>
+</tr>
+</tbody>
+</table>
+<h3 id="合同管理接口">5.6 合同管理接口</h3>
+<table>
+<thead>
+<tr class="header">
+<th>接口</th>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>/api/contracts</td>
+<td>GET</td>
+<td>获取所有合同</td>
+</tr>
+<tr class="even">
+<td>/api/contracts/:id</td>
+<td>GET</td>
+<td>获取合同详情</td>
+</tr>
+<tr class="odd">
+<td>/api/contracts</td>
+<td>POST</td>
+<td>创建合同</td>
+</tr>
+<tr class="even">
+<td>/api/contracts/:id</td>
+<td>PUT</td>
+<td>更新合同</td>
+</tr>
+<tr class="odd">
+<td>/api/contracts/:id/sign</td>
+<td>POST</td>
+<td>签署合同</td>
+</tr>
+</tbody>
+</table>
+<h3 id="保险接口">5.7 保险接口</h3>
+<table>
+<thead>
+<tr class="header">
+<th>接口</th>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>/api/insurance/products</td>
+<td>GET</td>
+<td>获取保险产品</td>
+</tr>
+<tr class="even">
+<td>/api/insurance/apply</td>
+<td>POST</td>
+<td>申请投保</td>
+</tr>
+<tr class="odd">
+<td>/api/insurance/policies</td>
+<td>GET</td>
+<td>获取保单列表</td>
+</tr>
+</tbody>
+</table>
+<h3 id="视频面试接口">5.8 视频面试接口</h3>
+<table>
+<thead>
+<tr class="header">
+<th>接口</th>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>/api/interview/token</td>
+<td>POST</td>
+<td>获取ZEGO token</td>
+</tr>
+<tr class="even">
+<td>/api/interview/rooms</td>
+<td>POST</td>
+<td>创建面试房间</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="六第三方服务集成">六、第三方服务集成</h2>
+<h3 id="爱签电子签约">6.1 爱签电子签约</h3>
+<p><strong>功能</strong>: 电子合同在线签署</p>
+<p><strong>API文档</strong>: <code>爱签技术文档.md</code></p>
+<p><strong>核心接口</strong>: - 创建合同 - 获取签署链接 - 查询签署状态 -
+下载合同文件</p>
+<h3 id="大树保保险">6.2 大树保保险</h3>
+<p><strong>功能</strong>: 家政人员保险投保</p>
+<p><strong>API文档</strong>: <code>大树保保险api接口文档.md</code></p>
+<p><strong>核心接口</strong>: - 产品列表查询 - 投保申请 - 保单查询 -
+理赔申请</p>
+<h3 id="zego-即构科技">6.3 ZEGO 即构科技</h3>
+<p><strong>功能</strong>: 视频面试实时音视频</p>
+<p><strong>API文档</strong>: <code>ZEGO-视频面试技术文档.md</code></p>
+<p><strong>核心功能</strong>: - 视频通话 - 语音通话 - 美颜滤镜 -
+屏幕共享 - 提词器</p>
+<h3 id="芝麻背调">6.4 芝麻背调</h3>
+<p><strong>功能</strong>: 候选人背景调查</p>
+<p><strong>API文档</strong>: <code>芝麻背调技术文档.md</code></p>
+<p><strong>核心接口</strong>: - 创建背调任务 - 获取报告数据 -
+风险评估查询</p>
+<hr />
+<h2 id="七小程序集成">七、小程序集成</h2>
+<h3 id="小程序端功能">7.1 小程序端功能</h3>
+<ul>
+<li>简历创建与完善</li>
+<li>简历列表与详情查看</li>
+<li>阿姨信息浏览</li>
+<li>合同签署</li>
+<li>视频面试入口</li>
+<li>档期管理</li>
+</ul>
+<h3 id="api-文档">7.2 API 文档</h3>
+<p>详细小程序 API 文档见:
+<code>backend/docs/小程序API完整文档.md</code></p>
+<h3 id="核心接口">7.3 核心接口</h3>
+<table>
+<thead>
+<tr class="header">
+<th>接口</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>/miniprogram/auth/login</td>
+<td>小程序登录</td>
+</tr>
+<tr class="even">
+<td>/miniprogram/resumes/create</td>
+<td>创建简历</td>
+</tr>
+<tr class="odd">
+<td>/miniprogram/resumes/list</td>
+<td>简历列表</td>
+</tr>
+<tr class="even">
+<td>/miniprogram/resumes/detail</td>
+<td>简历详情</td>
+</tr>
+<tr class="odd">
+<td>/miniprogram/contracts/create</td>
+<td>创建合同</td>
+</tr>
+<tr class="even">
+<td>/miniprogram/files/upload</td>
+<td>文件上传</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="八部署运维">八、部署运维</h2>
+<h3 id="服务管理命令">8.1 服务管理命令</h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 启动所有服务</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/manage.sh</span> start</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 停止所有服务</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/manage.sh</span> stop</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 重启服务</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/manage.sh</span> restart</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 查看状态</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/manage.sh</span> status</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="co"># 查看日志</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/manage.sh</span> logs</span></code></pre></div>
+<h3 id="pm2-管理">8.2 PM2 管理</h3>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 查看进程状态</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="ex">pm2</span> status</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 重启指定进程</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="ex">pm2</span> restart backend-prod</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 查看日志</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="ex">pm2</span> logs backend-prod</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 监控</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="ex">pm2</span> monit</span></code></pre></div>
+<h3 id="nginx-配置">8.3 Nginx 配置</h3>
+<p>生产环境使用 Nginx 作为反向代理，配置文件:
+<code>nginx-production.conf</code></p>
+<h3 id="备份策略">8.4 备份策略</h3>
+<ul>
+<li>数据库每日自动备份</li>
+<li>备份文件保留 30 天</li>
+<li>备份位置: <code>/home/ubuntu/backups/</code></li>
+</ul>
+<hr />
+<h2 id="九更新日志">九、更新日志</h2>
+<h3 id="section">2026-03-16</h3>
+<ul>
+<li>新增背景调查 API 文档</li>
+<li>完善小程序 API 文档</li>
+<li>优化文档结构</li>
+</ul>
+<h3 id="section-1">2026-01-31</h3>
+<ul>
+<li>发布 2.0.0 版本</li>
+<li>完善技术架构文档</li>
+<li>整合所有模块文档</li>
+</ul>
+<h3 id="历史版本">历史版本</h3>
+<p>详见 <code>DOCUMENTATION.md</code> 历史更新记录</p>
+<hr />
+<h2 id="附录">附录</h2>
+<h3 id="a.-数据字典">A. 数据字典</h3>
+<h4 id="学历枚举">学历枚举</h4>
+<table>
+<thead>
+<tr class="header">
+<th>枚举值</th>
+<th>中文</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>no</td>
+<td>无学历</td>
+</tr>
+<tr class="even">
+<td>primary</td>
+<td>小学</td>
+</tr>
+<tr class="odd">
+<td>middle</td>
+<td>初中</td>
+</tr>
+<tr class="even">
+<td>secondary</td>
+<td>中专</td>
+</tr>
+<tr class="odd">
+<td>vocational</td>
+<td>职高</td>
+</tr>
+<tr class="even">
+<td>high</td>
+<td>高中</td>
+</tr>
+<tr class="odd">
+<td>college</td>
+<td>大专</td>
+</tr>
+<tr class="even">
+<td>bachelor</td>
+<td>本科</td>
+</tr>
+<tr class="odd">
+<td>graduate</td>
+<td>研究生+</td>
+</tr>
+</tbody>
+</table>
+<h4 id="婚姻状况">婚姻状况</h4>
+<table>
+<thead>
+<tr class="header">
+<th>枚举值</th>
+<th>中文</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>single</td>
+<td>未婚</td>
+</tr>
+<tr class="even">
+<td>married</td>
+<td>已婚</td>
+</tr>
+<tr class="odd">
+<td>divorced</td>
+<td>离异</td>
+</tr>
+<tr class="even">
+<td>widowed</td>
+<td>丧偶</td>
+</tr>
+</tbody>
+</table>
+<h4 id="接单状态">接单状态</h4>
+<table>
+<thead>
+<tr class="header">
+<th>枚举值</th>
+<th>中文</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>accepting</td>
+<td>想接单</td>
+</tr>
+<tr class="even">
+<td>not-accepting</td>
+<td>不接单</td>
+</tr>
+<tr class="odd">
+<td>on-service</td>
+<td>已上户</td>
+</tr>
+</tbody>
+</table>
+<h3 id="b.-联系方式">B. 联系方式</h3>
+<ul>
+<li>技术支持: 技术团队</li>
+<li>项目地址: https://crm.andejiazheng.com</li>
+</ul>
+<hr />
+<p><strong>文档版本</strong>: 2.0.0<br />
+<strong>最后更新</strong>: 2026-03-16<br />
+<strong>维护者</strong>: Lisa 🦋</p>
+</body>
+</html>

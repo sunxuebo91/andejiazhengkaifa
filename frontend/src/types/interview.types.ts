@@ -21,6 +21,14 @@ export interface InterviewRoom {
   endedAt?: string;
   duration?: number;
   participants: Participant[];
+  // ==================== 简历关联 ====================
+  resumeId?: string; // 关联的简历ID
+  candidateName?: string; // 候选人姓名
+  candidatePhone?: string; // 候选人手机号
+  candidatePosition?: string; // 候选人应聘职位
+  // ==================== 面试评价 ====================
+  rating?: number; // 面试评分（1-5星）
+  interviewNote?: string; // 面试备注/评价
 }
 
 export interface RoomListResponse {

@@ -14,6 +14,7 @@ interface User {
   permissions: string[];
   active: boolean;
   suspended?: boolean;
+  wechatOpenId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -150,6 +151,20 @@ const UserList: React.FC = () => {
       title: '手机号',
       dataIndex: 'phone',
       key: 'phone',
+    },
+    {
+      title: 'OpenID',
+      dataIndex: 'wechatOpenId',
+      key: 'wechatOpenId',
+      width: 180,
+      ellipsis: true,
+      render: (openId?: string) => openId ? (
+        <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#52c41a' }} title={openId}>
+          {openId.substring(0, 10)}...
+        </span>
+      ) : (
+        <span style={{ color: '#ccc' }}>未绑定</span>
+      ),
     },
     {
       title: '角色',

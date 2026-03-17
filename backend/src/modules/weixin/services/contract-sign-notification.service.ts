@@ -51,7 +51,7 @@ export class ContractSignNotificationService {
         secret: this.appSecret,
       };
 
-      this.logger.log('🔑 获取小程序access_token');
+      this.logger.log(`🔑 获取小程序access_token - 使用AppID: ${this.appId}`);
 
       const response = await axios.get(url, { params });
       const data = response.data;

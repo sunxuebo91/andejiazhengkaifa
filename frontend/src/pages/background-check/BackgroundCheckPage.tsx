@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Table, Button, Tag, Space, Modal, Form, Input, message,
-  Steps, Spin, Typography, Empty, Select,
+  Steps, Spin, Typography, Empty, Select, Card, Row, Col,
 } from 'antd';
-import { SearchOutlined, DownloadOutlined, StopOutlined, PlusOutlined, CheckCircleOutlined, EyeOutlined } from '@ant-design/icons';
+import { SearchOutlined, DownloadOutlined, StopOutlined, PlusOutlined, CheckCircleOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 // 背调套餐配置
@@ -40,6 +40,10 @@ export default function BackgroundCheckPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [step, setStep] = useState(0);
 
+  // 搜索状态
+  const [searchForm] = Form.useForm();
+  const [searchParams, setSearchParams] = useState<{ keyword?: string }>({});
+
   // 第一步：搜索简历
   const [resumeSearch, setResumeSearch] = useState('');
   const [resumeList, setResumeList] = useState<ResumeItem[]>([]);
@@ -54,10 +58,14 @@ export default function BackgroundCheckPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // ── 列表加载 ────────────────────────────────────────────────
-  const fetchRecords = useCallback(async (page = 1, pageSize = 10) => {
+  const fetchRecords = useCallback(async (page = 1, pageSize = 10, search?: { keyword?: string }) => {
     setLoading(true);
     try {
-      const result = await backgroundCheckService.getReports({ page, limit: pageSize });
+      const result = await backgroundCheckService.getReports({
+        page,
+        limit: pageSize,
+        keyword: search?.keyword || searchParams.keyword,
+      });
       setRecords(result.data || []);
       setPagination({ current: page, pageSize, total: result.total || 0 });
     } catch {
@@ -65,9 +73,22 @@ export default function BackgroundCheckPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
+
+  // ── 搜索处理 ────────────────────────────────────────────────
+  const handleSearch = (values: { keyword?: string }) => {
+    const newParams = { keyword: values.keyword?.trim() };
+    setSearchParams(newParams);
+    fetchRecords(1, pagination.pageSize, newParams);
+  };
+
+  const handleReset = () => {
+    searchForm.resetFields();
+    setSearchParams({});
+    fetchRecords(1, pagination.pageSize, {});
+  };
 
   // ── 取消背调 ─────────────────────────────────────────────────
   const handleCancel = (record: BackgroundCheck) => {
@@ -379,6 +400,35 @@ export default function BackgroundCheckPage() {
         </Button>
       </div>
 
+      {/* 搜索表单 */}
+      <Card style={{ marginBottom: 16 }}>
+        <Form form={searchForm} onFinish={handleSearch} layout="inline">
+          <Row gutter={16} style={{ width: '100%' }}>
+            <Col>
+              <Form.Item name="keyword" style={{ marginBottom: 0 }}>
+                <Input
+                  placeholder="搜索姓名/手机号/身份证号"
+                  prefix={<SearchOutlined />}
+                  allowClear
+                  style={{ width: 240 }}
+                  onPressEnter={() => searchForm.submit()}
+                />
+              </Form.Item>
+            </Col>
+            <Col>
+              <Space>
+                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
+                  搜索
+                </Button>
+                <Button onClick={handleReset} icon={<ReloadOutlined />}>
+                  重置
+                </Button>
+              </Space>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
+
       <Table
         rowKey="_id"
         columns={columns}
@@ -390,7 +440,7 @@ export default function BackgroundCheckPage() {
           total: pagination.total,
           showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, size) => fetchRecords(page, size),
+          onChange: (page, size) => fetchRecords(page, size, searchParams),
         }}
       />
 

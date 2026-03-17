@@ -269,8 +269,14 @@ export class CustomersService {
     const hasAssignedTo = !!dtoAny.assignedTo;
     const assignedToUserId = hasAssignedTo ? dtoAny.assignedTo : userId;
 
+    // 🛡️ 防护：确保 leadSource 不为空字符串
+    const validLeadSources = ['美团', '抖音', '快手', '小红书', '转介绍', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '妈妈网', '犀牛', '宝宝树', '幼亲舒', '其他'];
+    const leadSource = createCustomerDto.leadSource?.trim();
+    const finalLeadSource = (leadSource && validLeadSources.includes(leadSource)) ? leadSource : '其他';
+
     const customerData: any = {
       ...createCustomerDto,
+      leadSource: finalLeadSource,  // 使用验证后的值
       customerId,
       createdBy: userId,
       expectedStartDate: createCustomerDto.expectedStartDate ? new Date(createCustomerDto.expectedStartDate) : undefined,

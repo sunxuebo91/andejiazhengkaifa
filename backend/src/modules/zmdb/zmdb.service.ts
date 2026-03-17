@@ -626,18 +626,56 @@ export class ZmdbService {
   }
 
   /**
-   * 分页查询背调列表
+   * 分页查询背调列表（支持搜索）
    */
-  async findAll(page: number = 1, limit: number = 10): Promise<{
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    search?: { keyword?: string; name?: string; mobile?: string; idNo?: string }
+  ): Promise<{
     data: BackgroundCheck[];
     total: number;
     page: number;
     limit: number;
     totalPages: number;
   }> {
+    // 构建查询条件
+    const query: any = {};
+
+    if (search) {
+      const orConditions: any[] = [];
+
+      // 通用关键词搜索（姓名、手机号、身份证号）
+      if (search.keyword) {
+        const kw = search.keyword.trim();
+        orConditions.push(
+          { name: { $regex: kw, $options: 'i' } },
+          { mobile: { $regex: kw, $options: 'i' } },
+          { idNo: { $regex: kw, $options: 'i' } }
+        );
+      }
+
+      // 单独字段搜索
+      if (search.name) {
+        orConditions.push({ name: { $regex: search.name.trim(), $options: 'i' } });
+      }
+      if (search.mobile) {
+        orConditions.push({ mobile: { $regex: search.mobile.trim(), $options: 'i' } });
+      }
+      if (search.idNo) {
+        orConditions.push({ idNo: { $regex: search.idNo.trim(), $options: 'i' } });
+      }
+
+      if (orConditions.length > 0) {
+        query.$or = orConditions;
+      }
+    }
+
+    this.logger.log(`背调列表查询条件: ${JSON.stringify(query)}`);
+
     const [data, total] = await Promise.all([
       this.bgCheckModel
-        .find()
+        .find(query)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
@@ -645,7 +683,7 @@ export class ZmdbService {
         .populate('contractId', 'contractNumber customerName workerName esignContractNo') // 关联合同信息
         .lean()
         .exec(),
-      this.bgCheckModel.countDocuments().exec(),
+      this.bgCheckModel.countDocuments(query).exec(),
     ]);
 
     return { data: data as any, total, page, limit, totalPages: Math.ceil(total / limit) };

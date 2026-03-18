@@ -9,8 +9,20 @@ import { Document, Types } from 'mongoose';
 @Schema({ timestamps: true, collection: 'customer_operation_logs' })
 export class CustomerOperationLog extends Document {
   // 客户ID
-  @Prop({ type: Types.ObjectId, ref: 'Customer', required: true, index: true })
-  customerId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Customer', index: true })
+  customerId?: Types.ObjectId;
+
+  // 审计实体类型
+  @Prop({
+    required: true,
+    enum: ['customer', 'contract', 'policy', 'user', 'system'],
+    index: true
+  })
+  entityType: string;
+
+  // 审计实体ID
+  @Prop({ required: true, index: true })
+  entityId: string;
 
   // 操作类型
   @Prop({
@@ -55,6 +67,10 @@ export class CustomerOperationLog extends Document {
   @Prop({ required: true, default: Date.now, index: true })
   operatedAt: Date;
 
+  // 请求追踪ID
+  @Prop({ index: true })
+  requestId?: string;
+
   // IP地址（可选）
   @Prop()
   ipAddress?: string;
@@ -68,4 +84,4 @@ export const CustomerOperationLogSchema = SchemaFactory.createForClass(CustomerO
 
 // 添加复合索引，优化按客户和时间查询
 CustomerOperationLogSchema.index({ customerId: 1, operatedAt: -1 });
-
+CustomerOperationLogSchema.index({ entityType: 1, entityId: 1, operatedAt: -1 });

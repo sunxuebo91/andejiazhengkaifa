@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { ESignService } from './esign.service';
 import { ContractsService } from '../contracts/contracts.service';
-import { ContractSignNotificationService } from '../weixin/services/contract-sign-notification.service';
+import { WechatCloudService } from '../weixin/services/wechat-cloud.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 
@@ -34,7 +34,7 @@ export class ESignController {
     private readonly esignService: ESignService,
     @Inject(forwardRef(() => ContractsService))
     private readonly contractsService: ContractsService,
-    private readonly contractSignNotificationService: ContractSignNotificationService,
+    private readonly wechatCloudService: WechatCloudService,
   ) {
     this.logger.log('ESignController 已初始化');
   }
@@ -389,7 +389,7 @@ export class ESignController {
         signerMobile: contractData.signerMobile,
         signerIdCard: contractData.signerIdCard,
         validityTime: contractData.validityTime || 30,
-        signOrder: contractData.signOrder || 1
+        signOrder: contractData.signOrder || 2 // 🔥 默认顺序签约：客户先签→阿姨后签
       });
       
       return {
@@ -1148,17 +1148,18 @@ export class ESignController {
         return { success: false, message: '合同不存在' };
       }
 
-      // 发送测试通知
-      const result = await this.contractSignNotificationService.sendContractSignedNotification(
+      // 发送测试通知（通过云函数）
+      const result = await this.wechatCloudService.sendContractSignedNotification(
         {
           _id: contract._id.toString(),
           contractNumber: contract.contractNumber || contract.esignContractNo,
+          contractType: contract.contractType,
           customerName: contract.customerName,
           workerName: contract.workerName,
           customerServiceFee: contract.customerServiceFee,
-          createdBy: contract.createdBy,
+          createdBy: contract.createdBy?.toString(),
         },
-        'both'
+        'both',
       );
 
       return {
@@ -1199,7 +1200,8 @@ export class ESignController {
       await this.esignService.handleContractCallback(callbackData);
 
       // 2. 获取合同信息
-      const { contractNo, status } = callbackData;
+      // 🔥 userNotifyUrl 回调会包含 account 字段（某个用户签完后的回调）
+      const { contractNo, status, signUserList, account, signMark } = callbackData;
       const contract = await this.esignService['contractModel'].findOne({
         esignContractNo: contractNo
       }).populate('createdBy', '_id name').exec();
@@ -1208,49 +1210,111 @@ export class ESignController {
         // 3. 发送签署状态通知
         const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
 
-        if (statusNum === 1) {
-          // 签约中 - 有人已签署，判断是甲方还是乙方签了
-          // 注：爱签回调可能包含签署人信息，这里简化处理
-          this.logger.log(`📝 合同 ${contractNo} 有人已签署，发送通知`);
+        // 解析签署方列表，生成动态状态文本
+        let statusText = '';
+        let signerRole: 'customer' | 'worker' | 'both' = 'customer';
 
-          // 异步发送通知，不阻塞回调响应
-          this.contractSignNotificationService.sendContractSignedNotification(
+        // 🔥 关键逻辑：根据 account、signMark 和 status 判断签署进度
+        // 优先级：account/signMark（谁刚签完）> status（合同整体状态）
+        // account: userNotifyUrl 回调会带此字段，表示刚签完的用户
+        // status=1: 签约中（有人签了但还没签完）
+        // status=2: 已签约完成（全部签完）
+
+        // 🔥 优先检查 account/signMark（userNotifyUrl 回调）
+        if (account || signMark) {
+          // signMark 格式通常是 "姓名_时间戳"
+          const signerName = signMark ? signMark.split('_')[0] : '';
+          const isCustomer = signerName === contract.customerName ||
+                             (account && account.includes('_0')); // 甲方account通常以_0结尾
+          const isWorker = signerName === contract.workerName ||
+                           (account && account.includes('_1')); // 乙方account通常以_1结尾
+          const isCompany = account && account.startsWith('ASIGN'); // 企业account以ASIGN开头
+
+          if (isCustomer) {
+            statusText = '客户已签约，等待家政员签约';
+            signerRole = 'customer';
+            this.logger.log(`📝 合同 ${contractNo} userNotifyUrl回调，雇主(${signerName || account})已签署`);
+          } else if (isWorker) {
+            // 🔥 家政员签完，合同即完成（不需要等待企业签章）
+            statusText = '家政员已签约，合同签约完毕';
+            signerRole = 'both'; // 🔥 改为 both，表示合同已完成
+            this.logger.log(`🎉 合同 ${contractNo} userNotifyUrl回调，家政员(${signerName || account})已签署，合同完成`);
+          } else if (isCompany) {
+            // 企业签完（自动签章），合同完成
+            statusText = '合同签约完毕';
+            signerRole = 'both';
+            this.logger.log(`🎉 合同 ${contractNo} userNotifyUrl回调，企业(${signerName || account})已签署，合同完成`);
+          } else {
+            // 无法识别签署方，根据 status 判断
+            if (statusNum === 2) {
+              statusText = '双方已完成签署';
+              signerRole = 'both';
+            } else {
+              statusText = '签署进行中';
+              signerRole = 'customer';
+            }
+            this.logger.log(`📝 合同 ${contractNo} userNotifyUrl回调，签署方(${signerName || account})已签署，status=${statusNum}`);
+          }
+        } else if (statusNum === 2) {
+          // notifyUrl 回调（无 account），status=2 表示合同完成
+          statusText = '双方已完成签署';
+          signerRole = 'both';
+          this.logger.log(`🎉 合同 ${contractNo} notifyUrl回调，状态=2，双方已完成签署`);
+        } else if (statusNum === 1) {
+          // notifyUrl 回调（无 account），status=1 表示签约中
+          if (signUserList && Array.isArray(signUserList) && signUserList.length > 0) {
+            const signedUsers = signUserList.filter((u: any) =>
+              u.signStatus === 2 || u.signStatus === '2'
+            );
+            if (signedUsers.length > 0) {
+              const signedNames = signedUsers.map((u: any) => {
+                const roleText = u.name === contract.customerName ? '雇主' :
+                                 u.name === contract.workerName ? '家政员' : '签署方';
+                return `${u.name}(${roleText})`;
+              }).join('、');
+              statusText = `${signedNames}已签署`;
+              this.logger.log(`📝 合同 ${contractNo} 状态=1，${signedNames}已签署`);
+            } else {
+              statusText = '合同签署进行中';
+              this.logger.log(`📝 合同 ${contractNo} 状态=1，签署进行中`);
+            }
+          } else {
+            // 没有 signUserList 和 account，默认显示雇主已签署
+            statusText = '客户已签约，等待家政员签约';
+            this.logger.log(`📝 合同 ${contractNo} 状态=1，雇主已签署（无signUserList/account）`);
+          }
+          signerRole = 'customer';
+        }
+
+        if (statusNum === 1 || statusNum === 2) {
+          // 签约中或已签约 - 发送通知
+          this.logger.log(`📝 合同 ${contractNo} 状态=${statusNum}, 发送通知: ${statusText || '状态更新'}`);
+
+          // 异步发送通知，不阻塞回调响应（通过云函数发送，解决 openId 和额度问题）
+          this.wechatCloudService.sendContractSignedNotification(
             {
               _id: contract._id.toString(),
               contractNumber: contract.contractNumber,
+              contractType: contract.contractType,
               customerName: contract.customerName,
               workerName: contract.workerName,
               customerServiceFee: contract.customerServiceFee,
-              createdBy: contract.createdBy,
+              createdBy: contract.createdBy?.toString(),
             },
-            'customer' // 暂时假设是雇主先签，后续可根据回调数据判断
+            signerRole,
+            statusText || undefined,
           ).catch(error => {
             this.logger.error(`发送签署通知失败:`, error);
           });
-        } else if (statusNum === 2) {
-          // 已签约 - 所有人都已签署
-          this.logger.log(`🎉 合同 ${contractNo} 已签约，发送通知并触发保险同步`);
 
-          // 发送签署完成通知
-          this.contractSignNotificationService.sendContractSignedNotification(
-            {
-              _id: contract._id.toString(),
-              contractNumber: contract.contractNumber,
-              customerName: contract.customerName,
-              workerName: contract.workerName,
-              customerServiceFee: contract.customerServiceFee,
-              createdBy: contract.createdBy,
-            },
-            'both'
-          ).catch(error => {
-            this.logger.error(`发送签署完成通知失败:`, error);
-          });
-
-          // 异步触发保险同步，不阻塞回调响应
-          this.contractsService.syncInsuranceOnContractActive(contract._id.toString())
-            .catch(error => {
-              this.logger.error(`保险同步失败（异步）:`, error);
-            });
+          // 如果已签约，触发保险同步
+          if (statusNum === 2) {
+            this.logger.log(`🎉 合同 ${contractNo} 已签约，触发保险同步`);
+            this.contractsService.syncInsuranceOnContractActive(contract._id.toString())
+              .catch(error => {
+                this.logger.error(`保险同步失败（异步）:`, error);
+              });
+          }
         }
       }
 

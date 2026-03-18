@@ -11,6 +11,7 @@ import { CustomerOperationLog } from '../models/customer-operation-log.model';
 import { LeadTransferRuleService } from './lead-transfer-rule.service';
 import { User } from '../../users/models/user.entity';
 import { NotificationHelperService } from '../../notification/notification-helper.service';
+import { RequestContextStore } from '../../../common/logging/request-context';
 
 @Injectable()
 export class LeadAutoTransferService implements OnModuleInit {
@@ -605,6 +606,8 @@ export class LeadAutoTransferService implements OnModuleInit {
     await this.operationLogModel.create({
       customerId: customer._id,
       operatorId: new Types.ObjectId(targetUserId),
+      entityType: 'customer',
+      entityId: customer._id.toString(),
       operationType: 'assign',
       operationName: '系统自动流转',
       details: {
@@ -617,6 +620,7 @@ export class LeadAutoTransferService implements OnModuleInit {
         },
       },
       operatedAt: now,
+      requestId: RequestContextStore.getValue('requestId'),
     });
 
     this.logger.log(
@@ -930,4 +934,3 @@ export class LeadAutoTransferService implements OnModuleInit {
     return nextHour;
   }
 }
-

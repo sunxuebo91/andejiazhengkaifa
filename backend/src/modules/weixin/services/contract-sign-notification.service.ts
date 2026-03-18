@@ -20,6 +20,11 @@ export class ContractSignNotificationService {
   // 合同签署通知模板ID（需要在小程序后台配置）
   private readonly CONTRACT_SIGN_TEMPLATE_ID = '65Od_zcUMxFzKehPczmBbo1Aa60ctTe6nz7Iz_tJK48';
 
+  // 🔥 去重缓存：记录已发送的通知，避免同一合同同一阶段重复发送
+  // 格式: Map<"合同ID:签署阶段", 发送时间戳>
+  private sentNotificationCache = new Map<string, number>();
+  private readonly CACHE_TTL_MS = 60 * 1000; // 缓存有效期60秒
+
   constructor(
     @InjectModel('User') private readonly userModel: Model<User>,
     @InjectModel('MiniProgramUser') private readonly miniProgramUserModel: Model<MiniProgramUser>,
@@ -77,42 +82,67 @@ export class ContractSignNotificationService {
   /**
    * 发送合同签署通知
    * @param contract 合同信息
-   * @param signerRole 签署方角色 ('customer' = 雇主/甲方, 'worker' = 家政员/乙方)
+   * @param signerRole 签署方角色 ('customer' = 雇主/甲方, 'worker' = 家政员/乙方, 'both' = 全部完成)
+   * @param customStatusText 自定义状态文本（可选，优先级高于 signerRole 自动生成）
    */
   async sendContractSignedNotification(contract: {
     _id: string;
     contractNumber?: string;
+    contractType?: string; // 🔥 合同类型（如"住家保姆"、"住家育儿嫂"等）
     customerName?: string;
     workerName?: string;
     customerServiceFee?: number;
     createdBy?: any; // 合同创建人ID
-  }, signerRole: 'customer' | 'worker' | 'both'): Promise<void> {
+  }, signerRole: 'customer' | 'worker' | 'both', customStatusText?: string): Promise<void> {
     try {
       if (!this.appSecret) {
         this.logger.warn('⚠️ 小程序AppSecret未配置，跳过通知发送');
         return;
       }
 
+      // 🔥 去重检查：避免同一合同同一签署阶段重复发送通知
+      const cacheKey = `${contract._id}:${signerRole}`;
+      const now = Date.now();
+
+      // 清理过期缓存
+      for (const [key, timestamp] of this.sentNotificationCache.entries()) {
+        if (now - timestamp > this.CACHE_TTL_MS) {
+          this.sentNotificationCache.delete(key);
+        }
+      }
+
+      // 检查是否已发送过
+      if (this.sentNotificationCache.has(cacheKey)) {
+        this.logger.log(`⏭️ 跳过重复通知 - 合同ID: ${contract._id}, 签署方: ${signerRole}（60秒内已发送）`);
+        return;
+      }
+
+      // 标记为已发送
+      this.sentNotificationCache.set(cacheKey, now);
+
       this.logger.log(`📱 开始发送合同签署通知 - 合同ID: ${contract._id}, 签署方: ${signerRole}`);
 
-      // 1. 获取需要通知的用户（合同创建人 + 管理员）
+      // 1. 获取需要通知的用户（合同创建人 + 管理员，排除合同中的阿姨/乙方）
       // 直接传入 createdBy 对象，由 getUsersToNotify 内部处理提取ID
-      const usersToNotify = await this.getUsersToNotify(contract.createdBy);
-      
+      const usersToNotify = await this.getUsersToNotify(contract.createdBy, contract.workerName);
+
       if (usersToNotify.length === 0) {
         this.logger.warn('⚠️ 没有找到需要通知的用户（无绑定微信的员工/管理员）');
         return;
       }
 
-      // 2. 构建消息内容
-      const statusText = this.getStatusText(signerRole);
+      // 2. 构建消息内容（优先使用自定义状态文本）
+      const statusText = customStatusText || this.getStatusText(signerRole);
+      // 🔥 使用 contractType（如"住家保姆"）作为合同名称，而不是 contractNumber（如 CON23155391963）
+      const contractDisplayName = contract.contractType || '家政服务合同';
       const messageData = {
-        thing2: { value: this.truncate(contract.contractNumber || '家政服务合同', 20) },
+        thing2: { value: this.truncate(contractDisplayName, 20) },
         thing6: { value: this.truncate(contract.customerName || '未知', 20) },
         thing7: { value: this.truncate(contract.workerName || '未知', 20) },
-        thing4: { value: statusText },
+        thing4: { value: this.truncate(statusText, 20) },
         amount9: { value: `${contract.customerServiceFee || 0}.00` },
       };
+      this.logger.log(`📋 合同显示名称: ${contractDisplayName}, 合同编号: ${contract.contractNumber}`);
 
       // 3. 获取access_token
       const accessToken = await this.getAccessToken();
@@ -134,10 +164,12 @@ export class ContractSignNotificationService {
   }
 
   /**
-   * 获取需要通知的用户列表（合同创建人 + 管理员）
+   * 获取需要通知的用户列表（合同创建人 + 管理员，排除合同中的阿姨）
    * 优先使用 user.wechatOpenId，如果没有则通过手机号关联 miniprogram_users 获取
+   * @param createdBy 合同创建人
+   * @param excludeWorkerName 需要排除的阿姨姓名（合同乙方）
    */
-  private async getUsersToNotify(createdBy?: any): Promise<Array<{ wechatOpenId: string; name: string; role: string }>> {
+  private async getUsersToNotify(createdBy?: any, excludeWorkerName?: string): Promise<Array<{ wechatOpenId: string; name: string; role: string }>> {
     const users: Array<{ wechatOpenId: string; name: string; role: string }> = [];
 
     // 提取创建人ID（兼容字符串、ObjectId或对象）
@@ -161,7 +193,7 @@ export class ContractSignNotificationService {
         createdById = createdBy.toString();
       }
     }
-    this.logger.log(`📋 创建人ID: ${createdById || '无'}, 原始值类型: ${typeof createdBy}, _id类型: ${createdBy?._id ? typeof createdBy._id : 'N/A'}`);
+    this.logger.log(`📋 创建人ID: ${createdById || '无'}, 排除阿姨: ${excludeWorkerName || '无'}`);
 
     // 查找所有管理员和合同创建人
     const query: any = {
@@ -182,6 +214,13 @@ export class ContractSignNotificationService {
 
       if (!isCreator && !isAdmin) continue;
 
+      // 🔥 排除合同中的阿姨（乙方）- 阿姨不需要收到签约通知
+      if (excludeWorkerName && user.name === excludeWorkerName) {
+        this.logger.log(`⏭️ 跳过阿姨 ${user.name}（合同乙方，不发送通知）`);
+        continue;
+      }
+
+      // 🔥 优先使用 users 表的 wechatOpenId（员工小程序绑定的 openId）
       let openId = user.wechatOpenId;
 
       // 如果 user 表没有 wechatOpenId，通过手机号查找 miniprogram_users 表
@@ -235,14 +274,14 @@ export class ContractSignNotificationService {
       const result = response.data;
 
       if (result.errcode === 0) {
-        this.logger.log(`✅ 订阅消息发送成功 - 用户: ${userName || messageData.touser}`);
+        this.logger.log(`✅ 订阅消息发送成功 - 用户: ${userName || messageData.touser}, openId: ${messageData.touser}`);
         return true;
       } else if (result.errcode === 43101) {
         // 用户拒绝接受消息
-        this.logger.warn(`⚠️ 用户 ${userName} 未订阅该消息模板 (errcode: 43101)`);
+        this.logger.warn(`⚠️ 用户 ${userName} 未订阅该消息模板 (errcode: 43101), openId: ${messageData.touser}, templateId: ${messageData.template_id}`);
         return false;
       } else {
-        this.logger.error(`❌ 订阅消息发送失败 - 用户: ${userName}, errcode: ${result.errcode}, errmsg: ${result.errmsg}`);
+        this.logger.error(`❌ 订阅消息发送失败 - 用户: ${userName}, openId: ${messageData.touser}, errcode: ${result.errcode}, errmsg: ${result.errmsg}`);
         return false;
       }
     } catch (error) {

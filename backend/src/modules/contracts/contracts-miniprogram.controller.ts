@@ -577,7 +577,7 @@ export class ContractsMiniProgramController {
           }
         ],
         validityTime: 30,
-        signOrder: 1
+        signOrder: 2 // 🔥 顺序签约：客户先签→阿姨后签→企业自动签
       });
 
       if (esignResult.success) {

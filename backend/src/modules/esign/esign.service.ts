@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -9,6 +9,8 @@ import { NotificationGateway } from '../notification/notification.gateway';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { AppLogger } from '../../common/logging/app-logger';
+import { RequestContextStore } from '../../common/logging/request-context';
 
 // 爱签OpenAPI配置接口
 interface ESignConfig {
@@ -48,7 +50,7 @@ interface ESignResponse<T = any> {
 
 @Injectable()
 export class ESignService {
-  private readonly logger = new Logger(ESignService.name);
+  private readonly logger = new AppLogger(ESignService.name);
   private axiosInstance: AxiosInstance;
   private config: ESignConfig;
 
@@ -80,12 +82,12 @@ export class ESignService {
         const keyPath = path.resolve(privateKeyPath);
         if (fs.existsSync(keyPath)) {
           this.config.privateKey = fs.readFileSync(keyPath, 'utf8');
-          console.log('✅ 成功从文件加载私钥:', keyPath);
+          this.logger.log('esign.private_key.loaded_from_file', { keyPath });
         } else {
-          console.warn('⚠️ 私钥文件不存在:', keyPath);
+          this.logger.warn('esign.private_key.file_missing', { keyPath });
         }
       } catch (error) {
-        console.error('❌ 读取私钥文件失败:', error.message);
+        this.logger.error('esign.private_key.file_read_failed', error);
       }
     }
 
@@ -94,17 +96,17 @@ export class ESignService {
       const envPrivateKey = this.configService.get<string>('ESIGN_PRIVATE_KEY');
       if (envPrivateKey && envPrivateKey.trim() !== '') {
         this.config.privateKey = envPrivateKey;
-        console.log('✅ 使用环境变量私钥');
+        this.logger.log('esign.private_key.loaded_from_env');
       }
     }
 
     // 最后使用默认私钥（转换为PEM格式）
     if (!this.config.privateKey) {
       this.config.privateKey = defaultPrivateKey;
-      console.log('⚠️ 使用内置默认私钥（Base64格式）');
+      this.logger.warn('esign.private_key.using_builtin_default');
     }
 
-    console.log('🔍 爱签配置状态:', {
+    this.logger.info('esign.config.loaded', {
       type: this.config.type,
       appId: this.config.appId,
       host: this.config.host,
@@ -122,11 +124,13 @@ export class ESignService {
     // 添加简单的响应拦截器用于日志
     this.axiosInstance.interceptors.response.use(
       (response) => {
-        console.log('爱签API响应:', response.data);
+        this.logger.debug('esign.api.response', { data: response.data });
         return response;
       },
       (error) => {
-        console.error('爱签API错误:', error.response?.data || error.message);
+        this.logger.error('esign.api.error', error, {
+          response: error.response?.data,
+        });
         return Promise.reject(error);
       }
     );
@@ -155,12 +159,7 @@ export class ESignService {
    */
   async testConnection(): Promise<{ success: boolean; message: string; config: any }> {
     try {
-      console.log('🚀 开始测试API连接');
-      console.log('🔑 私钥原始值:', typeof this.config.privateKey, this.config.privateKey?.length);
-      console.log('🔑 私钥布尔值:', !!this.config.privateKey);
-      console.log('🔑 私钥开头:', this.config.privateKey?.substring(0, 30));
-      
-      console.log('测试API连接，当前配置:', {
+      this.logger.info('esign.connection_test.start', {
         appId: this.config.appId,
         host: this.config.host,
         hasPrivateKey: !!this.config.privateKey,
@@ -192,7 +191,7 @@ export class ESignService {
         }
       };
     } catch (error) {
-      console.error('API连接测试失败:', error);
+      this.logger.error('esign.connection_test.failed', error);
       return {
         success: false,
         message: `API连接失败: ${error.response?.data?.message || error.message}`,
@@ -212,11 +211,11 @@ export class ESignService {
    */
   async uploadDocument(fileBuffer: Buffer, fileName: string): Promise<string> {
     try {
-      console.log('开始上传文档:', fileName, '大小:', fileBuffer.length);
+      this.logger.info('esign.document_upload.start', { fileName, size: fileBuffer.length });
       
       // 如果没有私钥，返回模拟的文件ID
       if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟上传');
+        this.logger.warn('esign.document_upload.mock_used', { fileName });
         return `mock_file_${Date.now()}`;
       }
 
@@ -245,7 +244,7 @@ export class ESignService {
 
       return fileId;
     } catch (error) {
-      console.error('上传文档失败:', error);
+      this.logger.error('esign.document_upload.failed', error, { fileName });
       throw new BadRequestException(`上传文档失败: ${error.message}`);
     }
   }
@@ -255,11 +254,17 @@ export class ESignService {
    */
   async createSignFlow(signRequest: SignRequest): Promise<{ signFlowId: string; signUrl: string }> {
     try {
-      console.log('创建签署流程:', signRequest);
+      this.logger.info('esign.sign_flow.create_start', {
+        contractId: signRequest.contractId,
+        documentTitle: signRequest.documentTitle,
+        signerCount: signRequest.signers.length,
+      });
       
       // 如果没有私钥，返回模拟结果
       if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟创建签署流程');
+        this.logger.warn('esign.sign_flow.create_mock_used', {
+          contractId: signRequest.contractId,
+        });
         const mockSignFlowId = `mock_flow_${Date.now()}`;
         return {
           signFlowId: mockSignFlowId,
@@ -319,7 +324,9 @@ export class ESignService {
         signUrl: signUrlResponse.data.data.signUrl,
       };
     } catch (error) {
-      console.error('创建签署流程失败:', error);
+      this.logger.error('esign.sign_flow.create_failed', error, {
+        contractId: signRequest.contractId,
+      });
       throw new BadRequestException(`创建签署流程失败: ${error.message}`);
     }
   }
@@ -331,7 +338,7 @@ export class ESignService {
     try {
       // 如果没有私钥，返回模拟结果
       if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟查询');
+        this.logger.warn('esign.sign_flow.status_mock_used', { signFlowId });
         return {
           status: 'COMPLETED',
           documents: [
@@ -357,7 +364,7 @@ export class ESignService {
 
       return response.data.data;
     } catch (error) {
-      console.error('查询签署状态失败:', error);
+      this.logger.error('esign.sign_flow.status_failed', error, { signFlowId });
       throw new BadRequestException(`查询签署状态失败: ${error.message}`);
     }
   }
@@ -369,7 +376,7 @@ export class ESignService {
     try {
       // 如果没有私钥，返回模拟结果
       if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟下载链接');
+        this.logger.warn('esign.document_download.mock_used', { signFlowId, documentId });
         return {
           downloadUrl: `https://mock-esign.com/download/${signFlowId}/${documentId}`
         };
@@ -385,7 +392,10 @@ export class ESignService {
 
       return response.data.data;
     } catch (error) {
-      console.error('获取下载链接失败:', error);
+      this.logger.error('esign.document_download.failed', error, {
+        signFlowId,
+        documentId,
+      });
       throw new BadRequestException(`获取下载链接失败: ${error.message}`);
     }
   }
@@ -426,11 +436,17 @@ export class ESignService {
     }>;
   }): Promise<{ signFlowId: string; signUrl: string }> {
     try {
-      console.log('使用模板创建合同:', params);
+      this.logger.info('esign.template_contract.create_start', {
+        contractName: params.contractName,
+        templateId: params.templateId,
+        signerCount: params.signers.length,
+      });
       
       // 如果没有私钥，返回模拟结果
       if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟创建合同');
+        this.logger.warn('esign.template_contract.create_mock_used', {
+          templateId: params.templateId,
+        });
         const mockSignFlowId = `mock_template_flow_${Date.now()}`;
         return {
           signFlowId: mockSignFlowId,
@@ -506,7 +522,10 @@ export class ESignService {
         signUrl: signUrlResponse.data.data.signUrl,
       };
     } catch (error) {
-      console.error('使用模板创建合同失败:', error);
+      this.logger.error('esign.template_contract.create_failed', error, {
+        templateId: params.templateId,
+        contractName: params.contractName,
+      });
       throw new BadRequestException(`使用模板创建合同失败: ${error.message}`);
     }
   }
@@ -516,7 +535,7 @@ export class ESignService {
    */
   async getTemplateInfo(templateId: string): Promise<any> {
     try {
-      console.log('获取模板详情:', templateId);
+      this.logger.info('esign.template.info_fetch_start', { templateId });
       
       const response = await this.axiosInstance.get<ESignResponse<any>>(
         `/v1/files/template/${templateId}`
@@ -528,7 +547,7 @@ export class ESignService {
 
       return response.data.data;
     } catch (error) {
-      console.error('获取模板详情失败:', error);
+      this.logger.error('esign.template.info_fetch_failed', error, { templateId });
       throw new BadRequestException(`获取模板详情失败: ${error.message}`);
     }
   }
@@ -538,7 +557,7 @@ export class ESignService {
    */
   async getTemplateList(): Promise<any> {
     try {
-      console.log('获取模板列表');
+      this.logger.info('esign.template.list_fetch_start');
       
       const response = await this.axiosInstance.get<ESignResponse<any>>(
         '/v1/files/templates'
@@ -550,7 +569,7 @@ export class ESignService {
 
       return response.data.data;
     } catch (error) {
-      console.error('获取模板列表失败:', error);
+      this.logger.error('esign.template.list_fetch_failed', error);
       throw new BadRequestException(`获取模板列表失败: ${error.message}`);
     }
   }
@@ -560,7 +579,7 @@ export class ESignService {
    */
   async getTemplateFields(templateId: string): Promise<any> {
     try {
-      console.log('获取模板字段信息:', templateId);
+      this.logger.info('esign.template.fields_fetch_start', { templateId });
       
       const response = await this.axiosInstance.get<ESignResponse<any>>(
         `/v1/files/template/${templateId}/fields`
@@ -572,7 +591,7 @@ export class ESignService {
 
       return response.data.data;
     } catch (error) {
-      console.error('获取模板字段失败:', error);
+      this.logger.error('esign.template.fields_fetch_failed', error, { templateId });
       throw new BadRequestException(`获取模板字段失败: ${error.message}`);
     }
   }
@@ -1639,11 +1658,15 @@ export class ESignService {
       const domain = this.config.host;
 
       // 构建合同创建请求数据（按照官方文档格式）
+      const notifyUrl = this.config.notifyUrl;
       const requestData = {
         contractNo: params.contractNo,
         contractName: params.contractName,
-        signOrder: 1, // 无序签约
+        signOrder: 2,
         validityTime: 365, // 365天有效期
+        notifyUrl: notifyUrl, // 🔥 合同全部签完后回调（status=2）
+        userNotifyUrl: notifyUrl, // 🔥 某个用户签完后回调（甲方签完通知）
+        callbackUrl: notifyUrl, // 🔥 过期/拒签/失败时回调（status=3,4,-3）
         // 使用模板方式（按照官方文档格式）
         templates: [
           {
@@ -1894,7 +1917,7 @@ export class ESignService {
         contractNo: contractData.contractNo,
         contractName: contractData.contractName,
         validityTime: contractData.validityTime || 365,
-        signOrder: contractData.signOrder || 1,
+        signOrder: contractData.signOrder || 2, // 🔥 默认顺序签约：客户先签→阿姨后签
         templates: [
           {
             templateNo: contractData.templateNo,
@@ -1906,8 +1929,11 @@ export class ESignService {
         ]
       };
 
-      // 添加可选参数
-      if (contractData.notifyUrl) requestData['notifyUrl'] = contractData.notifyUrl;
+      // 添加可选参数 - 使用默认回调URL确保能收到通知
+      const notifyUrl = contractData.notifyUrl || this.config.notifyUrl;
+      requestData['notifyUrl'] = notifyUrl; // 🔥 合同全部签完后回调
+      requestData['userNotifyUrl'] = notifyUrl; // 🔥 某个用户签完后回调（甲方签完通知）
+      requestData['callbackUrl'] = notifyUrl; // 🔥 过期/拒签/失败时回调
       if (contractData.redirectUrl) requestData['redirectUrl'] = contractData.redirectUrl;
 
       // 标准签名逻辑
@@ -2100,7 +2126,7 @@ export class ESignService {
           templateNo: params.templateNo,
           templateParams: params.templateParams,
           validityTime: 30,
-          signOrder: 1,
+          signOrder: 2, // 🔥 顺序签约：客户先签→阿姨后签
           notifyUrl: this.config.notifyUrl
         });
 
@@ -3446,7 +3472,7 @@ export class ESignService {
           templateNo: params.templateNo,
           templateParams: params.templateParams,
           validityTime: params.validityTime,
-          signOrder: params.signOrder,
+          signOrder: 2,
           notifyUrl: this.config.notifyUrl // 🔥 添加回调URL，确保爱签在合同状态变化时通知我们
         });
 
@@ -3486,7 +3512,7 @@ export class ESignService {
           signType: signersData[index].signType,
           validateType: signersData[index].validateType
         })),
-        signOrder: 'parallel', // 并行签署
+        signOrder: 'sequential',
         templateParams: params.templateParams // 传递模板参数用于多行文本填充
       });
 
@@ -3670,9 +3696,11 @@ export class ESignService {
       const requestParams: Record<string, any> = {
         contractNo: contractData.contractNo,
         contractName: contractData.contractName,
-        signOrder: contractData.signOrder || 1, // 1=无序签约，2=顺序签约
+        signOrder: contractData.signOrder || 2, // 🔥 默认顺序签约：1=无序，2=顺序（客户先签→阿姨后签）
         validityTime: contractData.validityTime || 15, // 合同有效期（天）
-        notifyUrl: notifyUrl, // 🔥 回调URL - 确保始终传递给爱签
+        notifyUrl: notifyUrl, // 🔥 合同全部签完后回调（status=2）
+        userNotifyUrl: notifyUrl, // 🔥 某个用户签完后回调（用于甲方签完通知）
+        callbackUrl: notifyUrl, // 🔥 过期/拒签/失败时回调（status=3,4,-3）
         templates: [{
           templateNo: contractData.templateNo, // 平台分配的模板编号
           fillData: fillData, // 文本类填充
@@ -3681,7 +3709,7 @@ export class ESignService {
       };
 
       // 🔥 传递额外的可选参数（如 readSeconds, needAgree 等）
-      const optionalParams = ['readSeconds', 'needAgree', 'autoExpand', 'refuseOn', 'autoContinue', 'viewFlg', 'enableDownloadButton', 'callbackUrl', 'redirectUrl'];
+      const optionalParams = ['readSeconds', 'needAgree', 'autoExpand', 'refuseOn', 'autoContinue', 'viewFlg', 'enableDownloadButton', 'redirectUrl'];
       for (const param of optionalParams) {
         if (contractData[param] !== undefined && contractData[param] !== null) {
           requestParams[param] = contractData[param];
@@ -5172,7 +5200,7 @@ export class ESignService {
    */
   async handleContractCallback(callbackData: any): Promise<void> {
     try {
-      this.logger.log('📥 处理爱签回调数据:', JSON.stringify(callbackData));
+      this.logger.info('esign.callback.received', { callbackData });
 
       // 爱签回调数据格式可能包含：
       // - contractNo: 合同编号
@@ -5183,11 +5211,11 @@ export class ESignService {
       const { contractNo, status } = callbackData;
 
       if (!contractNo) {
-        this.logger.error('❌ 回调数据缺少合同编号');
+        this.logger.error('esign.callback.missing_contract_no');
         return;
       }
 
-      this.logger.log(`📋 合同编号: ${contractNo}, 状态: ${status}`);
+      this.logger.info('esign.callback.contract_status_received', { contractNo, status });
 
       // 查找本地数据库中的合同
       const contract = await this.contractModel.findOne({
@@ -5195,11 +5223,15 @@ export class ESignService {
       }).exec();
 
       if (!contract) {
-        this.logger.error(`❌ 未找到合同: ${contractNo}`);
+        this.logger.error('esign.callback.contract_not_found', undefined, { contractNo });
         return;
       }
 
-      this.logger.log(`✅ 找到合同: ${contract._id}, 当前状态: ${contract.contractStatus}`);
+      this.logger.info('esign.callback.contract_found', {
+        contractId: contract._id.toString(),
+        contractNo,
+        currentStatus: contract.contractStatus,
+      });
 
       // 更新爱签状态
       const updateData: any = {
@@ -5210,13 +5242,20 @@ export class ESignService {
       if (status === 2 || status === '2') {
         updateData.contractStatus = 'active';
         updateData.esignSignedAt = new Date();
-        this.logger.log('🎉 合同已签约，更新状态为 active');
+        this.logger.info('esign.callback.contract_signed', {
+          contractId: contract._id.toString(),
+          contractNo,
+        });
       }
 
       // 更新合同
       await this.contractModel.findByIdAndUpdate(contract._id, updateData).exec();
 
-      this.logger.log(`✅ 合同状态已更新: ${contract._id}`);
+      this.logger.info('esign.callback.contract_updated', {
+        contractId: contract._id.toString(),
+        contractNo,
+        nextStatus: updateData.contractStatus || contract.contractStatus,
+      });
 
       // 签约完成后，同步客户姓名为合同中的真实姓名（合同发起姓名）
       if (status === 2 || status === '2') {
@@ -5226,7 +5265,10 @@ export class ESignService {
         if (contract.customerId) {
           try {
             const customerId = contract.customerId.toString();
-            this.logger.log(`🔄 合同签约完成，更新客户状态: ${customerId}`);
+            this.logger.info('esign.callback.customer_sync_start', {
+              contractId: contract._id.toString(),
+              customerId,
+            });
 
             // 调用客户服务更新状态
             const customerModel = this.contractModel.db.model('Customer');
@@ -5243,20 +5285,31 @@ export class ESignService {
                 lastActivityAt: new Date(),
               }).exec();
 
-              this.logger.log(`✅ 客户状态已更新: ${oldStatus} -> 已签约, ${oldLeadLevel} -> O类`);
+              this.logger.info('esign.callback.customer_synced', {
+                customerId,
+                contractId: contract._id.toString(),
+                oldStatus,
+                oldLeadLevel,
+              });
 
               // 记录操作日志
               const operationLogModel = this.contractModel.db.model('CustomerOperationLog');
               await operationLogModel.create({
-                customerId: customerId,
-                operatorId: 'system',
+                customerId: customer._id,
+                operatorId: contract.createdBy || customer._id,
+                entityType: 'contract',
+                entityId: contract._id.toString(),
                 operationType: 'update',
-                operationDescription: '合同签约成功，自动更新客户状态',
+                operationName: '合同签约自动更新', // 🔥 修复：必填字段
                 details: {
                   before: { contractStatus: oldStatus, leadLevel: oldLeadLevel },
                   after: { contractStatus: '已签约', leadLevel: 'O类' },
+                  description: '合同签约成功，自动更新客户状态为已签约，线索等级为O类',
+                  relatedId: contract._id.toString(),
+                  relatedType: 'contract',
                 },
                 operatedAt: new Date(),
+                requestId: RequestContextStore.getValue('requestId'),
               });
 
               // 🔔 广播刷新事件，通知前端更新客户列表
@@ -5266,13 +5319,22 @@ export class ESignService {
                   contractNumber: contract.contractNumber,
                   action: 'statusUpdate',
                 });
-                this.logger.log('✅ 已广播客户列表刷新事件');
+                this.logger.info('esign.callback.customer_refresh_broadcasted', {
+                  customerId,
+                  contractNumber: contract.contractNumber,
+                });
               } catch (error) {
-                this.logger.error(`❌ 广播刷新事件失败: ${error.message}`);
+                this.logger.error('esign.callback.customer_refresh_failed', error, {
+                  customerId,
+                  contractNumber: contract.contractNumber,
+                });
               }
             }
           } catch (error) {
-            this.logger.error(`❌ 更新客户状态失败: ${error.message}`);
+            this.logger.error('esign.callback.customer_sync_failed', error, {
+              contractId: contract._id.toString(),
+              customerId: contract.customerId?.toString(),
+            });
             // 不抛出异常，避免影响合同流程
           }
         }
@@ -5287,7 +5349,7 @@ export class ESignService {
       // 由于循环依赖问题，这里我们先更新数据库，然后在 ContractsController 中手动触发同步
 
     } catch (error) {
-      this.logger.error('❌ 处理爱签回调失败:', error);
+      this.logger.error('esign.callback.handle_failed', error);
       throw error;
     }
   }
@@ -5295,7 +5357,10 @@ export class ESignService {
   private async syncCustomerNameBySignedContract(contract: ContractDocument): Promise<void> {
     const realName = contract.customerName?.trim();
     if (!realName) {
-      this.logger.warn(`⚠️ 合同 ${contract.contractNumber} 缺少 customerName，跳过客户姓名同步`);
+      this.logger.warn('esign.callback.customer_name_sync_missing_name', {
+        contractId: contract._id.toString(),
+        contractNumber: contract.contractNumber,
+      });
       return;
     }
 
@@ -5304,7 +5369,10 @@ export class ESignService {
       const customer = await this.customerModel.findById(contract.customerId).select('_id name phone').exec();
       if (customer) {
         if ((customer.name || '').trim() === realName) {
-          this.logger.log(`ℹ️ 客户姓名已是真实姓名，无需更新: ${customer._id}`);
+          this.logger.info('esign.callback.customer_name_sync_skipped_same_name', {
+            customerId: customer._id.toString(),
+            contractId: contract._id.toString(),
+          });
           return;
         }
 
@@ -5314,7 +5382,10 @@ export class ESignService {
           lastActivityAt: new Date(),
         }).exec();
 
-        this.logger.log(`✅ 已同步客户姓名: ${customer._id}, "${customer.name}" -> "${realName}"`);
+        this.logger.info('esign.callback.customer_name_synced_by_customer_id', {
+          customerId: customer._id.toString(),
+          contractId: contract._id.toString(),
+        });
         return;
       }
     }
@@ -5323,12 +5394,19 @@ export class ESignService {
     if (contract.customerPhone) {
       const customer = await this.customerModel.findOne({ phone: contract.customerPhone }).select('_id name phone').exec();
       if (!customer) {
-        this.logger.warn(`⚠️ 未找到可同步姓名的客户，contractNo=${contract.contractNumber}, phone=${contract.customerPhone}`);
+        this.logger.warn('esign.callback.customer_name_sync_customer_missing', {
+          contractId: contract._id.toString(),
+          contractNo: contract.contractNumber,
+          customerPhone: contract.customerPhone,
+        });
         return;
       }
 
       if ((customer.name || '').trim() === realName) {
-        this.logger.log(`ℹ️ 客户姓名已是真实姓名，无需更新: ${customer._id}`);
+        this.logger.info('esign.callback.customer_name_sync_skipped_same_name', {
+          customerId: customer._id.toString(),
+          contractId: contract._id.toString(),
+        });
         return;
       }
 
@@ -5338,11 +5416,17 @@ export class ESignService {
         lastActivityAt: new Date(),
       }).exec();
 
-      this.logger.log(`✅ 已按手机号同步客户姓名: ${customer._id}, "${customer.name}" -> "${realName}"`);
+      this.logger.info('esign.callback.customer_name_synced_by_phone', {
+        customerId: customer._id.toString(),
+        contractId: contract._id.toString(),
+      });
       return;
     }
 
-    this.logger.warn(`⚠️ 合同 ${contract.contractNumber} 缺少 customerId/customerPhone，无法同步客户姓名`);
+    this.logger.warn('esign.callback.customer_name_sync_missing_customer_ref', {
+      contractId: contract._id.toString(),
+      contractNumber: contract.contractNumber,
+    });
   }
 
 }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Contract, ContractDocument } from './models/contract.model';
@@ -14,10 +14,13 @@ import { AvailabilityStatus } from '../resume/models/availability-period.schema'
 import { DashubaoService } from '../dashubao/dashubao.service';
 import { InsurancePolicy, InsurancePolicyDocument } from '../dashubao/models/insurance-policy.model';
 import { ESignService } from '../esign/esign.service';
+import { AppLogger } from '../../common/logging/app-logger';
+import { RequestContextStore } from '../../common/logging/request-context';
 
 @Injectable()
 export class ContractsService {
-  private readonly logger = new Logger(ContractsService.name);
+  private readonly logger = new AppLogger(ContractsService.name);
+  private readonly systemOperatorId = new Types.ObjectId('000000000000000000000000');
 
   constructor(
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
@@ -43,16 +46,24 @@ export class ContractsService {
   ): Promise<void> {
     try {
       if (!customerId || customerId === 'temp') return;
+      const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
+      const operatorObjectId = isValidObjectId(operatorId) ? new Types.ObjectId(operatorId) : this.systemOperatorId;
       await this.operationLogModel.create({
         customerId: new Types.ObjectId(customerId.toString()),
-        operatorId: new Types.ObjectId(operatorId),
+        operatorId: operatorObjectId,
+        entityType: 'contract',
+        entityId: details?.relatedId || customerId.toString(),
         operationType,
         operationName,
         details,
         operatedAt: new Date(),
+        requestId: RequestContextStore.getValue('requestId'),
       });
     } catch (error) {
-      this.logger.error(`记录操作日志失败: ${error.message}`);
+      this.logger.error('audit.contract.write_failed', error, {
+        customerId: customerId.toString(),
+        operationType,
+      });
     }
   }
 
@@ -185,13 +196,16 @@ export class ContractsService {
    * 需要提取中文字段名（爱签模板的 dataKey）
    */
   private extractTemplateParams(contractDto: CreateContractDto | any): Record<string, any> {
-    console.log('🔍 [extractTemplateParams] 开始提取模板参数');
-    console.log('🔍 [extractTemplateParams] 输入数据类型:', typeof contractDto);
-    console.log('🔍 [extractTemplateParams] 输入数据字段数量:', Object.keys(contractDto || {}).length);
+    this.logger.debug('contract.template_params.extract_start', {
+      inputType: typeof contractDto,
+      keyCount: Object.keys(contractDto || {}).length,
+    });
 
     // 如果已经有 templateParams 对象，直接使用
     if (contractDto.templateParams && Object.keys(contractDto.templateParams).length > 0) {
-      console.log('🔍 [extractTemplateParams] 已有 templateParams，直接使用，字段数量:', Object.keys(contractDto.templateParams).length);
+      this.logger.debug('contract.template_params.extract_skip_existing', {
+        keyCount: Object.keys(contractDto.templateParams).length,
+      });
       return contractDto.templateParams;
     }
 
@@ -211,7 +225,7 @@ export class ContractsService {
 
     // 打印所有字段名，用于调试
     const allKeys = Object.keys(contractDto || {});
-    console.log('🔍 [extractTemplateParams] 所有字段名:', allKeys.join(', '));
+    this.logger.debug('contract.template_params.keys_scanned', { keys: allKeys });
 
     // 遍历所有字段，提取中文字段名
     for (const [key, value] of Object.entries(contractDto)) {
@@ -234,11 +248,13 @@ export class ContractsService {
       const hasChinese = /[\u4e00-\u9fa5]/.test(key);
       if (hasChinese) {
         templateParams[key] = value;
-        console.log(`🔍 [extractTemplateParams] 提取中文字段: ${key}`);
+        this.logger.debug('contract.template_params.key_extracted', { key });
       }
     }
 
-    console.log('🔍 [extractTemplateParams] 提取完成，中文字段数量:', Object.keys(templateParams).length);
+    this.logger.debug('contract.template_params.extract_finish', {
+      keyCount: Object.keys(templateParams).length,
+    });
     return templateParams;
   }
 
@@ -249,7 +265,12 @@ export class ContractsService {
     options?: { autoInitiateEsign?: boolean }  // 🆕 新增选项：是否自动触发爱签流程
   ): Promise<Contract> {
     try {
-      console.log('创建合同服务被调用，数据:', createContractDto);
+      this.logger.info('contract.create.start', {
+        customerId: createContractDto.customerId,
+        customerName: createContractDto.customerName,
+        customerPhone: createContractDto.customerPhone,
+        contractType: createContractDto.contractType,
+      });
       
       // 🆕 检查是否需要进入换人模式
       if (createContractDto.customerPhone) {
@@ -257,7 +278,7 @@ export class ContractsService {
         
         // 如果客户有现有合同，自动进入换人合并模式
         if (existingContractCheck.hasContract) {
-          console.log('🔄 检测到客户已有合同，进入自动换人合并模式:', {
+          this.logger.info('contract.create.redirect_change_worker', {
             customerPhone: createContractDto.customerPhone,
             existingContract: existingContractCheck.contract?.contractNumber,
             contractCount: existingContractCheck.contractCount
@@ -274,14 +295,18 @@ export class ContractsService {
       
       // 如果是从爱签同步过来的合同，处理临时字段
       if (createContractDto.customerId === 'temp' || createContractDto.workerId === 'temp' || createContractDto.createdBy === 'temp') {
-        console.log('检测到来自爱签的合同数据，开始处理临时字段...');
+        this.logger.warn('contract.create.temp_identifiers_detected', {
+          customerId: createContractDto.customerId,
+          workerId: createContractDto.workerId,
+          createdBy: createContractDto.createdBy,
+        });
         
         // 处理客户ID - 尝试找到现有客户或创建新客户
         let finalCustomerId = createContractDto.customerId;
         if (createContractDto.customerId === 'temp') {
           // TODO: 这里应该集成客户服务，暂时使用固定值
           finalCustomerId = new Types.ObjectId().toString();
-          console.log('为爱签合同生成临时客户ID:', finalCustomerId);
+          this.logger.warn('contract.create.temp_customer_id_generated', { finalCustomerId });
         }
         
         // 处理员工ID - 尝试找到现有员工或创建新员工记录
@@ -289,7 +314,7 @@ export class ContractsService {
         if (createContractDto.workerId === 'temp') {
           // TODO: 这里应该集成员工/简历服务，暂时使用固定值
           finalWorkerId = new Types.ObjectId().toString();
-          console.log('为爱签合同生成临时员工ID:', finalWorkerId);
+          this.logger.warn('contract.create.temp_worker_id_generated', { finalWorkerId });
         }
         
         // 处理创建人ID（只有当 userId 是有效的 ObjectId 格式时才使用）
@@ -298,7 +323,7 @@ export class ContractsService {
         if (createContractDto.createdBy === 'temp' || !createContractDto.createdBy) {
           // 使用传入的userId（如果是有效ObjectId）或生成临时ID
           finalCreatedBy = (userId && isValidObjectId(userId)) ? userId : new Types.ObjectId().toString();
-          console.log('为合同设置创建人ID:', finalCreatedBy);
+          this.logger.debug('contract.create.created_by_assigned', { finalCreatedBy });
         }
 
         // 更新字段
@@ -324,17 +349,23 @@ export class ContractsService {
           const resume = await this.resumeService.findByPhone(createContractDto.workerPhone);
           if (resume && resume.currentAddress) {
             createContractDto.workerAddress = resume.currentAddress;
-            console.log('📍 从简历自动获取联系地址:', createContractDto.workerAddress);
+            this.logger.debug('contract.create.worker_address_inferred', {
+              workerId: createContractDto.workerId,
+            });
           }
         } catch (error) {
-          console.warn('⚠️ 从简历获取联系地址失败:', error.message);
+          this.logger.warn('contract.create.worker_address_infer_failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
       // 🆕 将 templateNo 映射到 esignTemplateNo（因为 Schema 中只有 esignTemplateNo）
       if ((createContractDto as any).templateNo && !createContractDto.esignTemplateNo) {
         createContractDto.esignTemplateNo = (createContractDto as any).templateNo;
-        console.log('📋 将 templateNo 映射到 esignTemplateNo:', createContractDto.esignTemplateNo);
+        this.logger.debug('contract.create.template_mapped', {
+          esignTemplateNo: createContractDto.esignTemplateNo,
+        });
       }
 
       // 🆕 提取中文字段并保存到 templateParams（用于后续发起爱签签署）
@@ -342,17 +373,20 @@ export class ContractsService {
         const extractedTemplateParams = this.extractTemplateParams(createContractDto);
         if (Object.keys(extractedTemplateParams).length > 0) {
           createContractDto.templateParams = extractedTemplateParams;
-          console.log('📋 提取并保存模板参数，字段数量:', Object.keys(extractedTemplateParams).length);
-          console.log('📋 模板参数:', JSON.stringify(extractedTemplateParams, null, 2));
+          this.logger.debug('contract.create.template_params_saved', {
+            keyCount: Object.keys(extractedTemplateParams).length,
+          });
         }
       }
-
-      console.log('处理后的合同数据:', createContractDto);
 
       const contract = new this.contractModel(createContractDto);
       const savedContract = await contract.save();
 
-      console.log('合同保存成功，ID:', savedContract._id);
+      this.logger.info('contract.create.saved', {
+        contractId: savedContract._id.toString(),
+        contractNumber: savedContract.contractNumber,
+        customerId: String(createContractDto.customerId),
+      });
 
       // 📝 记录客户操作日志 - 发起合同
       if (createContractDto.customerId && createContractDto.customerId !== 'temp' && userId) {
@@ -419,7 +453,9 @@ export class ContractsService {
           // 🔥 提取模板参数：从小程序提交的平铺数据中提取爱签模板字段
           const templateParams = this.extractTemplateParams(createContractDto);
 
-          this.logger.log(`📋 提取的模板参数:`, JSON.stringify(templateParams, null, 2));
+          this.logger.debug('contract.create.template_params_extracted', {
+            templateParams,
+          });
 
           const esignResult = await this.esignService.createCompleteContractFlow({
             contractNo: savedContract.contractNumber,
@@ -443,7 +479,7 @@ export class ContractsService {
               }
             ],
             validityTime: 30,
-            signOrder: 1
+            signOrder: 2 // 🔥 顺序签约：客户先签→阿姨后签
           });
 
           if (esignResult.success) {
@@ -477,7 +513,10 @@ export class ContractsService {
 
       return savedContract;
     } catch (error) {
-      console.error('创建合同失败:', error);
+      this.logger.error('contract.create.failed', error, {
+        customerId: createContractDto.customerId,
+        customerName: createContractDto.customerName,
+      });
       throw new BadRequestException(`创建合同失败: ${error.message}`);
     }
   }
@@ -1654,7 +1693,9 @@ export class ContractsService {
 
           // 🔥 修复：从保存后的合同对象中提取 templateParams，而不是使用 createContractDto.templateParams
           const templateParams = this.extractTemplateParams(newContract as any);
-          this.logger.log(`📋 [换人合同] 提取的模板参数:`, JSON.stringify(templateParams, null, 2));
+          this.logger.debug('contract.change_worker.template_params_extracted', {
+            templateParams,
+          });
 
           if (Object.keys(templateParams).length === 0) {
             this.logger.warn(`⚠️ [换人合同] 没有提取到模板参数，跳过爱签流程`);
@@ -1690,7 +1731,7 @@ export class ContractsService {
               }
             ],
             validityTime: 30,
-            signOrder: 1
+            signOrder: 2 // 🔥 顺序签约：客户先签→阿姨后签→企业自动签
           });
 
           if (esignResult.success) {

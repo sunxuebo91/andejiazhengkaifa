@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from './models/customer.model';
@@ -18,11 +18,14 @@ import { Contract } from '../contracts/models/contract.model';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import axios from 'axios';
+import { AppLogger } from '../../common/logging/app-logger';
+import { RequestContextStore } from '../../common/logging/request-context';
 
 
 @Injectable()
 export class CustomersService {
-  private readonly logger = new Logger(CustomersService.name);
+  private readonly logger = new AppLogger(CustomersService.name);
+  private readonly systemOperatorId = new Types.ObjectId('000000000000000000000000');
 
   constructor(
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
@@ -58,16 +61,25 @@ export class CustomersService {
     }
   ): Promise<void> {
     try {
+      const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
+      const operatorObjectId = isValidObjectId(operatorId) ? new Types.ObjectId(operatorId) : this.systemOperatorId;
+
       await this.operationLogModel.create({
         customerId: new Types.ObjectId(customerId.toString()),
-        operatorId: new Types.ObjectId(operatorId),
+        operatorId: operatorObjectId,
+        entityType: 'customer',
+        entityId: customerId.toString(),
         operationType,
         operationName,
         details,
         operatedAt: new Date(),
+        requestId: RequestContextStore.getValue('requestId'),
       });
     } catch (error) {
-      this.logger.error(`记录操作日志失败: ${error.message}`);
+      this.logger.error('audit.customer.write_failed', error, {
+        customerId: customerId.toString(),
+        operationType,
+      });
     }
   }
 
@@ -476,8 +488,13 @@ export class CustomersService {
     const skip = (page - 1) * limit;
 
     // 🔥 [CUSTOMER-SORT-FIX] 强制按更新时间倒序排序，与简历列表保持一致
-    console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 开始查询客户列表 - page: ${page}, limit: ${limit}, sortBy: ${sortBy}, followUpStatus: ${followUpStatus}`);
-    console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] 查询条件:`, JSON.stringify(searchConditions));
+    this.logger.debug('customer.list.query_start', {
+      page,
+      limit,
+      sortBy,
+      followUpStatus,
+      searchConditions,
+    });
 
     // 🆕 如果有 followUpStatus 筛选，使用聚合管道在数据库层面筛选
     if (followUpStatus) {
@@ -700,7 +717,11 @@ export class CustomersService {
       calculatedFollowUpStatus: undefined // 移除临时字段
     }));
 
-    console.log(`🔥🔥🔥 [CUSTOMER-DEBUG] followUpStatus筛选结果: total=${total}, returned=${formattedCustomers.length}`);
+    this.logger.debug('customer.list.followup_filter_result', {
+      total,
+      returned: formattedCustomers.length,
+      followUpStatus,
+    });
 
     return {
       customers: formattedCustomers,
@@ -972,17 +993,20 @@ export class CustomersService {
    */
   async updateLeadLevelToOOnContractSigned(customerId: string): Promise<void> {
     try {
-      this.logger.log(`🔄 检查客户 ${customerId} 是否需要更新线索等级为O类`);
+      this.logger.info('customer.lead_level_o.sync_check', { customerId });
 
       const customer = await this.customerModel.findById(customerId).exec();
       if (!customer) {
-        this.logger.warn(`客户 ${customerId} 不存在，跳过线索等级更新`);
+        this.logger.warn('customer.lead_level_o.customer_missing', { customerId });
         return;
       }
 
       // 如果已经是O类，无需更新
       if (customer.leadLevel === 'O类') {
-        this.logger.log(`客户 ${customer.name} 已经是O类，无需更新`);
+        this.logger.info('customer.lead_level_o.already_synced', {
+          customerId,
+          customerName: customer.name,
+        });
         return;
       }
 
@@ -994,7 +1018,11 @@ export class CustomersService {
         lastActivityAt: new Date(),
       });
 
-      this.logger.log(`✅ 客户 ${customer.name} 线索等级已自动更新: ${oldLeadLevel} -> O类`);
+      this.logger.info('customer.lead_level_o.synced', {
+        customerId,
+        customerName: customer.name,
+        oldLeadLevel,
+      });
 
       // 记录操作日志
       await this.logOperation(
@@ -1009,7 +1037,7 @@ export class CustomersService {
         }
       );
     } catch (error) {
-      this.logger.error(`❌ 自动更新客户线索等级失败:`, error);
+      this.logger.error('customer.lead_level_o.sync_failed', error, { customerId });
       // 不抛出异常，避免影响合同流程
     }
   }
@@ -1489,7 +1517,11 @@ export class CustomersService {
     try {
       // 检查用户是否绑定了微信
       if (!targetUser.wechatOpenId) {
-        console.log(`用户 ${targetUser.name} 未绑定微信，跳过通知发送`);
+        this.logger.info('wechat.assignment_notification.skipped_no_openid', {
+          targetUserId: targetUser?._id?.toString?.() || targetUser?.id,
+          targetUserName: targetUser?.name,
+          customerId: (customer as any)?._id?.toString?.(),
+        });
         return;
       }
 
@@ -1510,9 +1542,18 @@ export class CustomersService {
         detailUrl
       );
 
-      console.log(`微信通知发送成功：${targetUser.name} (${customer.name})`);
+      this.logger.info('wechat.assignment_notification.sent', {
+        targetUserId: targetUser?._id?.toString?.() || targetUser?.id,
+        targetUserName: targetUser?.name,
+        customerId: (customer as any)?._id?.toString?.(),
+        customerName: customer?.name,
+      });
     } catch (error) {
-      console.error(`发送微信通知失败：${error.message}`, error);
+      this.logger.error('wechat.assignment_notification.failed', error, {
+        targetUserId: targetUser?._id?.toString?.() || targetUser?.id,
+        targetUserName: targetUser?.name,
+        customerId: (customer as any)?._id?.toString?.(),
+      });
       // 不抛出错误，避免影响主业务流程
     }
   }
@@ -1522,7 +1563,11 @@ export class CustomersService {
     try {
       // 检查用户是否绑定了微信
       if (!targetUser.wechatOpenId) {
-        console.log(`用户 ${targetUser.name} 未绑定微信，跳过批量分配通知发送`);
+        this.logger.info('wechat.batch_assignment_notification.skipped_no_openid', {
+          targetUserId: targetUser?._id?.toString?.() || targetUser?.id,
+          targetUserName: targetUser?.name,
+          count,
+        });
         return;
       }
 
@@ -1532,11 +1577,21 @@ export class CustomersService {
       // 这里可以发送一个汇总通知，告知用户有多少个客户被分配给他
       // 由于现有的通知模板是针对单个客户的，这里暂时记录日志
       // 后续可以添加专门的批量分配通知模板
-      console.log(`批量分配通知：${targetUser.name} 被分配了 ${count} 个客户，原因：${assignmentReason || '未填写'}`);
+      this.logger.info('wechat.batch_assignment_notification.todo', {
+        targetUserId: targetUser?._id?.toString?.() || targetUser?.id,
+        targetUserName: targetUser?.name,
+        count,
+        assignmentReason: assignmentReason || '未填写',
+        listUrl,
+      });
 
       // TODO: 实现批量分配的微信通知模板
     } catch (error) {
-      console.error(`发送批量分配通知失败：${error.message}`, error);
+      this.logger.error('wechat.batch_assignment_notification.failed', error, {
+        targetUserId: targetUser?._id?.toString?.() || targetUser?.id,
+        targetUserName: targetUser?.name,
+        count,
+      });
       // 不抛出错误，避免影响主业务流程
     }
   }

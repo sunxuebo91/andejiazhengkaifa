@@ -94,10 +94,27 @@ async function bootstrap() {
     // 启动服务器
     const port = process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3001);
     await app.listen(port, '0.0.0.0'); // 明确绑定到所有接口
-    console.log(`应用已启动，监听端口：${port}，环境：${process.env.NODE_ENV || 'development'}`);
-    console.log(`API文档地址：http://localhost:${port}/api/docs`);
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      context: 'Bootstrap',
+      message: 'application.started',
+      port,
+      env: process.env.NODE_ENV || 'development',
+      docsUrl: `http://localhost:${port}/api/docs`,
+    }));
   } catch (error) {
-    console.error('应用启动失败:', error);
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      context: 'Bootstrap',
+      message: 'application.start_failed',
+      error: error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      } : error,
+    }));
     process.exit(1);
   }
 }

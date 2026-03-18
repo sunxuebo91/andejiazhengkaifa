@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -36,6 +36,8 @@ import { ShortUrlModule } from './modules/short-url/short-url.module';
 import { ContractApprovalsModule } from './modules/contract-approvals/contract-approvals.module';
 import { ZmdbModule } from './modules/zmdb/zmdb.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
+import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
+import { MiniprogramLoggerMiddleware } from './common/middleware/miniprogram-logger.middleware';
 
 @Module({
   imports: [
@@ -97,4 +99,9 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL });
+    consumer.apply(MiniprogramLoggerMiddleware).forRoutes({ path: 'miniprogram/*', method: RequestMethod.ALL });
+  }
+}

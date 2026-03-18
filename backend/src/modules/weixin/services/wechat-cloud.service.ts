@@ -139,7 +139,7 @@ export class WechatCloudService {
       }
 
       this.logger.log(`📱 批量发送通知 - 被分配人: ${notificationData.assignedToId}, 客户数: ${notificationData.customerCount}`);
-      
+
       // 对于批量分配，可以发送一条汇总通知
       await this.sendCustomerAssignNotification({
         assignedToId: notificationData.assignedToId,
@@ -151,6 +151,86 @@ export class WechatCloudService {
       });
     } catch (error) {
       this.logger.error('❌ 批量发送通知失败:', error.message);
+    }
+  }
+
+  /**
+   * 调用云函数发送合同签署通知
+   * @param contractData 合同数据
+   * @param signerRole 签署方角色：'customer'(甲方) | 'worker'(乙方) | 'both'(双方)
+   * @param statusText 状态描述文本
+   */
+  async sendContractSignedNotification(
+    contractData: {
+      _id: string;
+      contractNumber?: string;
+      contractType?: string;
+      customerName?: string;
+      workerName?: string;
+      customerServiceFee?: number;
+      createdBy?: string;
+    },
+    signerRole: 'customer' | 'worker' | 'both' = 'customer',
+    statusText?: string,
+  ): Promise<void> {
+    try {
+      if (!this.appSecret) {
+        this.logger.warn('⚠️ 小程序AppSecret未配置，跳过合同签署通知发送');
+        return;
+      }
+
+      const accessToken = await this.getAccessToken();
+
+      const url = `https://api.weixin.qq.com/tcb/invokecloudfunction?access_token=${accessToken}&env=${this.cloudEnv}&name=quickstartFunctions`;
+
+      const signRoleText = signerRole === 'customer' ? '客户已签约，等待家政员签约' :
+                           signerRole === 'worker'   ? '双方均已签约' :
+                                                       statusText || '合同签署完成';
+
+      const requestData = {
+        type: 'sendContractSignedNotify',
+        notificationData: {
+          creatorId: contractData.createdBy,
+          contractId: contractData._id,
+          contractNumber: contractData.contractNumber || contractData._id,
+          // contractName 只含合同类型名称，不含合同编号，供云函数"合同名称"字段直接使用
+          contractName: contractData.contractType || '家政服务合同',
+          contractType: contractData.contractType || '家政服务合同',
+          customerName: contractData.customerName || '客户',
+          workerName: contractData.workerName || '家政员',
+          serviceFeee: contractData.customerServiceFee,
+          signerRole,
+          statusText: signRoleText,
+          signTime: new Date().toISOString(),
+        },
+      };
+
+      this.logger.log(`📱 调用云函数发送合同签署通知 - 合同: ${contractData.contractNumber}, 创建人: ${contractData.createdBy}, 角色: ${signerRole}`);
+
+      const response = await axios.post(url, JSON.stringify(requestData), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const result = response.data;
+
+      if (result.errcode !== 0) {
+        this.logger.error(`❌ 云函数调用失败: ${result.errcode} - ${result.errmsg}`);
+        throw new Error(`云函数调用失败: ${result.errmsg}`);
+      }
+
+      this.logger.log('✅ 合同签署通知云函数调用成功');
+
+      if (result.resp_data) {
+        try {
+          const cloudResult = JSON.parse(result.resp_data);
+          this.logger.log('云函数返回:', cloudResult);
+        } catch (e) {
+          this.logger.log('云函数返回（原始）:', result.resp_data);
+        }
+      }
+    } catch (error) {
+      // 通知发送失败不应影响主流程，只记录错误
+      this.logger.error('❌ 发送合同签署通知失败:', error.message);
+      this.logger.debug('错误详情:', error);
     }
   }
 }

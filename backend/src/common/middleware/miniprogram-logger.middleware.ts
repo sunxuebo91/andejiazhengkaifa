@@ -1,5 +1,6 @@
-import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
+import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import { AppLogger } from '../logging/app-logger';
 
 /**
  * 小程序 H5 页面访问日志中间件
@@ -7,7 +8,7 @@ import { Request, Response, NextFunction } from 'express';
  */
 @Injectable()
 export class MiniprogramLoggerMiddleware implements NestMiddleware {
-  private readonly logger = new Logger('MiniprogramAccess');
+  private readonly logger = new AppLogger('MiniprogramAccess');
 
   use(req: Request, res: Response, next: NextFunction) {
     const { method, originalUrl, headers, ip, query } = req;
@@ -47,53 +48,9 @@ export class MiniprogramLoggerMiddleware implements NestMiddleware {
       environment: isMiniProgram ? '小程序WebView' : isWechat ? '微信浏览器' : '普通浏览器',
     };
 
-    // 🔥 重点日志：用不同颜色和标记区分
-    if (isMiniProgram) {
-      this.logger.log(`
-╔════════════════════════════════════════════════════════════════
-║ 🎯 小程序 WebView 访问
-╠════════════════════════════════════════════════════════════════
-║ 📄 访问文件: ${fileName}
-║ 🔗 完整URL: ${originalUrl}
-║ 📱 IP地址: ${realIp}
-║ 🌐 环境: 小程序 WebView
-║ 📋 Query参数: ${JSON.stringify(query)}
-║ 🕐 时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-╚════════════════════════════════════════════════════════════════
-      `);
-    } else if (isWechat) {
-      this.logger.log(`
-╔════════════════════════════════════════════════════════════════
-║ 📱 微信浏览器访问
-╠════════════════════════════════════════════════════════════════
-║ 📄 访问文件: ${fileName}
-║ 🔗 完整URL: ${originalUrl}
-║ 📱 IP地址: ${realIp}
-║ 🌐 环境: 微信浏览器
-║ 📋 Query参数: ${JSON.stringify(query)}
-║ 🕐 时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-╚════════════════════════════════════════════════════════════════
-      `);
-    } else {
-      this.logger.log(`
-╔════════════════════════════════════════════════════════════════
-║ 🌐 普通浏览器访问
-╠════════════════════════════════════════════════════════════════
-║ 📄 访问文件: ${fileName}
-║ 🔗 完整URL: ${originalUrl}
-║ 📱 IP地址: ${realIp}
-║ 🌐 环境: 普通浏览器
-║ 📋 Query参数: ${JSON.stringify(query)}
-║ 🕐 时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-╚════════════════════════════════════════════════════════════════
-      `);
-    }
-
-    // 记录详细的 JSON 格式日志（便于后续分析）
-    this.logger.debug(JSON.stringify(logInfo, null, 2));
+    this.logger.log('miniprogram.access', logInfo);
 
     // 继续处理请求
     next();
   }
 }
-

@@ -670,8 +670,8 @@ export class ContractsService {
 
   // 根据ID获取合同详情
   async findOne(id: string): Promise<any> {
-    console.log('🚨🚨🚨 [CONTRACTS SERVICE] 开始查询合同详情, ID:', id);
-    console.log('🚨🚨🚨 [CONTRACTS SERVICE] 当前时间:', new Date().toISOString());
+    this.logger.debug('🚨🚨🚨 [CONTRACTS SERVICE] 开始查询合同详情, ID:', { data: id });
+    this.logger.debug('🚨🚨🚨 [CONTRACTS SERVICE] 当前时间:', { data: new Date().toISOString() });
 
     // ✅ 验证 ObjectId 格式的辅助函数
     const isValidObjectId = (val: any): boolean => {
@@ -700,37 +700,37 @@ export class ContractsService {
       if (isValidObjectId(rawContract.createdBy)) {
         query = query.populate('createdBy', 'name username');
       } else if (rawContract.createdBy) {
-        console.warn('⚠️ [CONTRACTS SERVICE] createdBy 不是有效的 ObjectId:', rawContract.createdBy);
+        this.logger.warn('⚠️ [CONTRACTS SERVICE] createdBy 不是有效的 ObjectId:', { data: rawContract.createdBy });
       }
 
       // 只有当 lastUpdatedBy 是有效的 ObjectId 时才 populate
       if (isValidObjectId(rawContract.lastUpdatedBy)) {
         query = query.populate('lastUpdatedBy', 'name username');
       } else if (rawContract.lastUpdatedBy) {
-        console.warn('⚠️ [CONTRACTS SERVICE] lastUpdatedBy 不是有效的 ObjectId:', rawContract.lastUpdatedBy);
+        this.logger.warn('⚠️ [CONTRACTS SERVICE] lastUpdatedBy 不是有效的 ObjectId:', { data: rawContract.lastUpdatedBy });
       }
     }
 
     const contract = await query.exec();
 
     if (!contract) {
-      console.log('🚨🚨🚨 [CONTRACTS SERVICE] 合同不存在, ID:', id);
+      this.logger.debug('🚨🚨🚨 [CONTRACTS SERVICE] 合同不存在, ID:', { data: id });
       throw new NotFoundException('合同不存在');
     }
 
-    console.log('🚨🚨🚨 [CONTRACTS SERVICE] 合同详情查询结果:');
-    console.log('🚨🚨🚨   - 合同ID:', contract._id);
-    console.log('🚨🚨🚨   - 合同编号:', contract.contractNumber);
-    console.log('🚨🚨🚨   - 创建人:', contract.createdBy);
-    console.log('🚨🚨🚨   - 最后更新人:', contract.lastUpdatedBy);
-    console.log('🚨🚨🚨   - lastUpdatedBy类型:', typeof contract.lastUpdatedBy);
-    console.log('🚨🚨🚨   - 原始合同数据的lastUpdatedBy字段:', contract.toObject().lastUpdatedBy);
+    this.logger.debug('🚨🚨🚨 [CONTRACTS SERVICE] 合同详情查询结果:');
+    this.logger.debug('🚨🚨🚨   - 合同ID:', { data: contract._id });
+    this.logger.debug('🚨🚨🚨   - 合同编号:', { data: contract.contractNumber });
+    this.logger.debug('🚨🚨🚨   - 创建人:', { data: contract.createdBy });
+    this.logger.debug('🚨🚨🚨   - 最后更新人:', { data: contract.lastUpdatedBy });
+    this.logger.debug('🚨🚨🚨   - lastUpdatedBy类型:', { data: typeof contract.lastUpdatedBy });
+    this.logger.debug('🚨🚨🚨   - 原始合同数据的lastUpdatedBy字段:', { data: contract.toObject().lastUpdatedBy });
 
     // 查询劳动者的保险信息（根据身份证号）
     let insuranceInfo = null;
     if (contract.workerIdCard) {
       try {
-        console.log('🔍 [CONTRACTS SERVICE] 查询劳动者保险信息, 身份证号:', contract.workerIdCard);
+        this.logger.debug('🔍 [CONTRACTS SERVICE] 查询劳动者保险信息, 身份证号:', { data: contract.workerIdCard });
         const policies = await this.dashubaoService.getPoliciesByIdCard(contract.workerIdCard);
 
         if (policies && policies.length > 0) {
@@ -740,12 +740,12 @@ export class ContractsService {
           );
 
           // 🔍 调试：检查原始保单数据
-          console.log('🔍 [CONTRACTS SERVICE] 原始保单数据 insuredList:', activePolicies.map(p => ({
+          this.logger.debug('contracts.insurance.raw_data', { data: activePolicies.map(p => ({
             policyNo: p.policyNo,
             insuredList: p.insuredList,
             hasInsuredList: !!p.insuredList,
             insuredListLength: p.insuredList?.length
-          })));
+          })) });
 
           insuranceInfo = {
             hasInsurance: activePolicies.length > 0,
@@ -764,17 +764,17 @@ export class ContractsService {
             })),
             totalPolicies: activePolicies.length,
           };
-          console.log('✅ [CONTRACTS SERVICE] 找到保险信息:', JSON.stringify(insuranceInfo, null, 2));
+          this.logger.debug('✅ [CONTRACTS SERVICE] 找到保险信息:', { data: JSON.stringify(insuranceInfo, null, 2) });
         } else {
           insuranceInfo = {
             hasInsurance: false,
             policies: [],
             totalPolicies: 0,
           };
-          console.log('ℹ️ [CONTRACTS SERVICE] 未找到保险信息');
+          this.logger.debug('ℹ️ [CONTRACTS SERVICE] 未找到保险信息');
         }
       } catch (error) {
-        console.error('❌ [CONTRACTS SERVICE] 查询保险信息失败:', error);
+        this.logger.error('❌ [CONTRACTS SERVICE] 查询保险信息失败:', error);
         insuranceInfo = {
           hasInsurance: false,
           policies: [],
@@ -791,7 +791,7 @@ export class ContractsService {
     // 🔥 如果 workerId populate 失败（返回 null），保留原始的 ObjectId
     // 这样前端至少知道有 workerId，只是关联的记录不存在
     if (!contractObj.workerId && rawContract.workerId) {
-      console.warn('⚠️ [CONTRACTS SERVICE] workerId populate 失败，保留原始 ObjectId');
+      this.logger.warn('⚠️ [CONTRACTS SERVICE] workerId populate 失败，保留原始 ObjectId');
       contractObj.workerId = rawContract.workerId;
     }
 
@@ -808,12 +808,12 @@ export class ContractsService {
         const creator = await this.userModel.findById(creatorId).select('name username').lean().exec();
         if (creator) {
           contractObj.createdBy = { _id: creatorId, name: creator.name, username: creator.username };
-          console.log('✅ [CONTRACTS SERVICE] 手动查询创建人成功:', creator.name);
+          this.logger.debug('✅ [CONTRACTS SERVICE] 手动查询创建人成功:', { data: creator.name });
         } else {
-          console.warn('⚠️ [CONTRACTS SERVICE] 创建人不存在, ID:', creatorId);
+          this.logger.warn('⚠️ [CONTRACTS SERVICE] 创建人不存在, ID:', { data: creatorId });
         }
       } catch (error) {
-        console.error('❌ [CONTRACTS SERVICE] 手动查询创建人失败:', error.message);
+        this.logger.error('❌ [CONTRACTS SERVICE] 手动查询创建人失败:', error.message);
       }
     }
 
@@ -824,10 +824,10 @@ export class ContractsService {
         const updater = await this.userModel.findById(updaterId).select('name username').lean().exec();
         if (updater) {
           contractObj.lastUpdatedBy = { _id: updaterId, name: updater.name, username: updater.username };
-          console.log('✅ [CONTRACTS SERVICE] 手动查询更新人成功:', updater.name);
+          this.logger.debug('✅ [CONTRACTS SERVICE] 手动查询更新人成功:', { data: updater.name });
         }
       } catch (error) {
-        console.error('❌ [CONTRACTS SERVICE] 手动查询更新人失败:', error.message);
+        this.logger.error('❌ [CONTRACTS SERVICE] 手动查询更新人失败:', error.message);
       }
     }
 
@@ -1155,7 +1155,7 @@ export class ContractsService {
   // 获取客户合同历史
   async getCustomerContractHistory(customerPhone: string): Promise<any> {
     try {
-      console.log('🔍 获取客户合同历史:', customerPhone);
+      this.logger.debug('🔍 获取客户合同历史:', { data: customerPhone });
       
       // 获取该客户的所有合同，按创建时间排序
       const allContracts = await this.contractModel
@@ -1166,7 +1166,7 @@ export class ContractsService {
         .sort({ createdAt: 1 }) // 按创建时间升序排列
         .exec();
 
-      console.log(`📋 找到 ${allContracts.length} 个合同`);
+      this.logger.debug(`📋 找到 ${allContracts.length} 个合同`);
 
       if (allContracts.length === 0) {
         return null;
@@ -1310,7 +1310,7 @@ export class ContractsService {
         latestContractId: currentContract._id
       };
 
-      console.log('✅ 合同历史构建完成:', {
+      this.logger.debug('✅ 合同历史构建完成:', {
         totalContracts: result.totalContracts,
         totalWorkers: result.totalWorkers,
         totalServiceDays: result.totalServiceDays
@@ -1318,7 +1318,7 @@ export class ContractsService {
 
       return result;
     } catch (error) {
-      console.error('获取客户合同历史失败:', error);
+      this.logger.error('获取客户合同历史失败:', error);
       throw new BadRequestException(`获取客户合同历史失败: ${error.message}`);
     }
   }
@@ -1331,21 +1331,21 @@ export class ContractsService {
     isSignedContract: boolean;
   }> {
     try {
-      console.log('🔍 开始检查客户现有合同, 手机号:', customerPhone);
-      console.log('🔍 手机号类型:', typeof customerPhone);
-      console.log('🔍 手机号长度:', customerPhone.length);
-      console.log('🔍 手机号字符编码:', [...customerPhone].map(c => c.charCodeAt(0)));
+      this.logger.debug('🔍 开始检查客户现有合同, 手机号:', { data: customerPhone });
+      this.logger.debug('🔍 手机号类型:', { data: typeof customerPhone });
+      this.logger.debug('🔍 手机号长度:', { data: customerPhone.length });
+      this.logger.debug('🔍 手机号字符编码:', { data: [...customerPhone].map(c => c.charCodeAt(0)) });
       
       // 先测试查询所有合同
       const allContracts = await this.contractModel.find({}).limit(5).exec();
-      console.log('📋 数据库中前5个合同的customerPhone字段:');
+      this.logger.debug('📋 数据库中前5个合同的customerPhone字段:');
       allContracts.forEach((contract, index) => {
-        console.log(`  ${index + 1}. ${contract.customerPhone} (类型: ${typeof contract.customerPhone}, 长度: ${contract.customerPhone?.length})`);
+        this.logger.debug(`  ${index + 1}. ${contract.customerPhone} (类型: ${typeof contract.customerPhone}, 长度: ${contract.customerPhone?.length})`);
       });
       
       // 查找该客户的所有合同
       const queryCondition = { customerPhone };
-      console.log('🔍 查询条件:', queryCondition);
+      this.logger.debug('🔍 查询条件:', { data: queryCondition });
       
       const contracts = await this.contractModel
         .find(queryCondition)
@@ -1355,7 +1355,7 @@ export class ContractsService {
         .sort({ createdAt: -1 })
         .exec();
 
-      console.log('📋 查询结果:', {
+      this.logger.debug('📋 查询结果:', {
         查询条件: { customerPhone },
         找到合同数量: contracts.length,
         合同列表: contracts.map(c => ({
@@ -1369,7 +1369,7 @@ export class ContractsService {
       });
 
       if (contracts.length === 0) {
-        console.log('❌ 没有找到该客户的合同');
+        this.logger.debug('❌ 没有找到该客户的合同');
         return {
           hasContract: false,
           contractCount: 0,
@@ -1379,7 +1379,7 @@ export class ContractsService {
 
       // 查找最新的合同
       const latestContract = contracts[0];
-      console.log('📄 最新合同:', {
+      this.logger.debug('📄 最新合同:', {
         id: latestContract._id,
         contractNumber: latestContract.contractNumber,
         esignStatus: latestContract.esignStatus,
@@ -1399,7 +1399,7 @@ export class ContractsService {
       
       const hasSignedContract = !!latestSignedContract;
 
-      console.log('🔍 检查已签约状态:', {
+      this.logger.debug('🔍 检查已签约状态:', {
         合同状态检查: contracts.map(c => ({
           contractNumber: c.contractNumber,
           esignStatus: c.esignStatus,
@@ -1409,7 +1409,7 @@ export class ContractsService {
         hasSignedContract
       });
 
-      console.log('✅ 检查完成:', {
+      this.logger.debug('✅ 检查完成:', {
         hasContract: true,
         contractCount: contracts.length,
         isSignedContract: hasSignedContract
@@ -1422,7 +1422,7 @@ export class ContractsService {
         isSignedContract: hasSignedContract
       };
     } catch (error) {
-      console.error('检查客户现有合同失败:', error);
+      this.logger.error('检查客户现有合同失败:', error);
       throw new BadRequestException(`检查客户现有合同失败: ${error.message}`);
     }
   }
@@ -1430,7 +1430,7 @@ export class ContractsService {
   // 根据服务人员信息查询合同（用于保险投保页面自动填充）
   async searchByWorkerInfo(name?: string, idCard?: string, phone?: string): Promise<Contract[]> {
     try {
-      console.log('🔍 根据服务人员信息查询合同:', { name, idCard, phone });
+      this.logger.debug('🔍 根据服务人员信息查询合同:', { name, idCard, phone });
 
       // 构建查询条件 - 必须同时匹配所有提供的字段
       const query: any = {};
@@ -1449,11 +1449,11 @@ export class ContractsService {
 
       // 如果没有提供任何查询条件，返回空数组
       if (Object.keys(query).length === 0) {
-        console.log('❌ 未提供任何查询条件');
+        this.logger.debug('❌ 未提供任何查询条件');
         return [];
       }
 
-      console.log('🔍 查询条件:', query);
+      this.logger.debug('🔍 查询条件:', { data: query });
 
       // 查询合同，只返回最新的合同
       const contracts = await this.contractModel
@@ -1464,7 +1464,7 @@ export class ContractsService {
         .limit(10) // 限制返回数量
         .exec();
 
-      console.log('📋 查询结果:', {
+      this.logger.debug('📋 查询结果:', {
         查询条件: query,
         找到合同数量: contracts.length,
         合同列表: contracts.map(c => ({
@@ -1480,7 +1480,7 @@ export class ContractsService {
 
       return contracts;
     } catch (error) {
-      console.error('根据服务人员信息查询合同失败:', error);
+      this.logger.error('根据服务人员信息查询合同失败:', error);
       throw new BadRequestException(`查询合同失败: ${error.message}`);
     }
   }
@@ -1492,7 +1492,7 @@ export class ContractsService {
     userId: string
   ): Promise<Contract> {
     try {
-      console.log('🔄 自动换人合并模式，原合同ID:', originalContractId);
+      this.logger.debug('🔄 自动换人合并模式，原合同ID:', { data: originalContractId });
       
       // 获取原合同信息
       const originalContract = await this.contractModel.findById(originalContractId).exec();
@@ -1510,7 +1510,7 @@ export class ContractsService {
         (currentDate.getTime() - originalStartDate.getTime()) / (1000 * 60 * 60 * 24)
       );
 
-      console.log('⏰ 时间计算:', {
+      this.logger.debug('⏰ 时间计算:', {
         originalStart: originalStartDate.toISOString().split('T')[0],
         originalEnd: originalEndDate.toISOString().split('T')[0],
         changeDate: currentDate.toISOString().split('T')[0],
@@ -1529,8 +1529,10 @@ export class ContractsService {
         // 处理新的服务人员信息（来自createContractDto）
         workerId: new Types.ObjectId(),
 
-        // 设置创建人
-        createdBy: Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : new Types.ObjectId(),
+        // 设置创建人：优先使用传入的userId，其次继承原合同的创建人
+        createdBy: Types.ObjectId.isValid(userId)
+          ? new Types.ObjectId(userId)
+          : (originalContract.createdBy || new Types.ObjectId()),
 
         // 🔧 修正时间设置：换人合同开始时间为当日，结束时间继承原合同
         // 例如：原合同 2025-06-01 ~ 2026-05-31，换人后新合同为 2025-12-03（当日）~ 2026-05-31
@@ -1557,17 +1559,17 @@ export class ContractsService {
           const resume = await this.resumeService.findByPhone(createContractDto.workerPhone);
           if (resume && resume.currentAddress) {
             (mergedContractData as any).workerAddress = resume.currentAddress;
-            console.log('📍 [换人合同] 从简历自动获取联系地址:', resume.currentAddress);
+            this.logger.debug('📍 [换人合同] 从简历自动获取联系地址:', { data: resume.currentAddress });
           }
         } catch (error) {
-          console.warn('⚠️ [换人合同] 从简历获取联系地址失败:', error.message);
+          this.logger.warn('⚠️ [换人合同] 从简历获取联系地址失败:', { data: error.message });
         }
       }
 
       // 🆕 将 templateNo 映射到 esignTemplateNo（与普通创建合同保持一致）
       if ((createContractDto as any).templateNo && !mergedContractData.esignTemplateNo) {
         (mergedContractData as any).esignTemplateNo = (createContractDto as any).templateNo;
-        console.log('📋 [换人合同] 将 templateNo 映射到 esignTemplateNo:', (mergedContractData as any).esignTemplateNo);
+        this.logger.debug('📋 [换人合同] 将 templateNo 映射到 esignTemplateNo:', { data: (mergedContractData as any).esignTemplateNo });
       }
 
       // 🆕 提取中文字段并保存到 templateParams（用于后续发起爱签签署）
@@ -1637,7 +1639,7 @@ export class ContractsService {
         }
       }
 
-      console.log('🔄 合并后的合同数据:', {
+      this.logger.debug('🔄 合并后的合同数据:', {
         contractNumber: mergedContractData.contractNumber,
         customerName: mergedContractData.customerName,
         workerName: mergedContractData.workerName,
@@ -1671,21 +1673,21 @@ export class ContractsService {
         }
       );
 
-      console.log('✅ 换人合并完成，新合同ID:', (newContract as any)._id);
-      console.log('📋 客户合同已自动合并，换人历史已记录');
+      this.logger.debug('✅ 换人合并完成，新合同ID:', { data: (newContract as any)._id });
+      this.logger.debug('📋 客户合同已自动合并，换人历史已记录');
 
       // 🔥🔥🔥 修复：换人合同也需要调用爱签API创建电子合同
-      console.log('🔍 检查是否应该启动爱签流程...');
-      console.log('  - templateNo:', createContractDto.templateNo);
-      console.log('  - customerName:', createContractDto.customerName);
-      console.log('  - customerPhone:', createContractDto.customerPhone);
-      console.log('  - customerIdCard:', createContractDto.customerIdCard);
-      console.log('  - workerName:', createContractDto.workerName);
-      console.log('  - workerPhone:', createContractDto.workerPhone);
-      console.log('  - workerIdCard:', createContractDto.workerIdCard);
+      this.logger.debug('🔍 检查是否应该启动爱签流程...');
+      this.logger.debug('  - templateNo:', { data: createContractDto.templateNo });
+      this.logger.debug('  - customerName:', { data: createContractDto.customerName });
+      this.logger.debug('  - customerPhone:', { data: createContractDto.customerPhone });
+      this.logger.debug('  - customerIdCard:', { data: createContractDto.customerIdCard });
+      this.logger.debug('  - workerName:', { data: createContractDto.workerName });
+      this.logger.debug('  - workerPhone:', { data: createContractDto.workerPhone });
+      this.logger.debug('  - workerIdCard:', { data: createContractDto.workerIdCard });
 
       const shouldInitiate = this.shouldInitiateEsignFlow(createContractDto);
-      console.log('  - shouldInitiateEsignFlow 结果:', shouldInitiate);
+      this.logger.debug('  - shouldInitiateEsignFlow 结果:', { data: shouldInitiate });
 
       if (shouldInitiate) {
         try {
@@ -1770,7 +1772,7 @@ export class ContractsService {
       return newContract;
 
     } catch (error) {
-      console.error('❌ 创建换人合同失败:', error);
+      this.logger.error('❌ 创建换人合同失败:', error);
       throw new BadRequestException(`创建换人合同失败: ${error.message}`);
     }
   }

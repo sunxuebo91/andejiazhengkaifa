@@ -2,6 +2,9 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ESignController } from './esign.controller';
 import { ESignService } from './esign.service';
+import { ESignApiService } from './services/esign-api.service';
+import { ESignUserSealService } from './services/esign-user-seal.service';
+import { ESignCallbackService } from './services/esign-callback.service';
 import { Contract, ContractSchema } from '../contracts/models/contract.model';
 import { Customer, CustomerSchema } from '../customers/models/customer.model';
 import { ContractsModule } from '../contracts/contracts.module';
@@ -19,7 +22,7 @@ import { NotificationModule } from '../notification/notification.module';
     NotificationModule, // 用于发送实时刷新通知
   ],
   controllers: [ESignController],
-  providers: [ESignService],
+  providers: [ESignApiService, ESignUserSealService, ESignCallbackService, ESignService],
   exports: [ESignService],
 })
 export class ESignModule {}

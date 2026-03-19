@@ -1,9 +1,12 @@
 import { Controller, Get, Query, HttpException } from '@nestjs/common';
 import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
+import { AppLogger } from '../../common/logging/app-logger';
 
 @Controller('baidu/place')
 export class BaiduController {
+  private readonly logger = new AppLogger(BaiduController.name);
+
   constructor(private configService: ConfigService) {}
 
   @Get('suggestion')
@@ -33,7 +36,7 @@ export class BaiduController {
 
       return response.data;
     } catch (error) {
-      console.error('百度地图API调用失败:', error);
+      this.logger.error('百度地图API调用失败:', error);
       throw new HttpException('百度地图服务暂时不可用', 503);
     }
   }

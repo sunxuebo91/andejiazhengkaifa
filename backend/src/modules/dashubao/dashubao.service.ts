@@ -826,7 +826,13 @@ export class DashubaoService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.policyModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      this.policyModel
+        .find(filter)
+        .populate('createdBy', 'name username')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
       this.policyModel.countDocuments(filter),
     ]);
 
@@ -1154,4 +1160,3 @@ export class DashubaoService {
       .exec();
   }
 }
-

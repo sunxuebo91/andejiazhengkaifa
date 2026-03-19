@@ -785,16 +785,16 @@ export class ESignController {
     enableDownloadButton?: number;
   }) {
     try {
-      console.log('创建合同请求:', contractData);
+      this.logger.debug('创建合同请求:', contractData);
 
       const result = await this.esignService.createContractWithTemplate(contractData);
       
-      console.log('创建合同响应:', result);
+      this.logger.debug('创建合同响应:', result);
 
       // 直接返回爱签API的原始响应格式 { code, msg, data }
       return result;
     } catch (error) {
-      console.error('创建合同失败:', error);
+      this.logger.error('创建合同失败:', error);
       // 返回爱签API错误格式
       return {
         code: error.response?.data?.code || 100001,
@@ -848,7 +848,7 @@ export class ESignController {
     isSignPwdNotice?: boolean;
   }) {
     try {
-      console.log('🔄 批量添加甲乙丙三方用户请求:', body);
+      this.logger.debug('🔄 批量添加甲乙丙三方用户请求:', body);
 
       // 构建甲方用户请求
       const partyARequest = {
@@ -896,26 +896,26 @@ export class ESignController {
       
       try {
         partyAResponse = await this.esignService.addStranger(partyARequest);
-        console.log('✅ 甲方用户添加响应:', partyAResponse);
+        this.logger.debug('✅ 甲方用户添加响应:', partyAResponse);
       } catch (error) {
-        console.error('❌ 甲方用户添加失败:', error);
+        this.logger.error('❌ 甲方用户添加失败:', error);
         partyAResponse = { code: -1, message: error.message || '甲方用户添加失败' };
       }
 
       try {
         partyBResponse = await this.esignService.addStranger(partyBRequest);
-        console.log('✅ 乙方用户添加响应:', partyBResponse);
+        this.logger.debug('✅ 乙方用户添加响应:', partyBResponse);
       } catch (error) {
-        console.error('❌ 乙方用户添加失败:', error);
+        this.logger.error('❌ 乙方用户添加失败:', error);
         partyBResponse = { code: -1, message: error.message || '乙方用户添加失败' };
       }
 
       // 🎯 关键修复：添加丙方企业用户
       try {
         partyCResponse = await this.esignService.addStranger(partyCRequest);
-        console.log('✅ 丙方企业用户添加响应:', partyCResponse);
+        this.logger.debug('✅ 丙方企业用户添加响应:', partyCResponse);
       } catch (error) {
-        console.error('❌ 丙方企业用户添加失败:', error);
+        this.logger.error('❌ 丙方企业用户添加失败:', error);
         partyCResponse = { code: -1, message: error.message || '丙方企业用户添加失败' };
       }
 
@@ -954,7 +954,7 @@ export class ESignController {
         }
       };
     } catch (error) {
-      console.error('❌ 批量添加用户失败:', error);
+      this.logger.error('❌ 批量添加用户失败:', error);
       return {
         success: false,
         message: error.message || '批量添加用户失败',
@@ -1240,10 +1240,10 @@ export class ESignController {
             signerRole = 'both'; // 🔥 改为 both，表示合同已完成
             this.logger.log(`🎉 合同 ${contractNo} userNotifyUrl回调，家政员(${signerName || account})已签署，合同完成`);
           } else if (isCompany) {
-            // 企业签完（自动签章），合同完成
-            statusText = '合同签约完毕';
-            signerRole = 'both';
-            this.logger.log(`🎉 合同 ${contractNo} userNotifyUrl回调，企业(${signerName || account})已签署，合同完成`);
+            // 🔥 企业签完（自动签章），不发送通知，避免和家政员签完的通知重复
+            // 因为家政员签完后已经发送"家政员已签约，合同签约完毕"
+            this.logger.log(`📝 合同 ${contractNo} userNotifyUrl回调，企业(${signerName || account})自动签章完成，跳过通知`);
+            return res.status(200).send('ok'); // 直接返回，不发送通知
           } else {
             // 无法识别签署方，根据 status 判断
             if (statusNum === 2) {
@@ -1257,6 +1257,11 @@ export class ESignController {
           }
         } else if (statusNum === 2) {
           // notifyUrl 回调（无 account），status=2 表示合同完成
+          // 🔥 如果合同已经是 active 状态，说明 userNotifyUrl 已经处理过了，跳过通知
+          if (contract.contractStatus === 'active') {
+            this.logger.log(`📝 合同 ${contractNo} notifyUrl回调，状态=2，合同已是active状态，跳过重复通知`);
+            return res.status(200).send('ok');
+          }
           statusText = '双方已完成签署';
           signerRole = 'both';
           this.logger.log(`🎉 合同 ${contractNo} notifyUrl回调，状态=2，双方已完成签署`);

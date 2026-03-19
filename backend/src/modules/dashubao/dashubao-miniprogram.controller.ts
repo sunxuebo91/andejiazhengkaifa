@@ -27,12 +27,15 @@ import { PolicyStatus } from './models/insurance-policy.model';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { AppLogger } from '../../common/logging/app-logger';
 
 @ApiTags('小程序-保险保单')
 @Controller('dashubao/miniprogram')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
 export class DashubaoMiniprogramController {
+  private readonly logger = new AppLogger(DashubaoMiniprogramController.name);
+
   constructor(private readonly dashubaoService: DashubaoService) {}
 
   // 辅助方法：角色映射
@@ -181,10 +184,10 @@ export class DashubaoMiniprogramController {
           if (wxRes.data?.openid) {
             openId = wxRes.data.openid;
             openIdSource = 'code_exchange';
-            console.log(`[支付] 通过code换取openId成功`);
+            this.logger.debug(`[支付] 通过code换取openId成功`);
           }
         } catch (e) {
-          console.error(`[支付] 通过code换取openId失败:`, e.message);
+          this.logger.error(`[支付] 通过code换取openId失败:`, e.message);
         }
       }
 
@@ -201,9 +204,9 @@ export class DashubaoMiniprogramController {
         ? `${openId.substring(0, 6)}****${openId.substring(openId.length - 4)}`
         : openId;
 
-      console.log(`[支付] 使用小程序支付(MINI)`);
-      console.log(`[支付] AppId: ${configuredAppId}`);
-      console.log(`[支付] OpenId: ${maskedOpenId} (来源: ${openIdSource})`);
+      this.logger.debug(`[支付] 使用小程序支付(MINI)`);
+      this.logger.debug(`[支付] AppId: ${configuredAppId}`);
+      this.logger.debug(`[支付] OpenId: ${maskedOpenId} (来源: ${openIdSource})`);
 
       // 调用小程序支付
       const result = await this.dashubaoService.createPaymentOrder(policyRef, 'MINI', openId);

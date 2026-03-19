@@ -5,9 +5,12 @@ import { User, UserWithoutPassword } from './models/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
+import { AppLogger } from '../../common/logging/app-logger';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new AppLogger(UsersService.name);
+
   constructor(@InjectModel('User') private readonly userModel: Model<User>) {}
 
   /**
@@ -118,7 +121,7 @@ export class UsersService {
         permissions: ['*'],
         active: true
       });
-      console.log('初始管理员账户已创建');
+      this.logger.debug('初始管理员账户已创建');
     } else {
       // 如果管理员存在但缺少email或phone字段，则更新
       if (!adminExists.email || !adminExists.phone) {
@@ -126,7 +129,7 @@ export class UsersService {
           email: adminExists.email || 'admin@andejiazheng.com',
           phone: adminExists.phone || '13800138000'
         });
-        console.log('管理员账户信息已更新');
+        this.logger.debug('管理员账户信息已更新');
       }
     }
   }

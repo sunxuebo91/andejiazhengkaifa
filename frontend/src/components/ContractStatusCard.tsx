@@ -485,12 +485,17 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
                   // 🔥 支持多种签署状态字段格式
                   const signStatus = signer.signStatus ?? signer.status ?? 0;
                   // 🔥 修复：根据爱签实际返回的状态码调整
-                  // signStatus: 0=待签约, 1=签约中, 2=已签约, 3=拒签
-                  const isSigned = signStatus === 2;      // 🔥 修复：2 表示已签约
-                  const isPending = signStatus === 0 || signStatus === 1;  // 0=待签约, 1=签约中
-                  const isRejected = signStatus === 3;    // 🔥 修复：3 表示拒签
+                  // signStatus: 0=待签约/等待前方签署, 1=签约中, 2=已签约, 3=拒签, 4=已撤销, 5=已过期
+                  const isSigned = signStatus === 2;
+                  const isPending = signStatus === 0 || signStatus === 1;
+                  // 🔥 修复：只有在合同整体状态不是"签约中"(1)时，才将3视为拒签
+                  // 顺序签约中，未到轮次的签署方可能被API标记为3，但合同仍在进行中，
+                  // 此时后端已修正为0，但此处额外防御：若整体status=1，不显示拒签
+                  const overallStatus = contractStatus.data?.status;
+                  const isRejected = signStatus === 3 && overallStatus !== 1;
 
                   const statusColor = isSigned ? 'green' : isRejected ? 'red' : 'orange';
+                  // 🔥 优先使用后端传来的 signStatusText（后端已处理"等待前方签署"等特殊文本）
                   const statusText = signer.signStatusText || (isSigned ? '已签约' : isRejected ? '已拒签' : isPending ? '待签约' : '未知');
                   const bgColor = isSigned ? '#f6ffed' : isRejected ? '#fff2f0' : '#fff7e6';
                   const borderColor = isSigned ? '#b7eb8f' : isRejected ? '#ffccc7' : '#ffd591';

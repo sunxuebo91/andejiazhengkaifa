@@ -10,7 +10,6 @@ import { Customer, CustomerSchema } from '../customers/models/customer.model';
 import { Resume, ResumeSchema } from '../resume/models/resume.entity';
 import { User, UserSchema } from '../users/models/user.entity';
 import { ESignModule } from '../esign/esign.module';
-import { TestController } from './test.controller';
 import { ResumeModule } from '../resume/resume.module';
 import { ContractApprovalsModule } from '../contract-approvals/contract-approvals.module';
 import { DashubaoModule } from '../dashubao/dashubao.module';
@@ -30,7 +29,7 @@ import { DashubaoModule } from '../dashubao/dashubao.module';
     ContractApprovalsModule,
     DashubaoModule,
   ],
-  controllers: [ContractsController, ContractsMiniProgramController, TestController],
+  controllers: [ContractsController, ContractsMiniProgramController],
   providers: [ContractsService],
   exports: [ContractsService],
 })

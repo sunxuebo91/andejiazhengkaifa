@@ -414,6 +414,32 @@ export class ZmdbService {
   async createReport(dto: CreateBackgroundCheckDto, userId: string): Promise<BackgroundCheck> {
     this.logger.log(`发起背调：${dto.name} ${dto.mobile}, 套餐: ${dto.packageType || '1'}`);
 
+    // 🔥 7天内重复检测：同一身份证号或手机号，7天内只能有一次成功的背调
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // 查询条件：7天内成功的背调（status=4 或 16 表示已完成）
+    const duplicateQuery: any = {
+      createdAt: { $gte: sevenDaysAgo },
+      status: { $in: [4, 16] }, // 已完成状态
+    };
+
+    // 优先用身份证号查，其次用手机号
+    if (dto.idNo) {
+      duplicateQuery.idNo = dto.idNo;
+    } else {
+      duplicateQuery.mobile = dto.mobile;
+    }
+
+    const existingCheck = await this.bgCheckModel.findOne(duplicateQuery).sort({ createdAt: -1 }).lean();
+    if (existingCheck) {
+      const checkDate = new Date((existingCheck as any).createdAt).toLocaleDateString('zh-CN');
+      this.logger.warn(`⚠️ 7天内已有成功的背调记录: ${existingCheck.name}, reportId=${existingCheck.reportId}, 完成日期=${checkDate}`);
+      throw new BadRequestException(
+        `该人员（${dto.name}）7天内已有成功的背调记录（${checkDate}），无需重复发起。如有特殊情况，请联系管理员。`
+      );
+    }
+
     // 🔍 根据身份证号查询关联的合同
     let contractId: Types.ObjectId | undefined;
     if (dto.idNo) {

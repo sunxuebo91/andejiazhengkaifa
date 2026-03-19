@@ -1,28 +1,18 @@
 import { Injectable, BadRequestException, Inject, forwardRef } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import axios, { AxiosInstance } from 'axios';
 import { Contract, ContractDocument } from '../contracts/models/contract.model';
 import { Customer, CustomerDocument } from '../customers/models/customer.model';
 import { NotificationGateway } from '../notification/notification.gateway';
 import * as crypto from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
+import axios from 'axios';
+import FormData from 'form-data';
+import { v4 as uuidv4 } from 'uuid';
 import { AppLogger } from '../../common/logging/app-logger';
 import { RequestContextStore } from '../../common/logging/request-context';
-
-// 爱签OpenAPI配置接口
-interface ESignConfig {
-  type: string; // API类型: 'openapi' | 'saasapi'
-  appId: string;
-  publicKey: string; // 爱签提供的公钥，用于验证回调
-  privateKey?: string; // 商户私钥，用于签名请求（OpenAPI必需）
-  privateKeyPath?: string; // 私钥文件路径
-  host: string;
-  version: string;
-  notifyUrl: string;
-}
+import { ESignApiService, ESignResponse } from './services/esign-api.service';
+import { ESignUserSealService } from './services/esign-user-seal.service';
+import { ESignCallbackService } from './services/esign-callback.service';
 
 // 签署参数接口
 interface SignRequest {
@@ -41,116 +31,80 @@ interface SignRequest {
   };
 }
 
-// API响应接口
-interface ESignResponse<T = any> {
-  code: number;
-  message: string;
-  data?: T;
-}
 
 @Injectable()
 export class ESignService {
   private readonly logger = new AppLogger(ESignService.name);
-  private axiosInstance: AxiosInstance;
-  private config: ESignConfig;
 
   constructor(
-    private configService: ConfigService,
-    @InjectModel(Contract.name) private contractModel: Model<ContractDocument>, // 注入合同模型
+    private readonly apiService: ESignApiService,
+    @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @Inject(forwardRef(() => NotificationGateway))
     private notificationGateway: NotificationGateway,
-  ) {
-    // 爱签OpenAPI配置 - 使用正确的域名
-    const defaultPrivateKey = `MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=`;
+    private readonly userSealService: ESignUserSealService,
+    private readonly callbackService: ESignCallbackService,
+  ) {}
+  // ── User / Seal ── delegated to ESignUserSealService ──────────────────────
+  async addEnterpriseUser(userData: Parameters<ESignUserSealService['addEnterpriseUser']>[0]) {
+    return this.userSealService.addEnterpriseUser(userData);
+  }
 
-    this.config = {
-      type: 'openapi',
-      appId: this.configService.get<string>('ESIGN_APP_ID', '141496759'),
-      publicKey: this.configService.get<string>('ESIGN_PUBLIC_KEY', 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjkWacvkz1GQnZtln/YqkaemCdiBNpM39XPY2Tcev3ZEBlrW8fradWAT2HgtbAL/+zo07KMEUSd9fHVGdUzjbZOfcmY/JQhbZEXud3w250CpN5luK1XhQZ+KUP8mtnRDPo2TnYyykx1jbVA+3MlZeKmoLF/vEwqBQSfZT8qTNIprxdVnLC7/VoJCA/fo7w9DX2uF0kxEEs0tQK6BJl/Xjl/O8k2EzBWTY9DnLg1H/In8IXM9UKGtpPTQDIVCvRo8PuFyOz/BVI/ttOdQPchbti6aIi5w5Osvp2wkplt1myU+fbtYzc/7Broxui4rWEAsyiSERrPBRmzUgO6dDII38iQIDAQAB'),
-      privateKey: this.configService.get<string>('ESIGN_PRIVATE_KEY'),
-      privateKeyPath: this.configService.get<string>('ESIGN_PRIVATE_KEY_PATH'),
-      host: this.configService.get<string>('ESIGN_HOST', 'https://oapi.asign.cn'), // 从环境变量获取域名
-      version: this.configService.get<string>('ESIGN_VERSION', 'v1'),
-      notifyUrl: this.configService.get<string>('ESIGN_NOTIFY_URL', 'https://crm.andejiazheng.com/api/esign/callback'),
-    };
+  async createEnterpriseSeal(sealData: Parameters<ESignUserSealService['createEnterpriseSeal']>[0]) {
+    return this.userSealService.createEnterpriseSeal(sealData);
+  }
 
-    // 优先从私钥文件读取
-    const privateKeyPath = this.config.privateKeyPath;
-    if (privateKeyPath) {
-      try {
-        const keyPath = path.resolve(privateKeyPath);
-        if (fs.existsSync(keyPath)) {
-          this.config.privateKey = fs.readFileSync(keyPath, 'utf8');
-          this.logger.log('esign.private_key.loaded_from_file', { keyPath });
-        } else {
-          this.logger.warn('esign.private_key.file_missing', { keyPath });
-        }
-      } catch (error) {
-        this.logger.error('esign.private_key.file_read_failed', error);
-      }
-    }
+  async getSealList(params: Parameters<ESignUserSealService['getSealList']>[0]) {
+    return this.userSealService.getSealList(params);
+  }
 
-    // 如果文件读取失败，尝试使用环境变量
-    if (!this.config.privateKey) {
-      const envPrivateKey = this.configService.get<string>('ESIGN_PRIVATE_KEY');
-      if (envPrivateKey && envPrivateKey.trim() !== '') {
-        this.config.privateKey = envPrivateKey;
-        this.logger.log('esign.private_key.loaded_from_env');
-      }
-    }
+  async deleteSeal(params: Parameters<ESignUserSealService['deleteSeal']>[0]) {
+    return this.userSealService.deleteSeal(params);
+  }
 
-    // 最后使用默认私钥（转换为PEM格式）
-    if (!this.config.privateKey) {
-      this.config.privateKey = defaultPrivateKey;
-      this.logger.warn('esign.private_key.using_builtin_default');
-    }
+  async getSealDetail(params: Parameters<ESignUserSealService['getSealDetail']>[0]) {
+    return this.userSealService.getSealDetail(params);
+  }
 
-    this.logger.info('esign.config.loaded', {
-      type: this.config.type,
-      appId: this.config.appId,
-      host: this.config.host,
-      hasPrivateKey: !!this.config.privateKey,
-      privateKeyLength: this.config.privateKey?.length || 0,
-      isPemFormat: this.config.privateKey?.includes('-----BEGIN') || false
-    });
+  async preRegisterUser(userData: Parameters<ESignUserSealService['preRegisterUser']>[0]) {
+    return this.userSealService.preRegisterUser(userData);
+  }
 
-    // 创建简单的axios实例（不使用拦截器）
-    this.axiosInstance = axios.create({
-      baseURL: this.config.host,
-      timeout: 30000,
-    });
+  async addStranger(userData: Parameters<ESignUserSealService['addStranger']>[0]) {
+    return this.userSealService.addStranger(userData);
+  }
 
-    // 添加简单的响应拦截器用于日志
-    this.axiosInstance.interceptors.response.use(
-      (response) => {
-        this.logger.debug('esign.api.response', { data: response.data });
-        return response;
-      },
-      (error) => {
-        this.logger.error('esign.api.error', error, {
-          response: error.response?.data,
-        });
-        return Promise.reject(error);
-      }
-    );
+  async setDefaultSeal(account: string, sealNo?: string) {
+    return this.userSealService.setDefaultSeal(account, sealNo);
+  }
+
+  async checkUserPermissions(account: string) {
+    return this.userSealService.checkUserPermissions(account);
   }
 
 
+  // ── Callback ── delegated to ESignCallbackService ──────────────────────
+  verifyCallback(signature: string, timestamp: string, body: string): boolean {
+    return this.callbackService.verifyCallback(signature, timestamp, body);
+  }
+
+  async handleContractCallback(callbackData: any): Promise<void> {
+    return this.callbackService.handleContractCallback(callbackData);
+  }
 
   /**
    * 获取调试配置信息
    */
   getDebugConfig() {
     return {
-      type: this.config.type,
-      appId: this.config.appId,
-      host: this.config.host,
-      hasPublicKey: !!this.config.publicKey,
-      hasPrivateKey: !!this.config.privateKey,
-      privateKeyLength: this.config.privateKey?.length || 0,
-      privateKeyStart: this.config.privateKey?.substring(0, 50) || 'None',
-      notifyUrl: this.config.notifyUrl
+      type: this.apiService.config.type,
+      appId: this.apiService.config.appId,
+      host: this.apiService.config.host,
+      hasPublicKey: !!this.apiService.config.publicKey,
+      hasPrivateKey: !!this.apiService.config.privateKey,
+      privateKeyLength: this.apiService.config.privateKey?.length || 0,
+      privateKeyStart: this.apiService.config.privateKey?.substring(0, 50) || 'None',
+      notifyUrl: this.apiService.config.notifyUrl
     };
   }
 
@@ -160,33 +114,33 @@ export class ESignService {
   async testConnection(): Promise<{ success: boolean; message: string; config: any }> {
     try {
       this.logger.info('esign.connection_test.start', {
-        appId: this.config.appId,
-        host: this.config.host,
-        hasPrivateKey: !!this.config.privateKey,
-        privateKeyLength: this.config.privateKey?.length || 0,
-        privateKeyType: typeof this.config.privateKey,
-        privateKeyExists: this.config.privateKey !== undefined,
-        privateKeyEmpty: this.config.privateKey === '',
-        privateKeyNull: this.config.privateKey === null,
-        privateKeyPreview: this.config.privateKey?.substring(0, 50) || 'NO_KEY'
+        appId: this.apiService.config.appId,
+        host: this.apiService.config.host,
+        hasPrivateKey: !!this.apiService.config.privateKey,
+        privateKeyLength: this.apiService.config.privateKey?.length || 0,
+        privateKeyType: typeof this.apiService.config.privateKey,
+        privateKeyExists: this.apiService.config.privateKey !== undefined,
+        privateKeyEmpty: this.apiService.config.privateKey === '',
+        privateKeyNull: this.apiService.config.privateKey === null,
+        privateKeyPreview: this.apiService.config.privateKey?.substring(0, 50) || 'NO_KEY'
       });
 
       // 测试基本的API连接
-      const response = await this.axiosInstance.get('/v1/accounts/verify');
+      const response = await this.apiService.axiosInstance.get('/v1/accounts/verify');
       
       return {
         success: true,
         message: 'API连接成功',
         config: {
-          appId: this.config.appId,
-          host: this.config.host,
-          hasPrivateKey: !!this.config.privateKey,
-          privateKeyLength: this.config.privateKey?.length || 0,
-          privateKeyType: typeof this.config.privateKey,
-          privateKeyExists: this.config.privateKey !== undefined,
-          privateKeyEmpty: this.config.privateKey === '',
-          privateKeyNull: this.config.privateKey === null,
-          privateKeyPreview: this.config.privateKey?.substring(0, 50) || 'NO_KEY',
+          appId: this.apiService.config.appId,
+          host: this.apiService.config.host,
+          hasPrivateKey: !!this.apiService.config.privateKey,
+          privateKeyLength: this.apiService.config.privateKey?.length || 0,
+          privateKeyType: typeof this.apiService.config.privateKey,
+          privateKeyExists: this.apiService.config.privateKey !== undefined,
+          privateKeyEmpty: this.apiService.config.privateKey === '',
+          privateKeyNull: this.apiService.config.privateKey === null,
+          privateKeyPreview: this.apiService.config.privateKey?.substring(0, 50) || 'NO_KEY',
           response: response.data
         }
       };
@@ -196,10 +150,10 @@ export class ESignService {
         success: false,
         message: `API连接失败: ${error.response?.data?.message || error.message}`,
         config: {
-          appId: this.config.appId,
-          host: this.config.host,
-          hasPrivateKey: !!this.config.privateKey,
-          privateKeyLength: this.config.privateKey?.length || 0,
+          appId: this.apiService.config.appId,
+          host: this.apiService.config.host,
+          hasPrivateKey: !!this.apiService.config.privateKey,
+          privateKeyLength: this.apiService.config.privateKey?.length || 0,
           error: error.response?.data || error.message
         }
       };
@@ -214,13 +168,13 @@ export class ESignService {
       this.logger.info('esign.document_upload.start', { fileName, size: fileBuffer.length });
       
       // 如果没有私钥，返回模拟的文件ID
-      if (!this.config.privateKey) {
+      if (!this.apiService.config.privateKey) {
         this.logger.warn('esign.document_upload.mock_used', { fileName });
         return `mock_file_${Date.now()}`;
       }
 
       // 1. 获取文件上传地址
-      const uploadUrlResponse = await this.axiosInstance.post<ESignResponse<{ uploadUrl: string; fileId: string }>>(
+      const uploadUrlResponse = await this.apiService.axiosInstance.post<ESignResponse<{ uploadUrl: string; fileId: string }>>(
         '/v1/files/getUploadUrl',
         {
           fileName,
@@ -261,7 +215,7 @@ export class ESignService {
       });
       
       // 如果没有私钥，返回模拟结果
-      if (!this.config.privateKey) {
+      if (!this.apiService.config.privateKey) {
         this.logger.warn('esign.sign_flow.create_mock_used', {
           contractId: signRequest.contractId,
         });
@@ -272,7 +226,7 @@ export class ESignService {
         };
       }
 
-      const response = await this.axiosInstance.post<ESignResponse<{ signFlowId: string }>>(
+      const response = await this.apiService.axiosInstance.post<ESignResponse<{ signFlowId: string }>>(
         '/v1/signflows',
         {
           businessScene: 'CONTRACT_SIGN', // 业务场景
@@ -294,7 +248,7 @@ export class ESignService {
           signFlowConfig: {
             signType: signRequest.signFlowConfig?.signType || 'SEQUENTIAL',
             deadline: signRequest.signFlowConfig?.deadline,
-            callbackUrl: this.config.notifyUrl,
+            callbackUrl: this.apiService.config.notifyUrl,
           },
         }
       );
@@ -306,12 +260,12 @@ export class ESignService {
       const signFlowId = response.data.data.signFlowId;
 
       // 获取签署链接
-      const signUrlResponse = await this.axiosInstance.post<ESignResponse<{ signUrl: string }>>(
+      const signUrlResponse = await this.apiService.axiosInstance.post<ESignResponse<{ signUrl: string }>>(
         `/v1/signflows/${signFlowId}/signers/signUrl`,
         {
           signerMobile: signRequest.signers[0].mobile, // 第一个签署人
           signType: 'REDIRECT', // 重定向模式
-          callbackUrl: this.config.notifyUrl,
+          callbackUrl: this.apiService.config.notifyUrl,
         }
       );
 
@@ -337,7 +291,7 @@ export class ESignService {
   async getSignFlowStatus(signFlowId: string): Promise<{ status: string; documents: any[] }> {
     try {
       // 如果没有私钥，返回模拟结果
-      if (!this.config.privateKey) {
+      if (!this.apiService.config.privateKey) {
         this.logger.warn('esign.sign_flow.status_mock_used', { signFlowId });
         return {
           status: 'COMPLETED',
@@ -351,7 +305,7 @@ export class ESignService {
         };
       }
 
-      const response = await this.axiosInstance.get<ESignResponse<{ 
+      const response = await this.apiService.axiosInstance.get<ESignResponse<{ 
         status: string; 
         documents: Array<{ fileId: string; fileName: string; downloadUrl?: string }> 
       }>>(
@@ -375,14 +329,14 @@ export class ESignService {
   async downloadSignedDocument(signFlowId: string, documentId: string): Promise<{ downloadUrl: string }> {
     try {
       // 如果没有私钥，返回模拟结果
-      if (!this.config.privateKey) {
+      if (!this.apiService.config.privateKey) {
         this.logger.warn('esign.document_download.mock_used', { signFlowId, documentId });
         return {
           downloadUrl: `https://mock-esign.com/download/${signFlowId}/${documentId}`
         };
       }
 
-      const response = await this.axiosInstance.get<ESignResponse<{ downloadUrl: string }>>(
+      const response = await this.apiService.axiosInstance.get<ESignResponse<{ downloadUrl: string }>>(
         `/v1/signflows/${signFlowId}/documents/${documentId}/downloadUrl`
       );
 
@@ -400,26 +354,6 @@ export class ESignService {
     }
   }
 
-  /**
-   * 验证回调签名（用于接收签署完成通知）
-   */
-  verifyCallback(signature: string, timestamp: string, body: string): boolean {
-    try {
-      if (!this.config.publicKey) {
-        console.warn('未配置公钥，无法验证回调签名');
-        return true; // 在没有公钥的情况下，暂时允许通过
-      }
-
-      const verify = crypto.createVerify('RSA-SHA256');
-      verify.update(`${timestamp}${body}`);
-      verify.end();
-      
-      return verify.verify(this.config.publicKey, signature, 'base64');
-    } catch (error) {
-      console.error('验证回调签名失败:', error);
-      return false;
-    }
-  }
 
   /**
    * 使用模板创建合同
@@ -443,7 +377,7 @@ export class ESignService {
       });
       
       // 如果没有私钥，返回模拟结果
-      if (!this.config.privateKey) {
+      if (!this.apiService.config.privateKey) {
         this.logger.warn('esign.template_contract.create_mock_used', {
           templateId: params.templateId,
         });
@@ -455,7 +389,7 @@ export class ESignService {
       }
 
       // 1. 使用模板创建文档
-      const createDocResponse = await this.axiosInstance.post<ESignResponse<{ fileId: string }>>(
+      const createDocResponse = await this.apiService.axiosInstance.post<ESignResponse<{ fileId: string }>>(
         '/v1/files/createByTemplate',
         {
           templateId: params.templateId,
@@ -471,7 +405,7 @@ export class ESignService {
       const fileId = createDocResponse.data.data.fileId;
 
       // 2. 创建签署流程
-      const signFlowResponse = await this.axiosInstance.post<ESignResponse<{ signFlowId: string }>>(
+      const signFlowResponse = await this.apiService.axiosInstance.post<ESignResponse<{ signFlowId: string }>>(
         '/v1/signflows',
         {
           businessScene: 'CONTRACT_SIGN',
@@ -492,7 +426,7 @@ export class ESignService {
           ],
           signFlowConfig: {
             signType: 'SEQUENTIAL',
-            callbackUrl: this.config.notifyUrl,
+            callbackUrl: this.apiService.config.notifyUrl,
           },
         }
       );
@@ -504,12 +438,12 @@ export class ESignService {
       const signFlowId = signFlowResponse.data.data.signFlowId;
 
       // 3. 获取签署链接
-      const signUrlResponse = await this.axiosInstance.post<ESignResponse<{ signUrl: string }>>(
+      const signUrlResponse = await this.apiService.axiosInstance.post<ESignResponse<{ signUrl: string }>>(
         `/v1/signflows/${signFlowId}/signers/signUrl`,
         {
           signerMobile: params.signers[0].mobile, // 第一个签署人
           signType: 'REDIRECT',
-          callbackUrl: this.config.notifyUrl,
+          callbackUrl: this.apiService.config.notifyUrl,
         }
       );
 
@@ -537,7 +471,7 @@ export class ESignService {
     try {
       this.logger.info('esign.template.info_fetch_start', { templateId });
       
-      const response = await this.axiosInstance.get<ESignResponse<any>>(
+      const response = await this.apiService.axiosInstance.get<ESignResponse<any>>(
         `/v1/files/template/${templateId}`
       );
 
@@ -559,7 +493,7 @@ export class ESignService {
     try {
       this.logger.info('esign.template.list_fetch_start');
       
-      const response = await this.axiosInstance.get<ESignResponse<any>>(
+      const response = await this.apiService.axiosInstance.get<ESignResponse<any>>(
         '/v1/files/templates'
       );
 
@@ -581,7 +515,7 @@ export class ESignService {
     try {
       this.logger.info('esign.template.fields_fetch_start', { templateId });
       
-      const response = await this.axiosInstance.get<ESignResponse<any>>(
+      const response = await this.apiService.axiosInstance.get<ESignResponse<any>>(
         `/v1/files/template/${templateId}/fields`
       );
 
@@ -601,7 +535,7 @@ export class ESignService {
    */
   async getTemplatePreview(templateId: string, templateParams: any): Promise<any> {
     try {
-      console.log('获取模板预览:', templateId, templateParams);
+      this.logger.debug('获取模板预览:', { data: templateId, templateParams });
       
       // 首先尝试下载模板文件
       try {
@@ -615,7 +549,7 @@ export class ESignService {
           };
         }
       } catch (downloadError) {
-        console.log('下载模板失败，尝试获取模板控件信息:', downloadError.message);
+        this.logger.debug('下载模板失败，尝试获取模板控件信息:', { data: downloadError.message });
       }
       
       // 如果下载失败，尝试获取模板控件信息
@@ -628,7 +562,7 @@ export class ESignService {
           message: '基于模板控件信息生成预览'
         };
       } catch (controlsError) {
-        console.log('获取模板控件信息失败:', controlsError.message);
+        this.logger.debug('获取模板控件信息失败:', { data: controlsError.message });
       }
       
       // 如果都失败，返回基本的预览数据
@@ -638,7 +572,7 @@ export class ESignService {
         message: '模板预览功能暂不可用，显示基于输入数据的模拟预览'
       };
     } catch (error) {
-      console.error('获取模板预览失败:', error);
+      this.logger.error('获取模板预览失败:', error);
       
       // 返回错误信息，但不抛出异常，让前端显示基本预览
       return {
@@ -654,17 +588,13 @@ export class ESignService {
    * 直接使用对方SDK代码的下载模板方法
    */
   async downloadTemplateDirectSDK(templateNo: string): Promise<any> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
 
     // 完全复用对方SDK的AiqianClient类逻辑
-    const appId = this.config.appId;
-    const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-    const domain = this.config.host;
+    const appId = this.apiService.config.appId;
+    const domain = this.apiService.config.host;
 
     try {
-      console.log('🔽 使用对方SDK代码直接下载模板:', templateNo);
+      this.logger.debug('🔽 使用对方SDK代码直接下载模板:', { data: templateNo });
 
       // 1. 过滤空值并排序（对方SDK的filterEmpty + 排序逻辑）
       const data = { templateNo };
@@ -680,20 +610,20 @@ export class ESignService {
 
       // 2. 生成JSON字符串
       const jsonData = JSON.stringify(sortedData, null, 0);
-      console.log('📋 bizData:', jsonData);
+      this.logger.debug('📋 bizData:', { data: jsonData });
 
       // 3. 生成时间戳（加10分钟缓冲）
       const time = Date.now() + 600 * 1000;
-      console.log('🕐 timestamp:', time);
+      this.logger.debug('🕐 timestamp:', { data: time });
 
       // 4. MD5计算
       const md5Hash = crypto.createHash('md5').update(jsonData).digest('hex');
-      console.log('🔐 MD5:', md5Hash);
+      this.logger.debug('🔐 MD5:', { data: md5Hash });
 
       // 5. 构建签名字符串
       const signStr = jsonData + md5Hash + appId + time;
-      console.log('🔐 签名字符串:', signStr);
-      console.log('🔐 签名字符串长度:', signStr.length);
+      this.logger.debug('🔐 签名字符串:', { data: signStr });
+      this.logger.debug('🔐 签名字符串长度:', { data: signStr.length });
 
       // 6. 生成签名（完全按照对方SDK）
       const signer = crypto.createSign('sha1');
@@ -701,14 +631,14 @@ export class ESignService {
       signer.end();
 
       // 格式化为PEM格式
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKeyBase64.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
+      const privateKeyPem = this.apiService.getPrivateKeyPem();
 
       const signature = signer.sign({
         key: privateKeyPem,
         format: 'pem'
       }, 'base64');
 
-      console.log('✍️ 签名:', signature.substring(0, 50) + '...');
+      this.logger.debug('✍️ 签名:', { data: signature.substring(0, 50) + '...' });
 
       // 7. 构建FormData请求（完全按照对方SDK）
       const formData = new FormData();
@@ -721,7 +651,7 @@ export class ESignService {
         ...formData.getHeaders()
       };
 
-      console.log('📤 请求头:', headers);
+      this.logger.debug('📤 请求头:', { data: headers });
 
       // 8. 发送请求
       const response = await axios.post(`${domain}/contract/downloadTemplate`, formData, {
@@ -729,9 +659,9 @@ export class ESignService {
         timeout: 30000
       });
 
-      console.log('✅ API调用成功:');
-      console.log('   状态码:', response.status);
-      console.log('   响应数据:', response.data);
+      this.logger.debug('✅ API调用成功:');
+      this.logger.debug('   状态码:', { data: response.status });
+      this.logger.debug('   响应数据:', { data: response.data });
 
       if (response.data.code !== 100000) {
         throw new Error(`下载模板失败: ${response.data.msg}`);
@@ -745,12 +675,12 @@ export class ESignService {
       return base64Str;
 
     } catch (error) {
-      console.log('❌ API调用失败:');
+      this.logger.debug('❌ API调用失败:');
       if (error.response) {
-        console.log('   状态码:', error.response.status);
-        console.log('   响应数据:', error.response.data);
+        this.logger.debug('   状态码:', { data: error.response.status });
+        this.logger.debug('   响应数据:', { data: error.response.data });
       } else {
-        console.log('   错误信息:', error.message);
+        this.logger.debug('   错误信息:', { data: error.message });
       }
       throw new Error(`下载模板失败: ${error.response?.data?.msg || error.message}`);
     }
@@ -764,17 +694,17 @@ export class ESignService {
    */
   async getTemplateData(templateIdent: string): Promise<any> {
     try {
-      console.log('🔍 使用官方API获取模板控件信息:', templateIdent);
+      this.logger.debug('🔍 使用官方API获取模板控件信息:', { data: templateIdent });
 
       // 使用官方的 /template/data 接口
-      const response = await this.callESignAPI('/template/data', {
+      const response = await this.apiService.callESignAPI('/template/data', {
         templateIdent: templateIdent
       });
 
-      console.log('📋 官方API模板控件信息响应 - response.code:', response.code);
-      console.log('📋 官方API模板控件信息响应 - response.msg:', response.msg);
-      console.log('📋 官方API模板控件信息响应 - response.data类型:', typeof response.data);
-      console.log('📋 官方API模板控件信息响应 - response.data是否为数组:', Array.isArray(response.data));
+      this.logger.debug('📋 官方API模板控件信息响应 - response.code:', { data: response.code });
+      this.logger.debug('📋 官方API模板控件信息响应 - response.msg:', { data: response.msg });
+      this.logger.debug('📋 官方API模板控件信息响应 - response.data类型:', { data: typeof response.data });
+      this.logger.debug('📋 官方API模板控件信息响应 - response.data是否为数组:', { data: Array.isArray(response.data) });
 
       if (response.code !== 100000) {
         throw new BadRequestException(`获取模板控件信息失败: ${response.msg}`);
@@ -787,7 +717,7 @@ export class ESignService {
       // 3. 去重：同一个 dataKey 只保留第一次出现的字段
       let filteredData = response.data;
       if (response.data && Array.isArray(response.data)) {
-        console.log('📋 官方API返回的原始字段数量:', response.data.length);
+        this.logger.debug('📋 官方API返回的原始字段数量:', { data: response.data.length });
 
         // 第一步：过滤签署字段
         const afterFilter = response.data.filter((field: any) => {
@@ -800,7 +730,7 @@ export class ESignService {
           // 🔥 过滤签名区、签章区等不需要用户填写的字段
           // dataType: 6=签署区, 7=签章区/印章, 15=备注签署区
           if (field.dataType === 6 || field.dataType === 7 || field.dataType === 15) {
-            console.log(`⚠️  过滤签名/签章字段: ${fieldKey} (dataType: ${field.dataType})`);
+            this.logger.debug(`⚠️  过滤签名/签章字段: ${fieldKey} (dataType: ${field.dataType})`);
             return false;
           }
 
@@ -808,14 +738,14 @@ export class ESignService {
           const lowerKey = fieldKey.toLowerCase();
           if (lowerKey.includes('签名区') || lowerKey.includes('签章区') ||
               lowerKey.includes('签署区') || lowerKey.includes('印章')) {
-            console.log(`⚠️  过滤签名相关字段: ${fieldKey}`);
+            this.logger.debug(`⚠️  过滤签名相关字段: ${fieldKey}`);
             return false;
           }
 
           // 🔥 过滤甲乙丙方占位符字段（与 CRM 端逻辑一致）
           // 这些是签名/印章位置字段，由爱签平台在签署时自动处理，不需要用户填写
           if (fieldKey === '甲方' || fieldKey === '乙方' || fieldKey === '丙方') {
-            console.log(`⚠️  过滤签名位置字段: ${fieldKey} (dataType: ${field.dataType})`);
+            this.logger.debug(`⚠️  过滤签名位置字段: ${fieldKey} (dataType: ${field.dataType})`);
             return false;
           }
 
@@ -823,7 +753,7 @@ export class ESignService {
           return true;
         });
 
-        console.log('📋 过滤签署字段后的数量:', afterFilter.length);
+        this.logger.debug('📋 过滤签署字段后的数量:', { data: afterFilter.length });
 
         // 第二步：去重 - 使用与 CRM 端相同的逻辑
         const seenKeys = new Set<string>();
@@ -834,25 +764,25 @@ export class ESignService {
 
           // 如果已经见过这个字段，跳过
           if (seenKeys.has(fieldKey)) {
-            console.log(`⚠️  跳过重复字段: ${fieldKey} (page: ${field.page})`);
+            this.logger.debug(`⚠️  跳过重复字段: ${fieldKey} (page: ${field.page})`);
             continue;
           }
 
           // 标记为已见过
           seenKeys.add(fieldKey);
           filteredData.push(field);
-          console.log(`✅ 保留字段: ${fieldKey} (page: ${field.page}, dataType: ${field.dataType})`);
+          this.logger.debug(`✅ 保留字段: ${fieldKey} (page: ${field.page}, dataType: ${field.dataType})`);
         }
 
-        console.log('📋 去重后的字段数量:', filteredData.length);
-        console.log('📋 过滤掉的字段数量:', response.data.length - filteredData.length);
-        console.log('📋 前3个保留字段示例:', JSON.stringify(filteredData.slice(0, 3), null, 2));
+        this.logger.debug('📋 去重后的字段数量:', { data: filteredData.length });
+        this.logger.debug('📋 过滤掉的字段数量:', { data: response.data.length - filteredData.length });
+        this.logger.debug('📋 前3个保留字段示例:', { data: JSON.stringify(filteredData.slice(0, 3), null, 2) });
       }
 
       // 🔥 返回过滤和去重后的字段数组
       return filteredData;
     } catch (error) {
-      console.error('❌ 获取模板控件信息失败:', error);
+      this.logger.error('❌ 获取模板控件信息失败:', error);
       throw new BadRequestException(`获取模板控件信息失败: ${error.message}`);
     }
   }
@@ -866,21 +796,17 @@ export class ESignService {
     templateParams: Record<string, any>,
     fileName?: string
   ): Promise<any> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
 
     try {
-      console.log('🔄 使用爱签模板填充API创建文件:', {
+      this.logger.debug('esign.file.create_from_template', {
         templateNo,
         templateParams,
         fileName
       });
 
       // 使用官方SDK的签名逻辑
-      const appId = this.config.appId;
-      const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-      const domain = this.config.host;
+      const appId = this.apiService.config.appId;
+      const domain = this.apiService.config.host;
 
       // 构建请求数据
       const requestData = {
@@ -918,7 +844,7 @@ export class ESignService {
       signer.end();
 
       // 格式化为PEM格式
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKeyBase64.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
+      const privateKeyPem = this.apiService.getPrivateKeyPem();
 
       const signature = signer.sign({
         key: privateKeyPem,
@@ -942,7 +868,7 @@ export class ESignService {
         timeout: 30000
       });
 
-      console.log('✅ 模板填充API调用成功:', response.data);
+      this.logger.debug('✅ 模板填充API调用成功:', { data: response.data });
 
       if (response.data.code !== 100000) {
         throw new Error(`模板填充失败: ${response.data.msg}`);
@@ -955,7 +881,7 @@ export class ESignService {
       return base64Str2;
 
     } catch (error) {
-      console.error('❌ 模板填充失败:', error);
+      this.logger.error('❌ 模板填充失败:', error);
       throw new BadRequestException(`模板填充失败: ${error.response?.data?.msg || error.message}`);
     }
   }
@@ -966,17 +892,13 @@ export class ESignService {
    * 下载文件（通过文件ID）
    */
   async downloadFile(fileId: string): Promise<any> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
 
     try {
-      console.log('🔽 下载文件:', fileId);
+      this.logger.debug('🔽 下载文件:', { data: fileId });
 
       // 使用官方SDK的签名逻辑
-      const appId = this.config.appId;
-      const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-      const domain = this.config.host;
+      const appId = this.apiService.config.appId;
+      const domain = this.apiService.config.host;
 
       // 构建请求数据
       const requestData = {
@@ -1012,7 +934,7 @@ export class ESignService {
       signer.end();
 
       // 格式化为PEM格式
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKeyBase64.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
+      const privateKeyPem = this.apiService.getPrivateKeyPem();
 
       const signature = signer.sign({
         key: privateKeyPem,
@@ -1036,7 +958,7 @@ export class ESignService {
         timeout: 30000
       });
 
-      console.log('✅ 文件下载API调用成功:', response.data);
+      this.logger.debug('✅ 文件下载API调用成功:', { data: response.data });
 
       if (response.data.code !== 100000) {
         throw new Error(`文件下载失败: ${response.data.msg}`);
@@ -1045,307 +967,15 @@ export class ESignService {
       return response.data.data;
 
     } catch (error) {
-      console.error('❌ 文件下载失败:', error);
+      this.logger.error('❌ 文件下载失败:', error);
       throw new BadRequestException(`文件下载失败: ${error.response?.data?.msg || error.message}`);
     }
   }
 
-  /**
-   * 添加企业用户
-   */
-  async addEnterpriseUser(userData: {
-    account: string;
-    name: string;
-    idType: string;
-    idNumber: string;
-    orgLegalIdNumber: string;
-    orgLegalName: string;
-  }): Promise<any> {
-    try {
-      console.log('添加企业用户:', userData);
 
-      // 如果没有私钥，返回模拟结果
-      if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟添加企业用户');
-        return {
-          accountId: `mock_enterprise_${Date.now()}`,
-          account: userData.account,
-          name: userData.name,
-          success: true
-        };
-      }
 
-      const response = await this.axiosInstance.post<ESignResponse<any>>(
-        '/v2/accounts/createByThirdPartyUserId',
-        {
-          thirdPartyUserId: userData.account,
-          name: userData.name,
-          idType: userData.idType,
-          idNumber: userData.idNumber,
-          mobile: '', // 企业用户可能没有手机号
-          accountType: 1, // 1表示企业
-          orgInfo: {
-            orgLegalIdNumber: userData.orgLegalIdNumber,
-            orgLegalName: userData.orgLegalName,
-          }
-        }
-      );
 
-      if (response.data.code !== 0) {
-        throw new BadRequestException(`添加企业用户失败: ${response.data.message}`);
-      }
 
-      return response.data.data;
-    } catch (error) {
-      console.error('添加企业用户失败:', error);
-      throw new BadRequestException(`添加企业用户失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 创建企业印章（使用嵌入式网页版 - 官方推荐方式）
-   * 根据爱签官方文档：https://open.esign.cn/doc/opendoc/pdf-sign3/yx5b1a
-   * 该接口返回一个可嵌入的制作印章页面，避免复杂的签名验证问题
-   */
-  async createEnterpriseSeal(sealData: {
-    account: string;
-    sealName?: string;
-    sealNo?: string;
-    redirectUrl?: string;
-    notifyUrl?: string;
-  }): Promise<any> {
-    try {
-      console.log('🖊️ 创建企业印章（嵌入式网页版）:', sealData);
-      
-      // 如果没有私钥，返回模拟数据
-      if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟企业印章制作页面');
-        const mockUrl = `https://mock-seal-maker.com/make?account=${sealData.account}&t=${Date.now()}`;
-        return {
-          success: true,
-          data: {
-            makeSealUrl: mockUrl,
-            account: sealData.account,
-            message: '模拟模式：请在生产环境中配置真实的爱签私钥',
-            validHours: 3
-          }
-        };
-      }
-
-      // 构建请求参数
-      const requestData: any = {
-        account: sealData.account
-      };
-
-      // 可选参数
-      if (sealData.sealNo) {
-        requestData.sealNo = sealData.sealNo;
-      }
-      
-      // 设置回调地址
-      if (sealData.redirectUrl) {
-        requestData.redirectUrl = sealData.redirectUrl;
-      }
-      
-      if (sealData.notifyUrl) {
-        requestData.notifyUrl = sealData.notifyUrl;
-      } else {
-        // 默认使用系统配置的回调地址
-        requestData.notifyUrl = this.config.notifyUrl;
-      }
-
-      console.log('📤 请求嵌入式印章制作页面:', requestData);
-
-      // 调用爱签嵌入式印章制作接口（这个接口相对简单，避免复杂签名问题）
-      const response = await this.axiosInstance.post<any>(
-        '/seal/makeOnline',
-        requestData
-      );
-
-      console.log('📥 爱签响应:', response.data);
-
-      // 爱签嵌入式接口的成功码是 100000
-      if (response.data.code !== 100000) {
-        throw new BadRequestException(`获取印章制作页面失败: ${response.data.msg}`);
-      }
-
-      return {
-        success: true,
-        data: {
-          makeSealUrl: response.data.data,
-          account: sealData.account,
-          sealNo: sealData.sealNo,
-          message: '印章制作页面获取成功，有效期3小时',
-          validHours: 3,
-          instructions: [
-            '1. 点击链接进入印章制作页面',
-            '2. 在页面中设计您的企业印章',
-            '3. 完成后印章将自动同步到爱签平台',
-            '4. 链接有效期为3小时，请及时使用'
-          ]
-        }
-      };
-    } catch (error) {
-      console.error('🚨 获取企业印章制作页面失败:', error);
-      
-      // 如果是网络错误或API不可用，提供友好的错误信息
-      if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-        return {
-          success: false,
-          error: 'NETWORK_ERROR',
-          message: '网络连接失败，请检查网络设置或稍后重试',
-          suggestion: '请联系管理员检查爱签API配置'
-        };
-      }
-
-      // 如果是签名相关错误，提供具体建议
-      if (error.message?.includes('签名') || error.response?.data?.code === 100016) {
-        return {
-          success: false,
-          error: 'SIGNATURE_ERROR',
-          message: '签名验证失败，建议使用嵌入式印章制作方式',
-          suggestion: '嵌入式印章制作页面可以避免复杂的签名验证问题'
-        };
-      }
-
-      throw new BadRequestException(`获取企业印章制作页面失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 获取印章列表
-   */
-  async getSealList(params: {
-    account: string;
-    sealType?: string;
-  }): Promise<any> {
-    try {
-      console.log('获取印章列表:', params);
-
-      // 如果没有私钥，返回模拟结果
-      if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟印章列表');
-        return {
-          seals: [
-            {
-              sealId: 'mock_seal_1',
-              sealName: '模拟企业印章1',
-              sealType: 'TEMPLATE_ROUND',
-              status: 'NORMAL'
-            },
-            {
-              sealId: 'mock_seal_2', 
-              sealName: '模拟企业印章2',
-              sealType: 'TEMPLATE_ROUND',
-              status: 'NORMAL'
-            }
-          ]
-        };
-      }
-
-      // 首先获取用户的accountId
-      const accountResponse = await this.axiosInstance.get<ESignResponse<any>>(
-        `/v2/accounts/getByThirdId?thirdPartyUserId=${params.account}`
-      );
-
-      if (accountResponse.data.code !== 0) {
-        throw new BadRequestException(`获取用户信息失败: ${accountResponse.data.message}`);
-      }
-
-      const accountId = accountResponse.data.data.accountId;
-
-      // 获取印章列表
-      let url = `/v2/seals?accountId=${accountId}`;
-      if (params.sealType) {
-        url += `&sealType=${params.sealType}`;
-      }
-
-      const response = await this.axiosInstance.get<ESignResponse<any>>(url);
-
-      if (response.data.code !== 0) {
-        throw new BadRequestException(`获取印章列表失败: ${response.data.message}`);
-      }
-
-      return response.data.data;
-    } catch (error) {
-      console.error('获取印章列表失败:', error);
-      throw new BadRequestException(`获取印章列表失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 删除印章
-   */
-  async deleteSeal(params: {
-    account: string;
-    sealId: string;
-  }): Promise<any> {
-    try {
-      console.log('删除印章:', params);
-
-      // 如果没有私钥，返回模拟结果
-      if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟删除印章');
-        return {
-          success: true,
-          message: '模拟删除印章成功'
-        };
-      }
-
-      const response = await this.axiosInstance.delete<ESignResponse<any>>(
-        `/v2/seals/${params.sealId}`
-      );
-
-      if (response.data.code !== 0) {
-        throw new BadRequestException(`删除印章失败: ${response.data.message}`);
-      }
-
-      return response.data.data;
-    } catch (error) {
-      console.error('删除印章失败:', error);
-      throw new BadRequestException(`删除印章失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 获取印章详情
-   */
-  async getSealDetail(params: {
-    account: string;
-    sealId: string;
-  }): Promise<any> {
-    try {
-      console.log('获取印章详情:', params);
-
-      // 如果没有私钥，返回模拟结果
-      if (!this.config.privateKey) {
-        console.warn('未配置私钥，使用模拟印章详情');
-        return {
-          sealId: params.sealId,
-          sealName: '模拟企业印章',
-          sealType: 'TEMPLATE_ROUND',
-          sealWidth: 159,
-          sealHeight: 159,
-          color: 'RED',
-          status: 'NORMAL',
-          createTime: new Date().toISOString()
-        };
-      }
-
-      const response = await this.axiosInstance.get<ESignResponse<any>>(
-        `/v2/seals/${params.sealId}`
-      );
-
-      if (response.data.code !== 0) {
-        throw new BadRequestException(`获取印章详情失败: ${response.data.message}`);
-      }
-
-      return response.data.data;
-    } catch (error) {
-      console.error('获取印章详情失败:', error);
-      throw new BadRequestException(`获取印章详情失败: ${error.message}`);
-    }
-  }
 
   /**
    * 添加签署人（基于爱签官方文档）
@@ -1378,17 +1008,13 @@ export class ESignService {
       }>;
     }>;
   }): Promise<any> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
 
     try {
-      console.log('🔄 添加签署人（官方API）:', contractData);
+      this.logger.debug('🔄 添加签署人（官方API）:', { data: contractData });
 
       // 使用官方SDK的签名逻辑
-      const appId = this.config.appId;
-      const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-      const domain = this.config.host;
+      const appId = this.apiService.config.appId;
+      const domain = this.apiService.config.host;
 
       // 构建请求数据（按照官方文档：数组格式）
       const requestData = contractData.signers.map(signer => ({
@@ -1441,7 +1067,7 @@ export class ESignService {
       signer.end();
 
       // 格式化为PEM格式
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKeyBase64.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
+      const privateKeyPem = this.apiService.getPrivateKeyPem();
 
       const signature = signer.sign({
         key: privateKeyPem,
@@ -1459,8 +1085,8 @@ export class ESignService {
         ...formData.getHeaders()
       };
 
-      console.log('📤 发送添加签署人请求（官方API）...');
-      console.log('请求数据:', jsonData);
+      this.logger.debug('📤 发送添加签署人请求（官方API）...');
+      this.logger.debug('请求数据:', { data: jsonData });
 
       // 8. 发送请求到正确的API端点
       const response = await axios.post(`${domain}/contract/addSigner`, formData, {
@@ -1468,7 +1094,7 @@ export class ESignService {
         timeout: 30000
       });
 
-      console.log('✅ 添加签署人API调用成功:', response.data);
+      this.logger.debug('✅ 添加签署人API调用成功:', { data: response.data });
 
       if (response.data.code !== 100000) {
         throw new Error(`添加签署人失败: ${response.data.msg}`);
@@ -1477,7 +1103,7 @@ export class ESignService {
       return response.data.data;
 
     } catch (error) {
-      console.error('❌ 添加签署人失败:', error);
+      this.logger.error('❌ 添加签署人失败:', error);
       throw new BadRequestException(`添加签署人失败: ${error.response?.data?.msg || error.message}`);
     }
   }
@@ -1506,7 +1132,7 @@ export class ESignService {
     redirectUrl?: string;
   }): Promise<any> {
     try {
-      console.log('🚀 开始完整的合同签约流程:', params);
+      this.logger.debug('🚀 开始完整的合同签约流程:', { data: params });
 
       const results = {
         contractNo: params.contractNo,
@@ -1517,7 +1143,7 @@ export class ESignService {
       };
 
       // 步骤1: 添加所有签署人
-      console.log('📝 步骤1: 添加签署人...');
+      this.logger.debug('📝 步骤1: 添加签署人...');
       for (const signer of params.signers) {
         try {
           const signerResult = await this.addSigner({
@@ -1552,9 +1178,9 @@ export class ESignService {
             status: 'success'
           });
           
-          console.log(`✅ 签署人 ${signer.name} 添加成功`);
+          this.logger.debug(`✅ 签署人 ${signer.name} 添加成功`);
         } catch (signerError) {
-          console.warn(`⚠️ 签署人 ${signer.name} 添加失败:`, signerError.message);
+          this.logger.warn(`⚠️ 签署人 ${signer.name} 添加失败:`, { data: signerError.message });
           results.signers.push({
             account: signer.account,
             name: signer.name,
@@ -1566,7 +1192,7 @@ export class ESignService {
       }
 
       // 步骤2: 创建待签署合同
-      console.log('📄 步骤2: 创建待签署合同...');
+      this.logger.debug('📄 步骤2: 创建待签署合同...');
       try {
         const contractResult = await this.createContractWithTemplate({
           contractNo: params.contractNo,
@@ -1585,7 +1211,7 @@ export class ESignService {
           status: 'success'
         };
 
-        console.log('✅ 合同创建成功:', contractResult);
+        this.logger.debug('✅ 合同创建成功:', { data: contractResult });
 
         // 步骤3: 如果合同创建成功且有预览链接，返回结果
         if (contractResult && contractResult.previewUrl) {
@@ -1597,7 +1223,7 @@ export class ESignService {
         }
 
       } catch (contractError) {
-        console.error('❌ 合同创建失败:', contractError.message);
+        this.logger.error('❌ 合同创建失败:', contractError.message);
         results.contract = {
           contractNo: params.contractNo,
           error: contractError.message,
@@ -1622,7 +1248,7 @@ export class ESignService {
       };
 
     } catch (error) {
-      console.error('❌ 完整签约流程失败:', error);
+      this.logger.error('❌ 完整签约流程失败:', error);
       throw new BadRequestException(`完整签约流程失败: ${error.message}`);
     }
   }
@@ -1645,20 +1271,16 @@ export class ESignService {
       email?: string;
     }>;
   }): Promise<any> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
 
     try {
-      console.log('🚀 使用经过验证的签名逻辑创建合同:', params);
+      this.logger.debug('🚀 使用经过验证的签名逻辑创建合同:', { data: params });
 
       // 使用与downloadTemplateDirectSDK完全相同的配置和逻辑
-      const appId = this.config.appId;
-      const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-      const domain = this.config.host;
+      const appId = this.apiService.config.appId;
+      const domain = this.apiService.config.host;
 
       // 构建合同创建请求数据（按照官方文档格式）
-      const notifyUrl = this.config.notifyUrl;
+      const notifyUrl = this.apiService.config.notifyUrl;
       const requestData = {
         contractNo: params.contractNo,
         contractName: params.contractName,
@@ -1713,7 +1335,7 @@ export class ESignService {
       signer.end();
 
       // 格式化为PEM格式
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKeyBase64.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
+      const privateKeyPem = this.apiService.getPrivateKeyPem();
 
       const signature = signer.sign({
         key: privateKeyPem,
@@ -1731,9 +1353,9 @@ export class ESignService {
         ...formData.getHeaders()
       };
 
-      console.log('📤 发送创建合同请求...');
-      console.log('请求数据:', jsonData);
-      console.log('签名:', signature);
+      this.logger.debug('📤 发送创建合同请求...');
+      this.logger.debug('请求数据:', { data: jsonData });
+      this.logger.debug('签名:', { data: signature });
 
       // 8. 发送请求到创建合同接口
       const response = await axios.post(`${domain}/contract/createContract`, formData, {
@@ -1741,7 +1363,7 @@ export class ESignService {
         timeout: 30000
       });
 
-      console.log('✅ 创建合同API调用成功:', response.data);
+      this.logger.debug('✅ 创建合同API调用成功:', { data: response.data });
 
       if (response.data.code !== 100000) {
         throw new Error(`创建合同失败: ${response.data.msg}`);
@@ -1756,94 +1378,20 @@ export class ESignService {
       };
 
     } catch (error) {
-      console.error('❌ 创建合同失败:', error);
+      this.logger.error('❌ 创建合同失败:', error);
       throw new BadRequestException(`创建合同失败: ${error.response?.data?.msg || error.message}`);
     }
   }
 
   // 根据爱签官方文档实现的7个完整流程模块
 
-  /**
-   * 模块1：用户预注册
-   * 将用户基本信息同步到爱签平台，延迟实名认证
-   */
-  async preRegisterUser(userData: {
-    phone: string;
-    name: string;
-    idCard: string;
-  }): Promise<{ account: string; sealNo: string }> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
-
-    try {
-      console.log('📝 模块1：用户预注册 (延迟认证):', userData);
-
-      const appId = this.config.appId;
-      const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-      const domain = this.config.host;
-
-      const requestData = {
-        account: userData.phone, // 手机号作为唯一ID
-        name: userData.name,
-        idCard: userData.idCard,
-        mobile: userData.phone,
-        identifyLater: true // 关键：允许签署时认证
-      };
-
-      // 签名逻辑
-      const timestamp = Date.now() + 600 * 1000;
-      const filteredData = Object.fromEntries(
-        Object.entries(requestData).filter(([_, v]) => v !== null && v !== undefined && v !== '')
-      );
-      const sortedData = Object.fromEntries(
-        Object.keys(filteredData).sort().map(k => [k, filteredData[k]])
-      );
-      
-      const jsonData = JSON.stringify(sortedData, null, 0);
-      const md5Hash = crypto.createHash('md5').update(jsonData).digest('hex');
-      const signStr = jsonData + md5Hash + appId + timestamp;
-      
-      const signer = crypto.createSign('sha1');
-      signer.update(signStr);
-      signer.end();
-      
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKeyBase64.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
-      const signature = signer.sign({ key: privateKeyPem, format: 'pem' }, 'base64');
-      
-      const formData = new FormData();
-      formData.append('bizData', jsonData);
-      formData.append('appId', appId);
-      formData.append('timestamp', timestamp.toString());
-      
-      const headers = { 'sign': signature, ...formData.getHeaders() };
-      
-      const response = await axios.post(`${domain}/v2/user/addPersonalUser`, formData, {
-        headers: headers,
-        timeout: 30000
-      });
-
-      if (response.data.code !== 100000) {
-        throw new Error(`用户预注册失败: ${response.data.msg}`);
-      }
-
-      return {
-        account: response.data.data.account,
-        sealNo: response.data.data.sealNo
-      };
-
-    } catch (error) {
-      console.error('❌ 用户预注册失败:', error);
-      throw new BadRequestException(`用户预注册失败: ${error.response?.data?.msg || error.message}`);
-    }
-  }
 
   /**
    * 模块2：模板数据准备
    * 从SaaS系统获取业务数据，转换为爱签模板结构
    */
   prepareTemplateData(contractData: any): any {
-    console.log('📋 模块2：模板数据准备');
+    this.logger.debug('📋 模块2：模板数据准备');
     
     // 敏感信息脱敏处理
     const sanitizedData = {
@@ -1899,19 +1447,15 @@ export class ESignService {
     notifyUrl?: string;
     redirectUrl?: string;
   }): Promise<any> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
 
     try {
-      console.log('📄 模块3：合同创建 (官方流程):', contractData);
+      this.logger.debug('📄 模块3：合同创建 (官方流程):', { data: contractData });
 
       // 获取预处理数据
       const templateData = this.prepareTemplateData(contractData.templateParams);
       
-      const appId = this.config.appId;
-      const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-      const domain = this.config.host;
+      const appId = this.apiService.config.appId;
+      const domain = this.apiService.config.host;
 
       const requestData = {
         contractNo: contractData.contractNo,
@@ -1930,7 +1474,7 @@ export class ESignService {
       };
 
       // 添加可选参数 - 使用默认回调URL确保能收到通知
-      const notifyUrl = contractData.notifyUrl || this.config.notifyUrl;
+      const notifyUrl = contractData.notifyUrl || this.apiService.config.notifyUrl;
       requestData['notifyUrl'] = notifyUrl; // 🔥 合同全部签完后回调
       requestData['userNotifyUrl'] = notifyUrl; // 🔥 某个用户签完后回调（甲方签完通知）
       requestData['callbackUrl'] = notifyUrl; // 🔥 过期/拒签/失败时回调
@@ -1953,7 +1497,7 @@ export class ESignService {
       signer.update(signStr);
       signer.end();
       
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKeyBase64.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
+      const privateKeyPem = this.apiService.getPrivateKeyPem();
       const signature = signer.sign({ key: privateKeyPem, format: 'pem' }, 'base64');
       
       const formData = new FormData();
@@ -1975,7 +1519,7 @@ export class ESignService {
       return response.data.data;
 
     } catch (error) {
-      console.error('❌ 合同创建失败:', error);
+      this.logger.error('❌ 合同创建失败:', error);
       throw new BadRequestException(`合同创建失败: ${error.response?.data?.msg || error.message}`);
     }
   }
@@ -1992,16 +1536,12 @@ export class ESignService {
     signPositions?: Array<{ page: number; x: number; y: number }>;
     sealNo?: string;
   }>): Promise<any> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
 
     try {
-      console.log('👥 模块4：签署方配置:', { contractNo, signers });
+      this.logger.debug('👥 模块4：签署方配置:', { contractNo, signers });
 
-      const appId = this.config.appId;
-      const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-      const domain = this.config.host;
+      const appId = this.apiService.config.appId;
+      const domain = this.apiService.config.host;
 
       const requestData = {
         contractNo,
@@ -2031,7 +1571,7 @@ export class ESignService {
       signer.update(signStr);
       signer.end();
       
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKeyBase64.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
+      const privateKeyPem = this.apiService.getPrivateKeyPem();
       const signature = signer.sign({ key: privateKeyPem, format: 'pem' }, 'base64');
       
       const formData = new FormData();
@@ -2053,7 +1593,7 @@ export class ESignService {
       return response.data.data;
 
     } catch (error) {
-      console.error('❌ 签署方配置失败:', error);
+      this.logger.error('❌ 签署方配置失败:', error);
       throw new BadRequestException(`签署方配置失败: ${error.response?.data?.msg || error.message}`);
     }
   }
@@ -2076,7 +1616,7 @@ export class ESignService {
     }>;
   }): Promise<any> {
     try {
-      console.log('🚀 模块5-7：完整签署流程管理:', params);
+      this.logger.debug('🚀 模块5-7：完整签署流程管理:', { data: params });
 
       const results = {
         contractNo: params.contractNo,
@@ -2088,7 +1628,7 @@ export class ESignService {
       };
 
       // 步骤1: 用户预注册（所有签署方）
-      console.log('📝 步骤1: 用户预注册...');
+      this.logger.debug('📝 步骤1: 用户预注册...');
       for (const signer of params.signers) {
         try {
           const userResult = await this.preRegisterUser({
@@ -2104,9 +1644,9 @@ export class ESignService {
             status: 'success'
           });
           
-          console.log(`✅ 用户 ${signer.name} 预注册成功`);
+          this.logger.debug(`✅ 用户 ${signer.name} 预注册成功`);
         } catch (userError) {
-          console.warn(`⚠️ 用户 ${signer.name} 预注册失败:`, userError.message);
+          this.logger.warn(`⚠️ 用户 ${signer.name} 预注册失败:`, { data: userError.message });
           results.users.push({
             account: signer.account,
             name: signer.name,
@@ -2118,7 +1658,7 @@ export class ESignService {
       }
 
       // 步骤2: 创建合同
-      console.log('📄 步骤2: 创建合同...');
+      this.logger.debug('📄 步骤2: 创建合同...');
       try {
         const contractResult = await this.createContractOfficial({
           contractNo: params.contractNo,
@@ -2127,7 +1667,7 @@ export class ESignService {
           templateParams: params.templateParams,
           validityTime: 30,
           signOrder: 2, // 🔥 顺序签约：客户先签→阿姨后签
-          notifyUrl: this.config.notifyUrl
+          notifyUrl: this.apiService.config.notifyUrl
         });
 
         results.contract = {
@@ -2136,9 +1676,9 @@ export class ESignService {
           status: 'success'
         };
 
-        console.log('✅ 合同创建成功');
+        this.logger.debug('✅ 合同创建成功');
       } catch (contractError) {
-        console.error('❌ 合同创建失败:', contractError.message);
+        this.logger.error('❌ 合同创建失败:', contractError.message);
         results.contract = {
           contractNo: params.contractNo,
           error: contractError.message,
@@ -2149,7 +1689,7 @@ export class ESignService {
 
       // 步骤3: 配置签署方（如果合同创建成功）
       if (results.contract?.status === 'success') {
-        console.log('👥 步骤3: 配置签署方...');
+        this.logger.debug('👥 步骤3: 配置签署方...');
         try {
           const signersConfig = params.signers.map((signer, index) => ({
             account: signer.phone, // 使用手机号作为account
@@ -2174,9 +1714,9 @@ export class ESignService {
             });
           }
 
-          console.log('✅ 签署方配置成功');
+          this.logger.debug('✅ 签署方配置成功');
         } catch (signersError) {
-          console.error('❌ 签署方配置失败:', signersError.message);
+          this.logger.error('❌ 签署方配置失败:', signersError.message);
           results.signers = {
             error: signersError.message,
             status: 'failed'
@@ -2201,7 +1741,7 @@ export class ESignService {
       };
 
     } catch (error) {
-      console.error('❌ 完整签署流程失败:', error);
+      this.logger.error('❌ 完整签署流程失败:', error);
       throw new BadRequestException(`完整签署流程失败: ${error.message}`);
     }
   }
@@ -2279,7 +1819,7 @@ export class ESignService {
    */
   async getTemplateComponents(templateId: string): Promise<any> {
     try {
-      console.log('🔍 获取模板控件信息:', templateId);
+      this.logger.debug('🔍 获取模板控件信息:', { data: templateId });
       
       // 基于爱签模板ID TN84E8C106BFE74FD3AE36AC2CA33A44DE 的预期控件
       // 这里我们定义该模板的实际控件结构
@@ -2295,7 +1835,7 @@ export class ESignService {
         }
       };
     } catch (error) {
-      console.error('获取模板控件信息失败:', error);
+      this.logger.error('获取模板控件信息失败:', error);
       throw new BadRequestException(`获取模板控件信息失败: ${error.message}`);
     }
   }
@@ -2305,7 +1845,7 @@ export class ESignService {
    */
   async generateTemplatePreview(templateId: string, formData: Record<string, any>): Promise<any> {
     try {
-      console.log('🔍 生成模板预览:', { templateId, formData });
+      this.logger.debug('🔍 生成模板预览:', { templateId, formData });
       
       // 转换表单数据为模板参数
       const templateParams = this.convertFormDataToTemplateParams(formData);
@@ -2322,7 +1862,7 @@ export class ESignService {
         }
       };
     } catch (error) {
-      console.error('生成模板预览失败:', error);
+      this.logger.error('生成模板预览失败:', error);
       throw new BadRequestException(`生成模板预览失败: ${error.message}`);
     }
   }
@@ -2477,18 +2017,13 @@ export class ESignService {
    * 使用multipart/form-data格式，完全按照官方Java示例实现
    */
   async writeTemplateDataOfficial(templateIdent: string, templateParams: Record<string, any> = {}): Promise<string> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-    const FormData = require('form-data');
-    const { v4: uuidv4 } = require('uuid');
 
     try {
-      console.log('🔄 使用爱签官方模板数据写入API:', { templateIdent, templateParams });
+      this.logger.debug('🔄 使用爱签官方模板数据写入API:', { templateIdent, templateParams });
 
       // 使用官方SDK的签名逻辑
-      const appId = this.config.appId;
-      const privateKeyBase64 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCORZpy+TPUZCdm2Wf9iqRp6YJ2IE2kzf1c9jZNx6/dkQGWtbx+tp1YBPYeC1sAv/7OjTsowRRJ318dUZ1TONtk59yZj8lCFtkRe53fDbnQKk3mW4rVeFBn4pQ/ya2dEM+jZOdjLKTHWNtUD7cyVl4qagsX+8TCoFBJ9lPypM0imvF1WcsLv9WgkID9+jvD0Nfa4XSTEQSzS1AroEmX9eOX87yTYTMFZNj0OcuDUf8ifwhcz1Qoa2k9NAMhUK9Gjw+4XI7P8FUj+2051A9yFu2LpoiLnDk6y+nbCSmW3WbJT59u1jNz/sGujG6LitYQCzKJIRGs8FGbNSA7p0MgjfyJAgMBAAECggEAXeuVClF45b04Ra0/+SCNaV29wj2RBDr4B2aCctZgQuR3KAbRaNUlCfY8g5j7eoNEsxaI915/BkVvhOtb8JSYQQTPnJBPTFHI+sGgdp+ZCtLimi/Udxf1/J6XP4TkF8wBRtxV5CKUpQUDxXqadaCOiXF34V1ThyhN2IXE5WnmAfFBk271ovsiTlRM9OlGzgyhWXqULBpADdI+LkHYrtZYaMVcGDloAlU881D0e38Hgtb7Z8TB7qyZwZjc4Y5aeYujyEFSTXNU2vPcwaWO2gYSHfgq6H3a3aST9htYQk02EDnsPB2zdls7Q6SNJGeKiXEsJcivCQV9Sh49TS5Yobm0AQKBgQD8Y+P98timrfqZULK1VJ10lTxKSj+ORejCjoWU6Hsn4yNVFG9P7HSRN4IkOLpeOG9/ptaveAjqY9hwilv4Glx7XGyKaQy5h6sgqljM0/Cq28n8hQNbjMJ11IadwTsvmx0F2ht+5ZG2IfqcJyOiir4n+lnNJhzUflVR95bIC0fk7wKBgQCQToWnHw1mj2wWM8ZqFVWRoF4UF1AQsvUJ0uEaRGiDSRZvRgNOS1JeB54Lkp5tZnjSkHqrM4SHSSchxUeshbk4+aKbCVE6M1zYXLjj8hi+r8z3wvKY+QXAXVSjhF7aOadCihElSixfb/qfNwa78OBqnHpEzPQE+R0cZkSEdJjmBwKBgFfTFqHmoFcX0U0KVLVelU/dIlajkYwbbYxN9dPENh7CHihb7QP9vu5NR379MnTY5Iuh7bCvb0LIraczrh8eZTIUDjz3oxLoT7cVL8NOuL9rrdSuIGX6DCzeYF2CwOqm6imAJPM6RUMAfelagT7tUpAswJTvfza+I0hbhF9l9YWHAoGAR7P8jRHM4s0Y898+E7AOGJIKrQj4a5PAVeVGnHqpQ7KpRxkOw3SBtN8sFKwBtHJaTqYjjbXHgEFFBG62Mm8vnbPMrCRxC+5Bj/BinkDJMta/jcx8Jq51wSOezrETQHOtPE7GPjUg3zsQ2NPKsM/7cn3V8yGzjlUJtfbKzNXyszkCgYEA9rt1fn9khwIHFCd7qdB+/zUTwD4mzTZ3V1QtZHdIvz+s9uudbIs9IOrJmR3JYBX6Nay5BY2noFZyyYkZMGKFaCqZzEJT+i64vus6VMCNZAu7dnWCpDoQkKegLFTnCBiMBW9TRC4wi4dTYeVL/iEUE6AKRe4rvU86+wzzwi+5ntw=';
-      const domain = this.config.host;
+      const appId = this.apiService.config.appId;
+      const domain = this.apiService.config.host;
 
       // 1. 构建bizData - 完全按照官方文档示例
       const bizDataObj = {
@@ -2509,24 +2044,24 @@ export class ESignService {
 
       // 3. 生成JSON字符串
       const dataString = JSON.stringify(sortedBizData);
-      console.log('📋 dataString:', dataString);
+      this.logger.debug('📋 dataString:', { data: dataString });
 
       // 4. 生成时间戳（当前时间 + 10分钟的毫秒数）
       const now = new Date();
       const timestamp = (now.getTime() + 10 * 60 * 1000).toString();
-      console.log('⏰ timestamp:', timestamp);
+      this.logger.debug('⏰ timestamp:', { data: timestamp });
 
       // 5. 生成签名 - 使用官方NetSignUtils.getSign算法
-      const sign = this.generateOfficialSign(appId, privateKeyBase64, dataString, timestamp);
-      console.log('🔐 sign:', sign.substring(0, 50) + '...');
+      const sign = this.apiService.generateOfficialSign(appId, this.apiService.config.privateKey, dataString, timestamp);
+      this.logger.debug('🔐 sign:', { data: sign.substring(0, 50) + '...' });
 
       // 6. 构建multipart/form-data请求 - 完全按照官方Java示例
       const boundary = uuidv4();
       
       // 使用官方文档中的addTextValue格式
-      const textValues = this.addTextValue('appId', appId, boundary) +
-                        this.addTextValue('timestamp', timestamp, boundary) +
-                        this.addTextValue('bizData', dataString, boundary);
+      const textValues = this.apiService.addTextValue('appId', appId, boundary) +
+                        this.apiService.addTextValue('timestamp', timestamp, boundary) +
+                        this.apiService.addTextValue('bizData', dataString, boundary);
 
       // 7. 发送请求到官方模板数据接口
       const response = await axios.post(`${domain}/template/data`, textValues + `--${boundary}--\r\n`, {
@@ -2540,7 +2075,7 @@ export class ESignService {
         timeout: 30000
       });
 
-      console.log('✅ 模板数据写入API调用成功:', response.data);
+      this.logger.debug('✅ 模板数据写入API调用成功:', { data: response.data });
 
       if (response.data.code !== 100000) {
         throw new Error(`模板数据写入失败: ${response.data.msg}`);
@@ -2557,54 +2092,9 @@ export class ESignService {
       }
 
     } catch (error) {
-      console.error('❌ 模板数据写入失败:', error);
+      this.logger.error('❌ 模板数据写入失败:', error);
       throw new BadRequestException(`模板数据写入失败: ${error.response?.data?.msg || error.message}`);
     }
-  }
-
-  /**
-   * 官方NetSignUtils.getSign签名算法实现
-   */
-  private generateOfficialSign(appId: string, privateKey: string, dataString: string, timestamp: string): string {
-    const crypto = require('crypto');
-
-    try {
-      // 1. 计算dataString的MD5值
-      const md5Hash = crypto.createHash('md5').update(dataString, 'utf8').digest('hex');
-      console.log('🔐 MD5 hash:', md5Hash);
-
-      // 2. 构建签名字符串：dataString + md5(dataString) + appId + timestamp
-      const signString = dataString + md5Hash + appId + timestamp;
-      console.log('🔐 Sign string length:', signString.length);
-
-      // 3. 格式化私钥为PEM格式
-      const privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${privateKey.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----`;
-
-      // 4. 使用SHA1withRSA算法进行签名
-      const sign = crypto.createSign('sha1');
-      sign.update(signString, 'utf8');
-      sign.end();
-
-      const signature = sign.sign(privateKeyPem, 'base64');
-
-      // 5. 移除换行符
-      const cleanSignature = signature.replace(/\r\n/g, '');
-
-      return cleanSignature;
-    } catch (error) {
-      console.error('🚨 官方签名生成失败:', error);
-      throw new Error(`签名生成失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 官方NetSignUtils.addTextValue实现
-   */
-  private addTextValue(name: string, value: string, boundary: string): string {
-    return `--${boundary}\r\n` +
-           `Content-Disposition: form-data; name="${name}"\r\n` +
-           `\r\n` +
-           `${value}\r\n`;
   }
 
   /**
@@ -2612,74 +2102,6 @@ export class ESignService {
    * 优先使用官方模板数据写入API，如果失败则使用其他方法
    */
 
-  /**
-   * 爱签官方完整流程实现
-   * 流程：1.添加陌生用户 -> 2.创建合同 -> 3.添加签署方 -> 4.获取签署链接 -> 5.下载已签署合同
-   */
-
-  /**
-   * 步骤1：添加陌生用户
-   * API: /user/addStranger
-   */
-  async addStranger(userData: {
-    account: string;
-    userType: number;
-    name?: string;
-    companyName?: string;
-    mobile?: string;
-    signPwd?: string;
-    isSignPwdNotice?: number;
-    isNotice?: number;
-    identifiedNotifyUrl?: string;
-    creditCode?: string;
-    agentName?: string;
-    agentCardNo?: string;
-    idCard?: string;
-    bankCard?: string;
-    immutableInfoList?: string[];
-  }): Promise<any> {
-    try {
-      console.log('🔄 步骤1：添加陌生用户:', userData);
-
-      // 构建符合官方API的bizData
-      const bizData: any = {
-        account: userData.account,
-        userType: userData.userType
-      };
-
-      // 添加可选参数
-      if (userData.name) bizData.name = userData.name;
-      if (userData.companyName) bizData.companyName = userData.companyName;
-      if (userData.mobile) bizData.mobile = userData.mobile;
-      if (userData.signPwd) bizData.signPwd = userData.signPwd;
-      if (userData.isSignPwdNotice !== undefined) bizData.isSignPwdNotice = userData.isSignPwdNotice;
-      if (userData.isNotice !== undefined) bizData.isNotice = userData.isNotice;
-      if (userData.identifiedNotifyUrl) bizData.identifiedNotifyUrl = userData.identifiedNotifyUrl;
-      if (userData.creditCode) bizData.creditCode = userData.creditCode;
-      if (userData.agentName) bizData.agentName = userData.agentName;
-      if (userData.agentCardNo) bizData.agentCardNo = userData.agentCardNo;
-      if (userData.idCard) bizData.idCard = userData.idCard;
-      if (userData.bankCard) bizData.bankCard = userData.bankCard;
-      if (userData.immutableInfoList) bizData.immutableInfoList = userData.immutableInfoList;
-
-      console.log('📤 发送给爱签的bizData:', bizData);
-
-      const response = await this.callESignAPI('/v2/user/addStranger', bizData);
-      console.log('✅ 添加陌生用户响应:', response);
-      
-      // callESignAPI已经返回了response.data，所以这里直接返回
-      return response;
-    } catch (error) {
-      console.error('❌ 添加陌生用户失败:', error);
-      // 返回一个标准的错误响应格式，而不是抛出异常
-      return {
-        code: -1,
-        message: error.message || '添加陌生用户失败',
-        success: false,
-        error: error
-      };
-    }
-  }
 
   /**
    * 步骤2：创建合同（基于模板）
@@ -2742,7 +2164,7 @@ export class ESignService {
     signMark?: string; // 业务系统传递的唯一标识
   }>): Promise<any> {
     try {
-      console.log('🔄 添加签署方（官方标准）:', signersData);
+      this.logger.debug('🔄 添加签署方（官方标准）:', { data: signersData });
 
       // 验证必填参数
       for (const signer of signersData) {
@@ -2778,15 +2200,15 @@ export class ESignService {
         ...(signer.signMark && { signMark: signer.signMark })
       }));
 
-      console.log('📋 构建的签署方数据:', JSON.stringify(bizData, null, 2));
+      this.logger.debug('📋 构建的签署方数据:', { data: JSON.stringify(bizData, null, 2) });
 
-      const response = await this.callESignAPI('/contract/addSigner', bizData);
+      const response = await this.apiService.callESignAPI('/contract/addSigner', bizData);
       
-      console.log('✅ 添加签署方成功:', response);
+      this.logger.debug('✅ 添加签署方成功:', { data: response });
       // 直接返回爱签API的原始响应格式 { code, msg, data }
       return response;
     } catch (error) {
-      console.error('❌ 添加签署方失败:', error);
+      this.logger.error('❌ 添加签署方失败:', error);
       // 如果是爱签API错误，直接抛出让上层处理
       throw error;
     }
@@ -2814,7 +2236,7 @@ export class ESignService {
     templateParams?: Record<string, any>; // 添加模板参数，用于处理多行文本填充
   }): Promise<any> {
     try {
-      console.log('🔄 简化版添加签署方:', params);
+      this.logger.debug('🔄 简化版添加签署方:', { data: params });
 
       const signersData = await Promise.all(params.signers.map(async (signer, index) => {
         // 签署类型：2-无感知签章，3-有感知签章
@@ -2824,7 +2246,7 @@ export class ESignService {
         // 如果是第三个及以后的签署人（通常是企业发起方），强制设置为无感知签章
         if (index >= 2) {
           signType = 2; // 无感知签章（自动签章）
-          console.log(`🏢 检测到企业发起方（第${index + 1}个签署人），强制启用无感知签章`);
+          this.logger.debug(`🏢 检测到企业发起方（第${index + 1}个签署人），强制启用无感知签章`);
         }
         
         // 验证方式：1-短信验证码，2-签约密码，3-人脸识别
@@ -2848,11 +2270,11 @@ export class ESignService {
 
           // 为企业用户设置默认印章
           try {
-            console.log(`🔧 为企业用户 ${signer.account} 设置默认印章...`);
+            this.logger.debug(`🔧 为企业用户 ${signer.account} 设置默认印章...`);
             await this.setDefaultSeal(signer.account, "5f0e3bd2fc744bd8b500576e60b17711");
-            console.log(`✅ 企业用户 ${signer.account} 默认印章设置完成`);
+            this.logger.debug(`✅ 企业用户 ${signer.account} 默认印章设置完成`);
           } catch (error) {
-            console.warn(`⚠️ 为企业用户 ${signer.account} 设置默认印章失败: ${error.message}`);
+            this.logger.warn(`⚠️ 为企业用户 ${signer.account} 设置默认印章失败: ${error.message}`);
           }
         }
 
@@ -2864,7 +2286,7 @@ export class ESignService {
           canDrag: 0   // 不允许拖动
         }];
 
-        console.log(`📝 签署人 ${index + 1} (${signer.name}) 签章策略: signKey=${signKey}`);
+        this.logger.debug(`📝 签署人 ${index + 1} (${signer.name}) 签章策略: signKey=${signKey}`);
 
         // 构建接收方模板填充策略（用于多行文本等控件）
         // 只在第一个签署人中添加模板填充策略，避免重复
@@ -2878,8 +2300,8 @@ export class ESignService {
         // 处理服务备注等多行文本字段（只在第一个签署人中处理）
         // 🔥🔥🔥 注意："服务内容"已改为多选控件(dataType=9)，在 createContractWithTemplate 的
         //        componentData 中处理，不能再放入 receiverFillStrategyList，否则爱签报 100629
-        console.log(`🔍 处理签署人 ${index + 1}/${params.signers.length}: ${signer.name}`);
-        console.log(`📋 templateParams存在: ${!!params.templateParams}`);
+        this.logger.debug(`🔍 处理签署人 ${index + 1}/${params.signers.length}: ${signer.name}`);
+        this.logger.debug(`📋 templateParams存在: ${!!params.templateParams}`);
 
         // 🔥🔥🔥 2025-03-11 关键修复：移除 receiverFillStrategyList 逻辑
         // 原因：receiverFillStrategyList 用于"签署时填充"场景，要求模板中配置"签署方可填充"控件。
@@ -2894,9 +2316,9 @@ export class ESignService {
         // 2. 在 receiverFillStrategyList 中指定对应字段的 key
         // 3. 设置 fillStage=1（待签署时填充）或 fillStage=2（即时填充）
 
-        console.log(`📋 签署人 ${index + 1}/${params.signers.length}: ${signer.name}`);
-        console.log(`⚠️ 不设置 receiverFillStrategyList（当前模板没有"签署方可填充"控件，所有字段已通过 fillData 预填充）`);
-        console.log(`📊 receiverFillStrategyList长度: ${receiverFillStrategyList.length}（保持为空）`);
+        this.logger.debug(`📋 签署人 ${index + 1}/${params.signers.length}: ${signer.name}`);
+        this.logger.debug(`⚠️ 不设置 receiverFillStrategyList（当前模板没有"签署方可填充"控件，所有字段已通过 fillData 预填充）`);
+        this.logger.debug(`📊 receiverFillStrategyList长度: ${receiverFillStrategyList.length}（保持为空）`);
 
         // 构建签署人数据，严格按照爱签官方文档格式
         const signerData: any = {
@@ -2917,15 +2339,15 @@ export class ESignService {
         // 🔧 关键修复：只为甲方和乙方设置noticeMobile，企业用户不设置
         if (index < 2 && signer.mobile) {
           signerData.noticeMobile = signer.mobile;
-          console.log(`📱 为${index === 0 ? '甲方' : '乙方'}设置通知手机号: ${signer.mobile}`);
+          this.logger.debug(`📱 为${index === 0 ? '甲方' : '乙方'}设置通知手机号: ${signer.mobile}`);
         } else if (index >= 2) {
-          console.log(`🏢 企业用户不设置noticeMobile字段，避免长度限制错误`);
+          this.logger.debug(`🏢 企业用户不设置noticeMobile字段，避免长度限制错误`);
         }
 
         // 🔧 关键修复：为丙方（企业）添加顶层sealNo参数，按照官方文档要求
         if (index >= 2) {
           signerData.sealNo = "5f0e3bd2fc744bd8b500576e60b17711"; // 企业默认印章编号
-          console.log(`🏢 为企业签署人设置顶层sealNo参数: ${signerData.sealNo}`);
+          this.logger.debug(`🏢 为企业签署人设置顶层sealNo参数: ${signerData.sealNo}`);
         }
 
         return signerData;
@@ -2934,7 +2356,7 @@ export class ESignService {
       // 调用标准的添加签署方方法，直接返回爱签API响应
       return await this.addContractSigners(signersData);
     } catch (error) {
-      console.error('❌ 简化版添加签署方失败:', error);
+      this.logger.error('❌ 简化版添加签署方失败:', error);
       // 如果是爱签API错误，直接抛出让上层处理
       throw error;
     }
@@ -2947,15 +2369,15 @@ export class ESignService {
    */
   async getContractStatus(contractNo: string): Promise<any> {
     try {
-      console.log('🔄 步骤4：获取合同状态:', contractNo);
+      this.logger.debug('🔄 步骤4：获取合同状态:', { data: contractNo });
 
       const bizData = {
         contractNo: contractNo
       };
 
       // 使用正确的API端点：/contract/status（根据官方文档）
-      const response = await this.callESignAPI('/contract/status', bizData);
-      console.log('✅ 获取合同状态成功:', response);
+      const response = await this.apiService.callESignAPI('/contract/status', bizData);
+      this.logger.debug('✅ 获取合同状态成功:', { data: response });
 
       // 🔥 增强：尝试获取签署方详细信息
       if (response.code === 100000 && response.data) {
@@ -2965,8 +2387,17 @@ export class ESignService {
 
           if (contractInfoResult.success && contractInfoResult.data?.signUser) {
             const signUsers = contractInfoResult.data.signUser;
+            const overallContractStatus = response.data.status; // 合同整体状态
 
-            console.log('🔍 爱签返回的签署方原始数据:', JSON.stringify(signUsers, null, 2));
+            this.logger.debug('🔍 爱签返回的签署方原始数据:', { data: JSON.stringify(signUsers, null, 2) });
+            this.logger.debug('🔍 合同整体状态:', { data: overallContractStatus });
+
+            // 🔥 顺序签约修复：计算当前"活跃签署顺序"
+            // 按 signOrder 升序排序，找到第一个尚未完成签署（signStatus !== 2）的签署方的 signOrder
+            const sortedByOrder = [...signUsers].sort((a: any, b: any) =>
+              (a.signOrder || 0) - (b.signOrder || 0)
+            );
+            const firstUnsignedOrder = sortedByOrder.find((u: any) => u.signStatus !== 2)?.signOrder ?? 999;
 
             // 将签署方信息添加到响应中
             response.data.signUsers = signUsers.map((user: any, index: number) => {
@@ -2996,31 +2427,54 @@ export class ESignService {
                 role = '丙方（企业）';
               }
 
-              console.log(`🔍 签署方 ${index}: name=${user.name}, userType=${user.userType}, signOrder=${user.signOrder}, role=${role}`);
+              this.logger.debug(`🔍 签署方 ${index}: name=${user.name}, userType=${user.userType}, signOrder=${user.signOrder}, signStatus=${user.signStatus}, role=${role}`);
+
+              // 🔥 顺序签约状态修复：
+              // 在顺序签约（signOrder=2）模式下，未到签署轮次的签署方，
+              // 爱签API可能返回 signStatus=3（或 null/undefined），
+              // 但合同整体仍处于"签约中"（status=1），说明这些并非真正的拒签，
+              // 而是"等待前方签署方完成"的队列状态。
+              let resolvedSignStatus: number = user.signStatus ?? 0;
+              const userSignOrder = user.signOrder || (index + 1);
+              const isWaitingInQueue =
+                overallContractStatus === 1 &&          // 合同整体仍在签约中
+                user.signStatus !== 2 &&                // 本人尚未完成签署
+                !user.signTime &&                       // 没有签署时间（未真正操作过）
+                userSignOrder > firstUnsignedOrder;     // 签署顺序在当前活跃签署方之后
+
+              if (isWaitingInQueue) {
+                // 尚未轮到该签署方，显示为"等待前方签署"
+                resolvedSignStatus = 0;
+                this.logger.debug(`⏳ 签署方 ${user.name}(signOrder=${userSignOrder}) 等待前方签署，原始signStatus=${user.signStatus} 修正为 0`);
+              } else if (user.signStatus === null || user.signStatus === undefined) {
+                resolvedSignStatus = 0;
+              }
 
               return {
                 account: user.account,
                 name: user.name || `签署方${index + 1}`,
                 role: role,
                 phone: user.mobile || user.phone,
-                signStatus: user.signStatus,
-                signStatusText: this.getSignStatusText(user.signStatus || 0),
+                signStatus: resolvedSignStatus,
+                signStatusText: resolvedSignStatus === 0 && isWaitingInQueue
+                  ? '等待前方签署'
+                  : this.getSignStatusText(resolvedSignStatus),
                 signTime: user.signTime,
-                signOrder: user.signOrder || (index + 1),
+                signOrder: userSignOrder,
                 userType: user.userType // 0=个人, 1=企业
               };
             });
 
-            console.log('✅ 获取签署方信息成功:', JSON.stringify(response.data.signUsers, null, 2));
+            this.logger.debug('✅ 获取签署方信息成功:', { data: JSON.stringify(response.data.signUsers, null, 2) });
           }
         } catch (signersError) {
-          console.warn('⚠️ 获取签署方信息失败，但不影响主流程:', signersError.message);
+          this.logger.warn('⚠️ 获取签署方信息失败，但不影响主流程:', { data: signersError.message });
         }
       }
 
       return response;
     } catch (error) {
-      console.error('❌ 获取合同状态失败:', error);
+      this.logger.error('❌ 获取合同状态失败:', error);
       throw error;
     }
   }
@@ -3031,7 +2485,7 @@ export class ESignService {
    */
   async getContractSignUrls(contractNo: string): Promise<any> {
     try {
-      console.log('🔄 获取合同签署链接:', contractNo);
+      this.logger.debug('🔄 获取合同签署链接:', { data: contractNo });
 
       // 使用合同预览接口获取签署方信息（这个接口返回完整的signUser数据）
       const previewResult = await this.previewContractWithSignUrls(contractNo);
@@ -3045,7 +2499,7 @@ export class ESignService {
         throw new Error('该合同暂无签署方信息，请确保已添加签署人');
       }
 
-      console.log('📋 签署方列表:', signUsers);
+      this.logger.debug('📋 签署方列表:', { data: signUsers });
 
       // 构建签署链接数据
       const signUrls = signUsers.map((user: any, index: number) => {
@@ -3059,13 +2513,13 @@ export class ESignService {
           role = '丙方（企业）';
         }
 
-        console.log(`🔍 签署方 ${index + 1}: signOrder=${user.signOrder}, index=${index}, role=${role}, name=${user.name}, signUrl=${user.signUrl}`);
+        this.logger.debug(`🔍 签署方 ${index + 1}: signOrder=${user.signOrder}, index=${index}, role=${role}, name=${user.name}, signUrl=${user.signUrl}`);
 
         // 如果是企业签署方且没有签署链接，说明使用的是无感知签章（自动签章）
         let signUrl = user.signUrl;
         if (!signUrl && (index >= 2 || role.includes('丙方'))) {
           signUrl = '无需签署（企业自动签章）';
-          console.log(`ℹ️ 企业签署方使用无感知签章，无需签署链接`);
+          this.logger.debug(`ℹ️ 企业签署方使用无感知签章，无需签署链接`);
         }
 
         return {
@@ -3081,7 +2535,7 @@ export class ESignService {
         };
       });
 
-      console.log('✅ 签署链接获取成功:', JSON.stringify(signUrls, null, 2));
+      this.logger.debug('✅ 签署链接获取成功:', { data: JSON.stringify(signUrls, null, 2) });
 
       return {
         success: true,
@@ -3092,7 +2546,7 @@ export class ESignService {
         message: '签署链接获取成功',
       };
     } catch (error) {
-      console.error('❌ 获取签署链接失败:', error);
+      this.logger.error('❌ 获取签署链接失败:', error);
       throw error;
     }
   }
@@ -3104,14 +2558,14 @@ export class ESignService {
    */
   async getContractInfo(contractNo: string): Promise<any> {
     try {
-      console.log('🔍 查询合同信息:', contractNo);
+      this.logger.debug('🔍 查询合同信息:', { data: contractNo });
 
       const bizData = {
         contractNo: contractNo
       };
 
-      const response = await this.callESignAPI('/contract/getContract', bizData);
-      console.log('✅ 获取合同信息成功:', response);
+      const response = await this.apiService.callESignAPI('/contract/getContract', bizData);
+      this.logger.debug('✅ 获取合同信息成功:', { data: response });
       
       if (response.code === 100000) {
         return {
@@ -3124,7 +2578,7 @@ export class ESignService {
         throw new Error(response.msg || '获取合同信息失败');
       }
     } catch (error) {
-      console.error('❌ 获取合同信息失败:', error);
+      this.logger.error('❌ 获取合同信息失败:', error);
       throw new Error(`获取合同信息失败: ${error.message}`);
     }
   }
@@ -3140,7 +2594,7 @@ export class ESignService {
     outfile?: string; // 文件本地路径（可选）
   }): Promise<any> {
     try {
-      console.log('🔄 步骤5：下载已签署合同:', contractNo, options);
+      this.logger.debug('🔄 步骤5：下载已签署合同:', { data: contractNo, options });
 
       const bizData = {
         contractNo: contractNo,
@@ -3149,8 +2603,8 @@ export class ESignService {
         ...(options?.outfile && { outfile: options.outfile })
       };
 
-      const response = await this.callESignAPI('/contract/downloadContract', bizData);
-      console.log('✅ 下载合同成功:', response.data);
+      const response = await this.apiService.callESignAPI('/contract/downloadContract', bizData);
+      this.logger.debug('✅ 下载合同成功:', { data: response.data });
       
       // 如果返回的是base64数据，我们需要处理
       if (response.data && response.data.data) {
@@ -3173,173 +2627,11 @@ export class ESignService {
       
       return response.data;
     } catch (error) {
-      console.error('❌ 下载合同失败:', error);
+      this.logger.error('❌ 下载合同失败:', error);
       throw error;
     }
   }
 
-  /**
-   * 设置默认印章
-   * API: /user/setDefaultSeal
-   * 将指定印章设置为默认章，如果没有指定印章，则会将系统默认生成印章设置为默认章
-   */
-  async setDefaultSeal(account: string, sealNo?: string): Promise<any> {
-    try {
-      console.log(`🔧 为用户 ${account} 设置默认印章: ${sealNo || '系统默认章'}`);
-      
-      const bizData = {
-        account: account,
-        sealNo: sealNo || "5f0e3bd2fc744bd8b500576e60b17711" // 官方默认章编号
-      };
-
-      const response = await this.callESignAPI('/user/setDefaultSeal', bizData);
-      
-      if (response.code === 100000) {
-        console.log(`✅ 用户 ${account} 默认印章设置成功`);
-      } else {
-        console.warn(`⚠️ 用户 ${account} 默认印章设置失败: ${response.msg}`);
-      }
-      
-      return response;
-    } catch (error) {
-      console.error(`❌ 设置默认印章失败:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * 通用爱签API调用方法（基于官方Java Demo规范）
-   */
-  private async callESignAPI(uri: string, bizData: any): Promise<any> {
-    try {
-      // 1. 准备参数
-      const appId = this.config.appId;
-      const privateKey = this.config.privateKey;
-
-      if (!appId || !privateKey) {
-        throw new Error('爱签配置不完整，缺少appId或privateKey');
-      }
-
-      // 2. 处理bizData - 按字母排序（官方要求）
-      const sortedBizData = this.sortObjectKeys(bizData);
-      const bizDataString = JSON.stringify(sortedBizData);
-
-      // 3. 生成13位时间戳（当前时间 + 10分钟）
-      const timestamp = (Date.now() + 10 * 60 * 1000).toString();
-
-      console.log('🔐 [callESignAPI] 签名前数据:');
-      console.log('  - URI:', uri);
-      console.log('  - appId:', appId);
-      console.log('  - timestamp:', timestamp);
-      console.log('  - bizDataString (前100字符):', bizDataString.substring(0, 100));
-
-      // 4. 生成签名
-      const sign = this.generateOfficialSignature(appId, privateKey, bizDataString, timestamp);
-
-      console.log('  - 生成的签名 (前50字符):', sign.substring(0, 50));
-
-             // 5. 构建FormData请求
-       const FormData = require('form-data');
-       const formData = new FormData();
-       formData.append('appId', appId);
-       formData.append('timestamp', timestamp);
-       formData.append('bizData', bizDataString);
-
-       // 6. 发送请求
-       const response = await this.axiosInstance.post(uri, formData, {
-         headers: {
-           'sign': sign,
-           'timestamp': timestamp,
-           'Content-Type': formData.getHeaders()['content-type']
-         }
-       });
-
-      console.log('✅ [callESignAPI] 请求成功，响应码:', response.data?.code);
-      return response.data;
-    } catch (error) {
-      console.error('❌ [callESignAPI] 爱签API调用失败:', error.response?.data || error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * 生成官方签名（基于Java官方实现）
-   * @param appId 接入者APPID
-   * @param privateKey 用户私钥（Base64编码的PKCS8格式）
-   * @param dataString 请求参数JSON字符串
-   * @param timestamp 时间戳
-   * @returns 签名字符串
-   */
-  private generateOfficialSignature(appId: string, privateKey: string, dataString: string, timestamp: string): string {
-    try {
-      // 1. 计算dataString的MD5哈希值
-      const md5Hash = crypto.createHash('md5').update(dataString, 'utf8').digest('hex');
-
-      // 2. 构建待签名字符串：dataString + md5(dataString) + appId + timestamp
-      const updateString = dataString + md5Hash + appId + timestamp;
-
-      console.log('🔐 [generateOfficialSignature] 签名算法调试信息:');
-      console.log('  - appId:', appId);
-      console.log('  - timestamp:', timestamp);
-      console.log('  - dataString (前200字符):', dataString.substring(0, 200));
-      console.log('  - dataString 长度:', dataString.length);
-      console.log('  - md5Hash:', md5Hash);
-      console.log('  - updateString (前200字符):', updateString.substring(0, 200));
-      console.log('  - updateString 长度:', updateString.length);
-
-      // 3. 准备私钥
-      // 清理私钥格式，移除头尾标识和换行符
-      let cleanPrivateKey = privateKey
-        .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-        .replace(/-----END PRIVATE KEY-----/g, '')
-        .replace(/-----BEGIN RSA PRIVATE KEY-----/g, '')
-        .replace(/-----END RSA PRIVATE KEY-----/g, '')
-        .replace(/\r?\n/g, '')
-        .replace(/\s/g, '');
-
-      console.log('  - 清理后的私钥长度:', cleanPrivateKey.length);
-      console.log('  - 私钥前50字符:', cleanPrivateKey.substring(0, 50));
-
-      // 4. 构建完整的PKCS8格式私钥
-      const privateKeyPEM = `-----BEGIN PRIVATE KEY-----\n${cleanPrivateKey}\n-----END PRIVATE KEY-----`;
-
-      // 5. 使用SHA1withRSA算法签名
-      const sign = crypto.createSign('RSA-SHA1');
-      sign.update(updateString, 'utf8');
-      const signature = sign.sign(privateKeyPEM, 'base64');
-
-      // 6. 移除签名中的换行符（按照Java实现）
-      const finalSignature = signature.replace(/\r\n/g, '').replace(/\n/g, '');
-
-      console.log('  - 签名长度:', finalSignature.length);
-      console.log('  - 最终签名 (前100字符):', finalSignature.substring(0, 100));
-
-      return finalSignature;
-    } catch (error) {
-      console.error('❌ [generateOfficialSignature] 签名生成失败详细信息:', error);
-      throw new Error(`签名生成失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 对象键按字母排序（官方要求）
-   */
-  private sortObjectKeys(obj: any): any {
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.sortObjectKeys(item));
-    }
-    
-    if (obj !== null && typeof obj === 'object') {
-      const sortedKeys = Object.keys(obj).sort();
-      const sortedObj = {};
-      sortedKeys.forEach(key => {
-        sortedObj[key] = this.sortObjectKeys(obj[key]);
-      });
-      return sortedObj;
-    }
-    
-    return obj;
-  }
 
   /**
    * 完整的合同创建和签署流程
@@ -3373,7 +2665,7 @@ export class ESignService {
     message: string;
   }> {
     try {
-      console.log('🚀 开始完整的合同创建和签署流程:', params);
+      this.logger.debug('🚀 开始完整的合同创建和签署流程:', { data: params });
 
       // 处理签署人信息（支持新旧两种格式）
       let signersData: Array<{
@@ -3406,7 +2698,7 @@ export class ESignService {
         throw new Error('缺少签署人信息，请提供signers数组或signerName/signerMobile/signerIdCard');
       }
 
-      console.log('📝 处理后的签署人信息:', signersData);
+      this.logger.debug('📝 处理后的签署人信息:', { data: signersData });
 
       // 步骤1：为每个签署人添加陌生用户（区分个人用户和企业用户）
       const signerAccounts: Array<{ name: string; mobile: string; account: string }> = [];
@@ -3426,7 +2718,7 @@ export class ESignService {
             mobile: signer.mobile,
             account: ENTERPRISE_ACCOUNT
           });
-          console.log(`🏢 企业签署人 ${ENTERPRISE_NAME} 使用已有账户: ${ENTERPRISE_ACCOUNT}`);
+          this.logger.debug(`🏢 企业签署人 ${ENTERPRISE_NAME} 使用已有账户: ${ENTERPRISE_ACCOUNT}`);
         } else {
           // 个人用户：创建新账户
           const signerAccount = `account_${Date.now()}_${index}`;
@@ -3446,7 +2738,7 @@ export class ESignService {
           if (addStrangerResult && addStrangerResult.code !== 100000 && addStrangerResult.code !== 100049) {
             const errorMsg = addStrangerResult?.msg || '添加陌生用户失败';
             const errorCode = addStrangerResult?.code || 'UNKNOWN';
-            console.error(`❌ 爱签添加陌生用户失败: code=${errorCode}, msg=${errorMsg}`);
+            this.logger.error(`❌ 爱签添加陌生用户失败: code=${errorCode}, msg=${errorMsg}`);
             throw new Error(`爱签添加签署人失败: ${errorMsg} (错误码: ${errorCode})`);
           }
 
@@ -3456,7 +2748,7 @@ export class ESignService {
             account: signerAccount
           });
 
-          console.log(`✅ 签署人 ${signer.name} 添加成功，账户: ${signerAccount}`);
+          this.logger.debug(`✅ 签署人 ${signer.name} 添加成功，账户: ${signerAccount}`);
         }
       }
 
@@ -3473,7 +2765,7 @@ export class ESignService {
           templateParams: params.templateParams,
           validityTime: params.validityTime,
           signOrder: 2,
-          notifyUrl: this.config.notifyUrl // 🔥 添加回调URL，确保爱签在合同状态变化时通知我们
+          notifyUrl: this.apiService.config.notifyUrl // 🔥 添加回调URL，确保爱签在合同状态变化时通知我们
         });
 
         // 🔥 检查是否是合同编号重复错误（100055）
@@ -3482,7 +2774,7 @@ export class ESignService {
           const timestamp = Date.now().toString();
           const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
           contractNo = `CON${timestamp.slice(-10)}${random}`;
-          console.log(`⚠️ 合同编号重复，重新生成编号: ${contractNo} (重试 ${retryCount + 1}/${maxContractRetries})`);
+          this.logger.debug(`⚠️ 合同编号重复，重新生成编号: ${contractNo} (重试 ${retryCount + 1}/${maxContractRetries})`);
           continue;
         }
 
@@ -3490,12 +2782,12 @@ export class ESignService {
         if (!createResult || createResult.code !== 100000) {
           const errorMsg = createResult?.msg || '创建合同失败';
           const errorCode = createResult?.code || 'UNKNOWN';
-          console.error(`❌ 爱签创建合同失败: code=${errorCode}, msg=${errorMsg}`);
+          this.logger.error(`❌ 爱签创建合同失败: code=${errorCode}, msg=${errorMsg}`);
           throw new Error(`爱签创建合同失败: ${errorMsg} (错误码: ${errorCode})`);
         }
 
         // 成功创建合同
-        console.log(`✅ 步骤2完成：合同创建成功，合同编号: ${contractNo}`);
+        this.logger.debug(`✅ 步骤2完成：合同创建成功，合同编号: ${contractNo}`);
         break;
       }
 
@@ -3520,28 +2812,28 @@ export class ESignService {
       if (signerResult && signerResult.code !== 100000) {
         const errorMsg = signerResult?.msg || '添加签署方失败';
         const errorCode = signerResult?.code || 'UNKNOWN';
-        console.error(`❌ 爱签添加签署方失败: code=${errorCode}, msg=${errorMsg}`);
+        this.logger.error(`❌ 爱签添加签署方失败: code=${errorCode}, msg=${errorMsg}`);
         throw new Error(`爱签添加签署方失败: ${errorMsg} (错误码: ${errorCode})`);
       }
-      console.log('✅ 步骤3完成：添加签署方成功');
+      this.logger.debug('✅ 步骤3完成：添加签署方成功');
 
       // 处理返回结果
       // 🔥 修复：小程序端使用 hxcx.asign.cn，后端API使用 oapi.asign.cn
       // 根据环境变量判断使用哪个域名
-      const apiHost = this.config.host || 'https://oapi.asign.cn';
+      const apiHost = this.apiService.config.host || 'https://oapi.asign.cn';
       // 小程序签署页面域名（生产环境）
       const miniProgramSignHost = apiHost.includes('prev.asign.cn') || apiHost.includes('bprev.asign.cn')
         ? 'https://bpre.asign.cn'  // 测试环境
         : 'https://hxcx.asign.cn'; // 生产环境
 
-      console.log('🔧 签署链接域名配置:', {
+      this.logger.debug('esign.sign_url.host_config', {
         apiHost,
         miniProgramSignHost,
         environment: apiHost.includes('prev') ? '测试环境' : '生产环境'
       });
 
       // 🔥 等待爱签系统处理完成，然后获取真正的短链接（带重试机制）
-      console.log('🔄 等待爱签系统处理，然后获取真正的签署短链接...');
+      this.logger.debug('🔄 等待爱签系统处理，然后获取真正的签署短链接...');
 
       // 尝试获取爱签返回的真正签署链接（短链接格式）- 最多重试5次
       let realSignUrls: any[] = [];
@@ -3551,7 +2843,7 @@ export class ESignService {
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
           const delay = retryDelays[attempt];
-          console.log(`⏳ 等待 ${delay}ms 后获取签署链接 (尝试 ${attempt + 1}/${maxRetries})...`);
+          this.logger.debug(`⏳ 等待 ${delay}ms 后获取签署链接 (尝试 ${attempt + 1}/${maxRetries})...`);
           await new Promise(resolve => setTimeout(resolve, delay));
 
           const contractInfoResult = await this.getContractInfo(params.contractNo);
@@ -3569,20 +2861,20 @@ export class ESignService {
                 signOrder: index + 1,
                 role: index === 0 ? '甲方（客户）' : (index === 1 ? '乙方（服务人员）' : '丙方（企业）')
               }));
-              console.log(`✅ 获取到爱签真正的签署链接 (尝试 ${attempt + 1}):`, realSignUrls.map(u => ({ name: u.name, signUrl: u.signUrl })));
+              this.logger.debug(`✅ 获取到爱签真正的签署链接 (尝试 ${attempt + 1}):`, { data: realSignUrls.map(u => ({ name: u.name, signUrl: u.signUrl })) });
               break; // 成功获取，跳出循环
             } else {
-              console.log(`⚠️ signUser 有数据但没有签署链接 (尝试 ${attempt + 1})`);
+              this.logger.debug(`⚠️ signUser 有数据但没有签署链接 (尝试 ${attempt + 1})`);
             }
           } else {
-            console.log(`⚠️ signUser 为空 (尝试 ${attempt + 1})`);
+            this.logger.debug(`⚠️ signUser 为空 (尝试 ${attempt + 1})`);
           }
         } catch (infoError) {
-          console.warn(`⚠️ 获取爱签签署链接失败 (尝试 ${attempt + 1}):`, infoError.message);
+          this.logger.warn(`⚠️ 获取爱签签署链接失败 (尝试 ${attempt + 1}):`, { data: infoError.message });
         }
 
         if (attempt === maxRetries - 1) {
-          console.warn('⚠️ 多次尝试后仍无法获取真实签署链接，使用备用链接');
+          this.logger.warn('⚠️ 多次尝试后仍无法获取真实签署链接，使用备用链接');
         }
       }
 
@@ -3606,10 +2898,10 @@ export class ESignService {
       }
 
       // 🔥 备用方案：使用拼接的小程序链接
-      console.log('⚠️ 使用拼接的备用签署链接');
+      this.logger.debug('⚠️ 使用拼接的备用签署链接');
       if (signersData.length === 1) {
         const signUrl = signerResult?.signUrl || `${miniProgramSignHost}/sign/${params.contractNo}`;
-        console.log('✅ 完整流程执行成功，签署链接(备用):', signUrl);
+        this.logger.debug('✅ 完整流程执行成功，签署链接(备用):', { data: signUrl });
 
         return {
           success: true,
@@ -3627,7 +2919,7 @@ export class ESignService {
           role: index === 0 ? '甲方（客户）' : '乙方（服务人员）'
         }));
 
-        console.log('✅ 完整流程执行成功，多个签署链接(备用):', signUrls);
+        this.logger.debug('✅ 完整流程执行成功，多个签署链接(备用):', { data: signUrls });
 
         return {
           success: true,
@@ -3638,7 +2930,7 @@ export class ESignService {
       }
 
     } catch (error) {
-      console.error('❌ 完整流程执行失败:', error);
+      this.logger.error('❌ 完整流程执行失败:', error);
       return {
         success: false,
         contractNo: params.contractNo,
@@ -3661,18 +2953,18 @@ export class ESignService {
     [key: string]: any;
   }): Promise<any> {
     try {
-      console.log('🔄 开始创建模板合同（官方API）:', contractData);
+      this.logger.debug('🔄 开始创建模板合同（官方API）:', { data: contractData });
 
       // 🔥 检查 templateParams 中的数组字段
-      console.log('🔥🔥🔥 检查 templateParams 中的字段类型:');
+      this.logger.debug('🔥🔥🔥 检查 templateParams 中的字段类型:');
       Object.entries(contractData.templateParams || {}).forEach(([key, value]) => {
-        console.log(`  ${key}: ${typeof value} ${Array.isArray(value) ? '(数组)' : ''} = ${JSON.stringify(value).substring(0, 100)}`);
+        this.logger.debug(`  ${key}: ${typeof value} ${Array.isArray(value) ? '(数组)' : ''} = ${JSON.stringify(value).substring(0, 100)}`);
       });
 
       // 🔥🔥🔥 关键修改：获取模板控件信息，用于处理多选字段
-      console.log('🔥 获取模板控件信息...');
+      this.logger.debug('🔥 获取模板控件信息...');
       const templateData = await this.getTemplateControlInfo(contractData.templateNo);
-      console.log('🔥 模板控件信息:', JSON.stringify(templateData, null, 2));
+      this.logger.debug('🔥 模板控件信息:', { data: JSON.stringify(templateData, null, 2) });
 
       // 🔒 兜底：确保模板必填的派生字段存在（例如“阿姨工资大写”）
       // 说明：后端模板字段转换时会把“阿姨工资/阿姨工资大写”等合并成一个输入控件，
@@ -3684,14 +2976,14 @@ export class ESignService {
       // normalizedTemplateParams = this.ensureRequiredFields(normalizedTemplateParams);
 
       // 构建请求参数，严格按照官方API文档
-      console.log('🔥🔥🔥 即将调用convertToFillData方法');
+      this.logger.debug('🔥🔥🔥 即将调用convertToFillData方法');
       // 🔥 传递模板控件信息，用于正确识别多选字段（dataType 9）
       const fillData = this.convertToFillData(normalizedTemplateParams, templateData);
-      console.log('🔥🔥🔥 convertToFillData调用完成，结果:', JSON.stringify(fillData, null, 2));
+      this.logger.debug('🔥🔥🔥 convertToFillData调用完成，结果:', { data: JSON.stringify(fillData, null, 2) });
       
       // 🔥 确保 notifyUrl 始终有值：优先使用传入的值，否则使用配置中的默认值
-      const notifyUrl = contractData.notifyUrl || this.config.notifyUrl;
-      console.log('🔔 回调URL:', notifyUrl);
+      const notifyUrl = contractData.notifyUrl || this.apiService.config.notifyUrl;
+      this.logger.debug('🔔 回调URL:', { data: notifyUrl });
 
       const requestParams: Record<string, any> = {
         contractNo: contractData.contractNo,
@@ -3716,20 +3008,20 @@ export class ESignService {
         }
       }
 
-      console.log('📋 发送到爱签API的请求参数:', JSON.stringify(requestParams, null, 2));
+      this.logger.debug('📋 发送到爱签API的请求参数:', { data: JSON.stringify(requestParams, null, 2) });
 
       // 调用官方API
-      const response = await this.callESignAPI('/contract/createContract', requestParams);
+      const response = await this.apiService.callESignAPI('/contract/createContract', requestParams);
 
-      console.log('✅ 爱签API响应:', response);
+      this.logger.debug('✅ 爱签API响应:', { data: response });
 
       // 🔥 关键修改：处理previewUrl
       if (response && response.code === 100000 && response.data) {
-        console.log('🎯 检查API响应中的previewUrl...');
+        this.logger.debug('🎯 检查API响应中的previewUrl...');
         
         // 检查响应数据中是否包含previewUrl
         if (response.data.previewUrl) {
-          console.log('✅ 发现官方previewUrl:', response.data.previewUrl);
+          this.logger.debug('✅ 发现官方previewUrl:', { data: response.data.previewUrl });
           
           // 🔥 将previewUrl添加到响应数据中，确保前端能够获取
           response.data.officialPreviewUrl = response.data.previewUrl;
@@ -3737,20 +3029,20 @@ export class ESignService {
           // 🔥 尝试更新数据库中的合同记录，保存previewUrl
           try {
             await this.updateContractPreviewUrl(contractData.contractNo, response.data.previewUrl);
-            console.log('✅ 合同预览链接已保存到数据库');
+            this.logger.debug('✅ 合同预览链接已保存到数据库');
           } catch (dbError) {
-            console.warn('⚠️ 保存预览链接到数据库失败:', dbError.message);
+            this.logger.warn('⚠️ 保存预览链接到数据库失败:', { data: dbError.message });
           }
         } else {
-          console.log('⚠️ API响应中未包含previewUrl字段');
-          console.log('📋 响应数据结构:', Object.keys(response.data || {}));
+          this.logger.debug('⚠️ API响应中未包含previewUrl字段');
+          this.logger.debug('📋 响应数据结构:', { data: Object.keys(response.data || {}) });
         }
       }
 
       // 直接返回爱签API的原始响应格式 { code, msg, data }
       return response;
     } catch (error) {
-      console.error('❌ 创建模板合同失败:', error);
+      this.logger.error('❌ 创建模板合同失败:', error);
       // 如果是爱签API错误，直接抛出让上层处理
       throw error;
     }
@@ -3768,7 +3060,7 @@ export class ESignService {
       const dstVal = normalized[dstKey];
       if ((dstVal === undefined || dstVal === null || dstVal === '') && srcVal !== undefined && srcVal !== null && srcVal !== '') {
         normalized[dstKey] = this.convertToChineseAmount(srcVal);
-        console.log(`🧩 补齐模板参数: ${dstKey} <- ${srcKey} (${srcVal}) => ${normalized[dstKey]}`);
+        this.logger.debug(`🧩 补齐模板参数: ${dstKey} <- ${srcKey} (${srcVal}) => ${normalized[dstKey]}`);
       }
     };
 
@@ -3798,7 +3090,7 @@ export class ESignService {
   private ensureRequiredFields(templateParams: Record<string, any>): Record<string, any> {
     const params = { ...templateParams };
 
-    console.log('🔍 开始检查必填字段...');
+    this.logger.debug('🔍 开始检查必填字段...');
 
     // 定义必填字段及其默认值
     const requiredFields = {
@@ -3854,11 +3146,11 @@ export class ESignService {
       if (params[key] === undefined || params[key] === null || params[key] === '') {
         params[key] = defaultValue;
         addedCount++;
-        console.log(`✅ 补充必填字段: ${key} = ${defaultValue}`);
+        this.logger.debug(`✅ 补充必填字段: ${key} = ${defaultValue}`);
       }
     });
 
-    console.log(`🔍 必填字段检查完成，补充了 ${addedCount} 个字段`);
+    this.logger.debug(`🔍 必填字段检查完成，补充了 ${addedCount} 个字段`);
 
     return params;
   }
@@ -3920,7 +3212,7 @@ export class ESignService {
    */
   private async updateContractPreviewUrl(contractNo: string, previewUrl: string): Promise<void> {
     try {
-      console.log('💾 更新合同预览链接到数据库:', { contractNo, previewUrl });
+      this.logger.debug('💾 更新合同预览链接到数据库:', { contractNo, previewUrl });
       
       // 查找并更新合同记录
       const result = await this.contractModel.updateOne(
@@ -3934,12 +3226,12 @@ export class ESignService {
       );
       
       if (result.modifiedCount > 0) {
-        console.log('✅ 合同预览链接更新成功');
+        this.logger.debug('✅ 合同预览链接更新成功');
       } else {
-        console.log('⚠️ 未找到匹配的合同记录或无需更新');
+        this.logger.debug('⚠️ 未找到匹配的合同记录或无需更新');
       }
     } catch (error) {
-      console.error('❌ 更新合同预览链接失败:', error);
+      this.logger.error('❌ 更新合同预览链接失败:', error);
       throw error;
     }
   }
@@ -3950,26 +3242,26 @@ export class ESignService {
    */
   private async getTemplateControlInfo(templateNo: string): Promise<any[]> {
     try {
-      console.log('🔍 正在获取模板控件信息，模板编号:', templateNo);
-      const response = await this.callESignAPI('/template/data', {
+      this.logger.debug('🔍 正在获取模板控件信息，模板编号:', { data: templateNo });
+      const response = await this.apiService.callESignAPI('/template/data', {
         templateIdent: templateNo
       });
 
-      console.log('📋 爱签API响应:', JSON.stringify(response, null, 2));
+      this.logger.debug('📋 爱签API响应:', { data: JSON.stringify(response, null, 2) });
 
       if (response.code === 100000 && response.data) {
-        console.log('✅ 成功获取模板控件信息，字段数量:', response.data.length);
+        this.logger.debug('✅ 成功获取模板控件信息，字段数量:', { data: response.data.length });
         return response.data;
       } else {
-        console.warn('⚠️ 获取模板控件信息失败:', response);
-        console.warn('⚠️ 错误码:', response.code);
-        console.warn('⚠️ 错误信息:', response.msg);
-        console.warn('⚠️ 这可能是因为模板在爱签平台上被修改后需要重新同步');
+        this.logger.warn('⚠️ 获取模板控件信息失败:', { data: response });
+        this.logger.warn('⚠️ 错误码:', { data: response.code });
+        this.logger.warn('⚠️ 错误信息:', { data: response.msg });
+        this.logger.warn('⚠️ 这可能是因为模板在爱签平台上被修改后需要重新同步');
         return [];
       }
     } catch (error) {
-      console.error('❌ 获取模板控件信息异常:', error);
-      console.error('❌ 模板编号:', templateNo);
+      this.logger.error('❌ 获取模板控件信息异常:', error);
+      this.logger.error('❌ 模板编号:', templateNo);
       return [];
     }
   }
@@ -3981,7 +3273,7 @@ export class ESignService {
   private prepareFillDataForESign(templateParams: Record<string, any>): Record<string, any> {
     const fillData: Record<string, any> = {};
 
-    console.log('🎯 [桥接模式] 准备fillData，直接透传小程序数据');
+    this.logger.debug('🎯 [桥接模式] 准备fillData，直接透传小程序数据');
 
     // 直接遍历所有字段，只做基本的类型转换（确保都是字符串）
     Object.entries(templateParams).forEach(([key, value]) => {
@@ -3989,16 +3281,16 @@ export class ESignService {
         // 数组类型（如多选字段）转换为分号分隔的字符串
         if (Array.isArray(value)) {
           fillData[key] = value.join('；');
-          console.log(`  📋 数组字段 "${key}": [${value.join(', ')}] -> "${fillData[key]}"`);
+          this.logger.debug(`  📋 数组字段 "${key}": [${value.join(', ')}] -> "${fillData[key]}"`);
         } else {
           // 其他类型直接转字符串
           fillData[key] = String(value);
-          console.log(`  ✅ 普通字段 "${key}": "${fillData[key]}"`);
+          this.logger.debug(`  ✅ 普通字段 "${key}": "${fillData[key]}"`);
         }
       }
     });
 
-    console.log('✅ [桥接模式] fillData准备完成，字段数量:', Object.keys(fillData).length);
+    this.logger.debug('✅ [桥接模式] fillData准备完成，字段数量:', { data: Object.keys(fillData).length });
     return fillData;
   }
 
@@ -4028,11 +3320,11 @@ export class ESignService {
           keyword: key,
           defaultValue: value ? 'Yes' : 'Off'
         });
-        console.log(`  ☑️ 勾选字段 "${key}": ${value ? 'Yes' : 'Off'}`);
+        this.logger.debug(`  ☑️ 勾选字段 "${key}": ${value ? 'Yes' : 'Off'}`);
       }
     });
 
-    console.log('✅ [桥接模式] componentData准备完成，组件数量:', componentData.length);
+    this.logger.debug('✅ [桥接模式] componentData准备完成，组件数量:', { data: componentData.length });
     return componentData;
   }
 
@@ -4049,9 +3341,9 @@ export class ESignService {
     const MAX_FIELD_LENGTH = 2000; // 大部分字段的最大长度
     const MAX_MULTISELECT_LENGTH = 500; // 多选字段的最大长度（通常更短）
 
-    console.log('🔥🔥🔥 convertToFillData 开始处理 🔥🔥🔥');
-    console.log('🔥 输入参数:', JSON.stringify(templateParams, null, 2));
-    console.log('🔥 模板控件数量:', templateControls?.length || 0);
+    this.logger.debug('🔥🔥🔥 convertToFillData 开始处理 🔥🔥🔥');
+    this.logger.debug('🔥 输入参数:', { data: JSON.stringify(templateParams, null, 2) });
+    this.logger.debug('🔥 模板控件数量:', { data: templateControls?.length || 0 });
 
     // 🔥🔥🔥 关键修复：已知的多选字段列表
     // 这些字段名在爱签模板中是多选控件（dataType=9）
@@ -4065,7 +3357,7 @@ export class ESignService {
     // 因为CRM端在这种情况下成功地将"服务内容"作为换行分隔的文本放入fillData
     const SERVICE_CONTENT_FIELD = '服务内容';
 
-    console.log('🔥 已知多选字段列表:', KNOWN_MULTISELECT_FIELDS);
+    this.logger.debug('🔥 已知多选字段列表:', { data: KNOWN_MULTISELECT_FIELDS });
 
     // 🔥 构建字段类型映射表（基于模板控件信息）
     const fieldTypeMap: Record<string, number> = {};
@@ -4075,18 +3367,18 @@ export class ESignService {
           fieldTypeMap[control.dataKey] = control.dataType;
         }
       });
-      console.log('🔥 字段类型映射表:', JSON.stringify(fieldTypeMap, null, 2));
+      this.logger.debug('🔥 字段类型映射表:', { data: JSON.stringify(fieldTypeMap, null, 2) });
     }
 
     // 🔥🔥🔥 关键：如果模板控件信息为空，使用已知多选字段列表作为回退
     const useKnownMultiselectFallback = !templateControls || templateControls.length === 0;
     if (useKnownMultiselectFallback) {
-      console.log('⚠️ 模板控件信息为空，将使用已知多选字段列表作为回退机制');
+      this.logger.debug('⚠️ 模板控件信息为空，将使用已知多选字段列表作为回退机制');
     }
 
     // 遍历所有模板参数，特殊处理不同类型的字段
     Object.entries(templateParams).forEach(([key, value]) => {
-      console.log(`🔥 处理字段: "${key}" = ${JSON.stringify(value)} (类型: ${typeof value}, 是否数组: ${Array.isArray(value)})`);
+      this.logger.debug(`🔥 处理字段: "${key}" = ${JSON.stringify(value)} (类型: ${typeof value}, 是否数组: ${Array.isArray(value)})`);
 
       if (value !== null && value !== undefined && value !== '') {
         // 🔥🔥🔥 关键修复：基于模板控件的 dataType 判断字段类型
@@ -4110,7 +3402,7 @@ export class ESignService {
         // 这与CRM端的处理方式一致
         const isServiceContentFallback = useKnownMultiselectFallback && key === SERVICE_CONTENT_FIELD;
 
-        console.log(`🔥 字段"${key}" dataType=${fieldDataType}, isMultiSelectByDataType=${isMultiSelectByDataType}, isKnownMultiselectField=${isKnownMultiselectField}, isDropdownByDataType=${isDropdownByDataType}, isServiceContentFallback=${isServiceContentFallback}`);
+        this.logger.debug(`🔥 字段"${key}" dataType=${fieldDataType}, isMultiSelectByDataType=${isMultiSelectByDataType}, isKnownMultiselectField=${isKnownMultiselectField}, isDropdownByDataType=${isDropdownByDataType}, isServiceContentFallback=${isServiceContentFallback}`);
 
         // 🔥 服务备注/服务内容字段：需要换行符分隔的多行文本
         // ⚠️ 注意：当模板信息可用时，多选字段和下拉控件字段不作为服务字段处理！
@@ -4132,27 +3424,27 @@ export class ESignService {
                              key === '合同备注' ||
                              key.includes('合同备注'));
 
-        console.log(`🔥 字段"${key}"匹配检查: isMultiSelectField=${isMultiSelectField}, isServiceContentFallback=${isServiceContentFallback}, isDropdownByDataType=${isDropdownByDataType}, isServiceField=${isServiceField}, isRemarkField=${isRemarkField}`);
+        this.logger.debug(`🔥 字段"${key}"匹配检查: isMultiSelectField=${isMultiSelectField}, isServiceContentFallback=${isServiceContentFallback}, isDropdownByDataType=${isDropdownByDataType}, isServiceField=${isServiceField}, isRemarkField=${isRemarkField}`);
 
         if (isMultiSelectField && !isServiceContentFallback) {
           // 🔥🔥🔥 重要修改：多选字段不添加到 fillData，改为在 componentData 中处理
           // 但如果是"服务内容"回退模式，则跳过此判断，继续作为文本处理
-          console.log(`🔥🔥 检测到多选字段: "${key}" (byDataType=${isMultiSelectByDataType}, byName=${isMultiSelectByName}, byKnownList=${isKnownMultiselectField})，跳过 fillData 处理（将在 componentData 中处理）`);
+          this.logger.debug(`🔥🔥 检测到多选字段: "${key}" (byDataType=${isMultiSelectByDataType}, byName=${isMultiSelectByName}, byKnownList=${isKnownMultiselectField})，跳过 fillData 处理（将在 componentData 中处理）`);
           return;
         } else if (isDropdownByDataType) {
           // 🔥🔥🔥 重要修改：下拉控件字段不添加到 fillData，改为在 componentData 中处理
-          console.log(`🔥🔥 检测到下拉控件字段(dataType=16): "${key}"，跳过 fillData 处理（将在 componentData 中处理）`);
+          this.logger.debug(`🔥🔥 检测到下拉控件字段(dataType=16): "${key}"，跳过 fillData 处理（将在 componentData 中处理）`);
           return;
         } else if (isServiceField) {
           // 🔥 服务备注字段：转换为换行符分隔的多行文本
-          console.log(`🔥🔥 检测到服务备注字段: "${key}"`);
+          this.logger.debug(`🔥🔥 检测到服务备注字段: "${key}"`);
           if (Array.isArray(value)) {
             const serviceLines = value
               .filter(item => item && item.trim())
               .map(item => item.trim().replace(/\s+/g, ' '))
               .join('\n');
             fillData[key] = serviceLines;
-            console.log(`🔥🔥 服务备注数组转换: [${value.join(', ')}] -> 多行文本`);
+            this.logger.debug(`🔥🔥 服务备注数组转换: [${value.join(', ')}] -> 多行文本`);
           } else if (typeof value === 'string' && value.includes('；')) {
             const serviceLines = value
               .split('；')
@@ -4160,7 +3452,7 @@ export class ESignService {
               .map(item => item.trim().replace(/\s+/g, ' '))
               .join('\n');
             fillData[key] = serviceLines;
-            console.log(`🔥🔥 服务备注字符串转换: "${value}" -> 多行文本`);
+            this.logger.debug(`🔥🔥 服务备注字符串转换: "${value}" -> 多行文本`);
           } else {
             // 🔥 保留换行符，只清理每行内部的多余空格
             const cleanedValue = String(value)
@@ -4168,31 +3460,31 @@ export class ESignService {
               .map(line => line.trim().replace(/\s+/g, ' '))
               .join('\n');
             fillData[key] = cleanedValue;
-            console.log(`🔥🔥 服务备注单值（保留换行）: "${value}" -> "${fillData[key]}"`);
+            this.logger.debug(`🔥🔥 服务备注单值（保留换行）: "${value}" -> "${fillData[key]}"`);
           }
         } else if (isRemarkField) {
           // 🔥 备注类字段：保留换行符，只清理每行内部的多余空格
-          console.log(`🔥🔥 检测到备注类字段: "${key}"`);
+          this.logger.debug(`🔥🔥 检测到备注类字段: "${key}"`);
           const cleanedValue = String(value)
             .split('\n')
             .map(line => line.trim().replace(/\s+/g, ' '))
             .filter(line => line) // 移除空行
             .join('\n');
           fillData[key] = cleanedValue;
-          console.log(`🔥🔥 备注字段转换（保留换行）: "${value}" -> "${fillData[key]}"`);
+          this.logger.debug(`🔥🔥 备注字段转换（保留换行）: "${value}" -> "${fillData[key]}"`);
         } else {
           // 其他字段保持字符串格式，并清理多余空格（包括换行符）
           const cleanedValue = String(value).trim().replace(/\s+/g, ' ');
           fillData[key] = cleanedValue;
-          console.log(`➡️ 普通字段转换: "${key}" -> "${fillData[key]}"`);
+          this.logger.debug(`➡️ 普通字段转换: "${key}" -> "${fillData[key]}"`);
         }
       } else {
-        console.log(`⚠️ 跳过空值字段: "${key}" = ${value}`);
+        this.logger.debug(`⚠️ 跳过空值字段: "${key}" = ${value}`);
       }
     });
 
-    console.log('🔥🔥🔥 转换后的fillData完整数据 🔥🔥🔥');
-    console.log(JSON.stringify(fillData, null, 2));
+    this.logger.debug('🔥🔥🔥 转换后的fillData完整数据 🔥🔥🔥');
+    this.logger.debug(JSON.stringify(fillData, null, 2));
     
     // 检查是否有服务相关字段
     const serviceFieldsInFillData = Object.keys(fillData).filter(key => 
@@ -4200,12 +3492,12 @@ export class ESignService {
     );
     
     if (serviceFieldsInFillData.length > 0) {
-      console.log('🔥🔥 fillData中包含的服务相关字段:', serviceFieldsInFillData);
+      this.logger.debug('🔥🔥 fillData中包含的服务相关字段:', { data: serviceFieldsInFillData });
       serviceFieldsInFillData.forEach(field => {
-        console.log(`🔥  ${field}: ${fillData[field]}`);
+        this.logger.debug(`🔥  ${field}: ${fillData[field]}`);
       });
     } else {
-      console.log('🔥🔥 ⚠️ fillData中未找到服务相关字段');
+      this.logger.debug('🔥🔥 ⚠️ fillData中未找到服务相关字段');
     }
     
     return fillData;
@@ -4250,7 +3542,7 @@ export class ESignService {
       const originalValue = templateParams['服务类型'];
       const mappedValue = serviceTypeMapping[originalValue];
       if (originalValue !== mappedValue) {
-        console.log(`🔄 服务类型映射: "${originalValue}" -> "${mappedValue}"`);
+        this.logger.debug(`🔄 服务类型映射: "${originalValue}" -> "${mappedValue}"`);
         templateParams['服务类型'] = mappedValue;
       }
     }
@@ -4263,14 +3555,14 @@ export class ESignService {
       const isMultiSelectByName = key.includes('多选') || key.startsWith('多选');
       const isMultiSelectField = isMultiSelectByDataType || isMultiSelectByName;
 
-      console.log(`🔥 [componentData] 字段"${key}": dataType=${control?.dataType}, isMultiSelectByDataType=${isMultiSelectByDataType}, isMultiSelectByName=${isMultiSelectByName}`);
+      this.logger.debug(`🔥 [componentData] 字段"${key}": dataType=${control?.dataType}, isMultiSelectByDataType=${isMultiSelectByDataType}, isMultiSelectByName=${isMultiSelectByName}`);
 
       if (isMultiSelectField) {
         // 🔥🔥🔥 关键修改：多选字段使用正确的格式
         // 查找模板控件定义
         const multiSelectControl = templateControls.find((c: any) => c.dataKey === key && c.dataType === 9);
         if (!multiSelectControl || !multiSelectControl.options) {
-          console.log(`⚠️ 未找到多选字段"${key}"的模板定义(dataType=9)，跳过`);
+          this.logger.debug(`⚠️ 未找到多选字段"${key}"的模板定义(dataType=9)，跳过`);
           return;
         }
 
@@ -4284,8 +3576,8 @@ export class ESignService {
           selectedTexts = value.map(v => String(v).trim()).filter(Boolean);
         }
 
-        console.log(`🔥 多选字段"${key}"用户选择:`, selectedTexts);
-        console.log(`🔥 模板定义的选项:`, multiSelectControl.options);
+        this.logger.debug(`🔥 多选字段"${key}"用户选择:`, { data: selectedTexts });
+        this.logger.debug(`🔥 模板定义的选项:`, { data: multiSelectControl.options });
 
         // 匹配用户选择的文本到模板选项的索引
         const options = multiSelectControl.options.map((opt: any) => {
@@ -4301,7 +3593,7 @@ export class ESignService {
         // 🔥 关键修改：如果没有任何选项被选中，跳过这个多选字段
         const selectedCount = options.filter(o => o.selected).length;
         if (selectedCount === 0) {
-          console.log(`⚠️ 多选字段"${key}"没有任何选项被选中，跳过`);
+          this.logger.debug(`⚠️ 多选字段"${key}"没有任何选项被选中，跳过`);
           return;
         }
 
@@ -4311,7 +3603,7 @@ export class ESignService {
           options: options
         });
 
-        console.log(`🔘 多选组件转换: "${key}" -> ${selectedCount}/${options.length} 项选中`);
+        this.logger.debug(`🔘 多选组件转换: "${key}" -> ${selectedCount}/${options.length} 项选中`);
         return;
       }
 
@@ -4338,11 +3630,11 @@ export class ESignService {
               selected: true
             }]
           });
-          console.log(`🔽 下拉控件转换: "${key}" -> 选中索引 ${selectedOption.index} (${selectedOption.label})`);
+          this.logger.debug(`🔽 下拉控件转换: "${key}" -> 选中索引 ${selectedOption.index} (${selectedOption.label})`);
         } else {
-          console.log(`⚠️ 下拉控件"${key}"未找到匹配的选项，值: "${value}" (标准化后: "${normalizedValue}")`);
+          this.logger.debug(`⚠️ 下拉控件"${key}"未找到匹配的选项，值: "${value}" (标准化后: "${normalizedValue}")`);
           // 🔥 打印所有可用选项，帮助调试
-          console.log(`⚠️ 可用选项: ${dropdownControl.options.map(o => o.label).join(', ')}`);
+          this.logger.debug(`⚠️ 可用选项: ${dropdownControl.options.map(o => o.label).join(', ')}`);
         }
         return;
       }
@@ -4361,7 +3653,7 @@ export class ESignService {
       }
     });
 
-    console.log('🔘 转换后的componentData:', JSON.stringify(componentData, null, 2));
+    this.logger.debug('🔘 转换后的componentData:', { data: JSON.stringify(componentData, null, 2) });
     return componentData;
   }
 
@@ -4372,14 +3664,14 @@ export class ESignService {
   private async getTemplateNameFromAPI(templateNo: string): Promise<string> {
     // 方法1：尝试查询模板列表接口
     try {
-      console.log('🔍 方法1：尝试从模板列表接口获取模板名称:', templateNo);
+      this.logger.debug('🔍 方法1：尝试从模板列表接口获取模板名称:', { data: templateNo });
 
-      const response = await this.callESignAPI('/template/list', {
+      const response = await this.apiService.callESignAPI('/template/list', {
         pageNum: 1,
         pageSize: 100
       });
 
-      console.log('📋 模板列表API响应:', JSON.stringify(response, null, 2));
+      this.logger.debug('📋 模板列表API响应:', { data: JSON.stringify(response, null, 2) });
 
       if (response.code === 100000 && response.data) {
         // 尝试多种可能的数据结构
@@ -4389,7 +3681,7 @@ export class ESignService {
                          (Array.isArray(response.data) ? response.data : null);
 
         if (Array.isArray(templates)) {
-          console.log(`📋 找到 ${templates.length} 个模板`);
+          this.logger.debug(`📋 找到 ${templates.length} 个模板`);
 
           const matchedTemplate = templates.find((t: any) =>
             t.templateNo === templateNo ||
@@ -4403,16 +3695,16 @@ export class ESignService {
                                 matchedTemplate.name ||
                                 matchedTemplate.title;
             if (templateName) {
-              console.log('✅ 成功从模板列表获取模板名称:', templateName);
+              this.logger.debug('✅ 成功从模板列表获取模板名称:', { data: templateName });
               return templateName;
             }
           } else {
-            console.log('⚠️ 模板列表中未找到匹配的模板编号:', templateNo);
+            this.logger.debug('⚠️ 模板列表中未找到匹配的模板编号:', { data: templateNo });
           }
         }
       }
     } catch (error) {
-      console.log('⚠️ 模板列表接口调用失败:', error.message);
+      this.logger.debug('⚠️ 模板列表接口调用失败:', { data: error.message });
     }
 
     // 方法2：尝试其他可能的接口
@@ -4425,13 +3717,13 @@ export class ESignService {
 
     for (const endpoint of possibleEndpoints) {
       try {
-        console.log(`🔍 方法2：尝试接口 ${endpoint} 获取模板名称:`, templateNo);
+        this.logger.debug(`🔍 方法2：尝试接口 ${endpoint} 获取模板名称:`, { data: templateNo });
 
-        const response = await this.callESignAPI(endpoint, {
+        const response = await this.apiService.callESignAPI(endpoint, {
           templateIdent: templateNo
         });
 
-        console.log(`📋 ${endpoint} 响应:`, JSON.stringify(response, null, 2));
+        this.logger.debug(`📋 ${endpoint} 响应:`, { data: JSON.stringify(response, null, 2) });
 
         if (response.code === 100000 && response.data) {
           const templateName = response.data.templateName ||
@@ -4439,17 +3731,17 @@ export class ESignService {
                               response.data.title ||
                               response.data.templateTitle;
           if (templateName) {
-            console.log(`✅ 成功从 ${endpoint} 获取模板名称:`, templateName);
+            this.logger.debug(`✅ 成功从 ${endpoint} 获取模板名称:`, { data: templateName });
             return templateName;
           }
         }
       } catch (error) {
-        console.log(`⚠️ ${endpoint} 调用失败:`, error.message);
+        this.logger.debug(`⚠️ ${endpoint} 调用失败:`, { data: error.message });
         // 继续尝试下一个接口
       }
     }
 
-    console.log('⚠️ 所有方法都未能获取模板名称，使用默认值');
+    this.logger.debug('⚠️ 所有方法都未能获取模板名称，使用默认值');
     return '未知模板';
   }
 
@@ -4459,11 +3751,11 @@ export class ESignService {
    */
   async getRealTemplateInfo(templateNo: string): Promise<any> {
     try {
-      console.log('🔍 从爱签API获取模板信息:', templateNo);
+      this.logger.debug('🔍 从爱签API获取模板信息:', { data: templateNo });
 
       // 1. 获取模板字段数据
       const templateFields = await this.getTemplateData(templateNo);
-      console.log('📋 爱签API返回的原始模板数据:', templateFields);
+      this.logger.debug('📋 爱签API返回的原始模板数据:', { data: templateFields });
 
       // 2. 🔥 尝试从API获取真实的模板名称
       const templateName = await this.getTemplateNameFromAPI(templateNo);
@@ -4476,13 +3768,13 @@ export class ESignService {
         fields: this.convertTemplateFieldsToFormFields(templateFields)
       };
 
-      console.log('✅ 转换后的模板信息:', formattedTemplate);
+      this.logger.debug('✅ 转换后的模板信息:', { data: formattedTemplate });
       return formattedTemplate;
     } catch (error) {
-      console.error('❌ 获取模板信息失败:', error);
+      this.logger.error('❌ 获取模板信息失败:', error);
 
       // 如果API调用失败，返回空字段列表，提示用户重试
-      console.log('🔄 API调用失败，返回空模板');
+      this.logger.debug('🔄 API调用失败，返回空模板');
       return {
         templateNo: templateNo,
         templateName: '模板加载失败',
@@ -4498,12 +3790,12 @@ export class ESignService {
    * 让前端显示所有字段，避免遗漏必填字段
    */
   private convertTemplateFieldsToFormFields(templateFields: any[]): any[] {
-    console.log('🔍 开始转换爱签API原始模板字段，字段数量:', templateFields?.length);
+    this.logger.debug('🔍 开始转换爱签API原始模板字段，字段数量:', { data: templateFields?.length });
 
     // 🔥 打印所有原始字段的完整信息
-    console.log('📋 所有原始字段详情:');
+    this.logger.debug('📋 所有原始字段详情:');
     templateFields?.forEach((field, index) => {
-      console.log(`字段 ${index + 1}: dataKey="${field.dataKey}", dataType=${field.dataType}, required=${field.required}`);
+      this.logger.debug(`字段 ${index + 1}: dataKey="${field.dataKey}", dataType=${field.dataType}, required=${field.required}`);
     });
 
     const formFields: any[] = [];
@@ -4517,12 +3809,12 @@ export class ESignService {
         }
 
         const fieldKey = field.dataKey;
-        console.log(`🔍 处理字段 ${index + 1}/${templateFields.length}: ${fieldKey} (dataType: ${field.dataType}, required: ${field.required})`);
+        this.logger.debug(`🔍 处理字段 ${index + 1}/${templateFields.length}: ${fieldKey} (dataType: ${field.dataType}, required: ${field.required})`);
 
         // 🔥 过滤签名区、签章区等不需要用户填写的字段
         // dataType: 6=签署区, 7=签署时间, 15=备注签署区
         if (field.dataType === 6 || field.dataType === 7 || field.dataType === 15) {
-          console.log(`⚠️  跳过签名/签章字段: ${fieldKey} (dataType: ${field.dataType})`);
+          this.logger.debug(`⚠️  跳过签名/签章字段: ${fieldKey} (dataType: ${field.dataType})`);
           return;
         }
 
@@ -4530,13 +3822,13 @@ export class ESignService {
         const lowerKey = fieldKey.toLowerCase();
         if (lowerKey.includes('签名区') || lowerKey.includes('签章区') ||
             lowerKey.includes('签署区') || lowerKey.includes('印章')) {
-          console.log(`⚠️  跳过签名相关字段: ${fieldKey}`);
+          this.logger.debug(`⚠️  跳过签名相关字段: ${fieldKey}`);
           return;
         }
 
         // 🔥 严格去重：同一个dataKey只添加一次
         if (seenKeys.has(fieldKey)) {
-          console.log(`⚠️  跳过重复字段: ${fieldKey}`);
+          this.logger.debug(`⚠️  跳过重复字段: ${fieldKey}`);
           return;
         }
 
@@ -4570,7 +3862,7 @@ export class ESignService {
             index: index
           }));
 
-          console.log(`✅ 为服务备注字段添加了 ${serviceOptions.length} 个预定义选项`);
+          this.logger.debug(`✅ 为服务备注字段添加了 ${serviceOptions.length} 个预定义选项`);
         } else if (field.options && Array.isArray(field.options)) {
           // 处理爱签API原有的options字段
           options = field.options.map((opt: any) => ({
@@ -4585,7 +3877,7 @@ export class ESignService {
         let fieldType = this.getFieldTypeByDataType(field.dataType);
         if (fieldKey === '阿姨身份证' && field.dataType === 1) {
           fieldType = 'idcard';
-          console.log(`🔧 特殊处理: 将"阿姨身份证"字段类型从text强制转换为idcard`);
+          this.logger.debug(`🔧 特殊处理: 将"阿姨身份证"字段类型从text强制转换为idcard`);
         }
 
         const formField = {
@@ -4598,12 +3890,12 @@ export class ESignService {
         };
 
         formFields.push(formField);
-        console.log(`✅ 添加爱签原始字段: ${fieldKey} (类型: ${field.dataType}, required: ${field.required})`);
+        this.logger.debug(`✅ 添加爱签原始字段: ${fieldKey} (类型: ${field.dataType}, required: ${field.required})`);
       });
     }
 
-    console.log(`🔍 去重后字段数量: ${formFields.length} (原始: ${templateFields?.length})`);
-    console.log('📋 最终字段列表:', formFields.map(f => f.key));
+    this.logger.debug(`🔍 去重后字段数量: ${formFields.length} (原始: ${templateFields?.length})`);
+    this.logger.debug('📋 最终字段列表:', { data: formFields.map(f => f.key) });
     
     return formFields;
   }
@@ -4656,20 +3948,20 @@ export class ESignService {
    */
   async getRealTemplateList(): Promise<any[]> {
     try {
-      console.log('🔍 调用爱签API获取模板列表');
+      this.logger.debug('🔍 调用爱签API获取模板列表');
 
       // 调用爱签 /template/list 接口
-      const response = await this.callESignAPI('/template/list', {
+      const response = await this.apiService.callESignAPI('/template/list', {
         page: 1,
         rows: 100, // 获取最多100个模板
         status: 1  // 只获取使用中的模板
       });
 
-      console.log('📋 爱签模板列表API响应:', JSON.stringify(response, null, 2));
+      this.logger.debug('📋 爱签模板列表API响应:', { data: JSON.stringify(response, null, 2) });
 
       if (response.code === 100000 && response.data?.list) {
         const templateList = response.data.list;
-        console.log(`✅ 成功获取 ${templateList.length} 个模板`);
+        this.logger.debug(`✅ 成功获取 ${templateList.length} 个模板`);
 
         // 转换为前端需要的格式
         const formattedTemplates = await Promise.all(
@@ -4687,7 +3979,7 @@ export class ESignService {
                 fields: this.convertTemplateFieldsToFormFields(templateFields)
               };
             } catch (err) {
-              console.warn(`⚠️ 获取模板 ${template.templateIdent} 字段信息失败:`, err.message);
+              this.logger.warn(`⚠️ 获取模板 ${template.templateIdent} 字段信息失败:`, { data: err.message });
               return {
                 templateNo: template.templateIdent,
                 templateName: template.templateName,
@@ -4700,11 +3992,11 @@ export class ESignService {
 
         return formattedTemplates;
       } else {
-        console.warn('⚠️ 爱签API返回异常:', response);
+        this.logger.warn('⚠️ 爱签API返回异常:', { data: response });
         throw new Error(response.msg || '获取模板列表失败');
       }
     } catch (error) {
-      console.error('❌ 获取模板列表失败:', error);
+      this.logger.error('❌ 获取模板列表失败:', error);
 
       // 返回空模板列表，提示用户重试
       return [{
@@ -4783,7 +4075,7 @@ export class ESignService {
     signY?: number;
   }>): Promise<any> {
     try {
-      console.log('🔍 调用官方预览合同接口:', contractNo);
+      this.logger.debug('🔍 调用官方预览合同接口:', { data: contractNo });
 
       // 1. 获取合同信息，包括签署方信息
       const contractInfoResult = await this.getContractInfo(contractNo);
@@ -4819,13 +4111,13 @@ export class ESignService {
         signStrategyList: defaultSignStrategyList
       }];
 
-      console.log('📤 调用预览接口参数:', JSON.stringify(bizData, null, 2));
+      this.logger.debug('📤 调用预览接口参数:', { data: JSON.stringify(bizData, null, 2) });
 
-      const response = await this.callESignAPI('/contract/previewContract', bizData);
-      console.log('📥 预览接口响应:', response);
+      const response = await this.apiService.callESignAPI('/contract/previewContract', bizData);
+      this.logger.debug('📥 预览接口响应:', { data: response });
 
       if (response.code === 100000 && response.data) {
-        console.log('✅ 获取官方预览链接成功:', response.data);
+        this.logger.debug('✅ 获取官方预览链接成功:', { data: response.data });
         return {
           success: true,
           contractNo,
@@ -4847,11 +4139,11 @@ export class ESignService {
           message: '获取官方预览链接成功'
         };
       } else {
-        console.error('❌ 官方预览接口返回错误:', response);
+        this.logger.error('❌ 官方预览接口返回错误:', response);
         throw new Error(response.msg || '获取预览链接失败');
       }
     } catch (error) {
-      console.error('❌ 调用官方预览接口失败:', error);
+      this.logger.error('❌ 调用官方预览接口失败:', error);
       throw error;
     }
   }
@@ -4862,21 +4154,21 @@ export class ESignService {
    */
   async previewContractWithSignUrls(contractNo: string): Promise<any> {
     try {
-      console.log('🔍 预览合同:', contractNo);
+      this.logger.debug('🔍 预览合同:', { data: contractNo });
 
       // 🔥 优先尝试使用官方预览接口
       try {
         const officialResult = await this.previewContractOfficial(contractNo);
         if (officialResult.success && officialResult.previewUrl) {
-          console.log('✅ 使用官方预览接口成功');
+          this.logger.debug('✅ 使用官方预览接口成功');
           return officialResult;
         }
       } catch (officialError) {
-        console.warn('⚠️ 官方预览接口失败，尝试备用方案:', officialError.message);
+        this.logger.warn('⚠️ 官方预览接口失败，尝试备用方案:', { data: officialError.message });
       }
 
       // 🔥 备用方案：使用签约链接作为预览链接
-      console.log('🔄 使用签约链接作为预览（备用方案）');
+      this.logger.debug('🔄 使用签约链接作为预览（备用方案）');
 
       // 步骤1：获取合同基本信息
       const contractInfoResult = await this.getContractInfo(contractNo);
@@ -4886,7 +4178,7 @@ export class ESignService {
       }
 
       const contractInfo = contractInfoResult.data;
-      console.log('✅ 获取到合同信息:', {
+      this.logger.debug('esign.contract.info_fetched', {
         contractNo: contractInfo.contractNo || contractNo,
         contractName: contractInfo.contractName,
         status: contractInfo.status,
@@ -4912,10 +4204,10 @@ export class ESignService {
       let previewUrl = '';
       if (signUsers.length > 0 && signUsers[0].signUrl) {
         previewUrl = signUsers[0].signUrl; // 🔥 签约链接就是预览链接！
-        console.log('✅ 使用签约链接作为预览链接:', previewUrl);
+        this.logger.debug('✅ 使用签约链接作为预览链接:', { data: previewUrl });
       } else {
         // 备选方案：如果没有签约链接，尝试从合同状态中获取
-        console.log('⚠️ 未找到签约链接，尝试其他方式...');
+        this.logger.debug('⚠️ 未找到签约链接，尝试其他方式...');
         throw new Error('合同中没有可用的签约链接，无法预览。请确保已为合同添加签约人。');
       }
 
@@ -4961,7 +4253,7 @@ export class ESignService {
         }
       };
     } catch (error) {
-      console.error('❌ 签约链接预览失败:', error.message);
+      this.logger.error('❌ 签约链接预览失败:', error.message);
         return {
           success: false,
           contractNo,
@@ -4993,7 +4285,7 @@ export class ESignService {
     isNoticeSignUser: boolean = false
   ): Promise<any> {
     try {
-      console.log('🔍 撤销合同:', contractNo);
+      this.logger.debug('🔍 撤销合同:', { data: contractNo });
 
       // 构建撤销合同请求数据（按照官方文档）
       const withdrawData: any = {
@@ -5006,12 +4298,12 @@ export class ESignService {
         withdrawData.withdrawReason = withdrawReason.slice(0, 50); // 限制50字
       }
 
-      console.log('📋 撤销合同请求数据:', JSON.stringify(withdrawData, null, 2));
+      this.logger.debug('📋 撤销合同请求数据:', { data: JSON.stringify(withdrawData, null, 2) });
 
       // 调用爱签撤销合同API
-      const result = await this.callESignAPI('/contract/withdraw', withdrawData);
+      const result = await this.apiService.callESignAPI('/contract/withdraw', withdrawData);
       
-      console.log('✅ 撤销合同响应:', result);
+      this.logger.debug('✅ 撤销合同响应:', { data: result });
 
       if (result.code === 100000) {
         return {
@@ -5024,7 +4316,7 @@ export class ESignService {
         throw new Error(result.msg || '撤销合同失败');
       }
     } catch (error) {
-      console.error('❌ 撤销合同失败:', error);
+      this.logger.error('❌ 撤销合同失败:', error);
       
       // 处理特定的错误码
       if (error.response?.data?.code) {
@@ -5065,7 +4357,7 @@ export class ESignService {
     redirectUrl?: string
   ): Promise<any> {
     try {
-      console.log('🔍 作废合同:', contractNo);
+      this.logger.debug('🔍 作废合同:', { data: contractNo });
 
       // 构建作废合同请求数据
       const cancellationData: any = {
@@ -5083,12 +4375,12 @@ export class ESignService {
         cancellationData.redirectUrl = redirectUrl;
       }
 
-      console.log('📋 作废合同请求数据:', JSON.stringify(cancellationData, null, 2));
+      this.logger.debug('📋 作废合同请求数据:', { data: JSON.stringify(cancellationData, null, 2) });
 
       // 调用爱签作废合同API（正确的端点是 /contract/cancellation）
-      const result = await this.callESignAPI('/contract/cancellation', cancellationData);
+      const result = await this.apiService.callESignAPI('/contract/cancellation', cancellationData);
 
-      console.log('✅ 作废合同响应:', result);
+      this.logger.debug('✅ 作废合同响应:', { data: result });
 
       if (result.code === 100000) {
         return {
@@ -5102,7 +4394,7 @@ export class ESignService {
         throw new Error(result.msg || '作废合同失败');
       }
     } catch (error) {
-      console.error('❌ 作废合同失败:', error);
+      this.logger.error('❌ 作废合同失败:', error);
       throw new Error(`作废合同失败: ${error.message}`);
     }
   }
@@ -5120,7 +4412,7 @@ export class ESignService {
     isNoticeSignUser: boolean = false
   ): Promise<any> {
     try {
-      console.log('🔍 智能撤销/作废合同:', contractNo);
+      this.logger.debug('🔍 智能撤销/作废合同:', { data: contractNo });
 
       // 首先尝试撤销合同
       try {
@@ -5133,7 +4425,7 @@ export class ESignService {
       } catch (withdrawError) {
         // 如果是101000错误码（合同已签署完成），则尝试作废
         if (withdrawError.message.includes('已签署完成')) {
-          console.log('🔄 合同已签署完成，尝试作废操作...');
+          this.logger.debug('🔄 合同已签署完成，尝试作废操作...');
           // 使用默认15天有效期进行作废
           const invalidateResult = await this.invalidateContract(contractNo, 15);
           return {
@@ -5147,286 +4439,14 @@ export class ESignService {
         throw withdrawError;
       }
     } catch (error) {
-      console.error('❌ 智能撤销/作废合同失败:', error);
+      this.logger.error('❌ 智能撤销/作废合同失败:', error);
       throw error;
     }
   }
 
-  /**
-   * 检查用户权限
-   * @param account 用户账号
-   * @returns 用户权限信息
-   */
-  async checkUserPermissions(account: string): Promise<any> {
-    try {
-      console.log('🔍 检查用户权限:', account);
-
-      // 调用爱签API检查用户权限
-      const result = await this.callESignAPI('/user/getUserPermissions', {
-        account: account
-      });
-      
-      if (result.code === 100000) {
-        return {
-          success: true,
-          account,
-          permissions: result.data,
-          message: '用户权限获取成功'
-        };
-      } else {
-        return {
-          success: false,
-          account,
-          errorCode: result.code,
-          message: result.msg || '用户权限获取失败'
-        };
-      }
-    } catch (error) {
-      console.error('❌ 检查用户权限失败:', error);
-      return {
-        success: false,
-        account,
-        message: `检查用户权限失败: ${error.message}`,
-        error: error.message
-      };
-    }
-  }
 
   // 🗑️ 所有重复的方法定义已删除，保持代码简洁
 
-  /**
-   * 处理爱签合同状态回调
-   * 当爱签合同状态变化时，爱签会调用这个方法
-   */
-  async handleContractCallback(callbackData: any): Promise<void> {
-    try {
-      this.logger.info('esign.callback.received', { callbackData });
 
-      // 爱签回调数据格式可能包含：
-      // - contractNo: 合同编号
-      // - status: 合同状态 (0=等待签约, 1=签约中, 2=已签约, 3=过期, 4=拒签, 6=作废, 7=撤销)
-      // - signTime: 签署时间
-      // 具体格式需要根据爱签实际回调数据调整
-
-      const { contractNo, status } = callbackData;
-
-      if (!contractNo) {
-        this.logger.error('esign.callback.missing_contract_no');
-        return;
-      }
-
-      this.logger.info('esign.callback.contract_status_received', { contractNo, status });
-
-      // 查找本地数据库中的合同
-      const contract = await this.contractModel.findOne({
-        esignContractNo: contractNo
-      }).exec();
-
-      if (!contract) {
-        this.logger.error('esign.callback.contract_not_found', undefined, { contractNo });
-        return;
-      }
-
-      this.logger.info('esign.callback.contract_found', {
-        contractId: contract._id.toString(),
-        contractNo,
-        currentStatus: contract.contractStatus,
-      });
-
-      // 更新爱签状态
-      const updateData: any = {
-        esignStatus: status.toString()
-      };
-
-      // 如果爱签状态是"已签约"(2)，则更新本地合同状态为"active"
-      if (status === 2 || status === '2') {
-        updateData.contractStatus = 'active';
-        updateData.esignSignedAt = new Date();
-        this.logger.info('esign.callback.contract_signed', {
-          contractId: contract._id.toString(),
-          contractNo,
-        });
-      }
-
-      // 更新合同
-      await this.contractModel.findByIdAndUpdate(contract._id, updateData).exec();
-
-      this.logger.info('esign.callback.contract_updated', {
-        contractId: contract._id.toString(),
-        contractNo,
-        nextStatus: updateData.contractStatus || contract.contractStatus,
-      });
-
-      // 签约完成后，同步客户姓名为合同中的真实姓名（合同发起姓名）
-      if (status === 2 || status === '2') {
-        await this.syncCustomerNameBySignedContract(contract);
-
-        // 🆕 更新客户状态为"已签约"和线索等级为"O类"
-        if (contract.customerId) {
-          try {
-            const customerId = contract.customerId.toString();
-            this.logger.info('esign.callback.customer_sync_start', {
-              contractId: contract._id.toString(),
-              customerId,
-            });
-
-            // 调用客户服务更新状态
-            const customerModel = this.contractModel.db.model('Customer');
-            const customer = await customerModel.findById(customerId).exec();
-
-            if (customer) {
-              const oldStatus = customer.contractStatus;
-              const oldLeadLevel = customer.leadLevel;
-
-              // 更新客户状态和线索等级
-              await customerModel.findByIdAndUpdate(customerId, {
-                contractStatus: '已签约',
-                leadLevel: 'O类',
-                lastActivityAt: new Date(),
-              }).exec();
-
-              this.logger.info('esign.callback.customer_synced', {
-                customerId,
-                contractId: contract._id.toString(),
-                oldStatus,
-                oldLeadLevel,
-              });
-
-              // 记录操作日志
-              const operationLogModel = this.contractModel.db.model('CustomerOperationLog');
-              await operationLogModel.create({
-                customerId: customer._id,
-                operatorId: contract.createdBy || customer._id,
-                entityType: 'contract',
-                entityId: contract._id.toString(),
-                operationType: 'update',
-                operationName: '合同签约自动更新', // 🔥 修复：必填字段
-                details: {
-                  before: { contractStatus: oldStatus, leadLevel: oldLeadLevel },
-                  after: { contractStatus: '已签约', leadLevel: 'O类' },
-                  description: '合同签约成功，自动更新客户状态为已签约，线索等级为O类',
-                  relatedId: contract._id.toString(),
-                  relatedType: 'contract',
-                },
-                operatedAt: new Date(),
-                requestId: RequestContextStore.getValue('requestId'),
-              });
-
-              // 🔔 广播刷新事件，通知前端更新客户列表
-              try {
-                await this.notificationGateway.broadcastRefresh('customerList', {
-                  customerId: customerId,
-                  contractNumber: contract.contractNumber,
-                  action: 'statusUpdate',
-                });
-                this.logger.info('esign.callback.customer_refresh_broadcasted', {
-                  customerId,
-                  contractNumber: contract.contractNumber,
-                });
-              } catch (error) {
-                this.logger.error('esign.callback.customer_refresh_failed', error, {
-                  customerId,
-                  contractNumber: contract.contractNumber,
-                });
-              }
-            }
-          } catch (error) {
-            this.logger.error('esign.callback.customer_sync_failed', error, {
-              contractId: contract._id.toString(),
-              customerId: contract.customerId?.toString(),
-            });
-            // 不抛出异常，避免影响合同流程
-          }
-        }
-      }
-
-      // 🔔 如果状态变为 active，触发保险同步
-      // 注意：这里不能直接注入 ContractsService（会造成循环依赖）
-      // 保险同步会在 ContractsService.update() 方法中自动触发
-      // 所以我们需要通过 ContractsService.update() 来更新合同，而不是直接更新数据库
-
-      // 重新实现：通过事件或者直接调用 ContractsService
-      // 由于循环依赖问题，这里我们先更新数据库，然后在 ContractsController 中手动触发同步
-
-    } catch (error) {
-      this.logger.error('esign.callback.handle_failed', error);
-      throw error;
-    }
-  }
-
-  private async syncCustomerNameBySignedContract(contract: ContractDocument): Promise<void> {
-    const realName = contract.customerName?.trim();
-    if (!realName) {
-      this.logger.warn('esign.callback.customer_name_sync_missing_name', {
-        contractId: contract._id.toString(),
-        contractNumber: contract.contractNumber,
-      });
-      return;
-    }
-
-    // 优先按 customerId 精准更新
-    if (contract.customerId) {
-      const customer = await this.customerModel.findById(contract.customerId).select('_id name phone').exec();
-      if (customer) {
-        if ((customer.name || '').trim() === realName) {
-          this.logger.info('esign.callback.customer_name_sync_skipped_same_name', {
-            customerId: customer._id.toString(),
-            contractId: contract._id.toString(),
-          });
-          return;
-        }
-
-        await this.customerModel.findByIdAndUpdate(customer._id, {
-          name: realName,
-          updatedAt: new Date(),
-          lastActivityAt: new Date(),
-        }).exec();
-
-        this.logger.info('esign.callback.customer_name_synced_by_customer_id', {
-          customerId: customer._id.toString(),
-          contractId: contract._id.toString(),
-        });
-        return;
-      }
-    }
-
-    // 兜底：按合同手机号更新（历史脏数据可能没有 customerId）
-    if (contract.customerPhone) {
-      const customer = await this.customerModel.findOne({ phone: contract.customerPhone }).select('_id name phone').exec();
-      if (!customer) {
-        this.logger.warn('esign.callback.customer_name_sync_customer_missing', {
-          contractId: contract._id.toString(),
-          contractNo: contract.contractNumber,
-          customerPhone: contract.customerPhone,
-        });
-        return;
-      }
-
-      if ((customer.name || '').trim() === realName) {
-        this.logger.info('esign.callback.customer_name_sync_skipped_same_name', {
-          customerId: customer._id.toString(),
-          contractId: contract._id.toString(),
-        });
-        return;
-      }
-
-      await this.customerModel.findByIdAndUpdate(customer._id, {
-        name: realName,
-        updatedAt: new Date(),
-        lastActivityAt: new Date(),
-      }).exec();
-
-      this.logger.info('esign.callback.customer_name_synced_by_phone', {
-        customerId: customer._id.toString(),
-        contractId: contract._id.toString(),
-      });
-      return;
-    }
-
-    this.logger.warn('esign.callback.customer_name_sync_missing_customer_ref', {
-      contractId: contract._id.toString(),
-      contractNumber: contract.contractNumber,
-    });
-  }
 
 }

@@ -373,10 +373,22 @@ const InsuranceList: React.FC = () => {
     },
     {
       title: '保险购买人',
-      dataIndex: ['policyHolder', 'policyHolderName'],
-      key: 'policyHolderName',
+      dataIndex: 'createdBy',
+      key: 'createdBy',
       width: 150,
-      render: (_, record) => record.policyHolder?.policyHolderName || '-',
+      render: (_, record) => {
+        const creator = record.createdBy;
+        if (!creator) {
+          return '-';
+        }
+        if (typeof creator === 'string') {
+          if (creator === 'temp' || /^[a-fA-F0-9]{24}$/.test(creator)) {
+            return '-';
+          }
+          return creator;
+        }
+        return creator.name || creator.username || '-';
+      },
     },
     {
       title: '被保险人',

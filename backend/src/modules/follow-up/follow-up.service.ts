@@ -5,6 +5,7 @@ import { FollowUp, FollowUpType } from './models/follow-up.entity';
 import { CreateFollowUpDto } from './dto/create-follow-up.dto';
 import { User } from '../users/models/user.entity';
 import { Resume } from '../resume/models/resume.entity';
+import { AppLogger } from '../../common/logging/app-logger';
 
 // 定义填充后的用户信息类型
 export interface PopulatedUser {
@@ -29,6 +30,8 @@ export interface FollowUpQueryResult {
 
 @Injectable()
 export class FollowUpService {
+  private readonly logger = new AppLogger(FollowUpService.name);
+
   constructor(
     @InjectModel(FollowUp.name) private followUpModel: Model<FollowUp>,
     @InjectModel('User') private userModel: Model<User>,
@@ -43,7 +46,7 @@ export class FollowUpService {
       throw new NotFoundException('创建跟进记录的用户不存在');
     }
     
-    console.log('创建跟进记录的用户信息:', user);
+    this.logger.debug('创建跟进记录的用户信息:', { data: user });
     
     // 验证简历是否存在
     const resume = await this.resumeModel.findById(createFollowUpDto.resumeId);
@@ -77,7 +80,7 @@ export class FollowUpService {
       }
     );
     
-    console.log(`简历 ${createFollowUpDto.resumeId} 的updatedAt已更新为: ${currentTime.toISOString()}`);
+    this.logger.debug(`简历 ${createFollowUpDto.resumeId} 的updatedAt已更新为: ${currentTime.toISOString()}`);
     
     // 由于配置了自动填充,直接查询即可获取填充后的数据
     const populatedFollowUp = await this.followUpModel
@@ -90,7 +93,7 @@ export class FollowUpService {
 
     // 转换为普通对象并返回
     const result = populatedFollowUp.toObject();
-    console.log('保存后的跟进记录(带用户信息):', result);
+    this.logger.debug('保存后的跟进记录(带用户信息):', { data: result });
 
     return result as unknown as PopulatedFollowUp;
   }
@@ -99,8 +102,8 @@ export class FollowUpService {
   async findByResumeId(resumeId: string, page: number = 1, pageSize: number = 10): Promise<FollowUpQueryResult> {
     const skip = (page - 1) * pageSize;
     
-    console.log('=== 查询跟进记录开始 ===');
-    console.log('查询参数:', { 
+    this.logger.debug('=== 查询跟进记录开始 ===');
+    this.logger.debug('查询参数:', { 
       resumeId, 
       page, 
       pageSize,
@@ -125,7 +128,7 @@ export class FollowUpService {
         this.followUpModel.countDocuments({ resumeId: new Types.ObjectId(resumeId) })
       ]);
 
-      console.log('查询结果统计:', {
+      this.logger.debug('查询结果统计:', {
         total,
         currentPage: page,
         pageSize,
@@ -134,7 +137,7 @@ export class FollowUpService {
 
       if (followUps.length > 0) {
         const firstFollowUp = followUps[0] as PopulatedFollowUp;
-        console.log('第一条跟进记录详情:', {
+        this.logger.debug('第一条跟进记录详情:', {
           id: firstFollowUp._id,
           type: firstFollowUp.type,
           content: firstFollowUp.content,
@@ -146,10 +149,10 @@ export class FollowUpService {
           }
         });
       } else {
-        console.log('没有找到跟进记录');
+        this.logger.debug('没有找到跟进记录');
       }
 
-      console.log('=== 查询跟进记录结束 ===');
+      this.logger.debug('=== 查询跟进记录结束 ===');
 
       return {
         items: followUps as PopulatedFollowUp[],
@@ -159,7 +162,7 @@ export class FollowUpService {
         totalPages: Math.ceil(total / pageSize)
       };
     } catch (error) {
-      console.error('查询跟进记录时发生错误:', error);
+      this.logger.error('查询跟进记录时发生错误:', error);
       throw error;
     }
   }

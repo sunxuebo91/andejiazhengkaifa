@@ -1320,7 +1320,7 @@ export class CustomersService {
         customerId: updated._id,
         assignTime: updated.assignedAt
       }
-    }).catch(e => console.error('通知失败:', e));
+    }).catch(e => this.logger.error('通知失败:', e));
 
     // 📝 记录操作日志 - 分配客户
     await this.logOperation(

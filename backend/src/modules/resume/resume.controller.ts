@@ -870,161 +870,9 @@ export class ResumeController {
     @Body() dto: CreateResumeV2Dto,
     @Req() req?,
   ) {
-    try {
-      // 获取请求IP
-      const requestIp = req.ip || req.connection?.remoteAddress || 'unknown';
-
-      this.logger.log(`🆕 阿姨自助注册:`);
-      this.logger.log(`📝 注册数据: ${JSON.stringify(dto, null, 2)}`);
-      this.logger.log(`🌐 请求IP: ${requestIp}`);
-
-      // 数据验证
-      if (!dto.name || dto.name.trim().length < 2 || dto.name.trim().length > 20) {
-        return {
-          success: false,
-          message: '数据验证失败',
-          error: 'VALIDATION_ERROR',
-          details: [{ field: 'name', message: '姓名必须是2-20个字符' }]
-        };
-      }
-
-      if (!dto.phone || !/^1[3-9]\d{9}$/.test(dto.phone)) {
-        return {
-          success: false,
-          message: '数据验证失败',
-          error: 'VALIDATION_ERROR',
-          details: [{ field: 'phone', message: '手机号格式不正确' }]
-        };
-      }
-
-      if (!dto.age || dto.age < 18 || dto.age > 65) {
-        return {
-          success: false,
-          message: '数据验证失败',
-          error: 'VALIDATION_ERROR',
-          details: [{ field: 'age', message: '年龄必须在18-65之间' }]
-        };
-      }
-
-      if (!dto.gender || !['male', 'female'].includes(dto.gender)) {
-        return {
-          success: false,
-          message: '数据验证失败',
-          error: 'VALIDATION_ERROR',
-          details: [{ field: 'gender', message: '性别必须是male或female' }]
-        };
-      }
-
-      if (!dto.jobType) {
-        return {
-          success: false,
-          message: '数据验证失败',
-          error: 'VALIDATION_ERROR',
-          details: [{ field: 'jobType', message: '工种不能为空' }]
-        };
-      }
-
-      // 验证身份证号格式（如果提供）
-      if (dto.idNumber) {
-        const idRegex = /^[1-9]\d{5}(18|19|20)\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\d{3}[0-9Xx]$/;
-        if (!idRegex.test(dto.idNumber)) {
-          return {
-            success: false,
-            message: '数据验证失败',
-            error: 'VALIDATION_ERROR',
-            details: [{ field: 'idNumber', message: '身份证号格式不正确' }]
-          };
-        }
-
-        // 检查身份证号是否已存在
-        const existingWithIdNumber = await this.resumeService.findByIdNumber(dto.idNumber);
-        if (existingWithIdNumber) {
-          return {
-            success: false,
-            message: '该身份证号已注册',
-            error: 'DUPLICATE_ID_NUMBER',
-            status: 409
-          };
-        }
-      }
-
-      // 限流检查（简单实现，生产环境应使用Redis）
-      const rateLimitKey = `rate_limit:${requestIp}`;
-      const rateLimitResult = await this.resumeService.checkRateLimit(rateLimitKey, 3, 60); // 每分钟3次
-      if (!rateLimitResult.allowed) {
-        return {
-          success: false,
-          message: '提交过于频繁，请稍后再试',
-          error: 'RATE_LIMIT_EXCEEDED',
-          status: 429
-        };
-      }
-
-      // 强制设置字段（不信任前端传值）
-      const selfRegisterDto = {
-        ...dto,
-        leadSource: 'self-registration',  // 固定值，标记为自助注册
-        status: 'draft',                  // 固定值
-        education: dto.education || 'middle',
-        expectedSalary: dto.expectedSalary || 0,
-        experienceYears: dto.experienceYears || 0,
-        workExperiences: dto.workExperiences || [],
-        skills: dto.skills || []
-      };
-
-      // 调用服务层创建简历（不需要userId）
-      const result = await this.resumeService.createSelfRegister(selfRegisterDto);
-
-      this.logger.log(`✅ 自助注册成功:`, {
-        resumeId: result._id,
-        name: result.name,
-        phone: result.phone,
-        leadSource: result.leadSource,
-        ip: requestIp
-      });
-
-      return {
-        success: true,
-        message: '简历创建成功',
-        data: {
-          _id: result._id.toString(),
-          id: result._id.toString(),
-          name: result.name,
-          phone: result.phone,
-          status: result.status,
-          leadSource: result.leadSource,
-          createdAt: (result as any).createdAt
-        }
-      };
-    } catch (error) {
-      this.logger.error(`❌ 自助注册失败: ${error.message}`, error.stack);
-
-      // 处理特定错误类型
-      if (error instanceof ConflictException) {
-        return {
-          success: false,
-          message: error.message,
-          error: 'DUPLICATE_ERROR',
-          status: 409
-        };
-      }
-
-      if (error instanceof BadRequestException) {
-        return {
-          success: false,
-          message: error.message,
-          error: 'VALIDATION_ERROR',
-          status: 400
-        };
-      }
-
-      return {
-        success: false,
-        message: '服务器内部错误',
-        error: 'INTERNAL_ERROR',
-        status: 500
-      };
-    }
+    // 提取请求IP后将完整业务逻辑委托给服务层
+    const requestIp = req.ip || req.connection?.remoteAddress || 'unknown';
+    return this.resumeService.selfRegisterMiniprogram(dto, requestIp);
   }
 
   @Post('miniprogram/create')
@@ -1069,40 +917,7 @@ export class ResumeController {
           createdAt: result.createdAt,
           action: result.action || 'CREATED',
           // 返回完整的简历数据，方便小程序端使用
-          resume: {
-            id: createdResume._id || createdResume.id,
-            name: createdResume.name,
-            phone: createdResume.phone,
-            age: createdResume.age,
-            gender: createdResume.gender,
-            jobType: createdResume.jobType,
-            education: createdResume.education,
-            experienceYears: createdResume.experienceYears,
-            nativePlace: createdResume.nativePlace,
-            selfIntroduction: createdResume.selfIntroduction, // 🔥 确保包含
-            wechat: createdResume.wechat,
-            currentAddress: createdResume.currentAddress,
-            hukouAddress: createdResume.hukouAddress,
-            birthDate: createdResume.birthDate,
-            skills: createdResume.skills || [],
-            serviceArea: createdResume.serviceArea || [],
-            expectedSalary: createdResume.expectedSalary,
-            maternityNurseLevel: createdResume.maternityNurseLevel || null, // 🏅 月嫂档位
-            workExperiences: createdResume.workExperiences || [],
-            // 文件字段 - 完整对象格式（包含url, filename, size, mimetype）
-            idCardFront: createdResume.idCardFront,
-            idCardBack: createdResume.idCardBack,
-            personalPhoto: createdResume.personalPhoto || [],
-            certificates: createdResume.certificates || [], // 🎓 技能证书图片（FileInfo对象数组）
-            reports: createdResume.reports || [], // 📋 体检报告（FileInfo对象数组）
-            selfIntroductionVideo: createdResume.selfIntroductionVideo || null, // 🎬 自我介绍视频
-            // 兼容旧格式 - 仅URL字符串数组
-            certificateUrls: createdResume.certificateUrls || [], // 🎓 技能证书图片URL数组（兼容旧版）
-            medicalReportUrls: createdResume.medicalReportUrls || [], // 📋 体检报告URL数组（兼容旧版）
-            selfIntroductionVideoUrl: createdResume.selfIntroductionVideo?.url || null, // 🎬 视频URL兼容
-            createdAt: (createdResume as any).createdAt || new Date(),
-            updatedAt: (createdResume as any).updatedAt || new Date()
-          }
+          resume: this.resumeService.formatResumeForMiniprogram(createdResume)
         },
         message: result.action === 'UPDATED' ? '简历已更新' : '创建简历成功'
       };
@@ -1168,62 +983,17 @@ export class ResumeController {
       }
 
       // 构建小程序友好的响应数据
+      const formattedResume = this.resumeService.formatResumeForMiniprogram(resume);
       const responseData = {
-        id: resume._id || resume.id,
-        name: resume.name,
-        phone: resume.phone,
-        age: resume.age,
-        gender: resume.gender,
-        jobType: resume.jobType,
-        education: resume.education,
-        experienceYears: resume.experienceYears,
-        nativePlace: resume.nativePlace,
-        selfIntroduction: resume.selfIntroduction, // 🔥 重要字段
-        internalEvaluation: resume.internalEvaluation, // 📝 内部员工评价
-        wechat: resume.wechat,
-        currentAddress: resume.currentAddress,
-        hukouAddress: resume.hukouAddress,
-        birthDate: resume.birthDate,
-        skills: resume.skills || [],
-        serviceArea: resume.serviceArea || [],
-        expectedSalary: resume.expectedSalary,
-        maternityNurseLevel: resume.maternityNurseLevel || null, // 🏅 月嫂档位
-        workExperiences: resume.workExperiences || [],
-        // 文件信息 - 完整对象格式（包含url, filename, size, mimetype）
-        idCardFront: resume.idCardFront,
-        idCardBack: resume.idCardBack,
-        personalPhoto: resume.personalPhoto || [],
-        certificates: resume.certificates || [], // 🎓 技能证书图片（FileInfo对象数组）
-        reports: resume.reports || [], // 📋 体检报告（FileInfo对象数组）
-        selfIntroductionVideo: resume.selfIntroductionVideo || null, // 🎬 自我介绍视频
-        // 🆕 新增的4个相册字段（FileInfo对象数组）
-        confinementMealPhotos: resume.confinementMealPhotos || [], // 🍲 月子餐照片
-        cookingPhotos: resume.cookingPhotos || [], // 👨‍🍳 烹饪照片
-        complementaryFoodPhotos: resume.complementaryFoodPhotos || [], // 🍼 辅食添加照片
-        positiveReviewPhotos: resume.positiveReviewPhotos || [], // ⭐ 好评展示照片
-        // 兼容旧格式 - 仅URL字符串数组
-        idCardFrontUrl: resume.idCardFront?.url,
-        idCardBackUrl: resume.idCardBack?.url,
-        photoUrls: resume.photoUrls || [],
-        certificateUrls: resume.certificateUrls || [], // 🎓 技能证书图片URL数组（兼容旧版）
-        medicalReportUrls: resume.medicalReportUrls || [], // 📋 体检报告URL数组（兼容旧版）
-        selfIntroductionVideoUrl: resume.selfIntroductionVideo?.url || null, // 🎬 视频URL兼容
-        // 🆕 新增的4个相册字段的URL数组（兼容旧版）
-        confinementMealPhotoUrls: (resume.confinementMealPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-        cookingPhotoUrls: (resume.cookingPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-        complementaryFoodPhotoUrls: (resume.complementaryFoodPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-        positiveReviewPhotoUrls: (resume.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-        // 时间戳
-        createdAt: (resume as any).createdAt || new Date(),
-        updatedAt: (resume as any).updatedAt || new Date(),
+        ...formattedResume,
         // 员工评价数据
         employeeEvaluations: employeeEvaluations || [],
         // 推荐理由标签
-        recommendationTags: recommendationTags || []
+        recommendationTags: recommendationTags || [],
       };
 
       this.logger.log(`✅ 小程序获取简历详情成功: ${id}`);
-      this.logger.log(`📋 自我介绍字段: ${responseData.selfIntroduction ? '有内容(' + responseData.selfIntroduction.length + '字符)' : '无内容'}`);
+      this.logger.log(`📋 自我介绍字段: ${formattedResume.selfIntroduction ? '有内容(' + (formattedResume.selfIntroduction as string).length + '字符)' : '无内容'}`);
       this.logger.log(`📊 员工评价数量: ${employeeEvaluations?.length || 0}`);
       this.logger.log(`🏷️ 推荐理由标签数量: ${recommendationTags?.length || 0}`);
 
@@ -1269,48 +1039,7 @@ export class ResumeController {
 
       return {
         success: true,
-        data: {
-          id: resume._id || resume.id,
-          name: resume.name,
-          phone: resume.phone,
-          age: resume.age,
-          gender: resume.gender,
-          jobType: resume.jobType,
-          education: resume.education,
-          experienceYears: resume.experienceYears,
-          expectedSalary: resume.expectedSalary,
-          maternityNurseLevel: resume.maternityNurseLevel || null, // 🏅 月嫂档位
-          nativePlace: resume.nativePlace,
-          skills: resume.skills,
-          serviceArea: resume.serviceArea,
-          selfIntroduction: resume.selfIntroduction,
-          workExperiences: resume.workExperiences || resume.workHistory || [],
-          // 文件相关字段 - 完整对象格式（包含url, filename, size, mimetype）
-          idCardFront: resume.idCardFront,
-          idCardBack: resume.idCardBack,
-          personalPhoto: resume.personalPhoto,
-          certificates: resume.certificates || [], // 🎓 技能证书图片（FileInfo对象数组）
-          reports: resume.reports || [], // 📋 体检报告（FileInfo对象数组）
-          selfIntroductionVideo: resume.selfIntroductionVideo || null, // 🎬 自我介绍视频
-          // 🆕 新增的4个相册字段（FileInfo对象数组）
-          confinementMealPhotos: resume.confinementMealPhotos || [], // 🍲 月子餐照片
-          cookingPhotos: resume.cookingPhotos || [], // 👨‍🍳 烹饪照片
-          complementaryFoodPhotos: resume.complementaryFoodPhotos || [], // 🍼 辅食添加照片
-          positiveReviewPhotos: resume.positiveReviewPhotos || [], // ⭐ 好评展示照片
-          // 兼容旧格式 - 仅URL字符串数组
-          idCardFrontUrl: resume.idCardFront?.url,
-          idCardBackUrl: resume.idCardBack?.url,
-          photoUrls: resume.photoUrls || [],
-          certificateUrls: resume.certificateUrls || [], // 🎓 技能证书图片URL数组（兼容旧版）
-          medicalReportUrls: resume.medicalReportUrls || [], // 📋 体检报告URL数组（兼容旧版）
-          selfIntroductionVideoUrl: resume.selfIntroductionVideo?.url || null, // 🎬 视频URL兼容
-          // 🆕 新增的4个相册字段的URL数组（兼容旧版）
-          confinementMealPhotoUrls: (resume.confinementMealPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-          cookingPhotoUrls: (resume.cookingPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-          complementaryFoodPhotoUrls: (resume.complementaryFoodPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-          positiveReviewPhotoUrls: (resume.positiveReviewPhotos || []).map((photo: any) => photo.url).filter(Boolean),
-          updatedAt: (resume as any).updatedAt
-        },
+        data: this.resumeService.formatResumeForMiniprogram(resume),
         message: '更新简历成功'
       };
     } catch (error) {
@@ -1917,7 +1646,7 @@ export class ResumeController {
 
       return result;
     } catch (error) {
-      console.error('更新简历失败:', error);
+      this.logger.error('更新简历失败:', error);
       // 修改错误处理，与创建简历保持一致
       return {
         success: false,
@@ -2103,7 +1832,7 @@ export class ResumeController {
 
       // 详细记录请求信息
       this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}`);
-      console.log(`🔥🔥🔥 [CONSOLE-DEBUG-OLD] findAllOld方法被调用! URL: ${req?.url}`);
+      this.logger.debug(`🔥🔥🔥 [CONSOLE-DEBUG-OLD] findAllOld方法被调用! URL: ${req?.url}`);
 
       // 安全地解析页码
       try {

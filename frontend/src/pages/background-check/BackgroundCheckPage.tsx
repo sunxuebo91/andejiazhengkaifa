@@ -282,6 +282,21 @@ export default function BackgroundCheckPage() {
       render: (v) => v || '-',
     },
     {
+      title: '创建人',
+      dataIndex: 'createdBy',
+      width: 120,
+      render: (createdBy: BackgroundCheck['createdBy']) => {
+        if (!createdBy) return '-';
+        if (typeof createdBy === 'string') {
+          if (createdBy === 'temp' || /^[a-fA-F0-9]{24}$/.test(createdBy)) {
+            return '-';
+          }
+          return createdBy;
+        }
+        return createdBy.name || createdBy.username || '-';
+      },
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       width: 100,

@@ -94,7 +94,11 @@ export interface InsurancePolicy {
   authUrl?: string;
   wechatPayInfo?: WechatPayInfo;
   resumeId?: string;
-  createdBy?: string;
+  createdBy?: string | {
+    _id: string;
+    name?: string;
+    username?: string;
+  };
   errorMessage?: string;
   rawResponse?: Record<string, any>;
   createdAt?: string;
@@ -254,4 +258,3 @@ export const SURRENDER_REASON_OPTIONS = [
   { value: '14', label: '航班取消' },
   { value: '15', label: '航班改签' },
 ];
-

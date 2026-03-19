@@ -4,9 +4,12 @@ import { Model } from 'mongoose';
 import { Role } from './models/role.entity';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { AppLogger } from '../../common/logging/app-logger';
 
 @Injectable()
 export class RolesService implements OnModuleInit {
+  private readonly logger = new AppLogger(RolesService.name);
+
   constructor(@InjectModel('Role') private readonly roleModel: Model<Role>) {}
 
   async onModuleInit() {
@@ -113,7 +116,7 @@ export class RolesService implements OnModuleInit {
       const existingRole = await this.findByName(roleData.name);
       if (!existingRole) {
         await this.create(roleData);
-        console.log(`默认角色 "${roleData.name}" 已创建`);
+        this.logger.debug(`默认角色 "${roleData.name}" 已创建`);
       }
     }
   }

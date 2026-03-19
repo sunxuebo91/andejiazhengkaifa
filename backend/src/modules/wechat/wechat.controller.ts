@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { WeChatService } from './wechat.service';
 import { UsersService } from '../users/users.service';
-import { Public } from '../../common/decorators/public.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('微信服务')
 @Controller('wechat')

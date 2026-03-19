@@ -8,9 +8,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { LoginLog } from './models/login-log.entity';
 import axios from 'axios';
+import { AppLogger } from '../../common/logging/app-logger';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new AppLogger(AuthService.name);
+
   private loginAttempts: Map<string, { count: number; lastAttempt: Date }> = new Map();
   private readonly MAX_LOGIN_ATTEMPTS = 5;
   private readonly LOGIN_ATTEMPT_WINDOW = 15 * 60 * 1000; // 15分钟
@@ -46,7 +49,7 @@ export class AuthService {
       });
     } catch (error) {
       // 记录日志失败不应该影响登录流程
-      console.error('Failed to log login attempt:', error);
+      this.logger.error('Failed to log login attempt:', error);
     }
   }
 
@@ -102,7 +105,7 @@ export class AuthService {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      console.error('Login validation error:', error);
+      this.logger.error('Login validation error:', error);
       throw new InternalServerErrorException('登录验证过程中发生错误');
     }
   }
@@ -116,7 +119,7 @@ export class AuthService {
 
       // 如果传入了 openid，自动更新用户的 wechatOpenId（小程序登录时使用）
       if (openid && user.wechatOpenId !== openid) {
-        console.log(`[登录] 更新用户 ${user.name}(${user.username}) 的 wechatOpenId: ${user.wechatOpenId || '无'} → ${openid}`);
+        this.logger.debug(`[登录] 更新用户 ${user.name}(${user.username}) 的 wechatOpenId: ${user.wechatOpenId || '无'} → ${openid}`);
         await this.usersService.updateWeChatInfo(user._id.toString(), {
           openId: openid,
         });
@@ -149,7 +152,7 @@ export class AuthService {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      console.error('Login error:', error);
+      this.logger.error('Login error:', error);
       throw new InternalServerErrorException('登录过程中发生错误');
     }
   }
@@ -168,7 +171,7 @@ export class AuthService {
       // 3. 自动更新用户的 wechatOpenId（确保订阅消息能正常发送）
       const newOpenid = openidResult.openid;
       if (newOpenid && user.wechatOpenId !== newOpenid) {
-        console.log(`[小程序登录] 更新用户 ${user.name}(${phone}) 的 wechatOpenId: ${user.wechatOpenId || '无'} → ${newOpenid}`);
+        this.logger.debug(`[小程序登录] 更新用户 ${user.name}(${phone}) 的 wechatOpenId: ${user.wechatOpenId || '无'} → ${newOpenid}`);
         await this.usersService.updateWeChatInfo(user._id.toString(), {
           openId: newOpenid,
         });
@@ -210,7 +213,7 @@ export class AuthService {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      console.error('Miniprogram login error:', error);
+      this.logger.error('Miniprogram login error:', error);
       throw new InternalServerErrorException('小程序登录过程中发生错误');
     }
   }

@@ -11,9 +11,12 @@ import { RemoteControlDto } from './dto/remote-control.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 import { InterviewService } from '../interview/interview.service';
+import { AppLogger } from '../../common/logging/app-logger';
 
 @Controller('zego')
 export class ZegoController {
+  private readonly logger = new AppLogger(ZegoController.name);
+
   constructor(
     private readonly zegoService: ZegoService,
     private readonly interviewService: InterviewService,
@@ -25,7 +28,7 @@ export class ZegoController {
   @Post('generate-token')
   @UseGuards(JwtAuthGuard)
   generateToken(@Body() dto: GenerateTokenDto, @Request() req) {
-    console.log('生成Token请求:', {
+    this.logger.debug('生成Token请求:', {
       dtoUserId: dto.userId,
       jwtUserId: req.user.userId,
       roomId: dto.roomId,
@@ -70,7 +73,7 @@ export class ZegoController {
   @Public()
   @Post('generate-guest-token')
   async generateGuestToken(@Body() dto: GenerateGuestTokenDto) {
-    console.log('🔍 生成访客Token请求:', {
+    this.logger.debug('🔍 生成访客Token请求:', {
       userId: dto.userId,
       userIdLength: dto.userId?.length,
       userIdType: typeof dto.userId,
@@ -113,18 +116,18 @@ export class ZegoController {
 
       // // 🔥 如果房间在数据库中是 active，但 ZEGO 内存中不存在，自动重新创建
       // if (!roomStatus.exists && dbRoom.status === 'active') {
-      //   console.log('🔄 房间在数据库中存在但 ZEGO 内存中不存在，自动重新创建房间');
+      //   this.logger.debug('🔄 房间在数据库中存在但 ZEGO 内存中不存在，自动重新创建房间');
       //   // 从数据库中获取主持人的 ZEGO userId
       //   const hostZegoUserId = dbRoom.hostZegoUserId || `user_${Date.now()}`;
       //   this.zegoService.createRoom(dto.roomId, hostZegoUserId);
-      //   console.log('✅ 房间已重新创建:', dto.roomId);
+      //   this.logger.debug('✅ 房间已重新创建:', dto.roomId);
       // }
 
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
-      console.error('❌ 检查房间状态失败:', error);
+      this.logger.error('❌ 检查房间状态失败:', error);
       throw new HttpException({
         success: false,
         message: '检查房间状态失败',
@@ -160,18 +163,18 @@ export class ZegoController {
         dto.role,
       );
       if (result) {
-        console.log('✅ 面试间参与者信息已更新:', {
+        this.logger.debug('✅ 面试间参与者信息已更新:', {
           roomId: dto.roomId,
           userId: dto.userId,
           userName: dto.userName,
           role: dto.role,
         });
       } else {
-        console.error('❌ 面试间参与者信息更新失败: addParticipant返回null');
+        this.logger.error('❌ 面试间参与者信息更新失败: addParticipant返回null');
       }
     } catch (error) {
-      console.error('❌ 更新面试间参与者信息异常:', error);
-      console.error('❌ 错误详情:', {
+      this.logger.error('❌ 更新面试间参与者信息异常:', error);
+      this.logger.error('❌ 错误详情:', {
         roomId: dto.roomId,
         userId: dto.userId,
         userName: dto.userName,
@@ -198,7 +201,7 @@ export class ZegoController {
   async kickUser(@Body() dto: KickUserDto, @Request() req) {
     // 使用前端传递的 ZEGO userId（user_xxx 格式）
     const hostUserId = dto.hostUserId;
-    console.log('踢出用户请求:', {
+    this.logger.debug('踢出用户请求:', {
       roomId: dto.roomId,
       hostUserId: hostUserId,
       targetUserId: dto.userId,
@@ -227,7 +230,7 @@ export class ZegoController {
   @Post('dismiss-room')
   @UseGuards(JwtAuthGuard)
   async dismissRoom(@Body() dto: DismissRoomDto, @Request() req) {
-    console.log('解散房间请求:', {
+    this.logger.debug('解散房间请求:', {
       roomId: dto.roomId,
       hostUserId: dto.hostUserId,
       jwtUserId: req.user.userId,
@@ -283,15 +286,15 @@ export class ZegoController {
         userId = body.userId;
       }
 
-      console.log('🔧 用户离开房间:', { roomId, userId });
+      this.logger.debug('🔧 用户离开房间:', { roomId, userId });
       this.zegoService.leaveRoom(roomId, userId);
 
       // 🎯 更新面试间参与者信息（移除参与者）
       try {
         await this.interviewService.removeParticipant(roomId, userId);
-        console.log('✅ 面试间参与者已移除');
+        this.logger.debug('✅ 面试间参与者已移除');
       } catch (error) {
-        console.warn('⚠️ 移除面试间参与者失败:', error);
+        this.logger.warn('⚠️ 移除面试间参与者失败:', error);
       }
 
       return {
@@ -299,7 +302,7 @@ export class ZegoController {
         message: '已离开房间',
       };
     } catch (error) {
-      console.error('处理离开房间请求失败:', error);
+      this.logger.error('处理离开房间请求失败:', error);
       return {
         success: false,
         message: '处理失败',

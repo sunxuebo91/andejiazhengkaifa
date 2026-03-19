@@ -793,7 +793,7 @@ export class ContractsMiniProgramController {
       // 如果状态变为 active，手动触发保险同步
       if (updateData.contractStatus === ContractStatus.ACTIVE) {
         await this.contractsService.syncInsuranceOnContractActive(contractId).catch(error => {
-          console.error('保险同步失败:', error.message);
+          this.logger.error('保险同步失败:', error.message);
         });
       }
 
@@ -879,7 +879,7 @@ export class ContractsMiniProgramController {
                 await this.contractsService.syncInsuranceOnContractActive(
                   contract._id.toString()
                 ).catch(error => {
-                  console.error(`保险同步失败 (${contract.contractNumber}):`, error.message);
+                  this.logger.error(`保险同步失败 (${contract.contractNumber}):`, error.message);
                 });
               }
 
@@ -898,7 +898,7 @@ export class ContractsMiniProgramController {
           }
         } catch (error) {
           results.failed++;
-          console.error(`同步合同 ${contract.contractNumber} 失败:`, error.message);
+          this.logger.error(`同步合同 ${contract.contractNumber} 失败:`, error.message);
         }
 
         // 避免请求过快，延迟100ms

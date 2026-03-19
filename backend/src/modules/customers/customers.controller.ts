@@ -371,17 +371,17 @@ export class CustomersController {
   @ApiBody({ type: ClaimCustomersDto })
   async claimCustomers(@Body() dto: ClaimCustomersDto, @Request() req): Promise<ApiResponse> {
     try {
-      console.log('🎯 [领取客户] 开始处理:', { customerIds: dto.customerIds, userId: req.user.userId });
+      this.logger.debug('🎯 [领取客户] 开始处理:', { customerIds: dto.customerIds, userId: req.user.userId });
       const result = await this.customersService.claimCustomers(dto.customerIds, req.user.userId);
-      console.log('✅ [领取客户] 处理完成:', result);
+      this.logger.debug('✅ [领取客户] 处理完成:', result);
       const message = `领取完成：成功 ${result.success} 个，失败 ${result.failed} 个`;
       const response = this.createResponse(true, message, result);
-      console.log('📤 [领取客户] 返回响应:', response);
+      this.logger.debug('📤 [领取客户] 返回响应:', response);
       return response;
     } catch (error) {
-      console.error('❌ [领取客户] 处理失败:', error.message, error.stack);
+      this.logger.error('❌ [领取客户] 处理失败:', error.message, error.stack);
       const response = this.createResponse(false, error.message || '领取失败', null, error.message);
-      console.log('📤 [领取客户] 返回错误响应:', response);
+      this.logger.debug('📤 [领取客户] 返回错误响应:', response);
       return response;
     }
   }
@@ -735,9 +735,9 @@ export class CustomersController {
   ): Promise<ApiResponse> {
     try {
       // 记录请求信息（类似简历创建接口的日志记录）
-      console.log(`🆕 小程序创建客户:`);
-      console.log(`📝 创建数据: ${JSON.stringify(createCustomerDto, null, 2)}`);
-      console.log(`🔑 请求头: idempotencyKey=${idempotencyKey}, apiVersion=${apiVersion}, requestId=${requestId}`);
+      this.logger.debug(`🆕 小程序创建客户:`);
+      this.logger.debug(`📝 创建数据: ${JSON.stringify(createCustomerDto, null, 2)}`);
+      this.logger.debug(`🔑 请求头: idempotencyKey=${idempotencyKey}, apiVersion=${apiVersion}, requestId=${requestId}`);
 
       // 幂等性处理：如果提供了幂等性键，检查是否已存在相同的请求
       if (idempotencyKey) {
@@ -747,7 +747,7 @@ export class CustomersController {
 
       const customer = await this.customersService.create(createCustomerDto, req.user.userId);
 
-      console.log(`✅ 小程序创建客户成功: ${(customer as any)._id}`);
+      this.logger.debug(`✅ 小程序创建客户成功: ${(customer as any)._id}`);
 
       // 根据用户角色返回脱敏数据
       const sanitizedCustomer = this.sanitizeCustomerData(customer, req.user);
@@ -760,7 +760,7 @@ export class CustomersController {
         action: 'CREATED'
       });
     } catch (error) {
-      console.error(`小程序创建客户失败: ${error.message}`);
+      this.logger.error(`小程序创建客户失败: ${error.message}`);
 
       // 处理特定错误类型（参考简历创建接口）
       if (error.message?.includes('该手机号已存在')) {
@@ -821,8 +821,8 @@ export class CustomersController {
     @Request() req,
   ): Promise<ApiResponse> {
     try {
-      console.log(`🔄 小程序更新客户 ${id}:`);
-      console.log(`📝 更新数据: ${JSON.stringify(updateCustomerDto, null, 2)}`);
+      this.logger.debug(`🔄 小程序更新客户 ${id}:`);
+      this.logger.debug(`📝 更新数据: ${JSON.stringify(updateCustomerDto, null, 2)}`);
 
       // 先获取客户信息进行权限检查
       const existingCustomer = await this.customersService.findOne(id);
@@ -839,22 +839,22 @@ export class CustomersController {
       if (oldStatus !== updatedCustomer.contractStatus) {
         try {
           // 这里可以集成微信通知功能
-          console.log(`📱 客户状态变更: ${oldStatus} -> ${updatedCustomer.contractStatus}`);
+          this.logger.debug(`📱 客户状态变更: ${oldStatus} -> ${updatedCustomer.contractStatus}`);
           // await this.weixinService.sendCustomerStatusChangeNotification({...});
         } catch (notificationError) {
-          console.error('发送微信通知失败:', notificationError);
+          this.logger.error('发送微信通知失败:', notificationError);
           // 通知失败不影响主业务
         }
       }
 
-      console.log(`✅ 小程序更新客户成功: ${id}`);
+      this.logger.debug(`✅ 小程序更新客户成功: ${id}`);
 
       // 根据角色脱敏数据
       const sanitizedCustomer = this.sanitizeCustomerData(updatedCustomer, req.user);
 
       return this.createResponse(true, '客户信息更新成功', sanitizedCustomer);
     } catch (error) {
-      console.error(`小程序更新客户失败: ${error.message}`);
+      this.logger.error(`小程序更新客户失败: ${error.message}`);
 
       if (error instanceof ForbiddenException) {
         return this.createResponse(false, error.message, null, 'FORBIDDEN');
@@ -880,7 +880,7 @@ export class CustomersController {
     @Request() req,
   ): Promise<ApiResponse> {
     try {
-      console.log(`👥 小程序分配客户 ${id} 给 ${dto.assignedTo}`);
+      this.logger.debug(`👥 小程序分配客户 ${id} 给 ${dto.assignedTo}`);
 
       const updatedCustomer = await this.customersService.assignCustomer(
         id,
@@ -889,7 +889,7 @@ export class CustomersController {
         req.user.userId
       );
 
-      console.log(`✅ 小程序分配客户成功: ${id}`);
+      this.logger.debug(`✅ 小程序分配客户成功: ${id}`);
 
 	      // 根据角色脱敏数据（用于前端展示）
 	      const sanitizedCustomer = this.sanitizeCustomerData(updatedCustomer, req.user);
@@ -907,7 +907,7 @@ export class CustomersController {
 	        leadSource: (updatedCustomer as any).leadSource,                 // 线索来源
 	      };
 
-	      console.log(`📱 通知数据已准备: ${JSON.stringify(notificationData)}`);
+	      this.logger.debug(`📱 通知数据已准备: ${JSON.stringify(notificationData)}`);
 
 	      // 🚀 CRM端主动调用云函数发送通知（异步执行，不阻塞响应）
 	      this.wechatCloudService.sendCustomerAssignNotification(notificationData)
@@ -926,7 +926,7 @@ export class CustomersController {
 
 	      return this.createResponse(true, '客户分配成功', responseData);
     } catch (error) {
-      console.error(`小程序分配客户失败: ${error.message}`);
+      this.logger.error(`小程序分配客户失败: ${error.message}`);
       return this.createResponse(false, error.message || '客户分配失败', null, error.message);
     }
   }
@@ -950,7 +950,7 @@ export class CustomersController {
 
       const followUp = await this.customersService.createFollowUp(id, createFollowUpDto, req.user.userId);
 
-      console.log(`📝 小程序创建跟进记录成功: 客户${id}, 跟进人${req.user.userId}`);
+      this.logger.debug(`📝 小程序创建跟进记录成功: 客户${id}, 跟进人${req.user.userId}`);
 
       return this.createResponse(true, '跟进记录创建成功', followUp);
     } catch (error) {
@@ -1010,15 +1010,15 @@ export class CustomersController {
     @Request() req,
   ): Promise<ApiResponse> {
     try {
-      console.log(`📤 小程序释放客户到公海 ${id}, 原因: ${dto.reason}`);
+      this.logger.debug(`📤 小程序释放客户到公海 ${id}, 原因: ${dto.reason}`);
 
       // 调用现有的 releaseToPool 方法
       const customer = await this.customersService.releaseToPool(id, dto.reason, req.user.userId);
 
-      console.log(`✅ 小程序释放客户成功: ${id}`);
+      this.logger.debug(`✅ 小程序释放客户成功: ${id}`);
       return this.createResponse(true, '客户已释放到公海', customer);
     } catch (error) {
-      console.error(`❌ 小程序释放客户失败: ${error.message}`);
+      this.logger.error(`❌ 小程序释放客户失败: ${error.message}`);
       return this.createResponse(false, error.message || '释放失败', null, error.message);
     }
   }

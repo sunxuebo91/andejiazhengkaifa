@@ -208,29 +208,25 @@ export class ContractsController {
   @Post(':id/resend-sign-urls')
   async resendSignUrls(@Param('id') contractId: string) {
     try {
-      console.log('🔄 开始重新获取签署链接, 合同ID:', contractId);
+      this.logger.debug(`开始重新获取签署链接, 合同ID: ${contractId}`);
       const contract = await this.contractsService.findOne(contractId);
 
       if (!contract.esignContractNo) {
-        console.log('❌ 合同未关联爱签合同');
+        this.logger.warn(`合同未关联爱签合同, 合同ID: ${contractId}`);
         return {
           success: false,
           message: '该合同未关联爱签合同',
         };
       }
 
-      console.log('📝 爱签合同编号:', contract.esignContractNo);
+      this.logger.debug(`爱签合同编号: ${contract.esignContractNo}`);
       // 使用新的获取签署链接方法
       const result = await this.esignService.getContractSignUrls(contract.esignContractNo);
 
-      console.log('📊 获取签署链接结果:', {
-        success: result.success,
-        message: result.message,
-        signUrlsCount: result.data?.signUrls?.length || 0,
-      });
+      this.logger.debug(`获取签署链接结果: success=${result.success}, signUrlsCount=${result.data?.signUrls?.length || 0}`);
 
       if (!result.success) {
-        console.log('❌ 获取签署链接失败:', result.message);
+        this.logger.warn(`获取签署链接失败: ${result.message}`);
         return {
           success: false,
           message: result.message || '获取签署链接失败',
@@ -242,11 +238,10 @@ export class ContractsController {
         esignSignUrls: JSON.stringify(result.data.signUrls),
       });
 
-      console.log('✅ 签署链接已保存到数据库');
-      console.log('🎉 返回结果给前端:', JSON.stringify(result, null, 2));
+      this.logger.debug(`签署链接已保存到数据库, 合同ID: ${contractId}`);
       return result;
     } catch (error) {
-      console.error('❌ 重新获取签署链接失败:', error);
+      this.logger.error(`重新获取签署链接失败: ${error.message}`, error.stack);
       return {
         success: false,
         message: error.message || '获取签署链接失败',
@@ -281,22 +276,17 @@ export class ContractsController {
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    console.log('🚨🚨🚨 [CONTRACTS API CALLED] 收到合同详情请求, ID:', id);
-    console.log('🚨🚨🚨 [CONTRACTS API CALLED] 当前时间:', new Date().toISOString());
+    this.logger.debug(`收到合同详情请求, ID: ${id}`);
     try {
       const contract = await this.contractsService.findOne(id);
-      console.log('🚨🚨🚨 [CONTRACTS API CALLED] 合同详情查询完成:', {
-        contractNumber: contract.contractNumber,
-        hasLastUpdatedBy: !!contract.lastUpdatedBy,
-        lastUpdatedBy: contract.lastUpdatedBy
-      });
+      this.logger.debug(`合同详情查询完成: contractNumber=${contract.contractNumber}`);
       return {
         success: true,
         data: contract,
         message: '获取合同详情成功',
       };
     } catch (error) {
-      console.error('🚨🚨🚨 [CONTRACTS API CALLED] 合同详情查询失败:', error);
+      this.logger.error(`获取合同详情失败: ${error.message}`, error.stack);
       return {
         success: false,
         message: error.message || '获取合同详情失败',

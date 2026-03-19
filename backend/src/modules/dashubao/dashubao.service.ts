@@ -471,10 +471,20 @@ export class DashubaoService {
       <NotifyUrl>${notifyUrl}</NotifyUrl>
     </PayInfo>`;
 
+    // 每次支付尝试生成新的唯一流水号，避免大树保报"流水号不能重复"
+    const paymentAgencyRef = this.generateAgencyPolicyRef();
+    this.logger.log(`支付订单流水号（新生成）: ${paymentAgencyRef}（原保单流水号: ${policy.agencyPolicyRef}）`);
+
+    // 将本次支付流水号保存到保单记录，供支付回调查找保单使用
+    await this.policyModel.updateOne(
+      { agencyPolicyRef: policy.agencyPolicyRef },
+      { lastPaymentRef: paymentAgencyRef }
+    );
+
     // 构建保单信息（严格按照文档示例，不包含IssueDate和PremiumCalType）
     const policyXml = `
     <Policy>
-      <AgencyPolicyRef>${policy.agencyPolicyRef}</AgencyPolicyRef>
+      <AgencyPolicyRef>${paymentAgencyRef}</AgencyPolicyRef>
       <ProductCode>${policy.productCode || ''}</ProductCode>
       <PlanCode>${policy.planCode}</PlanCode>
       <EffectiveDate>${policy.effectiveDate}</EffectiveDate>
@@ -588,8 +598,15 @@ export class DashubaoService {
           this.logger.log(`处理保单:`, JSON.stringify(policyData, null, 2));
 
           if (policyData.Success === 'true' || policyData.Success === true) {
+            // 支持通过原始流水号或最近支付流水号（lastPaymentRef）查找保单
+            // 原因：重试支付时每次会生成新流水号，回调中的AgencyPolicyRef是新流水号而非原始agencyPolicyRef
             const updateResult = await this.policyModel.updateOne(
-              { agencyPolicyRef: agencyPolicyRef },
+              {
+                $or: [
+                  { agencyPolicyRef: agencyPolicyRef },
+                  { lastPaymentRef: agencyPolicyRef },
+                ]
+              },
               {
                 status: PolicyStatus.ACTIVE,
                 policyNo: policyData.PolicyNo,
@@ -605,9 +622,14 @@ export class DashubaoService {
             this.logger.log(`   更新结果: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);
 
             // 🔥 支付成功后，尝试自动绑定合同（创建时可能因未支付而未绑定）
-            const paidPolicy = await this.policyModel.findOne({ agencyPolicyRef }).exec();
+            const paidPolicy = await this.policyModel.findOne({
+              $or: [
+                { agencyPolicyRef: agencyPolicyRef },
+                { lastPaymentRef: agencyPolicyRef },
+              ]
+            }).exec();
             if (paidPolicy && !paidPolicy.contractId && paidPolicy.insuredList?.length > 0) {
-              await this.tryBindPolicyToContract(paidPolicy._id, agencyPolicyRef, paidPolicy.insuredList[0].idNumber);
+              await this.tryBindPolicyToContract(paidPolicy._id, paidPolicy.agencyPolicyRef, paidPolicy.insuredList[0].idNumber);
             }
           } else {
             this.logger.warn(`⚠️  保单处理失败: Success=${policyData.Success}`);

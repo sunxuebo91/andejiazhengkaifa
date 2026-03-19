@@ -209,8 +209,7 @@ export class ResumeService {
 
   async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string) {
     try {
-      this.logger.log(`🔥 [SORT-FIX-FINAL] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}, currentUserId: ${currentUserId}`);
-      console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 开始查询简历列表 - page: ${page}, pageSize: ${pageSize}`);
+      this.logger.log(`开始查询简历列表 - page: ${page}, pageSize: ${pageSize}, currentUserId: ${currentUserId}`);
 
       // 首次查询时检查updatedAt字段
       if (!this.hasCheckedUpdatedAt) {
@@ -258,13 +257,13 @@ export class ResumeService {
         query.ethnicity = ethnicity;
       }
 
-      this.logger.log(`🔥 [SORT-FIX-FINAL] 查询条件: ${JSON.stringify(query)}`);
+      this.logger.debug(`查询条件: ${JSON.stringify(query)}`);
 
       // 🔥 [SORT-FIX-FINAL] 使用分离的查询，确保排序和分页的执行顺序
 
       // 1. 获取总记录数
       const total = await this.resumeModel.countDocuments(query).exec();
-      this.logger.log(`🔥 [SORT-FIX-FINAL] 查询到总数: ${total}`);
+      this.logger.debug(`查询到总数: ${total}`);
 
       // 2. 获取分页和排序后的数据 - 强制排序修复
       let items = await this.resumeModel
@@ -355,31 +354,21 @@ export class ResumeService {
         });
 
         items = filteredItems;
-        this.logger.log(`🔒 [权限过滤] 原始数量: ${resumeIds.length}, 过滤后数量: ${items.length}, active合同数: ${activeContracts.length}`);
+        this.logger.debug(`权限过滤完成 - 原始数量: ${resumeIds.length}, 过滤后数量: ${items.length}, active合同数: ${activeContracts.length}`);
       }
 
-      this.logger.log(`🔥 [SORT-FIX-FINAL] 查询完成 - 返回 ${items.length} 条记录`);
+      this.logger.log(`查询完成 - 返回 ${items.length} 条记录`);
 
-      // 验证强制排序结果
-      if (items.length > 0) {
-        console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 强制排序后的前3条记录:`);
-        items.slice(0, 3).forEach((item: any, index) => {
-          console.log(`🔥🔥🔥 [CONSOLE-DEBUG]   ${index + 1}. ${item.name} - ${item.updatedAt}`);
-        });
-
-        if (items.length > 1) {
-          const first = items[0] as any;
-          const second = items[1] as any;
-          const firstTime = new Date(first.updatedAt).getTime();
-          const secondTime = new Date(second.updatedAt).getTime();
-          console.log(`🔥🔥🔥 [CONSOLE-DEBUG] 排序验证: ${first.name}(${firstTime}) vs ${second.name}(${secondTime})`);
-          if (firstTime < secondTime) {
-            this.logger.error(`🔥 [SORT-FIX-FINAL] ❌ 强制排序后仍然失败!`);
-            console.log(`🔥🔥🔥 [CONSOLE-DEBUG] ❌ 强制排序后仍然失败!`);
-          } else {
-            this.logger.log(`🔥 [SORT-FIX-FINAL] ✅ 强制排序成功!`);
-            console.log(`🔥🔥🔥 [CONSOLE-DEBUG] ✅ 强制排序成功!`);
-          }
+      // 排序验证（debug 级别）
+      if (items.length > 1) {
+        const first = items[0] as any;
+        const second = items[1] as any;
+        const firstTime = new Date(first.updatedAt).getTime();
+        const secondTime = new Date(second.updatedAt).getTime();
+        if (firstTime < secondTime) {
+          this.logger.error(`排序验证失败: ${first.name}(${firstTime}) vs ${second.name}(${secondTime})`);
+        } else {
+          this.logger.debug(`排序验证通过 - 共 ${items.length} 条记录`);
         }
       }
 
@@ -398,7 +387,7 @@ export class ResumeService {
         totalPages: Math.ceil(total / pageSize),
       };
     } catch (error) {
-      this.logger.error(`🔥 [SORT-FIX-FINAL] 查询失败: ${error.message}`, error.stack);
+      this.logger.error(`查询简历列表失败: ${error.message}`, error.stack);
       throw error;
     }
   }

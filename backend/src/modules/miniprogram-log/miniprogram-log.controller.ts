@@ -1,5 +1,6 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { AppLogger } from '../../common/logging/app-logger';
 
 /**
  * 小程序 H5 页面访问日志控制器
@@ -7,7 +8,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 @ApiTags('小程序日志')
 @Controller('miniprogram-access-log')
 export class MiniprogramLogController {
-  private readonly logger = new Logger('MiniprogramAccessLog');
+  private readonly logger = new AppLogger('MiniprogramAccessLog');
 
   @Post()
   @ApiOperation({ summary: '记录小程序 H5 页面访问日志' })
@@ -16,7 +17,6 @@ export class MiniprogramLogController {
     try {
       const {
         url,
-        pathname,
         fileName,
         environment,
         queryParams,
@@ -26,57 +26,22 @@ export class MiniprogramLogController {
         referrer,
         timestamp,
         event,
-        stayDuration,
         stayDurationSeconds,
       } = logData;
 
-      // 🔥 根据环境类型使用不同的日志样式
-      if (isMiniProgram) {
-        this.logger.log(`
-╔════════════════════════════════════════════════════════════════
-║ 🎯 小程序 WebView 访问
-╠════════════════════════════════════════════════════════════════
-║ 📄 访问文件: ${fileName}
-║ 🔗 完整URL: ${url}
-║ 🌐 环境: ${environment}
-║ 📋 Query参数: ${JSON.stringify(queryParams)}
-║ 🕐 时间: ${new Date(timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-║ 📱 来源: ${referrer}
-${event === 'page_unload' ? `║ ⏱️  停留时间: ${stayDurationSeconds}秒` : ''}
-╚════════════════════════════════════════════════════════════════
-        `);
-      } else if (isWechat) {
-        this.logger.log(`
-╔════════════════════════════════════════════════════════════════
-║ 📱 微信浏览器访问
-╠════════════════════════════════════════════════════════════════
-║ 📄 访问文件: ${fileName}
-║ 🔗 完整URL: ${url}
-║ 🌐 环境: ${environment}
-║ 📋 Query参数: ${JSON.stringify(queryParams)}
-║ 🕐 时间: ${new Date(timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-║ 📱 来源: ${referrer}
-${event === 'page_unload' ? `║ ⏱️  停留时间: ${stayDurationSeconds}秒` : ''}
-╚════════════════════════════════════════════════════════════════
-        `);
-      } else {
-        this.logger.log(`
-╔════════════════════════════════════════════════════════════════
-║ 🌐 普通浏览器访问
-╠════════════════════════════════════════════════════════════════
-║ 📄 访问文件: ${fileName}
-║ 🔗 完整URL: ${url}
-║ 🌐 环境: ${environment}
-║ 📋 Query参数: ${JSON.stringify(queryParams)}
-║ 🕐 时间: ${new Date(timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-║ 📱 来源: ${referrer}
-${event === 'page_unload' ? `║ ⏱️  停留时间: ${stayDurationSeconds}秒` : ''}
-╚════════════════════════════════════════════════════════════════
-        `);
-      }
+      const source = isMiniProgram ? 'miniprogram_webview' : isWechat ? 'wechat_browser' : 'normal_browser';
 
-      // 记录详细的 JSON 格式日志（便于后续分析）
-      this.logger.debug(JSON.stringify(logData, null, 2));
+      this.logger.info('miniprogram.page.access', {
+        source,
+        fileName,
+        url,
+        environment,
+        queryParams,
+        referrer,
+        userAgent,
+        clientTimestamp: timestamp,
+        ...(event === 'page_unload' ? { event, stayDurationSeconds } : { event }),
+      });
 
       return {
         success: true,
@@ -84,7 +49,7 @@ ${event === 'page_unload' ? `║ ⏱️  停留时间: ${stayDurationSeconds}秒
         timestamp: Date.now(),
       };
     } catch (error) {
-      this.logger.error('记录访问日志失败:', error);
+      this.logger.error('miniprogram.page.access.failed', error);
       return {
         success: false,
         message: '日志记录失败',

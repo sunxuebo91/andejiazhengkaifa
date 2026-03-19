@@ -46,10 +46,14 @@ export class RequestContextMiddleware implements NestMiddleware {
             RequestContextStore.set({ userId: String(userId) });
           }
 
-          this.logger.info('request.finish', {
-            statusCode: res.statusCode,
-            durationMs: Date.now() - startedAt,
-          });
+          const durationMs = Date.now() - startedAt;
+          const slowThreshold = parseInt(process.env.SLOW_REQUEST_MS || '3000', 10);
+
+          if (durationMs >= slowThreshold) {
+            this.logger.warn('request.slow', { statusCode: res.statusCode, durationMs, threshold: slowThreshold });
+          } else {
+            this.logger.info('request.finish', { statusCode: res.statusCode, durationMs });
+          }
         });
 
         next();

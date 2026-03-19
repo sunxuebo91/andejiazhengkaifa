@@ -39,11 +39,21 @@ import * as express from 'express';
 import { join } from 'path';
 import { ApiResponseInterceptor } from './common/interceptors/api-response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { NestLoggerAdapter } from './common/logging/nest-logger.adapter';
+
+// 创建全局 Logger 适配器实例（bootstrap 前后共享同一个实例）
+const nestLoggerAdapter = new NestLoggerAdapter();
 
 async function bootstrap() {
   try {
+    // 将 NestLoggerAdapter 直接作为 logger 传入：
+    //   - NestJS 内部会调用 Logger.overrideLogger(nestLoggerAdapter)
+    //   - 框架级日志（路由注册、模块初始化、守卫异常等）也会走结构化 JSON
+    //   - bufferLogs:true 确保应用完全启动前的日志不会丢失
     const app = await NestFactory.create(AppModule, {
-      logger: ['error', 'warn', 'log', 'debug'],
+      logger: nestLoggerAdapter,
+      bufferLogs: true,
     });
 
     // 启用CORS
@@ -58,8 +68,9 @@ async function bootstrap() {
     app.setGlobalPrefix('api');
 
     // 全局响应转换和错误处理
+    // 注意过滤器注册顺序：NestJS 后注册先执行，所以 AllExceptions 先注册作为兜底
     app.useGlobalInterceptors(new ApiResponseInterceptor());
-    app.useGlobalFilters(new HttpExceptionFilter());
+    app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
 
     // 设置静态资源和文件上传配置
     app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));

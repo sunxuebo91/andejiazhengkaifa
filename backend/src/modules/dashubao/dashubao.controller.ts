@@ -113,14 +113,27 @@ export class DashubaoController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '支付订单 - 获取微信支付信息' })
+  @ApiOperation({ summary: '支付订单 - 获取微信支付信息（支持MINI小程序支付和MWEB H5支付）' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async createPaymentOrder(
     @Param('policyRef') policyRef: string,
     @Query('tradeType') tradeType: string = 'MWEB',
     @Query('openId') openId?: string,
   ) {
-    return this.dashubaoService.createPaymentOrder(policyRef, tradeType, openId);
+    const result = await this.dashubaoService.createPaymentOrder(policyRef, tradeType, openId);
+
+    // 根据 tradeType 返回不同的 paymentType
+    if (tradeType === 'MWEB' && result.WeChatWebUrl) {
+      // H5 支付模式：返回 MWEB_FALLBACK 和 WeChatWebUrl
+      return {
+        ...result,
+        paymentType: 'MWEB_FALLBACK',
+        WeChatWebUrl: result.WeChatWebUrl,
+      };
+    }
+
+    // MINI 小程序支付或其他模式：保持原样
+    return result;
   }
 
   @Post('payment/callback')

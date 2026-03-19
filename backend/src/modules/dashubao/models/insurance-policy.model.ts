@@ -255,6 +255,10 @@ export class InsurancePolicy {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   createdBy?: Types.ObjectId;
 
+  @ApiProperty({ description: '最近一次支付尝试的流水号（0022接口使用，每次重试生成新值）' })
+  @Prop({ index: true })
+  lastPaymentRef?: string;
+
   @ApiProperty({ description: '错误信息' })
   @Prop()
   errorMessage?: string;

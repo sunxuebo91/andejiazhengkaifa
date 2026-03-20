@@ -876,7 +876,6 @@
       color: #fff !important;
       z-index: 100 !important; /* 覆盖视频容器 */
       display: none !important;
-      flex-direction: column !important;
       border-radius: 12px !important; /* 与视频容器一致的圆角 */
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
       border: 2px solid rgba(255, 255, 255, 0.1) !important;
@@ -888,19 +887,25 @@
     }
 
     .teleprompter-container.show {
-      display: flex !important;
+      display: block !important; /* 🔥 改为block，不用flex */
     }
 
     .teleprompter-content {
       padding: 30px 20px !important;
-      overflow-y: auto !important;
+      overflow-y: scroll !important;
+      overflow-x: hidden !important;
       font-size: 22px !important;
       line-height: 2.2 !important;
       text-align: left !important;
       white-space: pre-wrap !important;
       word-wrap: break-word !important;
-      flex: 1 !important;
       font-weight: 500 !important;
+      /* 🔥 关键修复：使用绝对定位填满容器 */
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
       /* 隐藏滚动条 */
       scrollbar-width: none !important; /* Firefox */
       -ms-overflow-style: none !important; /* IE/Edge */
@@ -3373,6 +3378,7 @@
 
     // ==================== 提词器功能 ====================
     let teleprompterPollingTimer = null;
+    let lastTeleprompterTimestamp = 0; // 🔥 记录最后处理的消息时间戳
 
     // 开始轮询提词器消息
     function startTeleprompterPolling() {
@@ -3381,6 +3387,11 @@
       }
 
       console.log('📝 开始轮询提词器消息...');
+      console.log('📝 当前用户ID:', currentUserId);
+      console.log('📝 当前房间ID:', roomId);
+
+      // 🔥 重置时间戳，确保能收到所有消息
+      lastTeleprompterTimestamp = 0;
 
       // 立即执行一次
       pollTeleprompterMessages();
@@ -3403,6 +3414,7 @@
     // 轮询提词器消息
     async function pollTeleprompterMessages() {
       if (!roomId || !currentUserId) {
+        console.log('📝 跳过轮询: roomId或currentUserId为空', { roomId, currentUserId });
         return;
       }
 
@@ -3414,7 +3426,8 @@
           },
           body: JSON.stringify({
             roomId: roomId,
-            userId: currentUserId
+            userId: currentUserId,
+            lastTimestamp: lastTeleprompterTimestamp // 🔥 传递时间戳避免重复处理
           })
         });
 
@@ -3426,10 +3439,15 @@
         const result = await response.json();
 
         if (result.success && result.data && result.data.length > 0) {
-          console.log('📝 收到提词器消息:', result.data);
+          console.log('📝 收到提词器消息:', result.data.length, '条');
+          console.log('📝 消息详情:', JSON.stringify(result.data));
           // 处理所有未读消息
           result.data.forEach(message => {
             handleTeleprompterMessage(message);
+            // 🔥 更新最后处理的时间戳
+            if (message.timestamp > lastTeleprompterTimestamp) {
+              lastTeleprompterTimestamp = message.timestamp;
+            }
           });
         }
       } catch (error) {
@@ -3439,16 +3457,20 @@
 
     // 处理提词器消息
     function handleTeleprompterMessage(message) {
-      console.log('📝 收到提词器消息:', message);
+      console.log('📝 🔥 收到提词器消息:', JSON.stringify(message));
+      console.log('📝 消息类型:', message.type, '| 动作:', message.action);
+      console.log('📝 目标用户:', message.targetUserIds, '| 当前用户:', currentUserId);
 
       const { type, action, content, scrollSpeed } = message;
 
       // 根据消息类型处理
       if (type === 'CONTENT') {
         // CONTENT类型消息：更新内容并显示
+        console.log('📝 处理 CONTENT 消息，内容长度:', content?.length, '速度:', scrollSpeed);
         updateTeleprompterContent(content, scrollSpeed);
       } else if (type === 'CONTROL') {
         // CONTROL类型消息：控制播放状态
+        console.log('📝 处理 CONTROL 消息，动作:', action);
         switch (action) {
           case 'PLAY':
             // 使用消息中的速度，如果没有则使用保存的速度
@@ -3472,12 +3494,20 @@
 
     // 更新提词器内容
     function updateTeleprompterContent(content, scrollSpeed) {
+      console.log('🔥 updateTeleprompterContent 被调用');
       const container = document.getElementById('teleprompterContainer');
       const contentDiv = document.getElementById('teleprompterContent');
 
-      if (!container || !contentDiv) return;
+      console.log('🔥 container:', container ? '存在' : '不存在');
+      console.log('🔥 contentDiv:', contentDiv ? '存在' : '不存在');
+
+      if (!container || !contentDiv) {
+        console.error('❌ 提词器容器不存在！');
+        return;
+      }
 
       contentDiv.textContent = content;
+      console.log('🔥 内容已设置:', content?.substring(0, 50) + '...');
 
       // 保存滚动速度，供后续PLAY消息使用
       if (scrollSpeed && scrollSpeed > 0) {
@@ -3486,8 +3516,10 @@
       }
 
       container.classList.add('show');
+      console.log('🔥 已添加 show 类，当前类名:', container.className);
+      console.log('🔥 container display 样式:', window.getComputedStyle(container).display);
 
-      console.log('📝 提词器内容已更新');
+      console.log('📝 ✅ 提词器内容已更新并显示');
     }
 
     // 提词器滚动控制变量
@@ -3507,10 +3539,18 @@
       // 设置滚动速度（像素/秒）
       teleprompterScrollSpeed = scrollSpeed || 50;
 
-      // 获取当前滚动位置
-      teleprompterScrollPosition = contentDiv.scrollTop;
+      // 重置滚动位置到顶部开始
+      teleprompterScrollPosition = 0;
+      contentDiv.scrollTop = 0;
+
+      // 🔥 调试：记录容器尺寸
+      const scrollHeight = contentDiv.scrollHeight;
+      const clientHeight = contentDiv.clientHeight;
+      const maxScroll = scrollHeight - clientHeight;
+      console.log('📏 提词器尺寸: scrollHeight=', scrollHeight, 'clientHeight=', clientHeight, 'maxScroll=', maxScroll);
 
       let lastTimestamp = performance.now();
+      let frameCount = 0;
 
       // 滚动动画函数
       function scroll(timestamp) {
@@ -3523,10 +3563,18 @@
         // 设置滚动位置
         contentDiv.scrollTop = teleprompterScrollPosition;
 
+        // 🔥 每100帧输出一次调试信息
+        frameCount++;
+        if (frameCount % 100 === 0) {
+          const currentMaxScroll = contentDiv.scrollHeight - contentDiv.clientHeight;
+          console.log('📜 滚动位置:', Math.round(teleprompterScrollPosition), '/', currentMaxScroll, 'scrollTop:', contentDiv.scrollTop);
+        }
+
         // 检查是否滚动到底部
-        const maxScroll = contentDiv.scrollHeight - contentDiv.clientHeight;
-        if (teleprompterScrollPosition >= maxScroll) {
+        const currentMaxScroll = contentDiv.scrollHeight - contentDiv.clientHeight;
+        if (currentMaxScroll > 0 && teleprompterScrollPosition >= currentMaxScroll) {
           // 循环滚动：回到顶部
+          console.log('🔄 滚动到底部，回到顶部');
           teleprompterScrollPosition = 0;
           contentDiv.scrollTop = 0;
         }
@@ -3553,23 +3601,31 @@
 
     // 显示提词器
     function showTeleprompter() {
+      console.log('🔥 showTeleprompter 被调用');
       const container = document.getElementById('teleprompterContainer');
-      if (!container) return;
+      if (!container) {
+        console.error('❌ showTeleprompter: 容器不存在！');
+        return;
+      }
 
       container.classList.add('show');
-
-      console.log('👁️ 提词器已显示');
+      console.log('👁️ 提词器已显示，类名:', container.className);
+      console.log('👁️ display:', window.getComputedStyle(container).display);
     }
 
     // 隐藏提词器
     function hideTeleprompter() {
+      console.log('🔥 hideTeleprompter 被调用');
       const container = document.getElementById('teleprompterContainer');
-      if (!container) return;
+      if (!container) {
+        console.error('❌ hideTeleprompter: 容器不存在！');
+        return;
+      }
 
       container.classList.remove('show');
       pauseTeleprompterScroll();
 
-      console.log('❌ 提词器已隐藏');
+      console.log('❌ 提词器已隐藏，类名:', container.className);
     }
 
     // 清理函数 - 统一的清理逻辑

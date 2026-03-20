@@ -2,10 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CustomersController } from '../customers.controller';
 import { CustomersService } from '../customers.service';
 import { WeixinService } from '../../weixin/weixin.service';
+import { WechatCloudService } from '../../weixin/services/wechat-cloud.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { ForbiddenException } from '@nestjs/common';
 import { CustomerFollowUpType } from '../models/customer-follow-up.entity';
+import { UsersService } from '../../users/users.service';
 
 describe('CustomersController - Miniprogram APIs', () => {
   let controller: CustomersController;
@@ -27,6 +29,14 @@ describe('CustomersController - Miniprogram APIs', () => {
   const mockWeixinService = {
     recordCustomerAction: jest.fn(),
     sendStatusChangeNotification: jest.fn(),
+  };
+
+  const mockWechatCloudService = {
+    sendCustomerAssignNotification: jest.fn(),
+  };
+
+  const mockUsersService = {
+    findAll: jest.fn(),
   };
 
   const mockUser = {
@@ -58,6 +68,14 @@ describe('CustomersController - Miniprogram APIs', () => {
         {
           provide: WeixinService,
           useValue: mockWeixinService,
+        },
+        {
+          provide: WechatCloudService,
+          useValue: mockWechatCloudService,
+        },
+        {
+          provide: UsersService,
+          useValue: mockUsersService,
         },
       ],
     })
@@ -144,6 +162,7 @@ describe('CustomersController - Miniprogram APIs', () => {
       name: '李四',
       phone: '13987654321',
       leadSource: '抖音',
+      leadLevel: 'A类',
       contractStatus: '匹配中'
     };
 
@@ -386,6 +405,48 @@ describe('CustomersController - Miniprogram APIs', () => {
     });
   });
 
+  describe('getAssignmentLogsForMiniprogram', () => {
+    it('应该允许普通员工查看自己客户的分配历史', async () => {
+      const mockLogs = [
+        {
+          _id: 'log123',
+          customerId: 'customer123',
+          assignedAt: new Date(),
+        },
+      ];
+
+      mockCustomersService.findOne.mockResolvedValue(mockCustomer);
+      mockCustomersService.getAssignmentLogs.mockResolvedValue(mockLogs);
+
+      const result = await controller.getAssignmentLogsForMiniprogram(
+        'customer123',
+        { user: mockUser },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(mockLogs);
+      expect(mockCustomersService.getAssignmentLogs).toHaveBeenCalledWith('customer123');
+    });
+
+    it('应该拒绝普通员工查看他人客户的分配历史', async () => {
+      const otherUserCustomer = {
+        ...mockCustomer,
+        assignedTo: 'otheruser123',
+      };
+
+      mockCustomersService.findOne.mockResolvedValue(otherUserCustomer);
+
+      const result = await controller.getAssignmentLogsForMiniprogram(
+        'customer123',
+        { user: mockUser },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('FORBIDDEN');
+      expect(mockCustomersService.getAssignmentLogs).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getStatisticsForMiniprogram', () => {
     it('应该为普通员工返回个人统计', async () => {
       const mockPersonalStats = {
@@ -396,6 +457,7 @@ describe('CustomersController - Miniprogram APIs', () => {
       mockCustomersService.findAll.mockResolvedValue(mockPersonalStats);
 
       const result = await controller.getStatisticsForMiniprogram(
+        {},
         { user: mockUser }
       );
 
@@ -428,6 +490,7 @@ describe('CustomersController - Miniprogram APIs', () => {
       mockCustomersService.findAll.mockResolvedValue(mockAllCustomers);
 
       const result = await controller.getStatisticsForMiniprogram(
+        {},
         { user: adminUser }
       );
 

@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ContractsController } from './contracts.controller';
 import { ContractsMiniProgramController } from './contracts-miniprogram.controller';
+import { ContractsQueryService } from './contracts-query.service';
 import { ContractsService } from './contracts.service';
 import { Contract, ContractSchema } from './models/contract.model';
 import { CustomerContractHistory, CustomerContractHistorySchema } from './models/customer-contract-history.model';
@@ -30,7 +31,7 @@ import { DashubaoModule } from '../dashubao/dashubao.module';
     DashubaoModule,
   ],
   controllers: [ContractsController, ContractsMiniProgramController],
-  providers: [ContractsService],
+  providers: [ContractsService, ContractsQueryService],
   exports: [ContractsService],
 })
 export class ContractsModule {}

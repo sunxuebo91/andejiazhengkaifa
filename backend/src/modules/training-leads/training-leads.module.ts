@@ -15,9 +15,12 @@ import { User, UserSchema } from '../users/models/user.entity';
       { name: User.name, schema: UserSchema },
     ]),
     // 为分享令牌签发/验证提供 JwtService
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'andejiazheng-secret-key',
-      signOptions: { algorithm: 'HS256' }
+    JwtModule.registerAsync({
+      useFactory: () => {
+        const secret = process.env.JWT_SECRET;
+        if (!secret) throw new Error('JWT_SECRET environment variable is required');
+        return { secret, signOptions: { algorithm: 'HS256' } };
+      },
     }),
   ],
   controllers: [TrainingLeadsController],

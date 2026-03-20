@@ -11,7 +11,7 @@ export class Customer {
   @Prop({ unique: true, sparse: true })
   phone: string;
 
-  @Prop()
+  @Prop({ unique: true, sparse: true })
   wechatId: string;
 
   @Prop()
@@ -134,6 +134,19 @@ export class Customer {
 
   @Prop()
   lastTransferredAt: Date; // 最后一次被流转的时间
+
+  // 冻结相关字段
+  @Prop({ default: false })
+  isFrozen: boolean; // 是否被冻结（冻结后不参与公海掉落和线索流转）
+
+  @Prop()
+  frozenAt: Date; // 冻结时间
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  frozenBy: Types.ObjectId; // 冻结操作人
+
+  @Prop()
+  frozenReason: string; // 冻结原因
 
   @Prop({ default: Date.now })
   createdAt: Date;

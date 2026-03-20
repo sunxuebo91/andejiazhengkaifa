@@ -100,7 +100,7 @@ export class AuthService {
       // 登录成功，清除尝试记录
       this.loginAttempts.delete(username);
       const { password: _, ...result } = user.toObject();
-      return result;
+      return this.usersService.toUserWithoutPassword(result);
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
@@ -167,26 +167,27 @@ export class AuthService {
       if (!user) {
         throw new UnauthorizedException('手机号未注册，请联系管理员');
       }
+      const currentUser = await this.usersService.toUserWithoutPassword(user.toObject());
 
       // 3. 自动更新用户的 wechatOpenId（确保订阅消息能正常发送）
       const newOpenid = openidResult.openid;
-      if (newOpenid && user.wechatOpenId !== newOpenid) {
-        this.logger.debug(`[小程序登录] 更新用户 ${user.name}(${phone}) 的 wechatOpenId: ${user.wechatOpenId || '无'} → ${newOpenid}`);
-        await this.usersService.updateWeChatInfo(user._id.toString(), {
+      if (newOpenid && currentUser.wechatOpenId !== newOpenid) {
+        this.logger.debug(`[小程序登录] 更新用户 ${currentUser.name}(${phone}) 的 wechatOpenId: ${currentUser.wechatOpenId || '无'} → ${newOpenid}`);
+        await this.usersService.updateWeChatInfo(currentUser._id.toString(), {
           openId: newOpenid,
         });
       }
 
       // 4. 记录登录日志
-      await this.logLoginAttempt(user._id.toString(), ip, userAgent, 'success');
+      await this.logLoginAttempt(currentUser._id.toString(), ip, userAgent, 'success');
 
       // 5. 生成JWT token
       const payload = {
-        username: user.username,
-        sub: user._id,
+        username: currentUser.username,
+        sub: currentUser._id,
         openid: newOpenid,
-        role: user.role,
-        permissions: user.permissions || []
+        role: currentUser.role,
+        permissions: currentUser.permissions || []
       };
       const token = this.jwtService.sign(payload);
 
@@ -195,15 +196,15 @@ export class AuthService {
         data: {
           access_token: token,
           user: {
-            id: user._id,
-            username: user.username,
-            name: user.name,
-            phone: user.phone,
-            email: user.email,
-            avatar: user.avatar || null,
-            role: user.role,
-            department: user.department || null,
-            permissions: user.permissions
+            id: currentUser._id,
+            username: currentUser.username,
+            name: currentUser.name,
+            phone: currentUser.phone,
+            email: currentUser.email,
+            avatar: currentUser.avatar || null,
+            role: currentUser.role,
+            department: currentUser.department || null,
+            permissions: currentUser.permissions
           },
           openid: newOpenid
         },

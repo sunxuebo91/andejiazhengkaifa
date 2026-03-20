@@ -50,6 +50,41 @@ const CustomerDetail: React.FC = () => {
   // 分配弹窗
   const [assignModal, setAssignModal] = useState<{ visible: boolean; customerId: string | null }>({ visible: false, customerId: null });
 
+  // 冻结操作状态
+  const [freezeLoading, setFreezeLoading] = useState(false);
+
+  const isAdmin = user?.role === 'admin';
+
+  const handleFreeze = async () => {
+    if (!customer) return;
+    const reason = window.prompt('请输入冻结原因（可选）：');
+    if (reason === null) return; // 用户取消
+    try {
+      setFreezeLoading(true);
+      await customerService.freezeCustomer(customer._id, reason || undefined);
+      await fetchCustomerDetail();
+      message.success('线索已冻结');
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '冻结失败');
+    } finally {
+      setFreezeLoading(false);
+    }
+  };
+
+  const handleUnfreeze = async () => {
+    if (!customer) return;
+    try {
+      setFreezeLoading(true);
+      await customerService.unfreezeCustomer(customer._id);
+      await fetchCustomerDetail();
+      message.success('线索已解冻');
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '解冻失败');
+    } finally {
+      setFreezeLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchCustomerDetail();
   }, [id]);
@@ -150,8 +185,6 @@ const CustomerDetail: React.FC = () => {
         console.log('📊 总服务人员数:', response.data?.totalWorkers);
         console.log('📊 合同记录数:', response.data?.contracts?.length);
 
-        // 🆕 智能状态同步：检查是否有已签约合同，自动更新客户状态
-        await checkAndUpdateCustomerStatus(response.data);
       } else {
         console.log('📝 API返回失败或无数据:', response);
         setCustomerHistory(null);
@@ -164,78 +197,6 @@ const CustomerDetail: React.FC = () => {
     } finally {
       setHistoryLoading(false);
       console.log('🏁 合同历史获取流程结束');
-    }
-  };
-
-  // 🆕 智能状态同步：检查合同状态并自动更新客户状态
-  const checkAndUpdateCustomerStatus = async (contractHistory: any) => {
-    if (!customer || !contractHistory?.contracts) {
-      return;
-    }
-
-    // 检查是否有已签约的合同（爱签状态为 '2'）
-    const hasSignedContract = contractHistory.contracts.some((contract: any) =>
-      contract.esignStatus === '2'
-    );
-
-    console.log('🔍 状态同步检查:', {
-      检查结果: hasSignedContract ? '发现已签约合同' : '未发现已签约合同',
-      当前客户状态: customer.contractStatus,
-      合同详情: contractHistory.contracts.map((c: any) => ({
-        contractNumber: c.contractNumber,
-        esignStatus: c.esignStatus,
-        workerName: c.workerName
-      }))
-    });
-
-    // 只有当有已签约合同，且客户当前状态不是"已签约"时，才自动更新
-    if (hasSignedContract && customer.contractStatus !== '已签约') {
-      console.log('🔄 检测到已签约合同，自动同步客户状态为"已签约"...');
-
-      try {
-        // 使用客户服务API更新状态
-        const updatedCustomer = await customerService.updateCustomer(customer._id, {
-          contractStatus: '已签约'
-        } as any);
-
-        if (updatedCustomer && updatedCustomer._id) {
-          console.log('✅ 客户状态已自动同步为"已签约"');
-
-          // 更新本地客户数据
-          setCustomer(prev => prev ? { ...prev, contractStatus: '已签约' } : prev);
-
-          // 显示成功提示
-          message.success('检测到已签约合同，客户状态已自动更新为"已签约"');
-        } else {
-          console.error('❌ 自动更新客户状态失败: 返回数据无效');
-          message.warning('检测到已签约合同，但自动更新客户状态失败，请手动更新');
-        }
-      } catch (error) {
-        console.error('❌ 自动同步客户状态时出错:', error);
-        message.error('自动同步客户状态时发生错误');
-      }
-    } else if (!hasSignedContract) {
-      console.log('ℹ️ 没有检测到已签约合同，客户状态保持不变');
-    } else {
-      console.log('ℹ️ 客户状态已经是"已签约"，无需更新');
-    }
-
-    // 🆕 同步线索等级为O类（当合同签约时）
-    if (hasSignedContract && customer.leadLevel !== 'O类') {
-      console.log('🔄 检测到已签约合同，自动同步线索等级为O类...');
-
-      try {
-        await customerService.syncLeadLevelToO(customer._id);
-        console.log('✅ 线索等级已自动同步为O类');
-
-        // 更新本地客户数据
-        setCustomer(prev => prev ? { ...prev, leadLevel: 'O类' } : prev);
-
-        message.success('线索等级已自动更新为O类');
-      } catch (error) {
-        console.error('❌ 自动同步线索等级时出错:', error);
-        // 不显示错误消息，避免干扰用户
-      }
     }
   };
 
@@ -371,6 +332,9 @@ const CustomerDetail: React.FC = () => {
               返回
             </Button>
             <span>客户详情 - {customer.name}</span>
+            {customer.isFrozen && (
+              <Tag color="blue" style={{ marginLeft: 8 }}>已冻结</Tag>
+            )}
           </Space>
         }
         extra={
@@ -380,6 +344,24 @@ const CustomerDetail: React.FC = () => {
                 分配负责人
               </Button>
             </Authorized>
+            {isAdmin && (
+              customer.isFrozen ? (
+                <Button
+                  danger
+                  loading={freezeLoading}
+                  onClick={handleUnfreeze}
+                >
+                  解冻
+                </Button>
+              ) : (
+                <Button
+                  loading={freezeLoading}
+                  onClick={handleFreeze}
+                >
+                  冻结
+                </Button>
+              )
+            )}
             <Button
               type="primary"
               icon={<EditOutlined />}
@@ -448,8 +430,7 @@ const CustomerDetail: React.FC = () => {
                   </Tag>
                 </Descriptions.Item>
 
-                {/* O类线索不显示线索状态 */}
-                {customer.leadLevel !== 'O类' && (() => {
+                {customer.followUpStatus && (() => {
                   const transferCount = customer.transferCount || 0;
                   const isTransferring = transferCount > 0 && customer.lastTransferredAt;
                   return (

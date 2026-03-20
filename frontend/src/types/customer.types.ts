@@ -46,6 +46,10 @@ export interface Customer {
   // 线索流转相关字段
   transferCount?: number;
   lastTransferredAt?: string;
+  // 冻结相关字段
+  isFrozen?: boolean;
+  frozenAt?: string;
+  frozenReason?: string;
   createdAt: string;
   updatedAt: string;
   // 跟进状态

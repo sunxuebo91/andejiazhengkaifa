@@ -47,6 +47,19 @@ const permissionsData: Permission[] = [
   { key: 'contract:delete', label: '删除合同', description: '允许删除合同' },
   { key: 'contract:all', label: '合同管理(全部)', description: '合同管理全部权限，包含查看、创建、编辑、删除' },
 
+  // 保险管理权限
+  { key: 'insurance:view', label: '查看保险', description: '允许查看保单列表和详情' },
+  { key: 'insurance:create', label: '创建保险', description: '允许创建新保单' },
+  { key: 'insurance:edit', label: '编辑保险', description: '允许变更、退保、注销等保单操作' },
+  { key: 'insurance:delete', label: '删除保险', description: '允许删除保单记录' },
+  { key: 'insurance:all', label: '保险管理(全部)', description: '保险管理全部权限，包含查看、创建、编辑、删除' },
+
+  // 背调管理权限
+  { key: 'background-check:view', label: '查看背调', description: '允许查看背调列表和详情' },
+  { key: 'background-check:create', label: '创建背调', description: '允许发起新的背调' },
+  { key: 'background-check:edit', label: '编辑背调', description: '允许同步、取消、处理背调记录' },
+  { key: 'background-check:all', label: '背调管理(全部)', description: '背调管理全部权限，包含查看、创建、编辑' },
+
   // 用户管理权限
   { key: 'user:view', label: '查看用户', description: '允许查看用户列表' },
   { key: 'user:create', label: '创建用户', description: '允许创建新用户' },
@@ -77,6 +90,14 @@ const permissionGroups = [
   {
     title: '用户管理',
     permissions: permissionsData.filter(p => p.key.startsWith('user:'))
+  },
+  {
+    title: '保险管理',
+    permissions: permissionsData.filter(p => p.key.startsWith('insurance:'))
+  },
+  {
+    title: '背调管理',
+    permissions: permissionsData.filter(p => p.key.startsWith('background-check:'))
   },
   {
     title: '系统管理',

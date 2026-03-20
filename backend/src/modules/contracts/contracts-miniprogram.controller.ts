@@ -19,13 +19,12 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 import { ESignService } from '../esign/esign.service';
 import { ContractStatus } from './models/contract.model';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 
 @ApiTags('小程序-合同管理')
 @Controller('contracts/miniprogram')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ContractsMiniProgramController {
   private readonly logger = new Logger(ContractsMiniProgramController.name);
 
@@ -50,6 +49,7 @@ export class ContractsMiniProgramController {
    * 获取合同列表（分页）
    */
   @Get('list')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】获取合同列表' })
   @ApiQuery({ name: 'page', required: false, description: '页码，默认1' })
   @ApiQuery({ name: 'limit', required: false, description: '每页数量，默认10' })
@@ -161,6 +161,7 @@ export class ContractsMiniProgramController {
    * 根据合同ID获取详情
    */
   @Get('detail/:id')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】根据ID获取合同详情' })
   @ApiParam({ name: 'id', description: '合同ID' })
   async getContractDetail(@Param('id') id: string) {
@@ -219,6 +220,7 @@ export class ContractsMiniProgramController {
    * 根据合同编号获取合同
    */
   @Get('by-number/:contractNumber')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】根据合同编号获取合同' })
   @ApiParam({ name: 'contractNumber', description: '合同编号' })
   async getByContractNumber(@Param('contractNumber') contractNumber: string) {
@@ -241,6 +243,7 @@ export class ContractsMiniProgramController {
    * 根据客户ID获取合同列表
    */
   @Get('by-customer/:customerId')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】根据客户ID获取合同列表' })
   @ApiParam({ name: 'customerId', description: '客户ID' })
   async getByCustomerId(@Param('customerId') customerId: string) {
@@ -256,6 +259,7 @@ export class ContractsMiniProgramController {
    * 根据服务人员ID获取合同列表
    */
   @Get('by-worker-id/:workerId')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】根据服务人员ID获取合同列表' })
   @ApiParam({ name: 'workerId', description: '服务人员ID（简历ID）' })
   async getByWorkerId(@Param('workerId') workerId: string) {
@@ -271,6 +275,7 @@ export class ContractsMiniProgramController {
    * 根据服务人员信息搜索合同（姓名/身份证/手机号）
    */
   @Get('search-worker')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】根据服务人员信息搜索合同' })
   @ApiQuery({ name: 'name', required: false, description: '服务人员姓名' })
   @ApiQuery({ name: 'idCard', required: false, description: '服务人员身份证号' })
@@ -296,6 +301,7 @@ export class ContractsMiniProgramController {
    * 检查客户现有合同
    */
   @Get('check-customer/:customerPhone')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】检查客户现有合同' })
   @ApiParam({ name: 'customerPhone', description: '客户手机号' })
   async checkCustomerContract(@Param('customerPhone') customerPhone: string) {
@@ -315,6 +321,7 @@ export class ContractsMiniProgramController {
    * 获取客户合同历史
    */
   @Get('history/:customerPhone')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】获取客户合同历史' })
   @ApiParam({ name: 'customerPhone', description: '客户手机号' })
   async getCustomerHistory(@Param('customerPhone') customerPhone: string) {
@@ -334,6 +341,7 @@ export class ContractsMiniProgramController {
    * 获取合同统计信息
    */
   @Get('statistics')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】获取合同统计信息' })
   async getStatistics() {
     try {
@@ -350,6 +358,7 @@ export class ContractsMiniProgramController {
    * 验证合同数据（提交前验证）
    */
   @Post('validate')
+  @Permissions('contract:create')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】验证合同数据' })
   async validateContract(@Body() createContractDto: CreateContractDto) {
@@ -393,6 +402,7 @@ export class ContractsMiniProgramController {
    * 这些字段会被保存到 templateParams 中，用于后续发起爱签签署
    */
   @Post('create')
+  @Permissions('contract:create')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】创建合同' })
   async createContract(@Body() body: any, @Request() req?) {
@@ -484,6 +494,7 @@ export class ContractsMiniProgramController {
    * 发起签署（手动触发爱签流程）
    */
   @Post('initiate-signing/:id')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】发起签署' })
   @ApiParam({ name: 'id', description: '合同ID' })
@@ -678,6 +689,7 @@ export class ContractsMiniProgramController {
    * 更新合同
    */
   @Put('update/:id')
+  @Permissions('contract:edit')
   @ApiOperation({ summary: '【小程序】更新合同' })
   @ApiParam({ name: 'id', description: '合同ID' })
   async updateContract(
@@ -698,6 +710,7 @@ export class ContractsMiniProgramController {
    * 这些字段会被保存到 templateParams 中，用于后续发起爱签签署
    */
   @Post('change-worker/:originalContractId')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】创建换人合同' })
   @ApiParam({ name: 'originalContractId', description: '原合同ID' })
@@ -725,6 +738,7 @@ export class ContractsMiniProgramController {
    * 手动触发保险同步
    */
   @Post('sync-insurance/:id')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】手动触发保险同步' })
   @ApiParam({ name: 'id', description: '合同ID' })
@@ -741,6 +755,7 @@ export class ContractsMiniProgramController {
    * 同步爱签合同状态到本地
    */
   @Post('sync-esign-status/:id')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】同步爱签合同状态' })
   @ApiParam({ name: 'id', description: '合同ID' })
@@ -783,12 +798,7 @@ export class ContractsMiniProgramController {
         updateData.contractStatus = ContractStatus.CANCELLED;
       }
 
-      // 直接更新数据库，不通过 update 方法（避免 userId 验证问题）
-      await this.contractsService['contractModel'].findByIdAndUpdate(
-        contractId,
-        updateData,
-        { new: true }
-      ).exec();
+      await this.contractsService.updateContractStatusDirectly(contractId, updateData);
 
       // 如果状态变为 active，手动触发保险同步
       if (updateData.contractStatus === ContractStatus.ACTIVE) {
@@ -815,18 +825,13 @@ export class ContractsMiniProgramController {
    * 批量同步所有合同的爱签状态
    */
   @Post('sync-all-esign-status')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】批量同步所有合同的爱签状态' })
   async syncAllEsignStatus() {
     try {
       // 查询所有有爱签合同编号的合同
-      const contracts = await this.contractsService['contractModel']
-        .find({
-          esignContractNo: { $exists: true, $ne: null },
-          contractStatus: { $in: ['draft', 'signing'] } // 只同步草稿和签约中的合同
-        })
-        .limit(50) // 限制一次最多同步50个
-        .exec();
+      const contracts = await this.contractsService.findContractsPendingEsignSync(50);
 
       const results = {
         total: contracts.length,
@@ -868,11 +873,10 @@ export class ContractsMiniProgramController {
                 updateData.esignSignedAt = new Date();
               }
 
-              await this.contractsService['contractModel'].findByIdAndUpdate(
-                contract._id,
+              await this.contractsService.updateContractStatusDirectly(
+                contract._id.toString(),
                 updateData,
-                { new: true }
-              ).exec();
+              );
 
               // 如果状态变为 active，触发保险同步
               if (newContractStatus === ContractStatus.ACTIVE) {
@@ -957,6 +961,7 @@ export class ContractsMiniProgramController {
    * 获取合同爱签信息（含签署方详情）
    */
   @Get('esign-info/:id')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】获取合同爱签信息' })
   @ApiParam({ name: 'id', description: '合同ID' })
   async getEsignInfo(@Param('id') contractId: string) {
@@ -1008,6 +1013,7 @@ export class ContractsMiniProgramController {
    * 返回每个签署方的签署状态、角色、签署时间等信息
    */
   @Get('signers-status/:id')
+  @Permissions('contract:view')
   @ApiOperation({ summary: '【小程序】获取合同签署方详细状态' })
   @ApiParam({ name: 'id', description: '合同ID' })
   async getSignersStatus(@Param('id') contractId: string) {
@@ -1071,6 +1077,7 @@ export class ContractsMiniProgramController {
    * 重新获取签署链接
    */
   @Post('resend-sign-urls/:id')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】重新获取签署链接' })
   @ApiParam({ name: 'id', description: '合同ID' })
@@ -1098,6 +1105,7 @@ export class ContractsMiniProgramController {
    * 下载已签署的合同文件
    */
   @Post('download-contract/:id')
+  @Permissions('contract:view')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】下载已签署合同' })
   @ApiParam({ name: 'id', description: '合同ID' })
@@ -1129,6 +1137,7 @@ export class ContractsMiniProgramController {
    * 撤销合同（针对未签署完成的合同）
    */
   @Post('withdraw/:id')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】撤销合同' })
   @ApiParam({ name: 'id', description: '合同ID' })
@@ -1158,14 +1167,10 @@ export class ContractsMiniProgramController {
 
       // 3. 更新本地合同状态
       if (result.success) {
-        await this.contractsService['contractModel'].findByIdAndUpdate(
-          contractId,
-          {
-            esignStatus: '7', // 已撤销
-            contractStatus: ContractStatus.CANCELLED,
-          },
-          { new: true },
-        ).exec();
+        await this.contractsService.updateContractStatusDirectly(contractId, {
+          esignStatus: '7',
+          contractStatus: ContractStatus.CANCELLED,
+        });
 
         this.logger.log(`✅ 合同撤销成功: ${contract.contractNumber}`);
       }
@@ -1181,6 +1186,7 @@ export class ContractsMiniProgramController {
    * 作废合同（针对已签署完成的合同）
    */
   @Post('invalidate/:id')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】作废合同' })
   @ApiParam({ name: 'id', description: '合同ID' })
@@ -1211,14 +1217,10 @@ export class ContractsMiniProgramController {
 
       // 3. 更新本地合同状态
       if (result.success) {
-        await this.contractsService['contractModel'].findByIdAndUpdate(
-          contractId,
-          {
-            esignStatus: '6', // 已作废
-            contractStatus: ContractStatus.CANCELLED,
-          },
-          { new: true },
-        ).exec();
+        await this.contractsService.updateContractStatusDirectly(contractId, {
+          esignStatus: '6',
+          contractStatus: ContractStatus.CANCELLED,
+        });
 
         this.logger.log(`✅ 合同作废成功: ${contract.contractNumber}`);
       }
@@ -1234,6 +1236,7 @@ export class ContractsMiniProgramController {
    * 智能撤销/作废合同（自动根据合同状态选择操作）
    */
   @Post('cancel/:id')
+  @Permissions('contract:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】智能撤销/作废合同' })
   @ApiParam({ name: 'id', description: '合同ID' })
@@ -1264,14 +1267,10 @@ export class ContractsMiniProgramController {
       // 3. 更新本地合同状态
       if (result.success) {
         const esignStatus = result.action === 'withdraw' ? '7' : '6';
-        await this.contractsService['contractModel'].findByIdAndUpdate(
-          contractId,
-          {
-            esignStatus: esignStatus,
-            contractStatus: ContractStatus.CANCELLED,
-          },
-          { new: true },
-        ).exec();
+        await this.contractsService.updateContractStatusDirectly(contractId, {
+          esignStatus,
+          contractStatus: ContractStatus.CANCELLED,
+        });
 
         this.logger.log(`✅ 合同${result.action === 'withdraw' ? '撤销' : '作废'}成功: ${contract.contractNumber}`);
       }

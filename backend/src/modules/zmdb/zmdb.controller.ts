@@ -55,19 +55,21 @@ export class ZmdbController {
     @Query('name') name?: string,
     @Query('mobile') mobile?: string,
     @Query('idNo') idNo?: string,
+    @Request() req?,
   ) {
     const result = await this.zmdbService.findAll(
       parseInt(page),
       parseInt(limit),
-      { keyword, name, mobile, idNo }
+      { keyword, name, mobile, idNo },
+      req.user,
     );
     return { success: true, ...result };
   }
 
   /** 根据身份证号查询背调记录 */
   @Get('reports/by-idno/:idNo')
-  async findByIdNo(@Param('idNo') idNo: string) {
-    const record = await this.zmdbService.findByIdNo(idNo);
+  async findByIdNo(@Param('idNo') idNo: string, @Request() req) {
+    const record = await this.zmdbService.findByIdNo(idNo, req.user);
     return {
       success: true,
       data: record,
@@ -84,22 +86,22 @@ export class ZmdbController {
 
   /** 根据记录 ID 查询单条背调（含 reportResult） */
   @Get('reports/:id/detail')
-  async findOne(@Param('id') id: string) {
-    const record = await this.zmdbService.findOne(id);
+  async findOne(@Param('id') id: string, @Request() req) {
+    const record = await this.zmdbService.findOne(id, req.user);
     return { success: true, data: record };
   }
 
   /** 取消背调 */
   @Delete('reports/:id/cancel')
-  async cancelReport(@Param('id') id: string) {
-    await this.zmdbService.cancelReport(id);
+  async cancelReport(@Param('id') id: string, @Request() req) {
+    await this.zmdbService.cancelReport(id, req.user);
     return { success: true };
   }
 
   /** 下载报告 PDF */
   @Get('reports/:reportId/download')
-  async downloadReport(@Param('reportId') reportId: string, @Res() res: Response) {
-    const buffer = await this.zmdbService.downloadReport(reportId);
+  async downloadReport(@Param('reportId') reportId: string, @Request() req, @Res() res: Response) {
+    const buffer = await this.zmdbService.downloadReport(reportId, req.user);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="report_${reportId}.pdf"`);
     res.send(buffer);

@@ -76,14 +76,6 @@ export class AuthController {
     }
   }
 
-  @Public()
-  @Post('clear-login-limit/:username')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '清除用户登录限制（临时接口）' })
-  async clearLoginLimit(@Param('username') username: string) {
-    return this.authService.clearLoginAttempts(username);
-  }
-
   @Post('avatar')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('avatar', avatarMulterConfig))

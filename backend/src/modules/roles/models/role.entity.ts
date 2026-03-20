@@ -4,6 +4,10 @@ import { ApiProperty } from '@nestjs/swagger';
 
 @Schema({ timestamps: true })
 export class Role extends Document {
+  @ApiProperty({ description: '角色编码', example: 'manager' })
+  @Prop({ required: true, unique: true })
+  code: string;
+
   @ApiProperty({ description: '角色名称' })
   @Prop({ required: true, unique: true })
   name: string;

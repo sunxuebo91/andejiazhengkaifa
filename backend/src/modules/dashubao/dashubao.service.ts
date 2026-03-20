@@ -53,6 +53,7 @@ interface DashubaoResponse {
 export class DashubaoService {
   private readonly logger = new Logger(DashubaoService.name);
   private config: DashubaoConfig;
+  private readonly duplicateInsuranceBlockDays = 30;
 
   constructor(
     private configService: ConfigService,
@@ -195,6 +196,8 @@ export class DashubaoService {
 
     this.logger.log(`创建保单，流水号: ${agencyPolicyRef}`);
 
+    await this.validateNoActiveDuplicateInsurance(dto);
+
     // 构建被保险人XML
     const insuredListXml = dto.insuredList.map((insured, index) => `
     <Insured>
@@ -328,6 +331,90 @@ export class DashubaoService {
     }
 
     return policy;
+  }
+
+  private async validateNoActiveDuplicateInsurance(dto: CreatePolicyDto): Promise<void> {
+    const insuredList = dto.insuredList || [];
+    const idNumbers = [...new Set(
+      insuredList
+        .map(insured => insured?.idNumber?.trim())
+        .filter((idNumber): idNumber is string => Boolean(idNumber))
+    )];
+
+    if (idNumbers.length === 0) {
+      return;
+    }
+
+    const existingPolicies = await this.policyModel
+      .find({
+        status: PolicyStatus.ACTIVE,
+        'insuredList.idNumber': { $in: idNumbers },
+      })
+      .select('policyNo agencyPolicyRef expireDate insuredList')
+      .lean()
+      .exec();
+
+    const now = new Date();
+
+    for (const insured of insuredList) {
+      const insuredIdNumber = insured?.idNumber?.trim();
+      if (!insuredIdNumber) {
+        continue;
+      }
+
+      const blockingPolicy = existingPolicies.find((policy: any) => {
+        const matchedInsured = policy.insuredList?.some((item: any) => item?.idNumber === insuredIdNumber);
+        if (!matchedInsured) {
+          return false;
+        }
+
+        const expireAt = this.parseDashubaoDate(policy.expireDate);
+        if (!expireAt || expireAt <= now) {
+          return false;
+        }
+
+        const remainingDays = (expireAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+        return remainingDays >= this.duplicateInsuranceBlockDays;
+      });
+
+      if (!blockingPolicy) {
+        continue;
+      }
+
+      throw new BadRequestException(
+        `劳动者${insured.insuredName || ''}已存在生效中的保险，且剩余有效期不少于${this.duplicateInsuranceBlockDays}天（到期时间：${this.formatDashubaoDate(blockingPolicy.expireDate)}），暂不允许重复购买`
+      );
+    }
+  }
+
+  private parseDashubaoDate(dateStr?: string): Date | null {
+    if (!dateStr) {
+      return null;
+    }
+
+    if (/^\d{14}$/.test(dateStr)) {
+      const normalized = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}T${dateStr.slice(8, 10)}:${dateStr.slice(10, 12)}:${dateStr.slice(12, 14)}`;
+      const parsed = new Date(normalized);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    const parsed = new Date(dateStr);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private formatDashubaoDate(dateStr?: string): string {
+    const parsed = this.parseDashubaoDate(dateStr);
+    if (!parsed) {
+      return dateStr || '-';
+    }
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    const hour = String(parsed.getHours()).padStart(2, '0');
+    const minute = String(parsed.getMinutes()).padStart(2, '0');
+
+    return `${year}-${month}-${day} ${hour}:${minute}`;
   }
 
   /**
@@ -953,6 +1040,30 @@ export class DashubaoService {
 
     this.logger.log(`📥 查询结果: 找到 ${policies.length} 个保单`);
     return policies;
+  }
+
+  async getActivePoliciesByIdCard(idCard: string): Promise<InsurancePolicyDocument[]> {
+    return this.policyModel.find({
+      'insuredList.idNumber': idCard,
+      status: 'active',
+    }).exec();
+  }
+
+  async getActivePoliciesByContractId(contractId: string | Types.ObjectId | unknown): Promise<InsurancePolicyDocument[]> {
+    return this.policyModel.find({
+      contractId,
+      status: 'active',
+    }).exec();
+  }
+
+  async bindPolicyToContract(
+    policyId: string | Types.ObjectId | unknown,
+    contractId: string | Types.ObjectId | unknown,
+  ): Promise<void> {
+    await this.policyModel.findByIdAndUpdate(policyId, {
+      contractId,
+      bindToContractAt: new Date(),
+    }).exec();
   }
 
   /**

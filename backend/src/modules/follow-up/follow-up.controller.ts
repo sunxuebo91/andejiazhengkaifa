@@ -23,17 +23,6 @@ export class FollowUpController {
     };
   }
 
-  @Get('test-populate')
-  @ApiOperation({ summary: '测试populate功能' })
-  async testPopulate() {
-    const followUp = await this.followUpService.testPopulate();
-    return {
-      success: true,
-      data: followUp,
-      message: '测试成功'
-    };
-  }
-
   @Get('resume/:resumeId')
   @ApiOperation({ summary: '获取简历的跟进记录' })
   @ApiResponse({ status: 200, description: '获取成功' })

@@ -6,7 +6,7 @@ import { DashboardStatsDto, CustomerBusinessMetrics } from './dto/dashboard-stat
 
 @ApiTags('驾驶舱')
 @Controller('dashboard')
-// @UseGuards(JwtAuthGuard) // 暂时禁用认证进行测试
+@UseGuards(JwtAuthGuard)
 export class DashboardController {
   private readonly logger = new Logger(DashboardController.name);
 
@@ -79,7 +79,7 @@ export class DashboardController {
   async getFinancialMetrics() {
     try {
       this.logger.log('收到获取财务营收指标请求');
-      const metrics = await this.dashboardService['getFinancialMetrics']();
+      const metrics = await this.dashboardService.getFinancialMetrics();
       
       return {
         success: true,
@@ -105,7 +105,7 @@ export class DashboardController {
   async getEfficiencyMetrics() {
     try {
       this.logger.log('收到获取运营效率指标请求');
-      const metrics = await this.dashboardService['getEfficiencyMetrics']();
+      const metrics = await this.dashboardService.getEfficiencyMetrics();
       
       return {
         success: true,

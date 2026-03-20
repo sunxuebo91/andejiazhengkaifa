@@ -46,8 +46,8 @@ export class DashubaoController {
   }
 
   private canDeletePolicy(user: any): boolean {
-    const isSpecialUser = user?.name === '孙学博' || user?.username === '孙学博';
-    return this.isAdmin(user) && isSpecialUser;
+    const approverUsername = process.env.POLICY_DELETE_APPROVER || 'sunxuebo';
+    return this.isAdmin(user) && user?.username === approverUsername;
   }
 
   @Post('policy')

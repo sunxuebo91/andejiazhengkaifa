@@ -8,6 +8,54 @@ import {
   fetchCurrentUser
 } from '../services/auth';
 
+const ROLE_ALIAS_MAP: Record<string, string> = {
+  admin: 'admin',
+  administrator: 'admin',
+  系统管理员: 'admin',
+  管理员: 'admin',
+  超级管理员: 'admin',
+  manager: 'manager',
+  经理: 'manager',
+  主管: 'manager',
+  employee: 'employee',
+  staff: 'employee',
+  普通员工: 'employee',
+  员工: 'employee',
+  销售: 'employee',
+};
+
+const normalizeRole = (role?: string): string => {
+  if (!role) {
+    return '';
+  }
+
+  const trimmedRole = role.trim();
+  return ROLE_ALIAS_MAP[trimmedRole] || ROLE_ALIAS_MAP[trimmedRole.toLowerCase()] || trimmedRole;
+};
+
+const normalizePermissions = (permissionList?: string[]): string[] => {
+  if (!Array.isArray(permissionList)) {
+    return [];
+  }
+
+  return [...new Set(permissionList)];
+};
+
+const formatUser = (userData: Partial<User>): User => ({
+  id: userData.id || userData._id?.toString() || '',
+  username: userData.username || '',
+  name: userData.name || '',
+  phone: userData.phone,
+  email: userData.email,
+  avatar: userData.avatar,
+  role: normalizeRole(userData.role || ''),
+  department: userData.department,
+  permissions: normalizePermissions(userData.permissions),
+  wechatOpenId: userData.wechatOpenId,
+  wechatNickname: userData.wechatNickname,
+  wechatAvatar: userData.wechatAvatar,
+});
+
 interface User {
   id: string;
   _id?: string; // MongoDB ObjectId
@@ -61,24 +109,13 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       if (isLoggedIn()) {
         const currentUser = getCurrentUser();
         if (currentUser) {
-          // 确保用户ID是字符串格式，处理MongoDB的ObjectId
-          const formattedUser: User = {
-            id: currentUser.id || currentUser._id?.toString() || '',
-            username: currentUser.username || '',
-            name: currentUser.name || '',
-            phone: currentUser.phone,
-            email: currentUser.email,
-            avatar: currentUser.avatar,
-            role: currentUser.role || '',
-            department: currentUser.department,
-            permissions: currentUser.permissions || []
-          };
+          const formattedUser = formatUser(currentUser);
           
           setUser(formattedUser);
           
           // 获取用户权限
           const userPermissions = await getUserPermissions();
-          setPermissions(userPermissions);
+          setPermissions(normalizePermissions(userPermissions));
         }
       }
       setLoading(false);
@@ -93,29 +130,21 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     
     // 如果有通配符权限，表示拥有所有权限
     if (permissions.includes('*')) return true;
-    
-    return permissions.includes(permission);
+
+    if (permissions.includes(permission)) return true;
+
+    const [resource] = permission.split(':');
+    return permissions.includes(`${resource}:all`);
   };
 
   // 检查是否有特定角色
   const hasRole = (role: string): boolean => {
-    return user?.role === role;
+    return normalizeRole(user?.role) === normalizeRole(role);
   };
 
   // 设置用户登录
   const login = (userData: any) => {
-    // 确保用户ID是字符串格式，处理MongoDB的ObjectId
-    const formattedUser: User = {
-      id: userData.id || userData._id?.toString() || '',
-      username: userData.username || '',
-      name: userData.name || '',
-      phone: userData.phone,
-      email: userData.email,
-      avatar: userData.avatar,
-      role: userData.role || '',
-      department: userData.department,
-      permissions: userData.permissions || []
-    };
+    const formattedUser = formatUser(userData);
     
     console.log('用户登录成功，设置状态:', formattedUser);
     setUser(formattedUser);
@@ -145,7 +174,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   // 更新用户信息
   const updateUser = (userData: Partial<User>) => {
     if (user) {
-      const updatedUser = { ...user, ...userData };
+      const updatedUser = formatUser({ ...user, ...userData });
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
     }
@@ -159,18 +188,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       }
 
       const updatedUser = await fetchCurrentUser();
-      // 确保用户ID是字符串格式，处理MongoDB的ObjectId
-      const formattedUser: User = {
-        id: updatedUser.id || updatedUser._id?.toString() || '',
-        username: updatedUser.username || '',
-        name: updatedUser.name || '',
-        phone: updatedUser.phone,
-        email: updatedUser.email,
-        avatar: updatedUser.avatar,
-        role: updatedUser.role || '',
-        department: updatedUser.department,
-        permissions: updatedUser.permissions || []
-      };
+      const formattedUser = formatUser(updatedUser);
       
       setUser(formattedUser);
 

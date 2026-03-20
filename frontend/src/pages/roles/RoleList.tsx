@@ -38,6 +38,17 @@ const permissionMap: Record<string, { text: string; color: string }> = {
   'contract:create': { text: '创建合同', color: 'green' },
   'contract:edit': { text: '编辑合同', color: 'cyan' },
   'contract:delete': { text: '删除合同', color: 'red' },
+  // 保险管理
+  'insurance:all': { text: '保险管理(全部)', color: 'volcano' },
+  'insurance:view': { text: '查看保险', color: 'blue' },
+  'insurance:create': { text: '创建保险', color: 'green' },
+  'insurance:edit': { text: '编辑保险', color: 'cyan' },
+  'insurance:delete': { text: '删除保险', color: 'red' },
+  // 背调管理
+  'background-check:all': { text: '背调管理(全部)', color: 'geekblue' },
+  'background-check:view': { text: '查看背调', color: 'blue' },
+  'background-check:create': { text: '创建背调', color: 'green' },
+  'background-check:edit': { text: '编辑背调', color: 'cyan' },
   // 用户管理
   'user:all': { text: '用户管理(全部)', color: 'green' },
   'user:view': { text: '查看用户', color: 'blue' },

@@ -9,6 +9,8 @@ import { UploadService } from '../upload/upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { UseGuards, Request } from '@nestjs/common';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { diskStorage } from 'multer';
@@ -26,7 +28,7 @@ const multerConfig: MulterOptions = {
 
 @ApiTags('简历管理')
 @Controller('resumes')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ResumeController {
   private readonly logger = new Logger(ResumeController.name);
 
@@ -660,33 +662,6 @@ export class ResumeController {
     }
   }
 
-  @Get('test-search-workers')
-  @Public()
-  @ApiOperation({ summary: '测试搜索服务人员（无认证）' })
-  @ApiResponse({ status: 200, description: '测试成功' })
-  async testSearchWorkers(
-    @Query('phone') phone?: string,
-    @Query('name') name?: string,
-    @Query('limit') limitStr: string = '10',
-  ) {
-    try {
-      const limit = parseInt(limitStr);
-      const workers = await this.resumeService.searchWorkers(phone, name, limit);
-      return {
-        success: true,
-        data: workers,
-        message: '测试搜索服务人员成功'
-      };
-    } catch (error) {
-      this.logger.error(`测试搜索服务人员失败: ${error.message}`, error.stack);
-      return {
-        success: false,
-        data: null,
-        message: error.message || '测试搜索服务人员失败'
-      };
-    }
-  }
-
   // ==================== 公开接口（不脱敏，供小程序使用） ====================
 
   @Get('public/list')
@@ -876,8 +851,7 @@ export class ResumeController {
   }
 
   @Post('miniprogram/create')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('resume:create')
   @ApiOperation({ summary: '小程序创建简历（支持幂等性和去重）' })
   @ApiBody({ type: CreateResumeV2Dto })
   async createForMiniprogram(
@@ -955,8 +929,7 @@ export class ResumeController {
   }
 
   @Get('miniprogram/:id')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('resume:view')
   @ApiOperation({ summary: '小程序获取简历详情' })
   @ApiParam({ name: 'id', description: '简历ID' })
   async getForMiniprogram(
@@ -1013,8 +986,7 @@ export class ResumeController {
   }
 
   @Patch('miniprogram/:id')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('resume:edit')
   @ApiOperation({ summary: '小程序更新简历（JSON格式）' })
   @ApiParam({ name: 'id', description: '简历ID' })
   @ApiBody({ type: UpdateResumeDto })
@@ -1053,8 +1025,7 @@ export class ResumeController {
   }
 
   @Post('miniprogram/:id/upload-file')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('resume:edit')
   @UseInterceptors(FileInterceptor('file', multerConfig))
   @ApiOperation({ summary: '小程序上传单个文件' })
   @ApiConsumes('multipart/form-data')
@@ -1120,8 +1091,7 @@ export class ResumeController {
   }
 
   @Post('miniprogram/:id/upload-files')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('resume:edit')
   @UseInterceptors(FilesInterceptor('files', 30, multerConfig))
   @ApiOperation({ summary: '小程序批量上传文件' })
   @ApiConsumes('multipart/form-data')
@@ -1207,8 +1177,7 @@ export class ResumeController {
   }
 
   @Delete('miniprogram/:id/delete-file')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('resume:edit')
   @ApiOperation({ summary: '小程序删除文件' })
   @ApiParam({ name: 'id', description: '简历ID' })
   @ApiBody({
@@ -1263,8 +1232,7 @@ export class ResumeController {
   }
 
   @Post('miniprogram/validate')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('resume:create')
   @ApiOperation({ summary: '小程序数据验证' })
   @ApiBody({
     schema: {
@@ -1324,8 +1292,7 @@ export class ResumeController {
   }
 
   @Get('miniprogram/stats')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('resume:view')
   @ApiOperation({ summary: '小程序统计信息' })
   async getStatsForMiniprogram(@Req() req) {
     try {

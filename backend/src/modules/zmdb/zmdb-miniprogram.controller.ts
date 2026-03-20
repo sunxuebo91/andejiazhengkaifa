@@ -19,14 +19,13 @@ import { JwtService } from '@nestjs/jwt';
 import { ZmdbService } from './zmdb.service';
 import { CreateBackgroundCheckDto } from './dto/create-background-check.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('小程序-背调管理')
 @Controller('zmdb/miniprogram')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ZmdbMiniprogramController {
   private readonly logger = new Logger(ZmdbMiniprogramController.name);
 
@@ -51,6 +50,7 @@ export class ZmdbMiniprogramController {
    * 获取背调列表（分页）
    */
   @Get('reports')
+  @Permissions('background-check:view')
   @ApiOperation({ summary: '【小程序】获取背调列表（分页）' })
   @ApiQuery({ name: 'page', required: false, description: '页码，默认1' })
   @ApiQuery({ name: 'limit', required: false, description: '每页条数，默认10' })
@@ -60,8 +60,8 @@ export class ZmdbMiniprogramController {
     @Query('limit') limit: string = '10',
     @Request() req,
   ) {
-    const result = await this.zmdbService.findAll(parseInt(page), parseInt(limit));
-    // 注意：背调记录目前不支持createdBy过滤，返回全部数据
+    // 传递 user 信息用于权限过滤（管理员可查看全部，普通用户只能查看自己创建的）
+    const result = await this.zmdbService.findAll(parseInt(page), parseInt(limit), {}, req.user);
     return { success: true, ...result, message: '获取成功' };
   }
 
@@ -69,11 +69,12 @@ export class ZmdbMiniprogramController {
    * 根据身份证号查询背调记录
    */
   @Get('reports/by-idno/:idNo')
+  @Permissions('background-check:view')
   @ApiOperation({ summary: '【小程序】根据身份证号查询背调记录' })
   @ApiParam({ name: 'idNo', description: '身份证号' })
   @ApiResponse({ status: 200, description: '查询成功' })
-  async findByIdNo(@Param('idNo') idNo: string) {
-    const record = await this.zmdbService.findByIdNo(idNo);
+  async findByIdNo(@Param('idNo') idNo: string, @Request() req) {
+    const record = await this.zmdbService.findByIdNo(idNo, req.user);
     return {
       success: true,
       data: record,
@@ -85,11 +86,12 @@ export class ZmdbMiniprogramController {
    * 获取背调详情（包含风险评估结果）
    */
   @Get('reports/:id')
+  @Permissions('background-check:view')
   @ApiOperation({ summary: '【小程序】获取背调详情' })
   @ApiParam({ name: 'id', description: '背调记录ID（MongoDB ObjectId）' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getDetail(@Param('id') id: string) {
-    const record = await this.zmdbService.findOne(id);
+  async getDetail(@Param('id') id: string, @Request() req) {
+    const record = await this.zmdbService.findOne(id, req.user);
     if (!record) {
       return { success: false, data: null, message: '背调记录不存在' };
     }
@@ -100,6 +102,7 @@ export class ZmdbMiniprogramController {
    * 主动拉取报告风险数据（报告完成后调用）
    */
   @Post('reports/:reportId/fetch-result')
+  @Permissions('background-check:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】拉取报告风险数据' })
   @ApiParam({ name: 'reportId', description: '芝麻报告ID' })
@@ -116,6 +119,7 @@ export class ZmdbMiniprogramController {
    * 准备授权书（使用本地隐私协议）
    */
   @Post('prepare-auth')
+  @Permissions('background-check:create')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】准备授权书（上传到芝麻背调）' })
   @ApiResponse({ status: 200, description: '准备成功' })
@@ -135,6 +139,7 @@ export class ZmdbMiniprogramController {
    * 发起背调
    */
   @Post('reports')
+  @Permissions('background-check:create')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】发起背调' })
   @ApiResponse({ status: 200, description: '发起成功' })
@@ -148,12 +153,13 @@ export class ZmdbMiniprogramController {
    * 取消背调
    */
   @Post('reports/:id/cancel')
+  @Permissions('background-check:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】取消背调' })
   @ApiParam({ name: 'id', description: '背调记录ID' })
   @ApiResponse({ status: 200, description: '取消成功' })
-  async cancelReport(@Param('id') id: string) {
-    await this.zmdbService.cancelReport(id);
+  async cancelReport(@Param('id') id: string, @Request() req) {
+    await this.zmdbService.cancelReport(id, req.user);
     return { success: true, message: '背调已取消' };
   }
 
@@ -188,18 +194,23 @@ export class ZmdbMiniprogramController {
       throw new UnauthorizedException('缺少认证信息，请提供token参数或Authorization头');
     }
 
-    // 验证JWT token
+    // 验证JWT token并提取用户信息
+    let user: { userId?: string; role?: string; permissions?: string[] } | undefined;
     try {
-      this.jwtService.verify(token);
+      const payload = this.jwtService.verify(token);
+      user = {
+        userId: payload.sub,
+        role: payload.role,
+        permissions: payload.permissions,
+      };
     } catch (error) {
       this.logger.warn(`Token验证失败: ${error.message}`);
       throw new UnauthorizedException('Token无效或已过期');
     }
 
-    const buffer = await this.zmdbService.downloadReport(reportId);
+    const buffer = await this.zmdbService.downloadReport(reportId, user);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="bgcheck_report_${reportId}.pdf"`);
     res.send(buffer);
   }
 }
-

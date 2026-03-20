@@ -29,6 +29,7 @@ import {
   TRAINING_TYPE_OPTIONS
 } from '../../types/training-lead.types';
 import TrainingLeadFollowUpModal from '../../components/TrainingLeadFollowUpModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -36,6 +37,7 @@ const { RangePicker } = DatePicker;
 
 const TrainingLeadList: React.FC = () => {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
   const [leads, setLeads] = useState<TrainingLead[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -69,6 +71,7 @@ const TrainingLeadList: React.FC = () => {
 
   // 用户列表（用于学员归属筛选）
   const [users, setUsers] = useState<any[]>([]);
+  const canViewUsers = hasPermission('user:view');
 
   // 搜索条件
   const [searchFilters, setSearchFilters] = useState<TrainingLeadQuery>({
@@ -84,6 +87,11 @@ const TrainingLeadList: React.FC = () => {
 
   // 加载用户列表
   const fetchUsers = async () => {
+    if (!canViewUsers) {
+      setUsers([]);
+      return;
+    }
+
     try {
       const response = await apiService.get('/api/users', { page: 1, pageSize: 1000 });
       if (response.success && response.data) {
@@ -114,8 +122,10 @@ const TrainingLeadList: React.FC = () => {
 
   useEffect(() => {
     fetchLeads();
-    fetchUsers();
-  }, [currentPage, pageSize]);
+    if (canViewUsers) {
+      fetchUsers();
+    }
+  }, [currentPage, pageSize, canViewUsers]);
 
   // 搜索
   const handleSearch = () => {
@@ -534,23 +544,25 @@ const TrainingLeadList: React.FC = () => {
                 <Option value={false}>否</Option>
               </Select>
             </Col>
-            <Col span={4}>
-              <Select
-                placeholder="学员归属"
-                value={searchFilters.studentOwner}
-                onChange={(value) => setSearchFilters({ ...searchFilters, studentOwner: value })}
-                allowClear
-                showSearch
-                filterOption={(input, option) =>
-                  String(option?.children || '').toLowerCase().includes(input.toLowerCase())
-                }
-                style={{ width: '100%' }}
-              >
-                {users.map(user => (
-                  <Option key={user._id} value={user._id}>{user.name}</Option>
-                ))}
-              </Select>
-            </Col>
+            {canViewUsers && (
+              <Col span={4}>
+                <Select
+                  placeholder="学员归属"
+                  value={searchFilters.studentOwner}
+                  onChange={(value) => setSearchFilters({ ...searchFilters, studentOwner: value })}
+                  allowClear
+                  showSearch
+                  filterOption={(input, option) =>
+                    String(option?.children || '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  style={{ width: '100%' }}
+                >
+                  {users.map(user => (
+                    <Option key={user._id} value={user._id}>{user.name}</Option>
+                  ))}
+                </Select>
+              </Col>
+            )}
           </Row>
 
           <Row gutter={[16, 16]}>
@@ -758,4 +770,3 @@ const TrainingLeadList: React.FC = () => {
 };
 
 export default TrainingLeadList;
-

@@ -365,7 +365,9 @@ export class ZegoController {
 
   /**
    * 获取提词器消息（公开接口，用于轮询）
+   * 🔥 必须是公开接口，因为阿姨端没有JWT token
    */
+  @Public()
   @Post('get-teleprompter')
   getTeleprompter(@Body() dto: GetTeleprompterDto) {
     const messages = this.zegoService.getTeleprompterMessages(

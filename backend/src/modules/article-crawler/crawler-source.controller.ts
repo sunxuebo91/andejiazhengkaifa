@@ -10,8 +10,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CrawlerSourceService } from './crawler-source.service';
 import { ArticleCrawlerService } from './article-crawler.service';
 import { AICrawlerExecutorService } from './ai-crawler-executor.service';
@@ -21,8 +21,8 @@ import { UpdateCrawlerSourceDto } from './dto/update-source.dto';
 
 @ApiTags('文章爬虫来源管理')
 @Controller('crawler-sources')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'manager', '系统管理员', '经理')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@Permissions('admin:settings')
 @ApiBearerAuth()
 export class CrawlerSourceController {
   constructor(

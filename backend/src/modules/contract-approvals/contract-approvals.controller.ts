@@ -23,9 +23,10 @@ export class ContractApprovalsController {
     private readonly approvalsService: ContractApprovalsService,
   ) {}
 
-  // 检查是否是孙学博
-  private isSunXuebo(user: any): boolean {
-    return user.username === 'sunxuebo' || user.name === '孙学博';
+  // 检查是否是合同审批专员
+  private isContractApprover(user: any): boolean {
+    const approverUsername = process.env.CONTRACT_APPROVER_USERNAME || 'sunxuebo';
+    return user.username === approverUsername;
   }
 
   // 检查是否是管理员
@@ -83,7 +84,7 @@ export class ContractApprovalsController {
       throw new ForbiddenException('只有管理员可以审批');
     }
 
-    if (!this.isSunXuebo(req.user)) {
+    if (!this.isContractApprover(req.user)) {
       throw new ForbiddenException('只有孙学博可以审批删除请求');
     }
 
@@ -116,7 +117,7 @@ export class ContractApprovalsController {
       throw new ForbiddenException('只有管理员可以审批');
     }
 
-    if (!this.isSunXuebo(req.user)) {
+    if (!this.isContractApprover(req.user)) {
       throw new ForbiddenException('只有孙学博可以审批删除请求');
     }
 

@@ -137,8 +137,8 @@ export default function App({ children }: AppProps) {
                 {/* <Route path="/mobile/contract/create" element={<MobileContractCreate />} /> */}
 
                 {/* 独立详情页路由 - 不显示左侧导航栏 */}
-                <Route path="/standalone/customers/:id" element={<AuthorizedRoute element={<CustomerDetail />} />} />
-                <Route path="/standalone/contracts/:id" element={<AuthorizedRoute element={<ContractDetail />} />} />
+                <Route path="/standalone/customers/:id" element={<AuthorizedRoute element={<CustomerDetail />} authority="customer:view" />} />
+                <Route path="/standalone/contracts/:id" element={<AuthorizedRoute element={<ContractDetail />} authority="contract:view" />} />
                 <Route path="/standalone/training-leads/:id" element={<AuthorizedRoute element={<TrainingLeadDetail />} />} />
                 <Route path="/standalone/aunt/resumes/detail/:id" element={<AuthorizedRoute element={<ResumeDetail />} authority="resume:view" />} />
 
@@ -176,23 +176,23 @@ export default function App({ children }: AppProps) {
                   <Route path="customers">
                     <Route
                       path="list"
-                      element={<AuthorizedRoute element={<CustomerList />} />}
+                      element={<AuthorizedRoute element={<CustomerList />} authority="customer:view" />}
                     />
                     <Route
                       path="public-pool"
-                      element={<AuthorizedRoute element={<PublicPool />} />}
+                      element={<AuthorizedRoute element={<PublicPool />} authority="customer:view" />}
                     />
                     <Route
                       path="create"
-                      element={<AuthorizedRoute element={<CreateCustomer />} />}
+                      element={<AuthorizedRoute element={<CreateCustomer />} authority="customer:create" />}
                     />
                     <Route
                       path=":id"
-                      element={<AuthorizedRoute element={<CustomerDetail />} />}
+                      element={<AuthorizedRoute element={<CustomerDetail />} authority="customer:view" />}
                     />
                     <Route
                       path="edit/:id"
-                      element={<AuthorizedRoute element={<EditCustomer />} />}
+                      element={<AuthorizedRoute element={<EditCustomer />} authority="customer:create" />}
                     />
                     <Route
                       path="lead-transfer-rules"
@@ -200,7 +200,7 @@ export default function App({ children }: AppProps) {
                     />
                     <Route
                       path="lead-transfer-records"
-                      element={<AuthorizedRoute element={<LeadTransferRecords />} />}
+                      element={<AuthorizedRoute element={<LeadTransferRecords />} authority="customer:view" />}
                     />
                     {/* 重定向 /customers 到 /customers/list */}
                     <Route index element={<Navigate to="list" replace />} />
@@ -210,15 +210,15 @@ export default function App({ children }: AppProps) {
                   <Route path="contracts">
                     <Route
                       path="list"
-                      element={<AuthorizedRoute element={<ContractList />} />}
+                      element={<AuthorizedRoute element={<ContractList />} authority="contract:view" />}
                     />
                     <Route
                       path="create"
-                      element={<AuthorizedRoute element={<ESignaturePage />} />}
+                      element={<AuthorizedRoute element={<ESignaturePage />} authority="contract:create" />}
                     />
                     <Route
                       path="miniprogram"
-                      element={<AuthorizedRoute element={<MiniProgramContractList />} />}
+                      element={<AuthorizedRoute element={<MiniProgramContractList />} authority="contract:view" />}
                     />
                     <Route
                       path="approvals"
@@ -226,11 +226,11 @@ export default function App({ children }: AppProps) {
                     />
                     <Route
                       path="detail/:id"
-                      element={<AuthorizedRoute element={<ContractDetail />} />}
+                      element={<AuthorizedRoute element={<ContractDetail />} authority="contract:view" />}
                     />
                     <Route
                       path=":id"
-                      element={<AuthorizedRoute element={<ContractDetail />} />}
+                      element={<AuthorizedRoute element={<ContractDetail />} authority="contract:view" />}
                     />
                     {/* 重定向 /contracts 到 /contracts/list */}
                     <Route index element={<Navigate to="list" replace />} />
@@ -354,11 +354,11 @@ export default function App({ children }: AppProps) {
                   <Route path="background-check">
                     <Route
                       index
-                      element={<AuthorizedRoute element={<BackgroundCheckPage />} />}
+                      element={<AuthorizedRoute element={<BackgroundCheckPage />} authority="background-check:view" />}
                     />
                     <Route
                       path=":id"
-                      element={<AuthorizedRoute element={<BackgroundCheckDetail />} />}
+                      element={<AuthorizedRoute element={<BackgroundCheckDetail />} authority="background-check:view" />}
                     />
                   </Route>
 
@@ -372,11 +372,11 @@ export default function App({ children }: AppProps) {
                   <Route path="insurance">
                     <Route
                       path="list"
-                      element={<AuthorizedRoute element={<InsuranceList />} />}
+                      element={<AuthorizedRoute element={<InsuranceList />} authority="insurance:view" />}
                     />
                     <Route
                       path="create"
-                      element={<AuthorizedRoute element={<CreateInsurance />} />}
+                      element={<AuthorizedRoute element={<CreateInsurance />} authority="insurance:create" />}
                     />
                     {/* 重定向 /insurance 到 /insurance/list */}
                     <Route index element={<Navigate to="list" replace />} />

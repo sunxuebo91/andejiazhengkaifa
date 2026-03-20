@@ -6,12 +6,16 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import { AppLogger } from '../../common/logging/app-logger';
+import { RolesService } from '../roles/roles.service';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new AppLogger(UsersService.name);
 
-  constructor(@InjectModel('User') private readonly userModel: Model<User>) {}
+  constructor(
+    @InjectModel('User') private readonly userModel: Model<User>,
+    private readonly rolesService: RolesService,
+  ) {}
 
   /**
    * 根据用户名查找用户
@@ -24,7 +28,11 @@ export class UsersService {
 
   async findById(id: string): Promise<UserWithoutPassword | null> {
     const user = await this.userModel.findById(id).select('-password').lean().exec();
-    return user as UserWithoutPassword;
+    if (!user) {
+      return null;
+    }
+
+    return this.toUserWithoutPassword(user as UserWithoutPassword);
   }
 
   async findByPhone(phone: string): Promise<User | null> {
@@ -32,18 +40,21 @@ export class UsersService {
   }
 
   async create(createUserDto: CreateUserDto): Promise<UserWithoutPassword> {
+    const normalizedRole = this.normalizeRole(createUserDto.role) ?? createUserDto.role;
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+    const resolvedPermissions = createUserDto.permissions || await this.rolesService.getEffectivePermissions(normalizedRole);
     const createdUser = new this.userModel({
       ...createUserDto,
+      role: normalizedRole,
       password: hashedPassword,
-      permissions: createUserDto.permissions || this.getDefaultPermissions(createUserDto.role)
+      permissions: resolvedPermissions,
     });
     const savedUser = await createdUser.save();
     
     // 使用 lean() 获取纯 JavaScript 对象
     const userObj = savedUser.toObject();
     const { password, ...userWithoutPassword } = userObj;
-    return userWithoutPassword as UserWithoutPassword;
+    return this.toUserWithoutPassword(userWithoutPassword as UserWithoutPassword);
   }
 
   async findAll(page: number = 1, pageSize: number = 10, search?: string) {
@@ -72,7 +83,7 @@ export class UsersService {
     ]);
 
     return {
-      items: users as UserWithoutPassword[],
+      items: await Promise.all((users as UserWithoutPassword[]).map((user) => this.toUserWithoutPassword(user))),
       total,
       page,
       pageSize,
@@ -82,10 +93,26 @@ export class UsersService {
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserWithoutPassword> {
     const updateData: any = { ...updateUserDto };
+    const existingUser = await this.userModel.findById(id).select('_id').lean().exec();
+    if (!existingUser) {
+      throw new NotFoundException('用户不存在');
+    }
     
     // 如果提供了新密码，需要加密
     if (updateUserDto.password) {
       updateData.password = await bcrypt.hash(updateUserDto.password, 10);
+    }
+
+    if (updateUserDto.role) {
+      updateData.role = this.normalizeRole(updateUserDto.role) ?? updateUserDto.role;
+    }
+
+    if (updateUserDto.role && typeof updateUserDto.permissions === 'undefined') {
+      updateData.permissions = await this.rolesService.getEffectivePermissions(updateData.role);
+    }
+
+    if (Array.isArray(updateUserDto.permissions)) {
+      updateData.permissions = [...new Set(updateUserDto.permissions)];
     }
 
     const updatedUser = await this.userModel
@@ -98,7 +125,7 @@ export class UsersService {
       throw new NotFoundException('用户不存在');
     }
 
-    return updatedUser as UserWithoutPassword;
+    return this.toUserWithoutPassword(updatedUser as UserWithoutPassword);
   }
 
   async remove(id: string): Promise<void> {
@@ -109,7 +136,7 @@ export class UsersService {
   }
 
   async ensureAdminExists() {
-    const adminExists = await this.userModel.findOne({ role: 'admin' }).exec();
+    const adminExists = await this.userModel.findOne({ role: { $in: ['admin', '系统管理员', '管理员'] } }).exec();
     if (!adminExists) {
       await this.create({
         username: 'admin',
@@ -124,10 +151,12 @@ export class UsersService {
       this.logger.debug('初始管理员账户已创建');
     } else {
       // 如果管理员存在但缺少email或phone字段，则更新
-      if (!adminExists.email || !adminExists.phone) {
+      if (!adminExists.email || !adminExists.phone || adminExists.role !== 'admin') {
         await this.userModel.findByIdAndUpdate(adminExists._id, {
+          role: 'admin',
           email: adminExists.email || 'admin@andejiazheng.com',
-          phone: adminExists.phone || '13800138000'
+          phone: adminExists.phone || '13800138000',
+          permissions: ['*'],
         });
         this.logger.debug('管理员账户信息已更新');
       }
@@ -148,7 +177,7 @@ export class UsersService {
       throw new NotFoundException('用户不存在');
     }
 
-    return updatedUser as UserWithoutPassword;
+    return this.toUserWithoutPassword(updatedUser as UserWithoutPassword);
   }
 
   /**
@@ -165,7 +194,7 @@ export class UsersService {
       throw new NotFoundException('用户不存在');
     }
 
-    return updatedUser as UserWithoutPassword;
+    return this.toUserWithoutPassword(updatedUser as UserWithoutPassword);
   }
 
   /**
@@ -182,22 +211,7 @@ export class UsersService {
       throw new NotFoundException('用户不存在');
     }
 
-    return updatedUser as UserWithoutPassword;
-  }
-
-  // 根据角色获取默认权限
-  private getDefaultPermissions(role: string): string[] {
-    switch (role) {
-      case 'admin':
-        return ['*']; // 管理员拥有所有权限
-      case 'manager':
-        return ['resume:all', 'customer:all', 'contract:all', 'user:view'];
-      case 'employee':
-        // 🔥 修复：员工需要管理自己客户的合同，添加合同权限
-        return ['resume:view', 'resume:create', 'customer:view', 'customer:create', 'contract:view', 'contract:create'];
-      default:
-        return ['resume:view', 'customer:view'];
-    }
+    return this.toUserWithoutPassword(updatedUser as UserWithoutPassword);
   }
 
   // 更新用户微信信息
@@ -224,7 +238,7 @@ export class UsersService {
       throw new NotFoundException('用户不存在');
     }
 
-    return updatedUser as UserWithoutPassword;
+    return this.toUserWithoutPassword(updatedUser as UserWithoutPassword);
   }
 
   // 根据微信OpenID查找用户
@@ -235,7 +249,7 @@ export class UsersService {
       .lean()
       .exec();
 
-    return user as UserWithoutPassword;
+    return user ? this.toUserWithoutPassword(user as UserWithoutPassword) : null;
   }
 
   // 获取已绑定微信的用户列表
@@ -246,6 +260,31 @@ export class UsersService {
       .lean()
       .exec();
 
-    return users as UserWithoutPassword[];
+    return Promise.all((users as UserWithoutPassword[]).map((user) => this.toUserWithoutPassword(user)));
+  }
+
+  async toUserWithoutPassword(user: UserWithoutPassword): Promise<UserWithoutPassword> {
+    const normalizedRole = this.normalizeRole(user.role) ?? user.role;
+    const rolePermissions = await this.rolesService.getEffectivePermissions(normalizedRole);
+    const explicitPermissions = Array.isArray(user.permissions) ? user.permissions : [];
+    const permissions = rolePermissions.length > 0 ? rolePermissions : explicitPermissions;
+
+    if (rolePermissions.length > 0 && explicitPermissions.length > 0) {
+      const explicitKey = [...explicitPermissions].sort().join(',');
+      const roleKey = [...rolePermissions].sort().join(',');
+      if (explicitKey !== roleKey) {
+        this.logger.warn(`User ${user.username}(${user._id}) has stale permission snapshot; using role-backed permissions for runtime access`);
+      }
+    }
+
+    return {
+      ...user,
+      role: normalizedRole,
+      permissions,
+    };
+  }
+
+  private normalizeRole(role?: string | null): string | null {
+    return this.rolesService.normalizeRoleCode(role);
   }
 }

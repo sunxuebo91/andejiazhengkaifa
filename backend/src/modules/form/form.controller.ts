@@ -26,8 +26,8 @@ import { SubmitFormDto } from './dto/submit-form.dto';
 import { QuerySubmissionDto } from './dto/query-submission.dto';
 import { UpdateSubmissionDto } from './dto/update-submission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('表单管理')
@@ -63,8 +63,8 @@ export class FormController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取所有表单的提交列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getAllSubmissions(@Query() query: QuerySubmissionDto) {
-    return this.formService.getAllSubmissions(query);
+  async getAllSubmissions(@Query() query: QuerySubmissionDto, @Request() req) {
+    return this.formService.getAllSubmissions(query, req.user);
   }
 
   @Get(':id')
@@ -108,8 +108,8 @@ export class FormController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取表单提交列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getSubmissions(@Param('id') id: string, @Query() query: QuerySubmissionDto) {
-    return this.formService.getSubmissions(id, query);
+  async getSubmissions(@Param('id') id: string, @Query() query: QuerySubmissionDto, @Request() req) {
+    return this.formService.getSubmissions(id, query, req.user);
   }
 
   @Post(':id/generate-share-token')
@@ -135,8 +135,8 @@ export class FormController {
   }
 
   @Delete('submissions/:submissionId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', '系统管理员')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '删除提交记录（仅管理员）' })
   @ApiResponse({ status: 200, description: '删除成功' })
@@ -197,4 +197,3 @@ export class FormController {
     };
   }
 }
-

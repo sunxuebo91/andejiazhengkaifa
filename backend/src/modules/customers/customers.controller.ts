@@ -33,6 +33,8 @@ import { ClaimCustomersDto, AssignFromPoolDto, ReleaseToPoolDto, BatchReleaseToP
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { ApiResponse } from '../../common/interfaces/api-response.interface';
 import { Public } from '../auth/decorators/public.decorator';
 import { WeixinService } from '../weixin/weixin.service';
@@ -41,7 +43,7 @@ import { UsersService } from '../users/users.service';
 
 @ApiTags('客户管理')
 @Controller('customers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CustomersController {
   private readonly logger = new Logger(CustomersController.name);
 
@@ -85,6 +87,10 @@ export class CustomersController {
           assignedToId = customer.assignedTo.toString?.() || String(customer.assignedTo);
         }
       }
+
+      // 调试日志 - 使用 log 级别确保能看到
+      this.logger.log(`🔐 权限检查: assignedToId=${assignedToId}, userId=${user.userId}, match=${assignedToId === user.userId}`);
+
       return assignedToId === user.userId;
     }
     return false;
@@ -192,6 +198,7 @@ export class CustomersController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @Permissions('customer:create')
   async create(
     @Body() createCustomerDto: CreateCustomerDto,
     @Request() req,
@@ -208,6 +215,7 @@ export class CustomersController {
   }
 
   @Get()
+  @Permissions('customer:view')
   async findAll(@Query() query: CustomerQueryDto, @Request() req): Promise<ApiResponse> {
     try {
       const result = await this.customersService.findAll(query, req.user.userId);
@@ -218,6 +226,7 @@ export class CustomersController {
   }
 
   @Get('statistics')
+  @Permissions('customer:view')
   async getStatistics(): Promise<ApiResponse> {
     try {
       const stats = await this.customersService.getStatistics();
@@ -229,6 +238,7 @@ export class CustomersController {
 
   @Get('search')
   @ApiOperation({ summary: '搜索客户（用于电子签名等场景，包含所有状态客户）' })
+  @Permissions('customer:view')
   async searchCustomers(
     @Query('search') search: string,
     @Query('limit') limit: string = '10',
@@ -244,6 +254,7 @@ export class CustomersController {
   }
 
   @Get('customer-id/:customerId')
+  @Permissions('customer:view')
   async findByCustomerId(@Param('customerId') customerId: string): Promise<ApiResponse> {
     try {
       const customer = await this.customersService.findByCustomerId(customerId);
@@ -256,6 +267,7 @@ export class CustomersController {
   // 根据手机号获取客户地址（用于合同详情页显示服务地址）
   @Get('address-by-phone/:phone')
   @ApiOperation({ summary: '根据手机号获取客户地址' })
+  @Permissions('customer:view')
   async getAddressByPhone(@Param('phone') phone: string): Promise<ApiResponse> {
     try {
       const customer = await this.customersService.findByPhone(phone);
@@ -270,6 +282,7 @@ export class CustomersController {
 
   // 可分配的用户列表 - 必须在 :id 路由之前
   @Get('assignable-users')
+  @Permissions('user:view')
   async getAssignableUsers(): Promise<ApiResponse> {
     try {
       const users = await this.customersService.getAssignableUsers();
@@ -283,8 +296,9 @@ export class CustomersController {
   @Post('batch-assign')
   @ApiOperation({ summary: '批量分配客户（仅管理员和经理）' })
   @ApiBody({ type: BatchAssignCustomerDto })
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
   @Roles('admin', 'manager')
+  @Permissions('customer:edit')
   async batchAssignCustomers(
     @Body() dto: BatchAssignCustomerDto,
     @Request() req,
@@ -328,6 +342,7 @@ export class CustomersController {
   // 获取用户当前持有的客户数量 - 必须在 :id 路由之前
   @Get('my-customer-count')
   @ApiOperation({ summary: '获取当前用户持有的客户数量' })
+  @Permissions('customer:view')
   async getMyCustomerCount(@Request() req): Promise<ApiResponse> {
     try {
       const count = await this.customersService.getUserCustomerCount(req.user.userId);
@@ -342,6 +357,7 @@ export class CustomersController {
   // 获取公海客户列表
   @Get('public-pool')
   @ApiOperation({ summary: '获取公海客户列表' })
+  @Permissions('customer:view')
   async getPublicPoolCustomers(@Query() query: PublicPoolQueryDto): Promise<ApiResponse> {
     try {
       const result = await this.customersService.getPublicPoolCustomers(query);
@@ -354,8 +370,9 @@ export class CustomersController {
   // 获取公海统计数据
   @Get('public-pool/statistics')
   @ApiOperation({ summary: '获取公海统计数据（管理员和经理）' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
   @Roles('admin', 'manager')
+  @Permissions('customer:view')
   async getPublicPoolStatistics(): Promise<ApiResponse> {
     try {
       const statistics = await this.customersService.getPublicPoolStatistics();
@@ -369,6 +386,7 @@ export class CustomersController {
   @Post('public-pool/claim')
   @ApiOperation({ summary: '员工从公海领取客户' })
   @ApiBody({ type: ClaimCustomersDto })
+  @Permissions('customer:edit')
   async claimCustomers(@Body() dto: ClaimCustomersDto, @Request() req): Promise<ApiResponse> {
     try {
       this.logger.debug('🎯 [领取客户] 开始处理:', { customerIds: dto.customerIds, userId: req.user.userId });
@@ -390,8 +408,9 @@ export class CustomersController {
   @Post('public-pool/assign')
   @ApiOperation({ summary: '管理员从公海分配客户（仅管理员和经理）' })
   @ApiBody({ type: AssignFromPoolDto })
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
   @Roles('admin', 'manager')
+  @Permissions('customer:edit')
   async assignFromPool(@Body() dto: AssignFromPoolDto, @Request() req): Promise<ApiResponse> {
     try {
       const result = await this.customersService.assignFromPool(
@@ -434,6 +453,7 @@ export class CustomersController {
   @Post('batch-release-to-pool')
   @ApiOperation({ summary: '批量释放客户到公海' })
   @ApiBody({ type: BatchReleaseToPoolDto })
+  @Permissions('customer:edit')
   async batchReleaseToPool(@Body() dto: BatchReleaseToPoolDto, @Request() req): Promise<ApiResponse> {
     try {
       const result = await this.customersService.batchReleaseToPool(
@@ -449,16 +469,22 @@ export class CustomersController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<ApiResponse> {
+  @Permissions('customer:view')
+  async findOne(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
     try {
       const customer = await this.customersService.findOne(id);
-      return this.createResponse(true, '客户详情获取成功', customer);
+      if (!this.canAccessCustomer(customer, req.user)) {
+        throw new ForbiddenException('无权限访问此客户信息');
+      }
+      const sanitized = this.sanitizeCustomerData(customer, req.user);
+      return this.createResponse(true, '客户详情获取成功', sanitized);
     } catch (error) {
       return this.createResponse(false, '客户详情获取失败', null, error.message);
     }
   }
 
   @Patch(':id')
+  @Permissions('customer:edit')
   async update(
     @Param('id') id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
@@ -474,6 +500,7 @@ export class CustomersController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @Permissions('customer:delete')
   async remove(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
     try {
       await this.customersService.remove(id, req.user.userId);
@@ -485,6 +512,7 @@ export class CustomersController {
 
   // 创建客户跟进记录
   @Post(':id/follow-ups')
+  @Permissions('customer:edit')
   async createFollowUp(
     @Param('id') id: string,
     @Body() createFollowUpDto: CreateCustomerFollowUpDto,
@@ -500,6 +528,7 @@ export class CustomersController {
 
   // 获取客户跟进记录
   @Get(':id/follow-ups')
+  @Permissions('customer:view')
   async getFollowUps(@Param('id') id: string): Promise<ApiResponse> {
     try {
       const followUps = await this.customersService.getFollowUps(id);
@@ -512,6 +541,7 @@ export class CustomersController {
   // 获取客户跟进状态
   @Get(':id/follow-up-status')
   @ApiOperation({ summary: '获取客户跟进状态（新客未跟进/流转未跟进）' })
+  @Permissions('customer:view')
   async getFollowUpStatus(@Param('id') id: string): Promise<ApiResponse> {
     try {
       const status = await this.customersService.getFollowUpStatus(id);
@@ -523,6 +553,7 @@ export class CustomersController {
 
   // 分配客户归属人
   @Patch(':id/assign')
+  @Permissions('customer:edit')
   async assignCustomer(
     @Param('id') id: string,
     @Body() dto: AssignCustomerDto,
@@ -563,6 +594,7 @@ export class CustomersController {
 
   // 客户分配历史
   @Get(':id/assignment-logs')
+  @Permissions('customer:view')
   async getAssignmentLogs(@Param('id') id: string): Promise<ApiResponse> {
     try {
       const logs = await this.customersService.getAssignmentLogs(id);
@@ -574,8 +606,9 @@ export class CustomersController {
 
   // 获取客户操作日志（仅管理员可访问）
   @Get(':id/operation-logs')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
   @Roles('admin')
+  @Permissions('customer:view')
   @ApiOperation({ summary: '获取客户操作日志（仅管理员）' })
   @ApiParam({ name: 'id', description: '客户ID' })
   async getOperationLogs(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
@@ -985,15 +1018,23 @@ export class CustomersController {
   }
 
   @Get('miniprogram/:id/assignment-logs')
-  @ApiOperation({ summary: '小程序获取客户分配历史（仅管理员和经理）' })
+  @ApiOperation({ summary: '小程序获取客户分配历史（权限控制）' })
   @ApiParam({ name: 'id', description: '客户ID' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
-  async getAssignmentLogsForMiniprogram(@Param('id') id: string): Promise<ApiResponse> {
+  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  async getAssignmentLogsForMiniprogram(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
     try {
+      const customer = await this.customersService.findOne(id);
+      if (!this.canAccessCustomer(customer, req.user)) {
+        throw new ForbiddenException('无权限查看此客户的分配历史');
+      }
+
       const logs = await this.customersService.getAssignmentLogs(id);
       return this.createResponse(true, '分配历史获取成功', logs);
     } catch (error) {
+      if (error instanceof ForbiddenException) {
+        return this.createResponse(false, error.message, null, 'FORBIDDEN');
+      }
       return this.createResponse(false, '分配历史获取失败', null, error.message);
     }
   }
@@ -1212,6 +1253,43 @@ export class CustomersController {
       return this.createResponse(true, '公海历史记录获取成功', logs);
     } catch (error) {
       return this.createResponse(false, '公海历史记录获取失败', null, error.message);
+    }
+  }
+
+  // 冻结线索（仅管理员）
+  @Patch(':id/freeze')
+  @ApiOperation({ summary: '冻结线索（仅管理员）' })
+  @ApiParam({ name: 'id', description: '客户ID' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async freezeCustomer(
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+    @Request() req
+  ): Promise<ApiResponse> {
+    try {
+      const customer = await this.customersService.freezeCustomer(id, req.user.userId, reason);
+      return this.createResponse(true, '线索已冻结', customer);
+    } catch (error) {
+      return this.createResponse(false, error.message || '冻结失败', null, error.message);
+    }
+  }
+
+  // 解冻线索（仅管理员）
+  @Patch(':id/unfreeze')
+  @ApiOperation({ summary: '解冻线索（仅管理员）' })
+  @ApiParam({ name: 'id', description: '客户ID' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async unfreezeCustomer(
+    @Param('id') id: string,
+    @Request() req
+  ): Promise<ApiResponse> {
+    try {
+      const customer = await this.customersService.unfreezeCustomer(id, req.user.userId);
+      return this.createResponse(true, '线索已解冻', customer);
+    } catch (error) {
+      return this.createResponse(false, error.message || '解冻失败', null, error.message);
     }
   }
 

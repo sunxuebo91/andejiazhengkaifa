@@ -17,12 +17,13 @@ import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { Public } from '../auth/decorators/public.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { ESignService } from '../esign/esign.service';
 import { ContractApprovalsService } from '../contract-approvals/contract-approvals.service';
 
 @Controller('contracts')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ContractsController {
   private readonly logger = new Logger(ContractsController.name);
 
@@ -42,7 +43,58 @@ export class ContractsController {
     return this.isAdmin(user) || user.role === '经理' || user.role === 'manager';
   }
 
+  private extractUserId(value: any): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    if (typeof value === 'object') {
+      if (typeof value._id === 'string') {
+        return value._id;
+      }
+      if (value._id?.toString) {
+        return value._id.toString();
+      }
+      if (typeof value.userId === 'string') {
+        return value.userId;
+      }
+    }
+
+    if (value.toString) {
+      return value.toString();
+    }
+
+    return undefined;
+  }
+
+  private canAccessContract(user: any, contract: any): boolean {
+    if (this.isManagerOrAdmin(user)) {
+      return true;
+    }
+
+    const createdById = this.extractUserId(contract?.createdBy);
+    if (createdById && createdById === user?.userId) {
+      return true;
+    }
+
+    // 兼容历史数据：createdBy 可能直接存了用户名或姓名
+    if (typeof contract?.createdBy === 'string') {
+      return contract.createdBy === user?.username || contract.createdBy === user?.name;
+    }
+
+    if (typeof contract?.createdBy === 'object' && contract.createdBy) {
+      return contract.createdBy.username === user?.username || contract.createdBy.name === user?.name;
+    }
+
+    return false;
+  }
+
   @Post()
+  @Permissions('contract:create')
   async create(@Body() createContractDto: CreateContractDto, @Request() req) {
     try {
       // ✅ CRM端保持原样：自动触发爱签流程
@@ -65,6 +117,7 @@ export class ContractsController {
   }
 
   @Get()
+  @Permissions('contract:view')
   async findAll(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
@@ -98,6 +151,7 @@ export class ContractsController {
   }
 
   @Get('statistics')
+  @Permissions('contract:view')
   async getStatistics() {
     try {
       const statistics = await this.contractsService.getStatistics();
@@ -115,6 +169,7 @@ export class ContractsController {
   }
 
   @Get('customer/:customerId')
+  @Permissions('contract:view')
   async findByCustomerId(@Param('customerId') customerId: string) {
     try {
       // ✅ 验证 customerId 是否是有效的 MongoDB ObjectId（24位十六进制字符串）
@@ -142,6 +197,7 @@ export class ContractsController {
   }
 
   @Get('worker/:workerId')
+  @Permissions('contract:view')
   async findByWorkerId(@Param('workerId') workerId: string) {
     try {
       const contracts = await this.contractsService.findByWorkerId(workerId);
@@ -159,6 +215,7 @@ export class ContractsController {
   }
 
   @Get('number/:contractNumber')
+  @Permissions('contract:view')
   async findByContractNumber(@Param('contractNumber') contractNumber: string) {
     try {
       const contract = await this.contractsService.findByContractNumber(contractNumber);
@@ -179,8 +236,8 @@ export class ContractsController {
    * 根据服务人员信息查询合同（用于保险投保页面自动填充）
    * 注意：此路由必须放在 @Get(':id') 之前，否则会被当作 ID 参数处理
    */
-  @Public()
   @Get('search-by-worker')
+  @Permissions('contract:view')
   async searchByWorkerInfo(
     @Query('name') name?: string,
     @Query('idCard') idCard?: string,
@@ -206,6 +263,7 @@ export class ContractsController {
    * 注意：此路由必须放在 @Get(':id') 之前，否则会被当作 ID 参数处理
    */
   @Post(':id/resend-sign-urls')
+  @Permissions('contract:edit')
   async resendSignUrls(@Param('id') contractId: string) {
     try {
       this.logger.debug(`开始重新获取签署链接, 合同ID: ${contractId}`);
@@ -254,6 +312,7 @@ export class ContractsController {
    * 注意：此路由必须放在 @Get(':id') 之前，否则会被当作 ID 参数处理
    */
   @Get('assignable-users')
+  @Permissions('user:view')
   async getAssignableUsers(@Request() req) {
     try {
       if (!this.isManagerOrAdmin(req.user)) {
@@ -275,10 +334,14 @@ export class ContractsController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  @Permissions('contract:view')
+  async findOne(@Param('id') id: string, @Request() req) {
     this.logger.debug(`收到合同详情请求, ID: ${id}`);
     try {
       const contract = await this.contractsService.findOne(id);
+      if (!this.canAccessContract(req.user, contract)) {
+        throw new ForbiddenException('无权限访问此合同');
+      }
       this.logger.debug(`合同详情查询完成: contractNumber=${contract.contractNumber}`);
       return {
         success: true,
@@ -295,6 +358,7 @@ export class ContractsController {
   }
 
   @Put(':id')
+  @Permissions('contract:edit')
   async update(@Param('id') id: string, @Body() updateContractDto: UpdateContractDto, @Request() req) {
     try {
       const contract = await this.contractsService.update(id, updateContractDto, req.user.userId);
@@ -313,6 +377,7 @@ export class ContractsController {
 
   // 删除请求端点（管理员直接删除，员工创建审批请求）
   @Post(':id/request-deletion')
+  @Permissions('contract:delete')
   async requestDeletion(
     @Param('id') id: string,
     @Body() body: { reason?: string },
@@ -360,6 +425,7 @@ export class ContractsController {
 
   // 保留原有的删除端点（仅供内部使用）
   @Delete(':id')
+  @Permissions('contract:delete')
   async remove(@Param('id') id: string, @Request() req) {
     try {
       // 只有管理员可以直接删除
@@ -382,6 +448,7 @@ export class ContractsController {
 
   // 分配合同给指定用户（仅管理员和经理）
   @Patch(':id/assign')
+  @Permissions('contract:edit')
   async assignContract(
     @Param('id') id: string,
     @Body() body: { assignedTo: string; reason?: string },
@@ -415,21 +482,15 @@ export class ContractsController {
     }
   }
 
-  @Get('test-no-auth')
-  @Public()
-  async testNoAuth() {
-    return {
-      success: true,
-      message: '无认证测试端点正常',
-      timestamp: new Date().toISOString()
-    };
-  }
-
   @Get(':id/esign-info')
-  async getEsignInfo(@Param('id') contractId: string) {
+  @Permissions('contract:view')
+  async getEsignInfo(@Param('id') contractId: string, @Request() req) {
     try {
       // 获取本地合同信息
       const contract = await this.contractsService.findOne(contractId);
+      if (!this.canAccessContract(req.user, contract)) {
+        throw new ForbiddenException('无权限访问此合同');
+      }
       
       if (!contract.esignContractNo) {
         return {
@@ -513,27 +574,12 @@ export class ContractsController {
     }
   }
 
-  @Post('esign/test-get-contract')
-  async testGetContract(@Body() body: { contractNo: string }) {
-    try {
-      const result = await this.esignService.getContractInfo(body.contractNo);
-      return result;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message || '测试getContract失败',
-        error: error.toString()
-      };
-    }
-  }
-
   // ==================== 换人功能 API ====================
 
   /**
    * 检查客户现有合同
    */
   @Get('check-customer/:customerPhone')
-  @Public()
   async checkCustomerContract(@Param('customerPhone') customerPhone: string) {
     try {
       const result = await this.contractsService.checkCustomerExistingContract(customerPhone);
@@ -583,7 +629,6 @@ export class ContractsController {
    * 获取客户合同历史
    */
   @Get('history/:customerPhone')
-  @Public()
   async getCustomerHistory(@Param('customerPhone') customerPhone: string) {
     try {
       const history = await this.contractsService.getCustomerContractHistory(customerPhone);
@@ -628,28 +673,6 @@ export class ContractsController {
   }
 
   /**
-   * 合同签约成功回调 - 临时禁用
-   */
-  @Post('signed-callback/:contractId')
-  async handleContractSigned(
-    @Param('contractId') contractId: string,
-    @Body() esignData: any
-  ) {
-    try {
-      // await this.contractsService.handleContractSigned(contractId, esignData);
-      return {
-        success: false,
-        message: '合同签约回调功能开发中',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message || '合同签约成功处理失败',
-      };
-    }
-  }
-
-  /**
    * 手动触发保险同步（用于重试失败的同步）
    * 增强功能：先查询爱签API确认合同状态，再触发保险同步
    */
@@ -671,79 +694,6 @@ export class ContractsController {
       return {
         success: false,
         message: error.message || '保险同步失败',
-      };
-    }
-  }
-}
-
-// 创建一个独立的测试控制器，不使用认证
-@Controller('contracts-test')
-export class ContractsTestController {
-  constructor(private readonly contractsService: ContractsService) {}
-
-  /**
-   * 检查客户现有合同 - 测试版本
-   */
-  @Get('check-customer/:customerPhone')
-  async checkCustomerContract(@Param('customerPhone') customerPhone: string) {
-    try {
-      const result = await this.contractsService.checkCustomerExistingContract(customerPhone);
-      return {
-        success: true,
-        data: result,
-        message: result.hasContract ? '客户已有合同' : '客户暂无合同',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message || '检查客户合同失败',
-      };
-    }
-  }
-
-  /**
-   * 创建换人合同 - 测试版本
-   */
-  @Post('change-worker/:originalContractId')
-  async createChangeWorkerContract(
-    @Param('originalContractId') originalContractId: string,
-    @Body() createContractDto: CreateContractDto
-  ) {
-    try {
-      const newContract = await this.contractsService.createChangeWorkerContract(
-        createContractDto,
-        originalContractId,
-        'test-user-id' // 临时用户ID
-      );
-      return {
-        success: true,
-        data: newContract,
-        message: '换人合同创建成功',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message || '换人合同创建失败',
-      };
-    }
-  }
-
-  /**
-   * 获取客户合同历史 - 测试版本
-   */
-  @Get('history/:customerPhone')
-  async getCustomerHistory(@Param('customerPhone') customerPhone: string) {
-    try {
-      const history = await this.contractsService.getCustomerContractHistory(customerPhone);
-      return {
-        success: true,
-        data: history,
-        message: history ? '获取客户合同历史成功' : '该客户暂无合同历史记录',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message || '获取客户合同历史失败',
       };
     }
   }

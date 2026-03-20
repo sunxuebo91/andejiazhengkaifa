@@ -969,6 +969,26 @@ export class CreateResumeDto {
   @IsArray()
   medicalReportUrls?: string[];
 
+  @ApiProperty({ description: '月子餐照片URL列表', required: false })
+  @IsOptional()
+  @IsArray()
+  confinementMealPhotoUrls?: string[];
+
+  @ApiProperty({ description: '烹饪照片URL列表', required: false })
+  @IsOptional()
+  @IsArray()
+  cookingPhotoUrls?: string[];
+
+  @ApiProperty({ description: '辅食添加照片URL列表', required: false })
+  @IsOptional()
+  @IsArray()
+  complementaryFoodPhotoUrls?: string[];
+
+  @ApiProperty({ description: '好评截图URL列表', required: false })
+  @IsOptional()
+  @IsArray()
+  positiveReviewPhotoUrls?: string[];
+
   // 新增字段
   @ApiProperty({ description: '紧急联系人姓名', example: '李四' })
   @IsOptional()
@@ -1027,4 +1047,26 @@ export class CreateResumeDto {
     filename?: string;
     size?: number;
   };
+
+  @ApiProperty({ description: '证书文件列表', required: false })
+  @IsOptional()
+  @IsArray()
+  @Allow()
+  certificates?: Array<{
+    url: string;
+    filename?: string;
+    size?: number;
+    mimetype?: string;
+  }>;
+
+  @ApiProperty({ description: '报告文件列表', required: false })
+  @IsOptional()
+  @IsArray()
+  @Allow()
+  reports?: Array<{
+    url: string;
+    filename?: string;
+    size?: number;
+    mimetype?: string;
+  }>;
 }

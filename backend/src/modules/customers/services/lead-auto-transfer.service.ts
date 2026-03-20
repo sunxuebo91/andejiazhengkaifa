@@ -167,6 +167,9 @@ export class LeadAutoTransferService implements OnModuleInit {
       // 允许自动流转
       autoTransferEnabled: { $ne: false },
 
+      // 未被冻结
+      isFrozen: { $ne: true },
+
       // 排除转介绍线索（不参与自动流转）
       leadSource: { $ne: '转介绍' },
     };
@@ -186,7 +189,6 @@ export class LeadAutoTransferService implements OnModuleInit {
       }
     }
 
-    // 调试：输出查询条件
     this.logger.log(`📝 查询条件: 阈值时间=${thresholdTime.toLocaleString('zh-CN')}, 状态=${triggerConditions.contractStatuses.join(',')}`);
 
     // 查询符合条件的线索（限制每次最多处理100条）
@@ -194,20 +196,6 @@ export class LeadAutoTransferService implements OnModuleInit {
 
     if (customers.length === 0) {
       this.logger.log(`规则 ${rule.ruleName}: 没有符合条件的线索`);
-
-      // 调试：分别测试各个条件
-      const debugCounts = {
-        total: await this.customerModel.countDocuments({}).exec(),
-        assignedTo: await this.customerModel.countDocuments({
-          assignedTo: { $in: rule.userQuotas.filter(u => u.role === 'source' || u.role === 'both').map(u => new Types.ObjectId(u.userId)) }
-        }).exec(),
-        contractStatus: await this.customerModel.countDocuments({
-          contractStatus: { $in: triggerConditions.contractStatuses }
-        }).exec(),
-        inPublicPool: await this.customerModel.countDocuments({ inPublicPool: false }).exec(),
-      };
-      this.logger.debug(`调试统计: ${JSON.stringify(debugCounts, null, 2)}`);
-
       return { transferredCount: 0, userStats: [] };
     }
 

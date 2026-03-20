@@ -92,6 +92,12 @@ export class ESignService {
     return this.callbackService.handleContractCallback(callbackData);
   }
 
+  async findContractForCallback(contractNo: string) {
+    return this.contractModel.findOne({
+      esignContractNo: contractNo,
+    }).populate('createdBy', '_id name').exec();
+  }
+
   /**
    * 获取调试配置信息
    */

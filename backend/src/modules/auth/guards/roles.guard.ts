@@ -1,6 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { normalizeRoleCode } from '../../roles/role.constants';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -22,6 +23,8 @@ export class RolesGuard implements CanActivate {
     }
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    return roles.includes(user.role);
+    const normalizedUserRole = normalizeRoleCode(user.role) ?? user.role;
+    const normalizedRoles = roles.map((role) => normalizeRoleCode(role) ?? role);
+    return normalizedRoles.includes(normalizedUserRole);
   }
 }

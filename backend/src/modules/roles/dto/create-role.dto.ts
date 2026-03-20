@@ -2,6 +2,11 @@ import { IsString, IsArray, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateRoleDto {
+  @ApiPropertyOptional({ description: '角色编码', example: 'manager' })
+  @IsString()
+  @IsOptional()
+  code?: string;
+
   @ApiProperty({ description: '角色名称', example: '经理' })
   @IsString()
   name: string;

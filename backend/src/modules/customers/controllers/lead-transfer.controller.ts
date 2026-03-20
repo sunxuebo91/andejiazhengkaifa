@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../../auth/guards/permissions.guard';
+import { Permissions } from '../../auth/decorators/permissions.decorator';
 import { LeadTransferRuleService } from '../services/lead-transfer-rule.service';
 import { LeadTransferRecordService } from '../services/lead-transfer-record.service';
 import { LeadAutoTransferService } from '../services/lead-auto-transfer.service';
@@ -19,7 +21,7 @@ interface ApiResponse {
 
 @ApiTags('线索流转')
 @Controller('lead-transfer')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class LeadTransferController {
   constructor(
@@ -36,6 +38,7 @@ export class LeadTransferController {
 
   @Post('rules')
   @Roles('admin', 'manager')
+  @Permissions('customer:edit')
   @ApiOperation({ summary: '创建流转规则' })
   async createRule(@Body() dto: CreateLeadTransferRuleDto, @Request() req: any): Promise<ApiResponse> {
     try {
@@ -48,6 +51,7 @@ export class LeadTransferController {
 
   @Get('rules')
   @Roles('admin', 'manager')
+  @Permissions('customer:view')
   @ApiOperation({ summary: '获取规则列表' })
   async getRules(): Promise<ApiResponse> {
     try {
@@ -60,6 +64,7 @@ export class LeadTransferController {
 
   @Get('rules/:id/predict')
   @Roles('admin', 'manager')
+  @Permissions('customer:view')
   @ApiOperation({ summary: '预测下次流转情况' })
   async predictNextTransfer(@Param('id') id: string): Promise<ApiResponse> {
     try {
@@ -72,6 +77,7 @@ export class LeadTransferController {
 
   @Get('rules/:id')
   @Roles('admin', 'manager')
+  @Permissions('customer:view')
   @ApiOperation({ summary: '获取规则详情' })
   async getRule(@Param('id') id: string): Promise<ApiResponse> {
     try {
@@ -84,6 +90,7 @@ export class LeadTransferController {
 
   @Patch('rules/:id')
   @Roles('admin', 'manager')
+  @Permissions('customer:edit')
   @ApiOperation({ summary: '更新规则' })
   async updateRule(
     @Param('id') id: string,
@@ -100,6 +107,7 @@ export class LeadTransferController {
 
   @Patch('rules/:id/toggle')
   @Roles('admin', 'manager')
+  @Permissions('customer:edit')
   @ApiOperation({ summary: '切换规则启用状态' })
   async toggleRule(
     @Param('id') id: string,
@@ -116,6 +124,7 @@ export class LeadTransferController {
 
   @Delete('rules/:id')
   @Roles('admin', 'manager')
+  @Permissions('customer:delete')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '删除规则' })
   async deleteRule(@Param('id') id: string, @Request() req: any): Promise<ApiResponse> {
@@ -131,6 +140,7 @@ export class LeadTransferController {
 
   @Get('records')
   @Roles('admin', 'manager', 'employee')
+  @Permissions('customer:view')
   @ApiOperation({ summary: '获取流转记录' })
   async getRecords(@Query() query: LeadTransferQueryDto): Promise<ApiResponse> {
     try {
@@ -143,6 +153,7 @@ export class LeadTransferController {
 
   @Get('statistics')
   @Roles('admin', 'manager')
+  @Permissions('customer:view')
   @ApiOperation({ summary: '获取流转统计' })
   async getStatistics(
     @Query('startDate') startDate?: string,
@@ -158,6 +169,7 @@ export class LeadTransferController {
 
   @Get('user-statistics/:userId')
   @Roles('admin', 'manager', 'employee')
+  @Permissions('customer:view')
   @ApiOperation({ summary: '获取用户流转统计' })
   async getUserStatistics(
     @Param('userId') userId: string,
@@ -174,6 +186,7 @@ export class LeadTransferController {
 
   @Post('execute-now')
   @Roles('admin', 'manager')
+  @Permissions('customer:edit')
   @ApiOperation({ summary: '手动执行指定规则' })
   async executeNow(@Body() body: { ruleId?: string }): Promise<ApiResponse> {
     try {
@@ -197,4 +210,3 @@ export class LeadTransferController {
     }
   }
 }
-

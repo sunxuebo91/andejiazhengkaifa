@@ -346,7 +346,7 @@ export class DashboardService {
   /**
    * 计算财务营收指标
    */
-  private async getFinancialMetrics(startDate?: string, endDate?: string): Promise<FinancialMetrics> {
+  async getFinancialMetrics(startDate?: string, endDate?: string): Promise<FinancialMetrics> {
     // 解析时间范围
     const { rangeStart, rangeEnd } = this.parseDateRange(startDate, endDate);
     
@@ -413,7 +413,7 @@ export class DashboardService {
   /**
    * 计算运营效率指标
    */
-  private async getEfficiencyMetrics(startDate?: string, endDate?: string): Promise<EfficiencyMetrics> {
+  async getEfficiencyMetrics(startDate?: string, endDate?: string): Promise<EfficiencyMetrics> {
     // 解析时间范围
     const { rangeStart, rangeEnd } = this.parseDateRange(startDate, endDate);
     

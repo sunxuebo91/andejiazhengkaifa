@@ -18,6 +18,44 @@ import { NotificationHelperService } from '../notification/notification-helper.s
 export class FormService {
   private readonly logger = new Logger(FormService.name);
 
+  private canViewAllFormSubmissions(user?: {
+    role?: string;
+    permissions?: string[];
+  }): boolean {
+    const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
+    const role = user?.role?.trim();
+
+    return permissions.includes('*')
+      || permissions.includes('admin:settings')
+      || permissions.includes('user:view')
+      || role === 'admin'
+      || role === 'manager'
+      || role === '系统管理员'
+      || role === '管理员'
+      || role === '经理'
+      || role === '主管';
+  }
+
+  private applySubmissionAccessFilter(
+    filter: Record<string, any>,
+    user?: {
+      userId?: string;
+      role?: string;
+      permissions?: string[];
+    },
+  ) {
+    if (this.canViewAllFormSubmissions(user)) {
+      return;
+    }
+
+    if (!user?.userId || !Types.ObjectId.isValid(user.userId)) {
+      filter._id = { $exists: false };
+      return;
+    }
+
+    filter.referredBy = new Types.ObjectId(user.userId);
+  }
+
   constructor(
     @InjectModel(FormConfig.name) private formConfigModel: Model<FormConfigDocument>,
     @InjectModel(FormField.name) private formFieldModel: Model<FormFieldDocument>,
@@ -419,7 +457,14 @@ export class FormService {
   /**
    * 获取所有表单的提交列表
    */
-  async getAllSubmissions(query: QuerySubmissionDto) {
+  async getAllSubmissions(
+    query: QuerySubmissionDto,
+    user?: {
+      userId?: string;
+      role?: string;
+      permissions?: string[];
+    },
+  ) {
     const { followUpStatus, startDate, endDate, page = 1, pageSize = 10 } = query;
 
     const filter: any = {};
@@ -437,6 +482,11 @@ export class FormService {
         filter.createdAt.$lte = new Date(endDate);
       }
     }
+
+    this.applySubmissionAccessFilter(filter, user);
+
+    this.logger.log(`表单提交列表查询 - 用户: ${user?.userId}, 角色: ${user?.role}, 权限: ${JSON.stringify(user?.permissions)}`);
+    this.logger.log(`表单提交列表查询条件: ${JSON.stringify(filter)}`);
 
     const skip = (page - 1) * pageSize;
 
@@ -465,7 +515,15 @@ export class FormService {
   /**
    * 获取表单提交列表
    */
-  async getSubmissions(formId: string, query: QuerySubmissionDto) {
+  async getSubmissions(
+    formId: string,
+    query: QuerySubmissionDto,
+    user?: {
+      userId?: string;
+      role?: string;
+      permissions?: string[];
+    },
+  ) {
     const { followUpStatus, startDate, endDate, page = 1, pageSize = 10 } = query;
 
     const filter: any = { formId: new Types.ObjectId(formId) };
@@ -483,6 +541,8 @@ export class FormService {
         filter.createdAt.$lte = new Date(endDate);
       }
     }
+
+    this.applySubmissionAccessFilter(filter, user);
 
     const skip = (page - 1) * pageSize;
 

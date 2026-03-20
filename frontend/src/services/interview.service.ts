@@ -31,7 +31,7 @@ export const createRoom = async (params: CreateRoomParams) => {
  * 获取面试间列表
  */
 export const getRooms = async (params?: QueryRoomsParams) => {
-  return await apiService.get<RoomListResponse>('/api/interview/rooms', { params });
+  return await apiService.get<RoomListResponse>('/api/interview/rooms', params);
 };
 
 /**
@@ -70,4 +70,3 @@ export const interviewService = {
   checkRoomStatus,
   getActiveRoom,
 };
-

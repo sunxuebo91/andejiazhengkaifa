@@ -17,9 +17,12 @@ import { ContractsModule } from '../contracts/contracts.module';
       { name: BackgroundCheck.name, schema: BackgroundCheckSchema },
     ]),
     // 用于验证URL参数中的token
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'andejiazheng-secret-key',
-      signOptions: { algorithm: 'HS256' },
+    JwtModule.registerAsync({
+      useFactory: () => {
+        const secret = process.env.JWT_SECRET;
+        if (!secret) throw new Error('JWT_SECRET environment variable is required');
+        return { secret, signOptions: { algorithm: 'HS256' } };
+      },
     }),
     forwardRef(() => ESignModule),
     forwardRef(() => ContractsModule),

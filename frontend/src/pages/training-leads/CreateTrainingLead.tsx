@@ -25,18 +25,26 @@ import {
   INTENDED_COURSES_OPTIONS,
   INTENTION_LEVEL_OPTIONS
 } from '../../types/training-lead.types';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { Option } = Select;
 const { TextArea } = Input;
 
 const CreateTrainingLead: React.FC = () => {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
+  const canViewUsers = hasPermission('user:view');
 
   // 加载用户列表
   useEffect(() => {
+    if (!canViewUsers) {
+      setUsers([]);
+      return;
+    }
+
     const fetchUsers = async () => {
       try {
         const response = await apiService.get('/api/users', { page: 1, pageSize: 1000 });
@@ -48,7 +56,7 @@ const CreateTrainingLead: React.FC = () => {
       }
     };
     fetchUsers();
-  }, []);
+  }, [canViewUsers]);
 
   const handleSubmit = async (values: any) => {
     setLoading(true);
@@ -294,25 +302,27 @@ const CreateTrainingLead: React.FC = () => {
                 </Form.Item>
               </Col>
 
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item
-                  label="学员归属"
-                  name="studentOwner"
-                >
-                  <Select
-                    placeholder="请选择学员归属"
-                    allowClear
-                    showSearch
-                    filterOption={(input, option) =>
-                      String(option?.children || '').toLowerCase().includes(input.toLowerCase())
-                    }
+              {canViewUsers && (
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item
+                    label="学员归属"
+                    name="studentOwner"
                   >
-                    {users.map(user => (
-                      <Option key={user._id} value={user._id}>{user.name}</Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              </Col>
+                    <Select
+                      placeholder="请选择学员归属"
+                      allowClear
+                      showSearch
+                      filterOption={(input, option) =>
+                        String(option?.children || '').toLowerCase().includes(input.toLowerCase())
+                      }
+                    >
+                      {users.map(user => (
+                        <Option key={user._id} value={user._id}>{user.name}</Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              )}
 
               <Col xs={24} sm={12} md={8}>
                 <Form.Item

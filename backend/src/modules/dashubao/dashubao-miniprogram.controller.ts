@@ -25,14 +25,13 @@ import {
 } from './dto/create-policy.dto';
 import { PolicyStatus } from './models/insurance-policy.model';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { AppLogger } from '../../common/logging/app-logger';
 
 @ApiTags('小程序-保险保单')
 @Controller('dashubao/miniprogram')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DashubaoMiniprogramController {
   private readonly logger = new AppLogger(DashubaoMiniprogramController.name);
 
@@ -51,6 +50,7 @@ export class DashubaoMiniprogramController {
   // ==================== 保单查询接口 ====================
 
   @Get('policies')
+  @Permissions('insurance:view')
   @ApiOperation({ summary: '【小程序】获取保单列表' })
   @ApiQuery({ name: 'status', required: false, enum: PolicyStatus, description: '保单状态筛选' })
   @ApiQuery({ name: 'resumeId', required: false, description: '关联简历ID' })
@@ -78,6 +78,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Get('policy/by-id-card/:idCard')
+  @Permissions('insurance:view')
   @ApiOperation({ summary: '【小程序】根据身份证号查询保单列表' })
   @ApiParam({ name: 'idCard', description: '被保险人身份证号' })
   @ApiResponse({ status: 200, description: '查询成功' })
@@ -92,6 +93,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Get('policy/by-policy-no/:policyNo')
+  @Permissions('insurance:view')
   @ApiOperation({ summary: '【小程序】根据保单号查询保单' })
   @ApiParam({ name: 'policyNo', description: '大树保保单号' })
   @ApiResponse({ status: 200, description: '查询成功' })
@@ -104,6 +106,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Get('policy/by-policy-ref/:policyRef')
+  @Permissions('insurance:view')
   @ApiOperation({ summary: '【小程序】根据商户单号查询保单' })
   @ApiParam({ name: 'policyRef', description: '渠道流水号（商户单号）' })
   @ApiResponse({ status: 200, description: '查询成功' })
@@ -116,6 +119,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Get('policy/:id')
+  @Permissions('insurance:view')
   @ApiOperation({ summary: '【小程序】根据ID获取保单详情' })
   @ApiParam({ name: 'id', description: '保单记录ID' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -130,6 +134,7 @@ export class DashubaoMiniprogramController {
   // ==================== 保单操作接口 ====================
 
   @Post('policy')
+  @Permissions('insurance:create')
   @ApiOperation({ summary: '【小程序】创建保单（投保确认）' })
   @ApiResponse({ status: 201, description: '保单创建成功' })
   @ApiResponse({ status: 400, description: '请求参数错误' })
@@ -143,6 +148,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Post('policy/query')
+  @Permissions('insurance:view')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】查询保单状态（从大树保查询）' })
   @ApiResponse({ status: 200, description: '查询成功' })
@@ -156,6 +162,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Post('policy/payment/:policyRef')
+  @Permissions('insurance:create')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】创建支付订单（小程序支付）' })
   @ApiParam({ name: 'policyRef', description: '保单号或商户单号' })
@@ -237,6 +244,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Post('policy/cancel')
+  @Permissions('insurance:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】注销保单（未生效保单）' })
   @ApiResponse({ status: 200, description: '注销成功' })
@@ -259,6 +267,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Post('policy/surrender')
+  @Permissions('insurance:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】退保（已生效保单）' })
   @ApiResponse({ status: 200, description: '退保成功' })
@@ -282,6 +291,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Post('policy/print')
+  @Permissions('insurance:view')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】获取电子保单PDF' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -304,6 +314,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Post('policy/amend')
+  @Permissions('insurance:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】批改保单（替换被保险人）' })
   @ApiResponse({ status: 200, description: '批改成功' })
@@ -317,6 +328,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Post('policy/add-insured')
+  @Permissions('insurance:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】批增（增加被保险人）' })
   @ApiResponse({ status: 200, description: '批增成功' })
@@ -330,6 +342,7 @@ export class DashubaoMiniprogramController {
   }
 
   @Post('policy/sync/:identifier')
+  @Permissions('insurance:edit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】同步保单状态（从大树保同步最新状态）' })
   @ApiParam({ name: 'identifier', description: '保单号或商户单号' })

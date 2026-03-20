@@ -3,13 +3,15 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { RolesService } from './roles.service';
 import { RolesController } from './roles.controller';
 import { RoleSchema } from './models/role.entity';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: 'Role', schema: RoleSchema }])
   ],
   controllers: [RolesController],
-  providers: [RolesService],
+  providers: [RolesService, RolesGuard, PermissionsGuard],
   exports: [RolesService],
 })
 export class RolesModule implements OnModuleInit {
@@ -19,4 +21,3 @@ export class RolesModule implements OnModuleInit {
     await this.rolesService.ensureDefaultRoles();
   }
 }
-

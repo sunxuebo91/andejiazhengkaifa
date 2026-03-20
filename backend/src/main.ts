@@ -13,6 +13,7 @@ if (!(global as any).crypto) {
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { Request } from 'express';
 // 确保在其他导入之前加载环境变量
 // 根据NODE_ENV加载对应的.env文件
 const envFile = process.env.NODE_ENV === 'production' ? '.env' : '.env.dev';
@@ -45,6 +46,8 @@ import { NestLoggerAdapter } from './common/logging/nest-logger.adapter';
 // 创建全局 Logger 适配器实例（bootstrap 前后共享同一个实例）
 const nestLoggerAdapter = new NestLoggerAdapter();
 
+type RawBodyRequest = Request & { rawBody?: string };
+
 async function bootstrap() {
   try {
     // 将 NestLoggerAdapter 直接作为 logger 传入：
@@ -56,6 +59,9 @@ async function bootstrap() {
       bufferLogs: true,
     });
 
+    // 动态 API 不使用 ETag / 304，避免权限变更后浏览器复用陈旧响应。
+    app.getHttpAdapter().getInstance().disable('etag');
+
     // 启用CORS
     app.enableCors({
       origin: true,
@@ -66,6 +72,14 @@ async function bootstrap() {
 
     // 设置API前缀
     app.setGlobalPrefix('api');
+
+    app.use('/api', (_req, res, next) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
+      next();
+    });
 
     // 全局响应转换和错误处理
     // 注意过滤器注册顺序：NestJS 后注册先执行，所以 AllExceptions 先注册作为兜底
@@ -79,17 +93,23 @@ async function bootstrap() {
     app.use('/api/dashubao/payment/callback', express.text({ type: 'application/xml' }));
     app.use('/api/dashubao/payment/callback', express.text({ type: 'text/xml' }));
 
-    // 其他接口使用JSON解析器
-    app.use(express.json({ limit: '50mb' }));
+    // 为需要签名验真的 JSON 回调保留原始请求体
+    app.use(express.json({
+      limit: '50mb',
+      verify: (req: RawBodyRequest, _res, buf) => {
+        if (req.originalUrl === '/api/esign/callback') {
+          req.rawBody = buf.toString('utf8');
+        }
+      },
+    }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
     // 启用全局验证
-    // 临时放宽验证规则进行调试
     app.useGlobalPipes(new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: false, // 临时设为false
-      skipMissingProperties: true,  // 跳过缺失属性
+      forbidNonWhitelisted: true,
+      skipMissingProperties: false,
       disableErrorMessages: false, // 显示详细错误信息
     }));
 

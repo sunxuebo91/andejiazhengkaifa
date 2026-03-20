@@ -6,6 +6,7 @@ import { Resume, ResumeSchema } from './models/resume.entity';
 import { WorkExperienceSchema, WorkExperienceSchemaFactory } from './models/work-experience.schema';
 import { FileInfoSchema, FileInfoSchemaFactory } from './models/file-info.schema';
 import { ResumeController } from './resume.controller';
+import { ResumeQueryService } from './resume-query.service';
 import { ResumeService } from './resume.service';
 import { UploadModule } from '../upload/upload.module';
 import { EmployeeEvaluation, EmployeeEvaluationSchema } from '../employee-evaluation/models/employee-evaluation.entity';
@@ -22,13 +23,16 @@ import { Contract, ContractSchema } from '../contracts/models/contract.model';
     ]),
     UploadModule,
     // 为分享令牌签发/验证提供 JwtService
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'andejiazheng-secret-key',
-      signOptions: { algorithm: 'HS256' }
+    JwtModule.registerAsync({
+      useFactory: () => {
+        const secret = process.env.JWT_SECRET;
+        if (!secret) throw new Error('JWT_SECRET environment variable is required');
+        return { secret, signOptions: { algorithm: 'HS256' } };
+      },
     }),
   ],
   controllers: [ResumeController],
-  providers: [ResumeService],
+  providers: [ResumeService, ResumeQueryService],
   exports: [ResumeService],
 })
 export class ResumeModule {}

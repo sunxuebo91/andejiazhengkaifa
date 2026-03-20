@@ -37,10 +37,16 @@ const CreateCustomer: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [assignableUsers, setAssignableUsers] = useState<Array<{ _id: string; name: string; username: string; role: string }>>([]);
-  const { user } = useAuth(); // 获取当前用户信息
+  const { user, hasPermission } = useAuth();
+  const canViewAssignableUsers = hasPermission('user:view');
 
   // 加载可分配用户（创建时可指定负责人）
   React.useEffect(() => {
+    if (!canViewAssignableUsers) {
+      setAssignableUsers([]);
+      return;
+    }
+
     const fetchUsers = async () => {
       try {
         const list = await cs.getAssignableUsers();
@@ -50,7 +56,7 @@ const CreateCustomer: React.FC = () => {
       }
     };
     fetchUsers();
-  }, []);
+  }, [canViewAssignableUsers]);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (values: any) => {
@@ -194,15 +200,17 @@ const CreateCustomer: React.FC = () => {
               </Form.Item>
             </Col>
             {/* 指定负责人（可选） */}
-            <Col span={8}>
-              <Form.Item label="指定负责人（可选）" name="assignedTo">
-                <Select allowClear placeholder="请选择负责人">
-                  {assignableUsers.map(u => (
-                    <Option key={u._id} value={u._id}>{u.name || u.username} ({u.role})</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
+            {canViewAssignableUsers && (
+              <Col span={8}>
+                <Form.Item label="指定负责人（可选）" name="assignedTo">
+                  <Select allowClear placeholder="请选择负责人">
+                    {assignableUsers.map(u => (
+                      <Option key={u._id} value={u._id}>{u.name || u.username} ({u.role})</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+            )}
           </Row>
 
           {/* 分配信息行 - 靠左对齐 */}

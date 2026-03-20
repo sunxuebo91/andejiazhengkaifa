@@ -2,6 +2,7 @@
 import {
   Controller,
   Post,
+  UseGuards,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
@@ -20,13 +21,13 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { UploadService } from './upload.service';
 import { VideoTranscoderService } from './video-transcoder.service';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiConsumes, ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CosException, CosErrorType } from './exceptions/cos.exception';
 
 @ApiTags('文件上传')
 @Controller('upload')
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class UploadController {
   private readonly logger = new Logger(UploadController.name);
 

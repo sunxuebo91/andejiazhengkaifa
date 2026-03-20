@@ -12,10 +12,10 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 import { ResumeService } from '../resume/resume.service';
 import { AvailabilityStatus } from '../resume/models/availability-period.schema';
 import { DashubaoService } from '../dashubao/dashubao.service';
-import { InsurancePolicy, InsurancePolicyDocument } from '../dashubao/models/insurance-policy.model';
 import { ESignService } from '../esign/esign.service';
 import { AppLogger } from '../../common/logging/app-logger';
 import { RequestContextStore } from '../../common/logging/request-context';
+import { ContractsQueryService } from './contracts-query.service';
 
 @Injectable()
 export class ContractsService {
@@ -32,6 +32,7 @@ export class ContractsService {
     @Inject(forwardRef(() => ResumeService)) private resumeService: ResumeService,
     private dashubaoService: DashubaoService,
     private esignService: ESignService,
+    private contractsQueryService: ContractsQueryService,
   ) {}
 
   /**
@@ -67,10 +68,10 @@ export class ContractsService {
     }
   }
 
-  // 生成合同编号
+  // 生成合同编号（扩大随机空间，降低并发碰撞概率）
   private generateContractNumber(): string {
     const timestamp = Date.now().toString();
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
     return `CON${timestamp.slice(-8)}${random}`;
   }
 
@@ -379,8 +380,26 @@ export class ContractsService {
         }
       }
 
-      const contract = new this.contractModel(createContractDto);
-      const savedContract = await contract.save();
+      let savedContract: ContractDocument;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          createContractDto.contractNumber = this.generateContractNumber();
+          this.logger.warn('contract.create.number_collision_retry', { attempt });
+        }
+        try {
+          const contract = new this.contractModel(createContractDto);
+          savedContract = await contract.save();
+          break;
+        } catch (saveError: any) {
+          if (saveError?.code === 11000 && saveError?.keyPattern?.contractNumber && attempt < 2) {
+            continue;
+          }
+          if (saveError?.code === 11000 && saveError?.keyPattern?.contractNumber) {
+            throw new ConflictException('合同编号生成冲突，请重试');
+          }
+          throw saveError;
+        }
+      }
 
       this.logger.info('contract.create.saved', {
         contractId: savedContract._id.toString(),
@@ -868,6 +887,26 @@ export class ContractsService {
       .exec();
   }
 
+  async updateContractStatusDirectly(id: string, updateData: Partial<Contract>): Promise<void> {
+    const updated = await this.contractModel
+      .findByIdAndUpdate(id, updateData, { new: true })
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException('合同不存在');
+    }
+  }
+
+  async findContractsPendingEsignSync(limit = 50): Promise<ContractDocument[]> {
+    return this.contractModel
+      .find({
+        esignContractNo: { $exists: true, $ne: null },
+        contractStatus: { $in: ['draft', 'signing'] },
+      })
+      .limit(limit)
+      .exec();
+  }
+
   // 更新合同
   async update(id: string, updateContractDto: UpdateContractDto, userId?: string): Promise<Contract> {
     // 先获取原合同状态
@@ -877,6 +916,23 @@ export class ContractsService {
     }
 
     const updateData: any = { ...updateContractDto };
+
+    // 合同状态机：校验转换合法性
+    if (updateContractDto.contractStatus && updateContractDto.contractStatus !== originalContract.contractStatus) {
+      const validTransitions: Record<string, string[]> = {
+        draft:     ['signing', 'cancelled'],
+        signing:   ['active', 'cancelled'],
+        active:    ['replaced', 'cancelled'],
+        replaced:  [],
+        cancelled: [],
+      };
+      const allowed = validTransitions[originalContract.contractStatus] ?? [];
+      if (!allowed.includes(updateContractDto.contractStatus)) {
+        throw new BadRequestException(
+          `合同状态不能从 ${originalContract.contractStatus} 变更为 ${updateContractDto.contractStatus}`
+        );
+      }
+    }
 
     // 处理日期字段
     if (updateContractDto.startDate) {
@@ -1154,173 +1210,7 @@ export class ContractsService {
 
   // 获取客户合同历史
   async getCustomerContractHistory(customerPhone: string): Promise<any> {
-    try {
-      this.logger.debug('🔍 获取客户合同历史:', { data: customerPhone });
-      
-      // 获取该客户的所有合同，按创建时间排序
-      const allContracts = await this.contractModel
-        .find({ customerPhone })
-        .populate('customerId', 'name phone customerId')
-        .populate('workerId', 'name phone')
-        .populate('createdBy', 'name username')
-        .sort({ createdAt: 1 }) // 按创建时间升序排列
-        .exec();
-
-      this.logger.debug(`📋 找到 ${allContracts.length} 个合同`);
-
-      if (allContracts.length === 0) {
-        return null;
-      }
-
-      // 构建换人历史记录
-      const workerHistory = [];
-      let totalServiceDays = 0;
-
-      allContracts.forEach((contract, index) => {
-        // 动态计算服务天数和实际结束日期
-        const contractStartDate = contract.startDate || contract.createdAt;
-        let actualEndDate: Date | null = null;
-        let calculatedServiceDays: number | null = null;
-
-        if (contract.replacedByContractId) {
-          // 已被替换的合同：结束日期 = 下一任合同的开始日期或换人生效日期
-          const nextContract = allContracts.find(c => c._id.toString() === contract.replacedByContractId.toString());
-          if (nextContract) {
-            actualEndDate = nextContract.changeDate || nextContract.startDate || nextContract.createdAt;
-          } else {
-            actualEndDate = contract.updatedAt || contract.endDate;
-          }
-        } else if (contract.isLatest) {
-          // 当前正在服务的合同：结束日期 = 合同约定结束日期，服务天数算到今天
-          actualEndDate = null; // 进行中，不设实际结束日期
-        } else {
-          // 其他情况（如已作废等）
-          actualEndDate = contract.endDate;
-        }
-
-        // 计算实际服务天数
-        if (contract.serviceDays) {
-          calculatedServiceDays = contract.serviceDays;
-        } else if (contractStartDate) {
-          const start = new Date(contractStartDate).getTime();
-          const end = actualEndDate ? new Date(actualEndDate).getTime() : Date.now();
-          calculatedServiceDays = Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
-        }
-
-        if (calculatedServiceDays) {
-          totalServiceDays += calculatedServiceDays;
-        }
-
-        const historyRecord = {
-          序号: index + 1,
-          合同编号: contract.contractNumber,
-          服务人员: contract.workerName,
-          联系电话: contract.workerPhone,
-          月薪: contract.workerSalary,
-          开始时间: contractStartDate,
-          结束时间: contract.replacedByContractId ? '已换人' : '进行中',
-          合同结束日期: contract.endDate,
-          实际结束日期: actualEndDate,
-          服务天数: calculatedServiceDays,
-          状态: contract.contractStatus,
-          是否最新: contract.isLatest,
-          创建时间: contract.createdAt,
-          被替换为: null,
-          替换了: null
-        };
-
-        // 添加替换关系信息
-        if (contract.replacedByContractId) {
-          const replacedBy = allContracts.find(c => c._id.toString() === contract.replacedByContractId.toString());
-          if (replacedBy) {
-            historyRecord.被替换为 = {
-              合同编号: replacedBy.contractNumber,
-              服务人员: replacedBy.workerName
-            };
-          }
-        }
-
-        if (contract.replacesContractId) {
-          const replaces = allContracts.find(c => c._id.toString() === contract.replacesContractId.toString());
-          if (replaces) {
-            historyRecord.替换了 = {
-              合同编号: replaces.contractNumber,
-              服务人员: replaces.workerName
-            };
-          }
-        }
-
-        workerHistory.push(historyRecord);
-      });
-
-      // 获取当前最新合同
-      const currentContract = allContracts.find(c => c.isLatest === true) || allContracts[allContracts.length - 1];
-
-      // 转换为前端期望的格式（使用 workerHistory 中已计算好的服务天数）
-      const contracts = allContracts.map((contract, index) => {
-        const historyItem = workerHistory[index];
-        const contractStartDate = contract.startDate || contract.createdAt;
-
-        // 已替换合同的实际结束日期 = 下一任合同的开始日期
-        let actualEndDate: Date | null = null;
-        if (contract.replacedByContractId) {
-          const nextContract = allContracts.find(c => c._id.toString() === contract.replacedByContractId.toString());
-          if (nextContract) {
-            actualEndDate = nextContract.changeDate || nextContract.startDate || nextContract.createdAt;
-          }
-        }
-
-        return {
-          contractId: contract._id.toString(),
-          order: index + 1,
-          contractNumber: contract.contractNumber,
-          workerName: contract.workerName,
-          workerPhone: contract.workerPhone,
-          workerSalary: contract.workerSalary,
-          startDate: contractStartDate,
-          endDate: contract.endDate, // 合同约定结束日期
-          actualEndDate, // 实际结束日期（换人时的结束日期）
-          serviceDays: historyItem?.服务天数 ?? null,
-          status: contract.isLatest ? 'active' : 'replaced',
-          terminationDate: contract.replacedByContractId ? (actualEndDate || contract.updatedAt) : null,
-          terminationReason: contract.replacedByContractId ? '换人' : null,
-          esignStatus: contract.esignStatus,
-          createdAt: contract.createdAt,
-          isLatest: contract.isLatest
-        };
-      });
-
-      const result = {
-        customerPhone,
-        customerName: currentContract.customerName,
-        totalContracts: allContracts.length,
-        totalWorkers: [...new Set(allContracts.map(c => c.workerName))].length,
-        totalServiceDays,
-        currentContract: {
-          id: currentContract._id,
-          contractNumber: currentContract.contractNumber,
-          workerName: currentContract.workerName,
-          workerPhone: currentContract.workerPhone,
-          workerSalary: currentContract.workerSalary,
-          status: currentContract.contractStatus,
-          isLatest: currentContract.isLatest
-        },
-        contracts, // 前端期望的字段名
-        workerHistory, // 保留原有的详细记录
-        latestContractId: currentContract._id
-      };
-
-      this.logger.debug('✅ 合同历史构建完成:', {
-        totalContracts: result.totalContracts,
-        totalWorkers: result.totalWorkers,
-        totalServiceDays: result.totalServiceDays
-      });
-
-      return result;
-    } catch (error) {
-      this.logger.error('获取客户合同历史失败:', error);
-      throw new BadRequestException(`获取客户合同历史失败: ${error.message}`);
-    }
+    return this.contractsQueryService.getCustomerContractHistory(customerPhone);
   }
 
   // 检查客户现有合同 - 用于换人模式判断
@@ -1330,159 +1220,12 @@ export class ContractsService {
     contractCount: number;
     isSignedContract: boolean;
   }> {
-    try {
-      this.logger.debug('🔍 开始检查客户现有合同, 手机号:', { data: customerPhone });
-      this.logger.debug('🔍 手机号类型:', { data: typeof customerPhone });
-      this.logger.debug('🔍 手机号长度:', { data: customerPhone.length });
-      this.logger.debug('🔍 手机号字符编码:', { data: [...customerPhone].map(c => c.charCodeAt(0)) });
-      
-      // 先测试查询所有合同
-      const allContracts = await this.contractModel.find({}).limit(5).exec();
-      this.logger.debug('📋 数据库中前5个合同的customerPhone字段:');
-      allContracts.forEach((contract, index) => {
-        this.logger.debug(`  ${index + 1}. ${contract.customerPhone} (类型: ${typeof contract.customerPhone}, 长度: ${contract.customerPhone?.length})`);
-      });
-      
-      // 查找该客户的所有合同
-      const queryCondition = { customerPhone };
-      this.logger.debug('🔍 查询条件:', { data: queryCondition });
-      
-      const contracts = await this.contractModel
-        .find(queryCondition)
-        .populate('customerId', 'name phone customerId')
-        .populate('workerId', 'name phone')
-        .populate('createdBy', 'name username')
-        .sort({ createdAt: -1 })
-        .exec();
-
-      this.logger.debug('📋 查询结果:', {
-        查询条件: { customerPhone },
-        找到合同数量: contracts.length,
-        合同列表: contracts.map(c => ({
-          id: c._id,
-          contractNumber: c.contractNumber,
-          customerName: c.customerName,
-          customerPhone: c.customerPhone,
-          esignStatus: c.esignStatus,
-          contractStatus: c.contractStatus
-        }))
-      });
-
-      if (contracts.length === 0) {
-        this.logger.debug('❌ 没有找到该客户的合同');
-        return {
-          hasContract: false,
-          contractCount: 0,
-          isSignedContract: false
-        };
-      }
-
-      // 查找最新的合同
-      const latestContract = contracts[0];
-      this.logger.debug('📄 最新合同:', {
-        id: latestContract._id,
-        contractNumber: latestContract.contractNumber,
-        esignStatus: latestContract.esignStatus,
-        contractStatus: latestContract.contractStatus
-      });
-      
-      // 检查是否有已签约状态的合同
-      // 爱签状态: '0'=待签约, '1'=已签约, '2'=已完成
-      // 只检查最新合同的状态，避免历史合同影响新合同创建
-      const latestSignedContract = contracts.find(contract => 
-        contract.isLatest !== false && (
-          contract.esignStatus === '1' || 
-          contract.esignStatus === '2' ||
-          contract.contractStatus === 'active'
-        )
-      );
-      
-      const hasSignedContract = !!latestSignedContract;
-
-      this.logger.debug('🔍 检查已签约状态:', {
-        合同状态检查: contracts.map(c => ({
-          contractNumber: c.contractNumber,
-          esignStatus: c.esignStatus,
-          contractStatus: c.contractStatus,
-          是否已签约: c.esignStatus === '1' || c.esignStatus === '2' || c.contractStatus === 'active'
-        })),
-        hasSignedContract
-      });
-
-      this.logger.debug('✅ 检查完成:', {
-        hasContract: true,
-        contractCount: contracts.length,
-        isSignedContract: hasSignedContract
-      });
-
-      return {
-        hasContract: true,
-        contract: latestContract,
-        contractCount: contracts.length,
-        isSignedContract: hasSignedContract
-      };
-    } catch (error) {
-      this.logger.error('检查客户现有合同失败:', error);
-      throw new BadRequestException(`检查客户现有合同失败: ${error.message}`);
-    }
+    return this.contractsQueryService.checkCustomerExistingContract(customerPhone);
   }
 
   // 根据服务人员信息查询合同（用于保险投保页面自动填充）
   async searchByWorkerInfo(name?: string, idCard?: string, phone?: string): Promise<Contract[]> {
-    try {
-      this.logger.debug('🔍 根据服务人员信息查询合同:', { name, idCard, phone });
-
-      // 构建查询条件 - 必须同时匹配所有提供的字段
-      const query: any = {};
-
-      if (name) {
-        query.workerName = name;
-      }
-
-      if (idCard) {
-        query.workerIdCard = idCard;
-      }
-
-      if (phone) {
-        query.workerPhone = phone;
-      }
-
-      // 如果没有提供任何查询条件，返回空数组
-      if (Object.keys(query).length === 0) {
-        this.logger.debug('❌ 未提供任何查询条件');
-        return [];
-      }
-
-      this.logger.debug('🔍 查询条件:', { data: query });
-
-      // 查询合同，只返回最新的合同
-      const contracts = await this.contractModel
-        .find(query)
-        .populate('customerId', 'name phone customerId address')
-        .populate('workerId', 'name phone idNumber hukouAddress')
-        .sort({ createdAt: -1 })
-        .limit(10) // 限制返回数量
-        .exec();
-
-      this.logger.debug('📋 查询结果:', {
-        查询条件: query,
-        找到合同数量: contracts.length,
-        合同列表: contracts.map(c => ({
-          id: c._id,
-          contractNumber: c.contractNumber,
-          customerName: c.customerName,
-          customerPhone: c.customerPhone,
-          workerName: c.workerName,
-          workerPhone: c.workerPhone,
-          workerIdCard: c.workerIdCard,
-        }))
-      });
-
-      return contracts;
-    } catch (error) {
-      this.logger.error('根据服务人员信息查询合同失败:', error);
-      throw new BadRequestException(`查询合同失败: ${error.message}`);
-    }
+    return this.contractsQueryService.searchByWorkerInfo(name, idCard, phone);
   }
 
   // 创建换人合同（自动合并模式）
@@ -1652,26 +1395,19 @@ export class ContractsService {
       const contract = new this.contractModel(mergedContractData);
       const newContract = await contract.save();
 
-      // 更新原合同状态为已替换
-      await this.contractModel.findByIdAndUpdate(originalContractId, {
-        isLatest: false,
-        contractStatus: 'replaced',
-        replacedByContractId: (newContract as any)._id,
-        serviceDays: serviceDays
-      });
-
-      // 🆕 同时更新该客户的其他历史合同状态
+      // 批量标记该客户所有旧合同为已替换（原合同 + 历史合同一次性处理）
       await this.contractModel.updateMany(
         {
           customerPhone: originalContract.customerPhone,
           _id: { $ne: newContract._id },
-          isLatest: { $ne: false }
         },
-        {
-          isLatest: false,
-          contractStatus: 'replaced'
-        }
+        { $set: { isLatest: false, contractStatus: 'replaced' } },
       );
+
+      // 为原合同补充换人特有字段（replacedByContractId、serviceDays）
+      await this.contractModel.findByIdAndUpdate(originalContractId, {
+        $set: { replacedByContractId: (newContract as any)._id, serviceDays },
+      });
 
       this.logger.debug('✅ 换人合并完成，新合同ID:', { data: (newContract as any)._id });
       this.logger.debug('📋 客户合同已自动合并，换人历史已记录');
@@ -1906,7 +1642,7 @@ export class ContractsService {
         this.logger.log(`⏭️ 合同 ${contractId} 保险已同步成功，跳过重复同步`);
         return;
       }
-      if (contract.insuranceSyncStatus === 'pending' && contract.insuranceSyncPending) {
+      if (contract.insuranceSyncStatus === 'pending') {
         this.logger.log(`⏭️ 合同 ${contractId} 保险正在同步中，跳过重复同步`);
         return;
       }
@@ -1955,10 +1691,7 @@ export class ContractsService {
     }
 
     // 🔥 修复：用身份证号匹配保单的被保险人，而不是用随机的 workerId
-    const policies = await this.dashubaoService['policyModel'].find({
-      'insuredList.idNumber': contract.workerIdCard,
-      status: 'active'
-    }).exec();
+    const policies = await this.dashubaoService.getActivePoliciesByIdCard(contract.workerIdCard);
 
     this.logger.log(`🔍 通过身份证号 ${contract.workerIdCard} 查找保单，找到 ${policies.length} 个`);
 
@@ -1978,10 +1711,7 @@ export class ContractsService {
     const bindResults = [];
     for (const policy of policies) {
       try {
-        await this.dashubaoService['policyModel'].findByIdAndUpdate(policy._id, {
-          contractId: contract._id,
-          bindToContractAt: new Date(),
-        });
+        await this.dashubaoService.bindPolicyToContract(policy._id, contract._id);
         bindResults.push({ success: true, policyNo: policy.policyNo });
         this.logger.log(`✅ 保单 ${policy.policyNo} 已绑定到合同 ${contract.contractNumber}`);
       } catch (error) {
@@ -2043,19 +1773,13 @@ export class ContractsService {
       }
 
       // 查找绑定到该合同的 active 保单
-      let found = await this.dashubaoService['policyModel'].find({
-        contractId: predecessorContract._id,
-        status: 'active'
-      }).exec();
+      let found = await this.dashubaoService.getActivePoliciesByContractId(predecessorContract._id);
 
       this.logger.log(`🔍 通过 contractId 查找 ${predecessorContract.workerName} 的保单，找到 ${found.length} 个`);
 
       // 如果没找到，用身份证号匹配
       if (found.length === 0) {
-        found = await this.dashubaoService['policyModel'].find({
-          'insuredList.idNumber': predecessorContract.workerIdCard,
-          status: 'active'
-        }).exec();
+        found = await this.dashubaoService.getActivePoliciesByIdCard(predecessorContract.workerIdCard);
         this.logger.log(`🔍 通过身份证号查找 ${predecessorContract.workerName} 的保单，找到 ${found.length} 个`);
       }
 

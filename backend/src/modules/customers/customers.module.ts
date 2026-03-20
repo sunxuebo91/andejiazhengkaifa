@@ -19,6 +19,9 @@ import { LeadTransferController } from './controllers/lead-transfer.controller';
 import { LeadTransferRuleService } from './services/lead-transfer-rule.service';
 import { LeadAutoTransferService } from './services/lead-auto-transfer.service';
 import { LeadTransferRecordService } from './services/lead-transfer-record.service';
+import { CustomerFollowUpStatusService } from './services/customer-follow-up-status.service';
+import { CustomerQueryService } from './services/customer-query.service';
+import { CustomerReadService } from './services/customer-read.service';
 
 @Module({
   imports: [
@@ -41,6 +44,9 @@ import { LeadTransferRecordService } from './services/lead-transfer-record.servi
   controllers: [CustomersController, LeadTransferController],
   providers: [
     CustomersService,
+    CustomerFollowUpStatusService,
+    CustomerQueryService,
+    CustomerReadService,
     LeadTransferRuleService,
     LeadAutoTransferService,
     LeadTransferRecordService,

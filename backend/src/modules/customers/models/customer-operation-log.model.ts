@@ -39,6 +39,8 @@ export class CustomerOperationLog extends Document {
       'change_status',    // 变更状态
       'change_lead_level',// 变更线索等级
       'batch_assign',     // 批量分配
+      'freeze',           // 冻结线索
+      'unfreeze',         // 解冻线索
       'other'             // 其他操作
     ],
     index: true

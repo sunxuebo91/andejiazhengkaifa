@@ -20,12 +20,18 @@ import * as fs from 'fs';
 import axios from 'axios';
 import { AppLogger } from '../../common/logging/app-logger';
 import { RequestContextStore } from '../../common/logging/request-context';
+import { ContractDocument } from '../contracts/models/contract.model';
+import { CustomerFollowUpStatusService } from './services/customer-follow-up-status.service';
+import { CustomerQueryService } from './services/customer-query.service';
+import { CustomerReadService } from './services/customer-read.service';
 
 
 @Injectable()
 export class CustomersService {
   private readonly logger = new AppLogger(CustomersService.name);
   private readonly systemOperatorId = new Types.ObjectId('000000000000000000000000');
+  private readonly signedCustomerContractStatus = '已签约';
+  private readonly signedCustomerLeadLevel = 'O类';
 
   constructor(
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
@@ -37,6 +43,9 @@ export class CustomersService {
     @InjectModel(Contract.name) private contractModel: Model<Contract>,
     private wechatService: WeChatService,
     private notificationHelper: NotificationHelperService,
+    private customerFollowUpStatusService: CustomerFollowUpStatusService,
+    private customerQueryService: CustomerQueryService,
+    private customerReadService: CustomerReadService,
   ) {}
 
   /**
@@ -88,98 +97,7 @@ export class CustomersService {
    * @param customerId 客户ID
    */
   async getOperationLogs(customerId: string): Promise<any[]> {
-    const logs = await this.operationLogModel
-      .find({ customerId: new Types.ObjectId(customerId) })
-      .populate('operatorId', 'name username')
-      .sort({ operatedAt: -1 })
-      .lean()
-      .exec();
-
-    return logs.map(log => ({
-      ...log,
-      operator: log.operatorId,
-    }));
-  }
-
-  /**
-   * 判断跟进记录是否为系统自动生成的记录
-   * 系统记录不算作有效跟进，只有员工手动填写的才算
-   * @param followUp 跟进记录
-   * @returns 是否为系统记录
-   */
-  private isSystemFollowUp(followUp: any): boolean {
-    // 系统记录的特征：
-    // 1. type 为 'other' 且 content 以 "系统" 开头
-    // 2. content 包含系统自动流转相关的关键词
-    const content = followUp.content || '';
-    const type = followUp.type || '';
-
-    // 检查是否为系统自动生成的记录
-    if (type === 'other' && (
-      content.startsWith('系统：') ||
-      content.startsWith('系统:') ||
-      content.includes('系统自动流转') ||
-      content.includes('负责人由') && content.includes('变更为')
-    )) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * 计算客户的跟进状态
-   * @param customer 客户对象
-   * @param followUps 跟进记录列表
-   * @param assignedToId 可选的负责人ID（用于列表查询时传入）
-   * @returns 跟进状态标签：'新客未跟进' | '流转未跟进' | '已跟进'
-   */
-  private calculateFollowUpStatus(customer: any, followUps: any[], assignedToId?: string): string | null {
-    // 检查当前负责人是否做过跟进
-    let hasOwnerFollowUp = false;
-
-    // 如果传入了 assignedToId，直接使用
-    let currentAssignedToId = assignedToId;
-
-    // 如果没有传入，尝试从 customer.assignedTo 中提取
-    if (!currentAssignedToId && customer.assignedTo) {
-      if (typeof customer.assignedTo === 'object') {
-        // 可能是 populated 的对象，尝试获取 _id
-        currentAssignedToId = customer.assignedTo._id?.toString() || customer.assignedTo.toString();
-      } else {
-        // 是 ObjectId 字符串
-        currentAssignedToId = customer.assignedTo.toString();
-      }
-    }
-
-    if (currentAssignedToId) {
-      // 过滤掉系统自动生成的记录，只保留员工手动填写的有效跟进记录
-      const validFollowUps = followUps ? followUps.filter(f => !this.isSystemFollowUp(f)) : [];
-
-      // 检查是否有当前负责人创建的有效跟进记录
-      hasOwnerFollowUp = validFollowUps.length > 0 && validFollowUps.some(followUp => {
-        const createdById = typeof followUp.createdBy === 'object'
-          ? followUp.createdBy._id?.toString()
-          : followUp.createdBy.toString();
-        return createdById === currentAssignedToId;
-      });
-    }
-
-    // 判断是流转线索还是新客线索
-    const transferCount = customer.transferCount || 0;
-
-    // 如果当前负责人已经做过有效跟进，显示"已跟进"
-    if (hasOwnerFollowUp) {
-      return '已跟进';
-    }
-
-    // 如果线索被流转过（transferCount > 0），显示"流转未跟进"
-    if (transferCount > 0) {
-      return '流转未跟进';
-    }
-
-    // 如果是新客（transferCount = 0），显示"新客未跟进"
-    return '新客未跟进';
+    return this.customerReadService.getOperationLogs(customerId);
   }
 
   /**
@@ -195,53 +113,7 @@ export class CustomersService {
     hasFollowUp: boolean;
     currentOwnerHasFollowUp: boolean;
   }> {
-    // 获取客户信息
-    const customer = await this.customerModel.findById(customerId).lean().exec();
-    if (!customer) {
-      throw new NotFoundException('客户不存在');
-    }
-
-    // 获取跟进记录 - 同时支持 ObjectId 和字符串格式（历史数据兼容）
-    const followUps = await this.customerFollowUpModel
-      .find({
-        $or: [
-          { customerId: customer._id },
-          { customerId: customerId }
-        ]
-      })
-      .populate('createdBy', '_id name username')
-      .lean()
-      .exec();
-
-    // 过滤掉系统自动生成的记录，只保留员工手动填写的有效跟进记录
-    const validFollowUps = followUps.filter(f => !this.isSystemFollowUp(f));
-
-    // 计算跟进状态
-    const followUpStatus = this.calculateFollowUpStatus(customer, followUps);
-
-    // 检查当前负责人是否做过有效跟进（不包括系统记录）
-    let currentOwnerHasFollowUp = false;
-    if (customer.assignedTo) {
-      const assignedToId = typeof customer.assignedTo === 'object'
-        ? (customer.assignedTo as any)._id?.toString()
-        : (customer.assignedTo as any).toString();
-
-      currentOwnerHasFollowUp = validFollowUps.some(followUp => {
-        const createdById = typeof followUp.createdBy === 'object'
-          ? (followUp.createdBy as any)._id?.toString()
-          : (followUp.createdBy as any).toString();
-        return createdById === assignedToId;
-      });
-    }
-
-    return {
-      customerId: customer._id.toString(),
-      customerName: customer.name,
-      followUpStatus,
-      transferCount: customer.transferCount || 0,
-      hasFollowUp: validFollowUps.length > 0,  // 只计算有效跟进记录
-      currentOwnerHasFollowUp,
-    };
+    return this.customerFollowUpStatusService.getFollowUpStatus(customerId);
   }
 
   // 生成客户ID
@@ -274,6 +146,14 @@ export class CustomersService {
       }
     }
 
+    // 检查微信号是否已存在（只有当微信号不为空时才检查）
+    if (wechatId) {
+      const existingByWechat = await this.customerModel.findOne({ wechatId });
+      if (existingByWechat) {
+        throw new ConflictException('该微信号已存在客户记录');
+      }
+    }
+
     const customerId = this.generateCustomerId();
 
     const now = new Date();
@@ -303,7 +183,18 @@ export class CustomersService {
     };
 
     const customer = new this.customerModel(customerData);
-    const savedCustomer = await customer.save();
+    let savedCustomer: CustomerDocument;
+    try {
+      savedCustomer = await customer.save();
+    } catch (saveError: any) {
+      if (saveError?.code === 11000 && saveError?.keyPattern?.phone) {
+        throw new ConflictException('该手机号已存在客户记录');
+      }
+      if (saveError?.code === 11000 && saveError?.keyPattern?.wechatId) {
+        throw new ConflictException('该微信号已存在客户记录');
+      }
+      throw saveError;
+    }
 
     // 📝 记录操作日志 - 创建客户
     await this.logOperation(
@@ -347,418 +238,12 @@ export class CustomersService {
     limit: number;
     totalPages: number;
   }> {
-    const {
-      search,
-      caregiverName,
-      caregiverPhone,
-      page = 1,
-      limit = 10,
-      sortBy = 'updatedAt',
-      sortOrder = 'desc',
-      createdStartDate,
-      createdEndDate,
-      assignedStartDate,
-      assignedEndDate,
-      followUpStatus, // 🆕 跟进状态筛选参数
-      ...filters
-    } = query as any;
-
-    const searchConditions: any = {};
-
-    // 🔥 [FIX] 客户列表应该只显示非公海客户
-    searchConditions.inPublicPool = false;
-
-    // 🔥 [OPTIMIZATION] 如果用户主动搜索（输入了关键词），则搜索所有客户（包括流失客户）
-    // 如果没有搜索关键词，则排除流失客户（除非用户主动筛选流失客户）
-    if (!search) {
-      // 没有搜索关键词时，排除流失客户（流失客户只在公海显示）
-      // 注意：如果用户主动筛选 contractStatus='流失客户'，则允许显示
-      if (!filters.contractStatus || filters.contractStatus !== '流失客户') {
-        searchConditions.contractStatus = { $ne: '流失客户' };
-      }
-    }
-
-    // 构建搜索条件（支持姓名、电话、微信号）
-    if (search) {
-      searchConditions.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { phone: (search || '').trim() }, // 添加精确匹配
-        { wechatId: { $regex: search, $options: 'i' } }, // 微信号模糊搜索
-        { wechatId: (search || '').trim() }, // 微信号精确匹配
-      ];
-    }
-
-    // 按名字或手机号精确搜索
-    if (query.name) {
-      searchConditions.name = { $regex: query.name, $options: 'i' };
-    }
-    if (query.phone) {
-      searchConditions.$or = [
-        { phone: { $regex: query.phone, $options: 'i' } },
-        { phone: (query.phone || '').trim() }, // 添加精确匹配
-      ];
-    }
-
-    // 阿姨搜索（预留）
-    if (caregiverName) {
-      searchConditions.caregiverName = { $regex: caregiverName, $options: 'i' };
-    }
-    if (caregiverPhone) {
-      searchConditions.caregiverPhone = { $regex: caregiverPhone, $options: 'i' };
-    }
-
-    // 线索创建时间范围筛选
-    if (createdStartDate || createdEndDate) {
-      searchConditions.createdAt = {};
-      if (createdStartDate) {
-        searchConditions.createdAt.$gte = new Date(createdStartDate);
-      }
-      if (createdEndDate) {
-        // 设置为当天的23:59:59
-        const endDate = new Date(createdEndDate);
-        endDate.setHours(23, 59, 59, 999);
-        searchConditions.createdAt.$lte = endDate;
-      }
-    }
-
-    // 线索分配时间范围筛选
-    if (assignedStartDate || assignedEndDate) {
-      searchConditions.assignedAt = {};
-      if (assignedStartDate) {
-        searchConditions.assignedAt.$gte = new Date(assignedStartDate);
-      }
-      if (assignedEndDate) {
-        // 设置为当天的23:59:59
-        const endDate = new Date(assignedEndDate);
-        endDate.setHours(23, 59, 59, 999);
-        searchConditions.assignedAt.$lte = endDate;
-      }
-    }
-
-    // 线索状态筛选：通过 transferCount 判断
-    if (filters.leadStatus === '已流转') {
-      searchConditions.transferCount = { $gt: 0 };
-      delete filters.leadStatus;
-    } else if (filters.leadStatus === '未流转') {
-      searchConditions.$and = (searchConditions.$and || []).concat([
-        {
-          $or: [
-            { transferCount: { $exists: false } },
-            { transferCount: 0 },
-          ],
-        },
-      ]);
-      delete filters.leadStatus;
-    }
-
-    // 其他筛选条件（包含 assignedTo 等）
-    Object.keys(filters).forEach((key) => {
-      if (filters[key]) {
-        // 如果是 assignedTo，需要转换为 ObjectId
-        if (key === 'assignedTo') {
-          searchConditions[key] = new Types.ObjectId(filters[key]);
-        } else if (key !== 'leadStatus') {
-          searchConditions[key] = filters[key];
-        }
-      }
-    });
-
-    // 基于角色的可见性控制
-    if (currentUserId) {
-      const currentUser = await this.userModel.findById(currentUserId).select('role').lean();
-      const role = (currentUser as any)?.role;
-      // 检查是否是普通员工（兼容 'employee' 和 '普通员工'）
-      const isEmployee = role === 'employee' || role === '普通员工';
-      if (isEmployee) {
-        // 员工默认仅能看到自己负责或自己创建的客户
-        searchConditions.$and = (searchConditions.$and || []).concat([
-          {
-            $or: [
-              { assignedTo: new Types.ObjectId(currentUserId) },
-              { assignedTo: currentUserId },
-              { createdBy: new Types.ObjectId(currentUserId) },
-              { createdBy: currentUserId },
-            ],
-          },
-        ]);
-      }
-    }
-
-    const skip = (page - 1) * limit;
-
-    // 🔥 [CUSTOMER-SORT-FIX] 强制按更新时间倒序排序，与简历列表保持一致
-    this.logger.debug('customer.list.query_start', {
-      page,
-      limit,
-      sortBy,
-      followUpStatus,
-      searchConditions,
-    });
-
-    // 🆕 如果有 followUpStatus 筛选，使用聚合管道在数据库层面筛选
-    if (followUpStatus) {
-      return this.findAllWithFollowUpStatusFilter(searchConditions, followUpStatus, page, limit, skip);
-    }
-
-    const findQuery = this.customerModel
-      .find(searchConditions)
-      .sort({ updatedAt: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('assignedTo', '_id name username')
-      .lean();
-
-    const [customers, total] = await Promise.all([
-      findQuery.exec(),
-      this.customerModel.countDocuments(searchConditions).exec(),
-    ]);
-
-    // 🔥 [CUSTOMER-SORT-FIX] 强制二次排序确保正确性
-    const sortedCustomers = (customers || []).sort((a: any, b: any) => {
-      const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
-      const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
-      return bTime - aTime;
-    });
-
-    // 🔥 转换 assignedTo 为 assignedToUser 格式，并计算跟进状态
-    const customersWithFollowUpStatus = await Promise.all(
-      sortedCustomers.map(async (customer: any) => {
-        // 获取该客户的跟进记录 - 使用 customer._id (ObjectId) 查询
-        const followUps = await this.customerFollowUpModel
-          .find({ customerId: customer._id })
-          .populate('createdBy', '_id name username')
-          .lean()
-          .exec();
-
-        // 提取 assignedToId（因为 customer.assignedTo 已经被 populate 了）
-        const assignedToId = customer.assignedTo?._id?.toString() || customer.assignedTo?.toString();
-
-        // 计算跟进状态，传入正确的 assignedToId
-        const calculatedFollowUpStatus = this.calculateFollowUpStatus(customer, followUps, assignedToId);
-
-        return {
-          ...customer,
-          assignedToUser: customer.assignedTo ? {
-            name: customer.assignedTo.name,
-            username: customer.assignedTo.username
-          } : null,
-          followUpStatus: calculatedFollowUpStatus
-        };
-      })
-    );
-
-    return {
-      customers: customersWithFollowUpStatus,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
-  }
-
-  /**
-   * 🆕 使用聚合管道按跟进状态筛选客户列表
-   * - 新客未跟进：客户没有任何跟进记录
-   * - 流转未跟进：客户有跟进记录，但当前归属人没有跟进过
-   * - 已跟进：当前归属人跟进过该客户
-   */
-  private async findAllWithFollowUpStatusFilter(
-    searchConditions: any,
-    followUpStatus: string,
-    page: number,
-    limit: number,
-    skip: number
-  ): Promise<{
-    customers: Customer[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }> {
-    // 系统自动记录的关键词（用于过滤无效跟进）
-    const systemKeywords = ['创建', '分配', '领取', '释放', '流转', '自动', '系统'];
-    const systemKeywordRegex = systemKeywords.join('|');
-
-    // 构建聚合管道
-    const pipeline: any[] = [
-      // 1. 基础筛选条件
-      { $match: searchConditions },
-
-      // 2. LEFT JOIN 跟进记录表
-      {
-        $lookup: {
-          from: 'customer_follow_ups',
-          localField: '_id',
-          foreignField: 'customerId',
-          as: 'allFollowUps'
-        }
-      },
-
-      // 3. 过滤掉系统自动生成的跟进记录，只保留有效跟进
-      {
-        $addFields: {
-          validFollowUps: {
-            $filter: {
-              input: '$allFollowUps',
-              as: 'f',
-              cond: {
-                $not: {
-                  $regexMatch: {
-                    input: { $ifNull: ['$$f.content', ''] },
-                    regex: systemKeywordRegex,
-                    options: 'i'
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-
-      // 4. 检查当前归属人是否有跟进记录
-      {
-        $addFields: {
-          hasAnyFollowUp: { $gt: [{ $size: '$validFollowUps' }, 0] },
-          hasOwnerFollowUp: {
-            $gt: [
-              {
-                $size: {
-                  $filter: {
-                    input: '$validFollowUps',
-                    as: 'f',
-                    cond: { $eq: ['$$f.createdBy', '$assignedTo'] }
-                  }
-                }
-              },
-              0
-            ]
-          },
-          transferCountVal: { $ifNull: ['$transferCount', 0] }
-        }
-      },
-
-      // 5. 计算跟进状态
-      {
-        $addFields: {
-          calculatedFollowUpStatus: {
-            $cond: {
-              if: '$hasOwnerFollowUp',
-              then: '已跟进',
-              else: {
-                $cond: {
-                  if: { $gt: ['$transferCountVal', 0] },
-                  then: '流转未跟进',
-                  else: '新客未跟进'
-                }
-              }
-            }
-          }
-        }
-      },
-
-      // 6. 按跟进状态筛选
-      { $match: { calculatedFollowUpStatus: followUpStatus } },
-    ];
-
-    // 获取总数的管道
-    const countPipeline = [...pipeline, { $count: 'total' }];
-
-    // 获取分页数据的管道
-    const dataPipeline = [
-      ...pipeline,
-      { $sort: { updatedAt: -1, createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      // JOIN 用户表获取 assignedTo 详情
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'assignedTo',
-          foreignField: '_id',
-          as: 'assignedToInfo'
-        }
-      },
-      {
-        $addFields: {
-          assignedTo: { $arrayElemAt: ['$assignedToInfo', 0] }
-        }
-      },
-      // 移除临时字段
-      {
-        $project: {
-          allFollowUps: 0,
-          validFollowUps: 0,
-          hasAnyFollowUp: 0,
-          hasOwnerFollowUp: 0,
-          transferCountVal: 0,
-          assignedToInfo: 0
-        }
-      }
-    ];
-
-    // 并行执行统计和数据查询
-    const [countResult, customers] = await Promise.all([
-      this.customerModel.aggregate(countPipeline).exec(),
-      this.customerModel.aggregate(dataPipeline).exec()
-    ]);
-
-    const total = countResult[0]?.total || 0;
-
-    // 格式化返回数据
-    const formattedCustomers = customers.map((customer: any) => ({
-      ...customer,
-      followUpStatus: customer.calculatedFollowUpStatus,
-      assignedToUser: customer.assignedTo ? {
-        _id: customer.assignedTo._id,
-        name: customer.assignedTo.name,
-        username: customer.assignedTo.username
-      } : null,
-      calculatedFollowUpStatus: undefined // 移除临时字段
-    }));
-
-    this.logger.debug('customer.list.followup_filter_result', {
-      total,
-      returned: formattedCustomers.length,
-      followUpStatus,
-    });
-
-    return {
-      customers: formattedCustomers,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    return this.customerQueryService.findAll(query, currentUserId);
   }
 
   // 🔥 电子签名专用搜索：包含所有状态的客户（包括流失客户）
   async searchForESign(search: string, limit: number = 10): Promise<Customer[]> {
-    if (!search) {
-      return [];
-    }
-
-    const searchConditions: any = {
-      inPublicPool: false, // 只搜索非公海客户
-      $or: [
-        { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { phone: (search || '').trim() }, // 精确匹配
-        { wechatId: { $regex: search, $options: 'i' } },
-        { wechatId: (search || '').trim() },
-      ],
-    };
-
-    // 🔥 注意：不过滤 contractStatus，允许搜索所有状态的客户（包括流失客户）
-    const customers = await this.customerModel
-      .find(searchConditions)
-      .sort({ updatedAt: -1, createdAt: -1 })
-      .limit(limit)
-      .populate('assignedTo', 'name username')
-      .lean()
-      .exec();
-
-    return customers as any;
+    return this.customerQueryService.searchForESign(search, limit);
   }
 
   // 根据ID获取客户详情（包含跟进记录）
@@ -770,82 +255,17 @@ export class CustomersService {
     followUps?: CustomerFollowUp[];
     followUpStatus?: string | null;
   }> {
-    const customer = await this.customerModel.findById(id).exec();
-    if (!customer) {
-      throw new NotFoundException('客户不存在');
-    }
-
-    // 获取创建人信息
-    const createdByUser = await this.userModel
-      .findById(customer.createdBy)
-      .select('name username')
-      .lean()
-      .exec();
-
-    // 获取最后更新人信息
-    const lastUpdatedByUser = customer.lastUpdatedBy ? await this.userModel
-      .findById(customer.lastUpdatedBy)
-      .select('name username')
-      .lean()
-      .exec() : null;
-
-    // 获取当前负责人信息
-    const assignedToUser = customer.assignedTo ? await this.userModel
-      .findById(customer.assignedTo)
-      .select('name username')
-      .lean()
-      .exec() : null;
-
-    // 获取分配人信息
-    const assignedByUser = customer.assignedBy ? await this.userModel
-      .findById(customer.assignedBy)
-      .select('name username')
-      .lean()
-      .exec() : null;
-
-    // 获取跟进记录 - 同时支持 ObjectId 和字符串格式的 customerId（历史数据兼容）
-    // 🔧 过滤掉系统自动生成的记录，只返回员工手动填写的跟进记录
-    const allFollowUps = await this.customerFollowUpModel
-      .find({
-        $or: [
-          { customerId: customer._id },  // ObjectId 格式
-          { customerId: id }              // 字符串格式（历史数据兼容）
-        ]
-      })
-      .populate('createdBy', '_id name username')
-      .sort({ createdAt: -1 })
-      .exec();
-
-    // 过滤掉系统记录（type='other' 且内容以"系统"开头的记录）
-    const followUps = allFollowUps.filter(followUp => !this.isSystemFollowUp(followUp));
-
-    // 计算跟进状态
-    const followUpStatus = this.calculateFollowUpStatus(customer.toObject(), followUps);
-
-    return {
-      ...customer.toObject(),
-      createdByUser: createdByUser ? { name: createdByUser.name, username: createdByUser.username } : null,
-      lastUpdatedByUser: lastUpdatedByUser ? { name: lastUpdatedByUser.name, username: lastUpdatedByUser.username } : null,
-      assignedToUser: assignedToUser ? { name: assignedToUser.name, username: assignedToUser.username } : null,
-      assignedByUser: assignedByUser ? { name: assignedByUser.name, username: assignedByUser.username } : null,
-      followUps: followUps,
-      followUpStatus
-    };
+    return this.customerReadService.findOne(id);
   }
 
   // 根据客户ID获取客户详情
   async findByCustomerId(customerId: string): Promise<Customer> {
-    const customer = await this.customerModel.findOne({ customerId }).exec();
-    if (!customer) {
-      throw new NotFoundException('客户不存在');
-    }
-    return customer;
+    return this.customerReadService.findByCustomerId(customerId);
   }
 
   // 根据手机号获取客户信息
   async findByPhone(phone: string): Promise<Customer | null> {
-    const customer = await this.customerModel.findOne({ phone }).exec();
-    return customer;
+    return this.customerReadService.findByPhone(phone);
   }
 
   // 更新客户信息
@@ -885,6 +305,18 @@ export class CustomersService {
 
       if (existingCustomer) {
         throw new ConflictException('该手机号已被其他客户使用');
+      }
+    }
+
+    // 如果更新微信号，检查是否与其他客户冲突（只有当微信号不为空时才检查）
+    if (updateCustomerDto.wechatId && updateCustomerDto.wechatId.trim()) {
+      const existingByWechat = await this.customerModel.findOne({
+        wechatId: updateCustomerDto.wechatId.trim(),
+        _id: { $ne: id }
+      });
+
+      if (existingByWechat) {
+        throw new ConflictException('该微信号已被其他客户使用');
       }
     }
 
@@ -1040,6 +472,124 @@ export class CustomersService {
       this.logger.error('customer.lead_level_o.sync_failed', error, { customerId });
       // 不抛出异常，避免影响合同流程
     }
+  }
+
+  async syncCustomerSignedStateFromContract(contract: ContractDocument): Promise<{
+    customerId?: string;
+    changedFields: Record<string, any>;
+  }> {
+    try {
+      const customer = await this.findCustomerForSignedContract(contract);
+      if (!customer) {
+        this.logger.warn('customer.signed_sync.customer_missing', {
+          contractId: contract._id.toString(),
+          contractNumber: contract.contractNumber,
+        });
+        return { changedFields: {} };
+      }
+
+      const before = {
+        name: customer.name,
+        phone: customer.phone,
+        idCardNumber: customer.idCardNumber,
+        address: customer.address,
+        contractStatus: customer.contractStatus,
+        leadLevel: customer.leadLevel,
+      };
+
+      const changedFields: Record<string, any> = {};
+      const contractName = contract.customerName?.trim();
+      const contractPhone = contract.customerPhone?.trim();
+      const contractIdCard = contract.customerIdCard?.trim();
+      const contractAddress = contract.customerAddress?.trim();
+
+      if (contractName && contractName !== (customer.name || '').trim()) {
+        changedFields.name = contractName;
+      }
+      if (contractPhone && contractPhone !== (customer.phone || '').trim()) {
+        changedFields.phone = contractPhone;
+      }
+      if (contractIdCard && contractIdCard !== (customer.idCardNumber || '').trim()) {
+        changedFields.idCardNumber = contractIdCard;
+      }
+      if (contractAddress && contractAddress !== (customer.address || '').trim()) {
+        changedFields.address = contractAddress;
+      }
+      if (customer.contractStatus !== this.signedCustomerContractStatus) {
+        changedFields.contractStatus = this.signedCustomerContractStatus;
+      }
+      if (customer.leadLevel !== this.signedCustomerLeadLevel) {
+        changedFields.leadLevel = this.signedCustomerLeadLevel;
+      }
+
+      if (Object.keys(changedFields).length === 0) {
+        this.logger.info('customer.signed_sync.no_change', {
+          customerId: customer._id.toString(),
+          contractId: contract._id.toString(),
+        });
+        return {
+          customerId: customer._id.toString(),
+          changedFields: {},
+        };
+      }
+
+      changedFields.updatedAt = new Date();
+      changedFields.lastActivityAt = new Date();
+
+      await this.customerModel.findByIdAndUpdate(customer._id, changedFields).exec();
+
+      await this.logOperation(
+        customer._id as Types.ObjectId,
+        (contract.createdBy as any)?.toString?.() || 'system',
+        'update',
+        '合同签约自动更新',
+        {
+          before,
+          after: {
+            ...before,
+            ...changedFields,
+          },
+          description: '合同签约成功，自动同步客户实名信息、客户状态和线索等级',
+          relatedId: contract._id.toString(),
+          relatedType: 'contract',
+        }
+      );
+
+      this.logger.info('customer.signed_sync.updated', {
+        customerId: customer._id.toString(),
+        contractId: contract._id.toString(),
+        changedFields: Object.keys(changedFields),
+      });
+
+      return {
+        customerId: customer._id.toString(),
+        changedFields,
+      };
+    } catch (error) {
+      this.logger.error('customer.signed_sync.failed', error, {
+        contractId: contract._id?.toString?.(),
+        contractNumber: contract.contractNumber,
+      });
+      return { changedFields: {} };
+    }
+  }
+
+  private async findCustomerForSignedContract(contract: ContractDocument): Promise<CustomerDocument | null> {
+    if (contract.customerId) {
+      const customer = await this.customerModel.findById(contract.customerId).exec();
+      if (customer) {
+        return customer;
+      }
+    }
+
+    if (contract.customerPhone) {
+      const customer = await this.customerModel.findOne({ phone: contract.customerPhone }).exec();
+      if (customer) {
+        return customer;
+      }
+    }
+
+    return null;
   }
 
   // 删除客户
@@ -1471,45 +1021,12 @@ export class CustomersService {
 
   // 获取客户的分配历史
   async getAssignmentLogs(customerId: string) {
-    const logs = await this.assignmentLogModel
-      .find({ customerId: new Types.ObjectId(customerId) })
-      .populate('oldAssignedTo', 'name username')
-      .populate('newAssignedTo', 'name username')
-      .populate('assignedBy', 'name username')
-      .sort({ assignedAt: -1 })
-      .lean()
-      .exec();
-
-    // 转换字段名以匹配前端期望
-    return logs.map(log => ({
-      ...log,
-      oldAssignedToUser: log.oldAssignedTo,
-      newAssignedToUser: log.newAssignedTo,
-      assignedByUser: log.assignedBy,
-    }));
+    return this.customerReadService.getAssignmentLogs(customerId);
   }
 
   // 获取客户跟进记录（过滤掉系统自动生成的记录）
   async getFollowUps(customerId: string): Promise<CustomerFollowUp[]> {
-    const customer = await this.customerModel.findById(customerId).exec();
-    if (!customer) {
-      throw new NotFoundException('客户不存在');
-    }
-
-    // 同时支持 ObjectId 和字符串格式的 customerId（历史数据兼容）
-    const allFollowUps = await this.customerFollowUpModel
-      .find({
-        $or: [
-          { customerId: customer._id },  // ObjectId 格式
-          { customerId: customerId }      // 字符串格式（历史数据兼容）
-        ]
-      })
-      .populate('createdBy', '_id name username')
-      .sort({ createdAt: -1 })
-      .exec();
-
-    // 🔧 过滤掉系统自动生成的记录，只返回员工手动填写的跟进记录
-    return allFollowUps.filter(followUp => !this.isSystemFollowUp(followUp));
+    return this.customerReadService.getFollowUps(customerId);
   }
 
   // 发送分配通知
@@ -2066,6 +1583,10 @@ export class CustomersService {
       throw new ConflictException('客户已在公海中');
     }
 
+    if ((customer as any).isFrozen) {
+      throw new ForbiddenException('该线索已被冻结，无法释放到公海');
+    }
+
     // 检查是否是负责人或管理员
     const user = await this.userModel.findById(userId).select('role').lean();
     const isOwner = (customer as any).assignedTo?.toString() === userId;
@@ -2164,6 +1685,12 @@ export class CustomersService {
 
         if ((customer as any).inPublicPool) {
           errors.push({ customerId, error: '客户已在公海中' });
+          failedCount++;
+          continue;
+        }
+
+        if ((customer as any).isFrozen) {
+          errors.push({ customerId, error: '该线索已被冻结，无法释放到公海' });
           failedCount++;
           continue;
         }
@@ -2555,5 +2082,62 @@ export class CustomersService {
       totalAmount,         // 签约金额
       isAdmin,             // 是否管理员视角
     };
+  }
+
+  // 冻结线索
+  async freezeCustomer(customerId: string, operatorId: string, reason?: string): Promise<Customer> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException('客户不存在');
+    }
+
+    if ((customer as any).isFrozen) {
+      throw new ConflictException('该线索已处于冻结状态');
+    }
+
+    const now = new Date();
+    const updated = await this.customerModel.findByIdAndUpdate(
+      customerId,
+      {
+        isFrozen: true,
+        frozenAt: now,
+        frozenBy: new Types.ObjectId(operatorId),
+        frozenReason: reason || '',
+      },
+      { new: true }
+    ).exec();
+
+    await this.logOperation(customerId, operatorId, 'freeze', '冻结线索', {
+      description: reason ? `冻结线索，原因：${reason}` : '冻结线索',
+    });
+
+    return updated;
+  }
+
+  // 解冻线索
+  async unfreezeCustomer(customerId: string, operatorId: string): Promise<Customer> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException('客户不存在');
+    }
+
+    if (!(customer as any).isFrozen) {
+      throw new ConflictException('该线索未处于冻结状态');
+    }
+
+    const updated = await this.customerModel.findByIdAndUpdate(
+      customerId,
+      {
+        isFrozen: false,
+        $unset: { frozenAt: '', frozenBy: '', frozenReason: '' },
+      },
+      { new: true }
+    ).exec();
+
+    await this.logOperation(customerId, operatorId, 'unfreeze', '解冻线索', {
+      description: '解冻线索，恢复正常流转规则',
+    });
+
+    return updated;
   }
 }

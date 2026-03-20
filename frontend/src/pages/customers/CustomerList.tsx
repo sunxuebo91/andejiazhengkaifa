@@ -32,6 +32,7 @@ import AssignCustomerModal from '../../components/AssignCustomerModal';
 import BatchAssignCustomerModal from '../../components/BatchAssignCustomerModal';
 import Authorized from '../../components/Authorized';
 import notificationSocketService from '../../services/notification-socket.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -39,6 +40,7 @@ const { RangePicker } = DatePicker;
 
 const CustomerList: React.FC = () => {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -105,6 +107,7 @@ const CustomerList: React.FC = () => {
 
   // 用户列表（用于线索归属人筛选）
   const [users, setUsers] = useState<Array<{ _id: string; name: string; username: string; role: string; department?: string }>>([]);
+  const canViewAssignableUsers = hasPermission('user:view');
 
   // 获取客户列表
   const loadCustomers = async (page = 1, size = 10) => {
@@ -133,8 +136,10 @@ const CustomerList: React.FC = () => {
   // 页面加载时获取数据
   useEffect(() => {
     loadCustomers();
-    loadUsers();
-  }, []);
+    if (canViewAssignableUsers) {
+      loadUsers();
+    }
+  }, [canViewAssignableUsers]);
 
   // 监听页面可见性变化，页面重新可见时刷新数据
   useEffect(() => {
@@ -223,6 +228,11 @@ const CustomerList: React.FC = () => {
 
   // 获取用户列表
   const loadUsers = async () => {
+    if (!canViewAssignableUsers) {
+      setUsers([]);
+      return;
+    }
+
     try {
       const userList = await customerService.getAssignableUsers();
       setUsers(userList);
@@ -741,29 +751,31 @@ const CustomerList: React.FC = () => {
                 <Option value="未流转">未流转</Option>
               </Select>
             </Col>
-            <Col span={3}>
-              <Select
-                placeholder="线索归属人"
-                allowClear
-                style={{ width: '100%' }}
-                value={searchFilters.assignedTo}
-                onChange={(value) => setSearchFilters({ ...searchFilters, assignedTo: value })}
-                showSearch
-                filterOption={(input, option) => {
-                  const label = option?.label || option?.children;
-                  if (typeof label === 'string') {
-                    return label.toLowerCase().includes(input.toLowerCase());
-                  }
-                  return false;
-                }}
-              >
-                {users.map(user => (
-                  <Option key={user._id} value={user._id}>
-                    {user.name} ({user.username})
-                  </Option>
-                ))}
-              </Select>
-            </Col>
+            {canViewAssignableUsers && (
+              <Col span={3}>
+                <Select
+                  placeholder="线索归属人"
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={searchFilters.assignedTo}
+                  onChange={(value) => setSearchFilters({ ...searchFilters, assignedTo: value })}
+                  showSearch
+                  filterOption={(input, option) => {
+                    const label = option?.label || option?.children;
+                    if (typeof label === 'string') {
+                      return label.toLowerCase().includes(input.toLowerCase());
+                    }
+                    return false;
+                  }}
+                >
+                  {users.map(user => (
+                    <Option key={user._id} value={user._id}>
+                      {user.name} ({user.username})
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+            )}
             <Col span={2}>
               <Space>
                 <Button type="primary" onClick={handleSearch}>

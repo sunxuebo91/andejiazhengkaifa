@@ -5,6 +5,11 @@ import { Role } from './models/role.entity';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { AppLogger } from '../../common/logging/app-logger';
+import {
+  DEFAULT_ROLE_DEFINITIONS,
+  getDefaultPermissionsForRole,
+  normalizeRoleCode,
+} from './role.constants';
 
 @Injectable()
 export class RolesService implements OnModuleInit {
@@ -17,7 +22,7 @@ export class RolesService implements OnModuleInit {
   }
 
   async create(createRoleDto: CreateRoleDto): Promise<Role> {
-    const createdRole = new this.roleModel(createRoleDto);
+    const createdRole = new this.roleModel(this.normalizeRolePayload(createRoleDto));
     return createdRole.save();
   }
 
@@ -67,7 +72,7 @@ export class RolesService implements OnModuleInit {
 
   async update(id: string, updateRoleDto: UpdateRoleDto): Promise<Role> {
     const updatedRole = await this.roleModel
-      .findByIdAndUpdate(id, updateRoleDto, { new: true })
+      .findByIdAndUpdate(id, this.normalizeRolePayload(updateRoleDto), { new: true })
       .exec();
 
     if (!updatedRole) {
@@ -88,35 +93,74 @@ export class RolesService implements OnModuleInit {
     return this.roleModel.findOne({ name }).exec();
   }
 
+  async findByCode(code: string): Promise<Role | null> {
+    const normalizedCode = normalizeRoleCode(code) ?? code;
+    return this.roleModel.findOne({ code: normalizedCode }).exec();
+  }
+
+  normalizeRoleCode(role?: string | null): string | null {
+    return normalizeRoleCode(role);
+  }
+
+  async getEffectivePermissions(role?: string | null): Promise<string[]> {
+    const normalizedRole = normalizeRoleCode(role);
+    if (!normalizedRole) {
+      return getDefaultPermissionsForRole(role);
+    }
+
+    const roleRecord = await this.findByCode(normalizedRole);
+    if (roleRecord?.permissions?.length) {
+      if (roleRecord.permissions.includes('*')) {
+        return ['*'];
+      }
+      return [...new Set(roleRecord.permissions)];
+    }
+
+    return getDefaultPermissionsForRole(normalizedRole);
+  }
+
+  getRoleDisplayName(role?: string | null): string {
+    const normalizedRole = normalizeRoleCode(role);
+    const definition = DEFAULT_ROLE_DEFINITIONS.find((item) => item.code === normalizedRole);
+    return definition?.name ?? role ?? '';
+  }
+
   // 确保默认角色存在
   async ensureDefaultRoles() {
-    const defaultRoles = [
-      {
-        name: '系统管理员',
-        description: '拥有系统所有权限',
-        permissions: ['admin:all', 'resume:all', 'customer:all', 'contract:all', 'user:all'],
-        active: true
-      },
-      {
-        name: '经理',
-        description: '可以管理团队、阿姨资源、客户和合同',
-        permissions: ['resume:all', 'customer:all', 'contract:all', 'user:view'],
-        active: true
-      },
-      {
-        name: '普通员工',
-        description: '可以管理阿姨资源、客户和自己的合同',
-        // 🔥 修复：员工需要管理自己客户的合同，添加合同权限
-        permissions: ['resume:view', 'resume:create', 'customer:view', 'customer:create', 'contract:view', 'contract:create'],
-        active: true
-      }
-    ];
+    for (const roleData of DEFAULT_ROLE_DEFINITIONS) {
+      const existingRole =
+        (await this.findByCode(roleData.code)) ||
+        (await this.findByName(roleData.name));
 
-    for (const roleData of defaultRoles) {
-      const existingRole = await this.findByName(roleData.name);
       if (!existingRole) {
         await this.create(roleData);
         this.logger.debug(`默认角色 "${roleData.name}" 已创建`);
+        continue;
+      }
+
+      const updateData: Partial<Role> = {};
+      if (!existingRole.code) {
+        updateData.code = roleData.code;
+      }
+      if (existingRole.name !== roleData.name) {
+        updateData.name = roleData.name;
+      }
+      if (existingRole.description !== roleData.description) {
+        updateData.description = roleData.description;
+      }
+      const existingPermissions = Array.isArray(existingRole.permissions) ? existingRole.permissions : [];
+      const nextPermissions = [...roleData.permissions].sort().join(',');
+      const currentPermissions = [...existingPermissions].sort().join(',');
+      if (currentPermissions !== nextPermissions) {
+        updateData.permissions = roleData.permissions;
+      }
+      if (existingRole.active !== roleData.active) {
+        updateData.active = roleData.active;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await this.roleModel.findByIdAndUpdate(existingRole._id, updateData).exec();
+        this.logger.debug(`默认角色 "${roleData.name}" 已标准化`);
       }
     }
   }
@@ -134,4 +178,20 @@ export class RolesService implements OnModuleInit {
         return 0;
     }
   }
-} 
+
+  private normalizeRolePayload<T extends Partial<CreateRoleDto | UpdateRoleDto>>(payload: T): T {
+    const normalizedCode = normalizeRoleCode(payload.code || payload.name);
+    const defaultDefinition = normalizedCode
+      ? DEFAULT_ROLE_DEFINITIONS.find((role) => role.code === normalizedCode) ?? null
+      : null;
+
+    return {
+      ...payload,
+      code: normalizedCode ?? payload.code,
+      name: payload.name || defaultDefinition?.name,
+      permissions: payload.permissions ? [...new Set(payload.permissions)] : payload.permissions,
+      active: payload.active ?? defaultDefinition?.active,
+      description: payload.description || defaultDefinition?.description,
+    };
+  }
+}

@@ -17,11 +17,13 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import leadTransferService, { LeadTransferRecord, LeadTransferStatistics } from '../../services/leadTransfer';
 import apiService from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 const LeadTransferRecords: React.FC = () => {
+  const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<LeadTransferRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -29,6 +31,7 @@ const LeadTransferRecords: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   const [users, setUsers] = useState<any[]>([]);
   const [statistics, setStatistics] = useState<LeadTransferStatistics | null>(null);
+  const canViewUsers = hasPermission('user:view');
 
   // 筛选条件
   const [filters, setFilters] = useState<{
@@ -71,6 +74,11 @@ const LeadTransferRecords: React.FC = () => {
 
   // 加载用户列表
   const loadUsers = async () => {
+    if (!canViewUsers) {
+      setUsers([]);
+      return;
+    }
+
     try {
       const response = await apiService.get('/api/users', { page: 1, pageSize: 1000 });
       setUsers(response.data?.items || []);
@@ -82,8 +90,10 @@ const LeadTransferRecords: React.FC = () => {
   useEffect(() => {
     loadRecords();
     loadStatistics();
-    loadUsers();
-  }, []);
+    if (canViewUsers) {
+      loadUsers();
+    }
+  }, [canViewUsers]);
 
   // 筛选条件变化时重新加载
   useEffect(() => {
@@ -236,37 +246,41 @@ const LeadTransferRecords: React.FC = () => {
             <Option value="failed">失败</Option>
           </Select>
 
-          <Select
-            placeholder="流出人员"
-            style={{ width: 150 }}
-            allowClear
-            showSearch
-            value={filters.fromUserId}
-            onChange={(value) => setFilters({ ...filters, fromUserId: value })}
-            filterOption={(input, option) =>
-              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-            }
-            options={users.map((user) => ({
-              label: user.name,
-              value: user._id,
-            }))}
-          />
+          {canViewUsers && (
+            <Select
+              placeholder="流出人员"
+              style={{ width: 150 }}
+              allowClear
+              showSearch
+              value={filters.fromUserId}
+              onChange={(value) => setFilters({ ...filters, fromUserId: value })}
+              filterOption={(input, option) =>
+                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={users.map((user) => ({
+                label: user.name,
+                value: user._id,
+              }))}
+            />
+          )}
 
-          <Select
-            placeholder="流入人员"
-            style={{ width: 150 }}
-            allowClear
-            showSearch
-            value={filters.toUserId}
-            onChange={(value) => setFilters({ ...filters, toUserId: value })}
-            filterOption={(input, option) =>
-              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-            }
-            options={users.map((user) => ({
-              label: user.name,
-              value: user._id,
-            }))}
-          />
+          {canViewUsers && (
+            <Select
+              placeholder="流入人员"
+              style={{ width: 150 }}
+              allowClear
+              showSearch
+              value={filters.toUserId}
+              onChange={(value) => setFilters({ ...filters, toUserId: value })}
+              filterOption={(input, option) =>
+                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={users.map((user) => ({
+                label: user.name,
+                value: user._id,
+              }))}
+            />
+          )}
 
           <RangePicker onChange={handleDateRangeChange} />
         </Space>
@@ -296,4 +310,3 @@ const LeadTransferRecords: React.FC = () => {
 };
 
 export default LeadTransferRecords;
-

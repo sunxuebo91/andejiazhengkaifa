@@ -705,14 +705,24 @@ export class ZegoService {
   ): TeleprompterMessage[] {
     const messages = this.teleprompterMessages.get(roomId) || [];
 
+    // 🔥 调试日志 - 始终输出
+    this.logger.log(`📝 获取提词器消息 - 房间: ${roomId}, 用户: ${userId}, lastTimestamp: ${lastTimestamp}, 队列中消息数: ${messages.length}`);
+
     // 过滤出目标用户的消息
     const userMessages = messages.filter(msg => {
       // 检查是否是目标用户
       const isTarget = msg.targetUserIds.includes('ALL') || msg.targetUserIds.includes(userId);
       // 检查是否是新消息
       const isNew = !lastTimestamp || msg.timestamp > lastTimestamp;
+
+      // 🔥 调试日志 - 显示过滤逻辑
+      this.logger.log(`📝 消息过滤 - type: ${msg.type}, targetUserIds: [${msg.targetUserIds.join(',')}], 当前用户: ${userId}, isTarget: ${isTarget}, isNew: ${isNew}`);
+
       return isTarget && isNew;
     });
+
+    // 🔥 返回结果日志
+    this.logger.log(`📝 返回 ${userMessages.length} 条消息给用户 ${userId}`);
 
     return userMessages;
   }

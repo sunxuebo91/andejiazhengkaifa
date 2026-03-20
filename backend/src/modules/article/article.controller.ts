@@ -14,8 +14,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { ArticleService } from './article.service';
 import { CreateArticleDto } from './dto/create-article.dto';
@@ -59,8 +59,8 @@ export class ArticleController {
   // ==================== 褓贝后台管理接口（需要认证） ====================
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '创建文章' })
   @ApiResponse({ status: 201, description: '创建成功' })
@@ -70,8 +70,8 @@ export class ArticleController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取文章列表（分页）' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -81,8 +81,8 @@ export class ArticleController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取文章详情' })
   @ApiParam({ name: 'id', description: '文章ID' })
@@ -93,8 +93,8 @@ export class ArticleController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新文章' })
   @ApiParam({ name: 'id', description: '文章ID' })
@@ -105,8 +105,8 @@ export class ArticleController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '删除文章' })
   @ApiParam({ name: 'id', description: '文章ID' })
@@ -117,8 +117,8 @@ export class ArticleController {
   }
 
   @Patch(':id/status')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '更新文章发布状态' })

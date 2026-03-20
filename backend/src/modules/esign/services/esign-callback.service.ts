@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import * as crypto from 'crypto';
 import { Contract, ContractDocument } from '../../contracts/models/contract.model';
 import { Customer, CustomerDocument } from '../../customers/models/customer.model';
+import { CustomersService } from '../../customers/customers.service';
 import { NotificationGateway } from '../../notification/notification.gateway';
 import { AppLogger } from '../../../common/logging/app-logger';
 import { RequestContextStore } from '../../../common/logging/request-context';
@@ -17,6 +18,7 @@ export class ESignCallbackService {
     private readonly apiService: ESignApiService,
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    private readonly customersService: CustomersService,
     @Inject(forwardRef(() => NotificationGateway))
     private notificationGateway: NotificationGateway,
   ) {}
@@ -27,8 +29,10 @@ export class ESignCallbackService {
   verifyCallback(signature: string, timestamp: string, body: string): boolean {
     try {
       if (!this.apiService.config.publicKey) {
-        this.logger.warn('未配置公钥，无法验证回调签名');
-        return true; // 在没有公钥的情况下，暂时允许通过
+        this.logger.error('esign.callback.verify_failed_no_public_key', undefined, {
+          hint: '请配置 ESIGN_PUBLIC_KEY 环境变量',
+        });
+        return false;
       }
 
       const verify = crypto.createVerify('RSA-SHA256');
@@ -107,63 +111,31 @@ export class ESignCallbackService {
 
       // 签约完成后，同步客户姓名为合同中的真实姓名（合同发起姓名）
       if (status === 2 || status === '2') {
-        await this.syncCustomerNameBySignedContract(contract);
+        const profileSyncResult = await this.customersService.syncCustomerSignedStateFromContract(contract);
 
         // 🆕 更新客户状态为"已签约"和线索等级为"O类"
-        if (contract.customerId) {
+        if (profileSyncResult?.customerId) {
           try {
-            const customerId = contract.customerId.toString();
+            const customerId = profileSyncResult.customerId;
             this.logger.info('esign.callback.customer_sync_start', {
               contractId: contract._id.toString(),
               customerId,
             });
 
-            // 调用客户服务更新状态
             const customerModel = this.contractModel.db.model('Customer');
-            const customer = await customerModel.findById(customerId).exec();
+              const customer = await customerModel.findById(customerId).exec();
 
-            if (customer) {
-              const oldStatus = customer.contractStatus;
-              const oldLeadLevel = customer.leadLevel;
+              if (customer) {
+                this.logger.info('esign.callback.customer_synced', {
+                  customerId,
+                  contractId: contract._id.toString(),
+                  profileChangedFields: Object.keys(profileSyncResult.changedFields || {}),
+                });
 
-              // 更新客户状态和线索等级
-              await customerModel.findByIdAndUpdate(customerId, {
-                contractStatus: '已签约',
-                leadLevel: 'O类',
-                lastActivityAt: new Date(),
-              }).exec();
-
-              this.logger.info('esign.callback.customer_synced', {
-                customerId,
-                contractId: contract._id.toString(),
-                oldStatus,
-                oldLeadLevel,
-              });
-
-              // 记录操作日志
-              const operationLogModel = this.contractModel.db.model('CustomerOperationLog');
-              await operationLogModel.create({
-                customerId: customer._id,
-                operatorId: contract.createdBy || customer._id,
-                entityType: 'contract',
-                entityId: contract._id.toString(),
-                operationType: 'update',
-                operationName: '合同签约自动更新', // 🔥 修复：必填字段
-                details: {
-                  before: { contractStatus: oldStatus, leadLevel: oldLeadLevel },
-                  after: { contractStatus: '已签约', leadLevel: 'O类' },
-                  description: '合同签约成功，自动更新客户状态为已签约，线索等级为O类',
-                  relatedId: contract._id.toString(),
-                  relatedType: 'contract',
-                },
-                operatedAt: new Date(),
-                requestId: RequestContextStore.getValue('requestId'),
-              });
-
-              // 🔔 广播刷新事件，通知前端更新客户列表
-              try {
-                await this.notificationGateway.broadcastRefresh('customerList', {
-                  customerId: customerId,
+                // 🔔 广播刷新事件，通知前端更新客户列表
+                try {
+                  await this.notificationGateway.broadcastRefresh('customerList', {
+                    customerId: customerId,
                   contractNumber: contract.contractNumber,
                   action: 'statusUpdate',
                 });
@@ -200,81 +172,6 @@ export class ESignCallbackService {
       this.logger.error('esign.callback.handle_failed', error);
       throw error;
     }
-  }
-
-  private async syncCustomerNameBySignedContract(contract: ContractDocument): Promise<void> {
-    const realName = contract.customerName?.trim();
-    if (!realName) {
-      this.logger.warn('esign.callback.customer_name_sync_missing_name', {
-        contractId: contract._id.toString(),
-        contractNumber: contract.contractNumber,
-      });
-      return;
-    }
-
-    // 优先按 customerId 精准更新
-    if (contract.customerId) {
-      const customer = await this.customerModel.findById(contract.customerId).select('_id name phone').exec();
-      if (customer) {
-        if ((customer.name || '').trim() === realName) {
-          this.logger.info('esign.callback.customer_name_sync_skipped_same_name', {
-            customerId: customer._id.toString(),
-            contractId: contract._id.toString(),
-          });
-          return;
-        }
-
-        await this.customerModel.findByIdAndUpdate(customer._id, {
-          name: realName,
-          updatedAt: new Date(),
-          lastActivityAt: new Date(),
-        }).exec();
-
-        this.logger.info('esign.callback.customer_name_synced_by_customer_id', {
-          customerId: customer._id.toString(),
-          contractId: contract._id.toString(),
-        });
-        return;
-      }
-    }
-
-    // 兜底：按合同手机号更新（历史脏数据可能没有 customerId）
-    if (contract.customerPhone) {
-      const customer = await this.customerModel.findOne({ phone: contract.customerPhone }).select('_id name phone').exec();
-      if (!customer) {
-        this.logger.warn('esign.callback.customer_name_sync_customer_missing', {
-          contractId: contract._id.toString(),
-          contractNo: contract.contractNumber,
-          customerPhone: contract.customerPhone,
-        });
-        return;
-      }
-
-      if ((customer.name || '').trim() === realName) {
-        this.logger.info('esign.callback.customer_name_sync_skipped_same_name', {
-          customerId: customer._id.toString(),
-          contractId: contract._id.toString(),
-        });
-        return;
-      }
-
-      await this.customerModel.findByIdAndUpdate(customer._id, {
-        name: realName,
-        updatedAt: new Date(),
-        lastActivityAt: new Date(),
-      }).exec();
-
-      this.logger.info('esign.callback.customer_name_synced_by_phone', {
-        customerId: customer._id.toString(),
-        contractId: contract._id.toString(),
-      });
-      return;
-    }
-
-    this.logger.warn('esign.callback.customer_name_sync_missing_customer_ref', {
-      contractId: contract._id.toString(),
-      contractNumber: contract.contractNumber,
-    });
   }
 
 }

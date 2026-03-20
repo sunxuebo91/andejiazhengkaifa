@@ -61,6 +61,52 @@ export class ZmdbService {
     };
   }
 
+  private canViewAllBackgroundChecks(user?: {
+    role?: string;
+    permissions?: string[];
+  }): boolean {
+    const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
+    const role = user?.role?.trim();
+
+    return permissions.includes('*')
+      || permissions.includes('background-check:all')
+      || permissions.includes('admin:settings')
+      || role === 'admin'
+      || role === 'manager'
+      || role === '系统管理员'
+      || role === '管理员'
+      || role === '经理'
+      || role === '主管';
+  }
+
+  private applyBackgroundCheckAccessFilter(
+    query: Record<string, any>,
+    user?: {
+      userId?: string;
+      role?: string;
+      permissions?: string[];
+    },
+  ) {
+    this.logger.log(`[权限过滤] user对象: userId=${user?.userId}, role=${user?.role}, permissions=${JSON.stringify(user?.permissions)}`);
+
+    const canViewAll = this.canViewAllBackgroundChecks(user);
+    this.logger.log(`[权限过滤] canViewAllBackgroundChecks 结果: ${canViewAll}`);
+
+    if (canViewAll) {
+      this.logger.log(`[权限过滤] 用户有权查看所有背调，跳过过滤`);
+      return;
+    }
+
+    if (!user?.userId || !Types.ObjectId.isValid(user.userId)) {
+      this.logger.log(`[权限过滤] 用户ID无效，拒绝所有访问`);
+      query._id = { $exists: false };
+      return;
+    }
+
+    this.logger.log(`[权限过滤] 限制只能查看自己创建的背调: createdBy=${user.userId}`);
+    query.createdBy = new Types.ObjectId(user.userId);
+  }
+
   private async request(endpoint: string, data: any): Promise<any> {
     const headers = this.buildHeaders();
     this.logger.log(`ZMDB请求: ${endpoint}, headers: ${JSON.stringify(headers)}, data: ${JSON.stringify(data)}`);
@@ -520,8 +566,14 @@ export class ZmdbService {
   /**
    * 取消背调（仅 status=1 或 9 时有效）
    */
-  async cancelReport(id: string): Promise<void> {
-    const record = await this.bgCheckModel.findById(id);
+  async cancelReport(
+    id: string,
+    user?: { userId?: string; role?: string; permissions?: string[] },
+  ): Promise<void> {
+    const query: Record<string, any> = { _id: id };
+    this.applyBackgroundCheckAccessFilter(query, user);
+
+    const record = await this.bgCheckModel.findOne(query);
     if (!record) throw new NotFoundException('背调记录不存在');
     if (!record.reportId) throw new BadRequestException('该背调尚未发起，无需取消');
     if (![1, 9].includes(record.status)) {
@@ -536,8 +588,14 @@ export class ZmdbService {
   /**
    * 下载报告 PDF（返回 Buffer）
    */
-  async downloadReport(reportId: string): Promise<Buffer> {
-    const record = await this.bgCheckModel.findOne({ reportId });
+  async downloadReport(
+    reportId: string,
+    user?: { userId?: string; role?: string; permissions?: string[] },
+  ): Promise<Buffer> {
+    const query: Record<string, any> = { reportId };
+    this.applyBackgroundCheckAccessFilter(query, user);
+
+    const record = await this.bgCheckModel.findOne(query);
     if (!record) throw new NotFoundException('背调记录不存在');
 
     // 下载报告接口使用 form-urlencoded 格式
@@ -657,7 +715,8 @@ export class ZmdbService {
   async findAll(
     page: number = 1,
     limit: number = 10,
-    search?: { keyword?: string; name?: string; mobile?: string; idNo?: string }
+    search?: { keyword?: string; name?: string; mobile?: string; idNo?: string },
+    user?: { userId?: string; role?: string; permissions?: string[] },
   ): Promise<{
     data: BackgroundCheck[];
     total: number;
@@ -697,6 +756,9 @@ export class ZmdbService {
       }
     }
 
+    this.applyBackgroundCheckAccessFilter(query, user);
+
+    this.logger.log(`背调列表查询 - 用户: ${user?.userId}, 角色: ${user?.role}, 权限: ${JSON.stringify(user?.permissions)}`);
     this.logger.log(`背调列表查询条件: ${JSON.stringify(query)}`);
 
     const [data, total] = await Promise.all([
@@ -712,34 +774,50 @@ export class ZmdbService {
       this.bgCheckModel.countDocuments(query).exec(),
     ]);
 
-    return { data: data as any, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const normalizedData = await Promise.all(
+      (data as any[]).map(record => this.ensureLatestContractLinked(record))
+    );
+
+    return { data: normalizedData as any, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   /**
    * 根据记录 ID 查询单条背调（含 reportResult）
    */
-  async findOne(id: string): Promise<BackgroundCheck | null> {
+  async findOne(
+    id: string,
+    user?: { userId?: string; role?: string; permissions?: string[] },
+  ): Promise<BackgroundCheck | null> {
+    const query: Record<string, any> = { _id: id };
+    this.applyBackgroundCheckAccessFilter(query, user);
+
     const record = await this.bgCheckModel
-      .findById(id)
+      .findOne(query)
       .populate('createdBy', 'name username')
       .populate('contractId', 'contractNumber customerName workerName esignContractNo')
       .lean()
       .exec();
-    return record as any;
+    return this.ensureLatestContractLinked(record as any);
   }
 
   /**
    * 根据身份证号查询最新的背调记录
    */
-  async findByIdNo(idNo: string): Promise<BackgroundCheck | null> {
+  async findByIdNo(
+    idNo: string,
+    user?: { userId?: string; role?: string; permissions?: string[] },
+  ): Promise<BackgroundCheck | null> {
     if (!idNo) {
       return null;
     }
 
     this.logger.log(`🔍 根据身份证号查询背调记录: ${idNo}`);
 
+    const query: Record<string, any> = { idNo };
+    this.applyBackgroundCheckAccessFilter(query, user);
+
     const record = await this.bgCheckModel
-      .findOne({ idNo })
+      .findOne(query)
       .sort({ createdAt: -1 }) // 按创建时间倒序，取最新的
       .populate('createdBy', 'name username')
       .populate('contractId', 'contractNumber customerName workerName esignContractNo')
@@ -752,6 +830,50 @@ export class ZmdbService {
       this.logger.log(`⚠️ 未找到身份证号 ${idNo} 对应的背调记录`);
     }
 
-    return record as any;
+    return this.ensureLatestContractLinked(record as any);
+  }
+
+  private async ensureLatestContractLinked(record: any): Promise<any> {
+    if (!record?.idNo) {
+      return record;
+    }
+
+    try {
+      const contracts = await this.contractsService.searchByWorkerInfo(undefined, record.idNo, undefined);
+      const latestContract = contracts?.[0] as any;
+
+      if (!latestContract?._id) {
+        return record;
+      }
+
+      const currentContractId =
+        typeof record.contractId === 'string'
+          ? record.contractId
+          : record.contractId?._id?.toString?.();
+      const latestContractId = latestContract._id.toString();
+
+      if (currentContractId === latestContractId) {
+        return record;
+      }
+
+      await this.bgCheckModel.updateOne(
+        { _id: record._id },
+        { $set: { contractId: latestContract._id } }
+      ).exec();
+
+      record.contractId = {
+        _id: latestContract._id,
+        contractNumber: latestContract.contractNumber,
+        customerName: latestContract.customerName,
+        workerName: latestContract.workerName,
+        esignContractNo: latestContract.esignContractNo,
+      };
+
+      this.logger.log(`✅ 背调 ${record._id} 已自动关联最新合同: ${latestContract.contractNumber}`);
+      return record;
+    } catch (error) {
+      this.logger.warn(`⚠️ 背调 ${record?._id} 自动关联最新合同失败: ${error.message}`);
+      return record;
+    }
   }
 }

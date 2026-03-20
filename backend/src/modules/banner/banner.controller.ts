@@ -19,8 +19,8 @@ import { UpdateBannerDto } from './dto/update-banner.dto';
 import { QueryBannerDto } from './dto/query-banner.dto';
 import { ReorderBannerDto } from './dto/reorder-banner.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Banner轮播图管理')
@@ -31,8 +31,8 @@ export class BannerController {
   // ==================== CRM端管理接口（需要管理员权限） ====================
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '创建Banner' })
   @ApiResponse({ status: 201, description: 'Banner创建成功' })
@@ -46,8 +46,8 @@ export class BannerController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取Banner列表（分页）' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -76,8 +76,8 @@ export class BannerController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取单个Banner详情' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -92,8 +92,8 @@ export class BannerController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新Banner' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -112,8 +112,8 @@ export class BannerController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '删除Banner' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -127,8 +127,8 @@ export class BannerController {
   }
 
   @Patch(':id/status')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新Banner状态' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -147,8 +147,8 @@ export class BannerController {
   }
 
   @Post('reorder')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('admin:settings')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '批量调整Banner排序' })

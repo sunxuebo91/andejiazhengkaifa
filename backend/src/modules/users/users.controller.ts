@@ -2,16 +2,23 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, Ht
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @ApiTags('用户管理')
 @Controller('users')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('admin')
+  @Permissions('user:create')
   @ApiOperation({ summary: '创建用户' })
   @ApiBody({ type: CreateUserDto })
   @ApiResponse({ status: 201, description: '用户创建成功' })
@@ -42,6 +49,7 @@ export class UsersController {
   }
 
   @Get()
+  @Permissions('user:view')
   @ApiOperation({ summary: '获取用户列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findAll(
@@ -69,6 +77,7 @@ export class UsersController {
   // 例如：如果有 /users/batch-sync 路由，应该在这里添加
 
   @Get(':id')
+  @Permissions('user:view')
   @ApiOperation({ summary: '获取用户详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 404, description: '用户不存在' })
@@ -112,6 +121,9 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('admin')
+  @Permissions('user:edit')
   @ApiOperation({ summary: '更新用户' })
   @ApiBody({ type: UpdateUserDto })
   @ApiResponse({ status: 200, description: '更新成功' })
@@ -141,6 +153,9 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('admin')
+  @Permissions('user:delete')
   @ApiOperation({ summary: '删除用户' })
   @ApiResponse({ status: 200, description: '删除成功' })
   @ApiResponse({ status: 404, description: '用户不存在' })
@@ -168,6 +183,9 @@ export class UsersController {
   }
 
   @Patch(':id/suspend')
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('admin')
+  @Permissions('user:edit')
   @ApiOperation({ summary: '暂停用户账号' })
   @ApiResponse({ status: 200, description: '暂停成功' })
   @ApiResponse({ status: 404, description: '用户不存在' })
@@ -196,6 +214,9 @@ export class UsersController {
   }
 
   @Patch(':id/resume')
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('admin')
+  @Permissions('user:edit')
   @ApiOperation({ summary: '恢复用户账号' })
   @ApiResponse({ status: 200, description: '恢复成功' })
   @ApiResponse({ status: 404, description: '用户不存在' })
@@ -224,6 +245,9 @@ export class UsersController {
   }
 
   @Patch(':id/monthly-task')
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('admin')
+  @Permissions('user:edit')
   @ApiOperation({ summary: '更新员工本月任务' })
   @ApiResponse({ status: 200, description: '更新成功' })
   @ApiResponse({ status: 404, description: '用户不存在' })
@@ -255,6 +279,7 @@ export class UsersController {
   }
 
   @Get(':id/monthly-task')
+  @Permissions('user:view')
   @ApiOperation({ summary: '获取员工本月任务（小程序用）' })
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 404, description: '用户不存在' })

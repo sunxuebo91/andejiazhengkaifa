@@ -12,7 +12,10 @@ import {
   forwardRef,
   Res,
   Header,
+  Req,
+  UnauthorizedException,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { ESignService } from './esign.service';
 import { ContractsService } from '../contracts/contracts.service';
 import { WechatCloudService } from '../weixin/services/wechat-cloud.service';
@@ -25,8 +28,10 @@ interface PreviewRequestDto {
   formData: Record<string, any>;
 }
 
+type ESignCallbackRequest = Request & { rawBody?: string };
+
 @Controller('esign')
-// @UseGuards(JwtAuthGuard) // Temporarily disabled for testing
+@UseGuards(JwtAuthGuard)
 export class ESignController {
   private readonly logger = new Logger(ESignController.name);
 
@@ -37,6 +42,22 @@ export class ESignController {
     private readonly wechatCloudService: WechatCloudService,
   ) {
     this.logger.log('ESignController 已初始化');
+  }
+
+  private getHeaderValue(req: Request, candidates: string[]): string | undefined {
+    for (const key of candidates) {
+      const value = req.headers[key];
+      if (Array.isArray(value)) {
+        if (value[0]) {
+          return value[0];
+        }
+        continue;
+      }
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -144,88 +165,6 @@ export class ESignController {
       return {
         success: false,
         message: error.message || '合同签署失败',
-      };
-    }
-  }
-
-  /**
-   * 获取调试配置信息 - 移到顶部测试
-   */
-  @Get('debug-config')
-  async getDebugConfig() {
-    this.logger.log('调用 debug-config 端点');
-    try {
-      const config = this.esignService.getDebugConfig();
-      
-      return {
-        success: true,
-        data: config,
-        message: '获取配置信息成功',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message || '获取配置信息失败',
-      };
-    }
-  }
-
-  /**
-   * 获取调试配置信息 - 复制版本用于测试
-   */
-  @Get('debug-config-copy')
-  async getDebugConfigCopy() {
-    this.logger.log('调用 debug-config-copy 端点');
-    try {
-      const config = this.esignService.getDebugConfig();
-      
-      return {
-        success: true,
-        data: config,
-        message: '获取配置信息成功 (复制版本)',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message || '获取配置信息失败',
-      };
-    }
-  }
-
-  /**
-   * 简单测试端点
-   */
-  @Get('test')
-  async simpleTest() {
-    this.logger.log('调用 test 端点');
-    return {
-      success: true,
-      message: '测试端点工作正常',
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  /**
-   * 测试爱签连接
-   */
-  @Get('test-connection')
-  async testConnection() {
-    this.logger.log('调用 test-connection 端点');
-    
-    try {
-      const result = await this.esignService.testConnection();
-      
-      return {
-        success: result.success,
-        data: result,
-        message: result.message,
-      };
-    } catch (error) {
-      this.logger.error('爱签连接测试失败', error.stack);
-      
-      return {
-        success: false,
-        message: error.message || '连接测试失败',
       };
     }
   }
@@ -1136,7 +1075,6 @@ export class ESignController {
    * 测试合同签署通知功能
    * 用于手动触发通知测试，验证微信订阅消息是否能正常发送
    */
-  @Public()
   @Post('test-notification/:contractId')
   async testNotification(@Param('contractId') contractId: string) {
     this.logger.log(`📧 测试通知 - 合同ID: ${contractId}`);
@@ -1192,19 +1130,38 @@ export class ESignController {
   @Public() // 爱签回调不需要认证
   @Post('callback')
   @Header('Content-Type', 'text/plain') // 返回纯文本
-  async handleEsignCallback(@Body() callbackData: any, @Res() res: any) {
+  async handleEsignCallback(
+    @Body() callbackData: any,
+    @Req() req: ESignCallbackRequest,
+    @Res() res: Response,
+  ) {
     this.logger.log('🔔 收到爱签回调:', JSON.stringify(callbackData));
 
     try {
+      const signature = this.getHeaderValue(req, ['sign', 'x-sign', 'signature', 'x-signature']);
+      const timestamp = this.getHeaderValue(req, ['timestamp', 'x-timestamp']);
+      const rawBody = req.rawBody ?? JSON.stringify(callbackData ?? {});
+
+      if (!signature || !timestamp) {
+        this.logger.warn('爱签回调缺少签名头', {
+          hasSignature: !!signature,
+          hasTimestamp: !!timestamp,
+        });
+        throw new UnauthorizedException('缺少回调签名');
+      }
+
+      if (!this.esignService.verifyCallback(signature, timestamp, rawBody)) {
+        this.logger.warn('爱签回调签名校验失败');
+        throw new UnauthorizedException('回调验签失败');
+      }
+
       // 1. 处理爱签回调，更新合同状态
       await this.esignService.handleContractCallback(callbackData);
 
       // 2. 获取合同信息
       // 🔥 userNotifyUrl 回调会包含 account 字段（某个用户签完后的回调）
       const { contractNo, status, signUserList, account, signMark } = callbackData;
-      const contract = await this.esignService['contractModel'].findOne({
-        esignContractNo: contractNo
-      }).populate('createdBy', '_id name').exec();
+      const contract = await this.esignService.findContractForCallback(contractNo);
 
       if (contract) {
         // 3. 发送签署状态通知
@@ -1326,28 +1283,11 @@ export class ESignController {
       // 🔥 重要：爱签要求回调响应必须是字符串 "ok"
       return res.status(200).send('ok');
     } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        return res.status(401).send('invalid signature');
+      }
       this.logger.error('处理爱签回调失败', error.stack);
-
-      // 即使失败也返回 "ok"，避免爱签重试
-      return res.status(200).send('ok');
-    }
-  }
-
-  @Post('test-get-contract')
-  async testGetContract(@Body() body: { contractNo: string }) {
-    this.logger.log('调用 test-get-contract 端点, contractNo:', body.contractNo);
-    
-    try {
-      const result = await this.esignService.getContractInfo(body.contractNo);
-      return result;
-    } catch (error) {
-      this.logger.error('测试getContract失败', error.stack);
-      
-      return {
-        success: false,
-        message: error.message || '测试getContract失败',
-        error: error.toString()
-      };
+      return res.status(500).send('error');
     }
   }
 

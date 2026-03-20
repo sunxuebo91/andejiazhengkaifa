@@ -13,6 +13,10 @@ export default defineConfig({
     // 性能优化配置
     target: 'es2015',
     minify: 'esbuild', // 使用 esbuild 压缩，速度更快
+    // 生产构建移除所有 console 调用，防止信息泄露
+    esbuild: {
+      drop: ['console', 'debugger'],
+    },
     rollupOptions: {
       output: {
         // 手动分包，优化加载速度

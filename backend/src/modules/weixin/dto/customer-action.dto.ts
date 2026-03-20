@@ -1,5 +1,6 @@
-import { IsString, IsNotEmpty, IsOptional, IsObject } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsObject, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 export class CustomerActionDto {
   @ApiProperty({ description: '客户ID', example: 'customer_123' })
@@ -51,4 +52,14 @@ export class CustomerActionDto {
   @IsOptional()
   @IsString()
   customerRecordId?: string;
+
+  @ApiProperty({ description: '时间戳', required: false })
+  @IsOptional()
+  @IsNumber()
+  timestamp?: number;
+
+  @ApiProperty({ description: '客户信息对象', required: false })
+  @IsOptional()
+  @IsObject()
+  customerInfo?: any;
 }

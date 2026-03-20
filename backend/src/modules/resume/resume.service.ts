@@ -15,6 +15,7 @@ import * as crypto from 'crypto';
 import { UpdateAvailabilityDto, BatchUpdateAvailabilityDto, QueryAvailabilityDto } from './dto/availability.dto';
 import { AvailabilityStatus } from './models/availability-period.schema';
 import { EmployeeEvaluation } from '../employee-evaluation/models/employee-evaluation.entity';
+import { ResumeQueryService } from './resume-query.service';
 
 @Injectable()
 export class ResumeService {
@@ -31,6 +32,7 @@ export class ResumeService {
     private readonly jwtService: JwtService,
     @InjectModel(EmployeeEvaluation.name)
     private readonly employeeEvaluationModel: Model<EmployeeEvaluation>,
+    private readonly resumeQueryService: ResumeQueryService,
   ) {}
 
   async createWithFiles(
@@ -180,297 +182,12 @@ export class ResumeService {
     }
   }
 
-  private hasCheckedUpdatedAt = false; // 标记是否已检查过updatedAt字段
-
-  private async syncSignedOrderStatus(resumeId: Types.ObjectId | string, currentStatus?: string) {
-    if (currentStatus === OrderStatus.ON_SERVICE || currentStatus === OrderStatus.SIGNED) {
-      return currentStatus;
-    }
-
-    const signedContract = await this.contractModel.findOne({
-      workerId: resumeId,
-      $or: [
-        { esignStatus: { $in: ['1', '2'] } },
-        { contractStatus: 'active' },
-      ],
-    }).select('_id').lean().exec();
-
-    if (!signedContract) {
-      return currentStatus;
-    }
-
-    await this.resumeModel.updateOne(
-      { _id: resumeId },
-      { orderStatus: OrderStatus.SIGNED },
-    ).exec();
-
-    return OrderStatus.SIGNED;
-  }
-
   async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string) {
-    try {
-      this.logger.log(`开始查询简历列表 - page: ${page}, pageSize: ${pageSize}, currentUserId: ${currentUserId}`);
-
-      // 首次查询时检查updatedAt字段
-      if (!this.hasCheckedUpdatedAt) {
-        await this.batchFixMissingUpdatedAt();
-        this.hasCheckedUpdatedAt = true;
-      }
-
-      // 构建查询条件
-      const query: any = {};
-
-      // 🆕 权限逻辑调整：默认所有用户都能看到所有简历，不再按创建人过滤
-      // 特殊情况：已签约的简历只有合同归属人能看到（在后续逻辑中处理）
-
-      // 关键词搜索
-      if (keyword) {
-        query.$or = [
-          { name: { $regex: keyword, $options: 'i' } },
-          { phone: { $regex: keyword, $options: 'i' } },
-          { expectedPosition: { $regex: keyword, $options: 'i' } }
-        ];
-      }
-
-      // 工种筛选
-      if (jobType) {
-        query.jobType = jobType;
-      }
-
-      // 接单状态筛选
-      if (orderStatus) {
-        query.orderStatus = orderStatus;
-      }
-
-      // 年龄筛选
-      if (maxAge !== undefined && maxAge !== null) {
-        query.age = { $lte: maxAge };
-      }
-
-      // 添加籍贯筛选
-      if (nativePlace) {
-        query.nativePlace = nativePlace;
-      }
-
-      // 添加民族筛选
-      if (ethnicity) {
-        query.ethnicity = ethnicity;
-      }
-
-      this.logger.debug(`查询条件: ${JSON.stringify(query)}`);
-
-      // 🔥 [SORT-FIX-FINAL] 使用分离的查询，确保排序和分页的执行顺序
-
-      // 1. 获取总记录数
-      const total = await this.resumeModel.countDocuments(query).exec();
-      this.logger.debug(`查询到总数: ${total}`);
-
-      // 2. 获取分页和排序后的数据 - 强制排序修复
-      let items = await this.resumeModel
-        .find(query)
-        .sort({ updatedAt: -1, createdAt: -1 }) // 数据库排序
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .populate('userId', 'username name')
-        .lean() // 使用lean提高性能
-        .exec();
-
-      // 🔥 [CRITICAL-FIX] 强制二次排序确保正确性
-      items = items.sort((a: any, b: any) => {
-        const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
-        const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
-        return bTime - aTime; // 最新的在前面
-      });
-
-      // 🆕 自动同步“已签约”接单状态
-      if (items.length > 0) {
-        const resumeIds = items.map((item: any) => item._id);
-        const signedContracts = await this.contractModel.find({
-          workerId: { $in: resumeIds },
-          $or: [
-            { esignStatus: { $in: ['1', '2'] } },
-            { contractStatus: 'active' },
-          ],
-        }).select('workerId').lean().exec();
-
-        const signedWorkerIds = new Set(signedContracts.map((contract: any) => contract.workerId?.toString()));
-        const needUpdateIds = items
-          .filter((item: any) => signedWorkerIds.has(item._id?.toString()))
-          .filter((item: any) => item.orderStatus !== OrderStatus.ON_SERVICE && item.orderStatus !== OrderStatus.SIGNED)
-          .map((item: any) => item._id);
-
-        if (needUpdateIds.length > 0) {
-          await this.resumeModel.updateMany(
-            { _id: { $in: needUpdateIds } },
-            { orderStatus: OrderStatus.SIGNED }
-          ).exec();
-        }
-
-        items = items.map((item: any) => (
-          signedWorkerIds.has(item._id?.toString()) && item.orderStatus !== OrderStatus.ON_SERVICE
-            ? { ...item, orderStatus: OrderStatus.SIGNED }
-            : item
-        ));
-      }
-
-      // 🆕 权限过滤：已签约的简历只有合同归属人能看到
-      if (items.length > 0) {
-        const resumeIds = items.map((item: any) => item._id);
-
-        // 查询所有有active合同的简历及其合同归属人
-        const activeContracts = await this.contractModel.find({
-          workerId: { $in: resumeIds },
-          contractStatus: 'active',
-        }).select('workerId createdBy').lean().exec();
-
-        // 构建Map：resumeId -> contractCreatedBy
-        const contractOwnerMap = new Map<string, string>();
-        activeContracts.forEach((contract: any) => {
-          const workerId = contract.workerId?.toString();
-          const ownerId = contract.createdBy?.toString();
-          if (workerId && ownerId) {
-            contractOwnerMap.set(workerId, ownerId);
-          }
-        });
-
-        // 过滤items：对于有active合同的简历，只保留当前用户是合同归属人的简历
-        const filteredItems = items.filter((item: any) => {
-          const resumeId = item._id?.toString();
-          const contractOwnerId = contractOwnerMap.get(resumeId);
-
-          // 如果没有active合同，所有人都能看到
-          if (!contractOwnerId) {
-            return true;
-          }
-
-          // 如果有active合同
-          if (currentUserId) {
-            // 如果有当前用户ID，只有合同归属人能看到
-            return contractOwnerId === currentUserId;
-          } else {
-            // 如果没有当前用户ID（公开接口），隐藏所有已签约的简历
-            return false;
-          }
-        });
-
-        items = filteredItems;
-        this.logger.debug(`权限过滤完成 - 原始数量: ${resumeIds.length}, 过滤后数量: ${items.length}, active合同数: ${activeContracts.length}`);
-      }
-
-      this.logger.log(`查询完成 - 返回 ${items.length} 条记录`);
-
-      // 排序验证（debug 级别）
-      if (items.length > 1) {
-        const first = items[0] as any;
-        const second = items[1] as any;
-        const firstTime = new Date(first.updatedAt).getTime();
-        const secondTime = new Date(second.updatedAt).getTime();
-        if (firstTime < secondTime) {
-          this.logger.error(`排序验证失败: ${first.name}(${firstTime}) vs ${second.name}(${secondTime})`);
-        } else {
-          this.logger.debug(`排序验证通过 - 共 ${items.length} 条记录`);
-        }
-      }
-
-      // 为列表项补充 avatarUrl（个人照片第一张或旧格式 photoUrls 第一张）
-      const itemsWithAvatar = items.map((it: any) => {
-        const firstPersonal = Array.isArray(it?.personalPhoto) && it.personalPhoto.length > 0 ? it.personalPhoto[0]?.url : undefined;
-        const firstLegacy = Array.isArray(it?.photoUrls) && it.photoUrls.length > 0 ? it.photoUrls[0] : undefined;
-        return { ...it, avatarUrl: firstPersonal || firstLegacy || '' };
-      });
-
-      return {
-        items: itemsWithAvatar,
-        total,
-        page,
-        pageSize,
-        totalPages: Math.ceil(total / pageSize),
-      };
-    } catch (error) {
-      this.logger.error(`查询简历列表失败: ${error.message}`, error.stack);
-      throw error;
-    }
+    return this.resumeQueryService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity, currentUserId);
   }
 
   async findOne(id: string, currentUserId?: string) {
-    const resume = await this.resumeModel
-      .findById(new Types.ObjectId(id))
-      .populate('userId', 'username name')
-      .exec();
-
-    if (!resume) {
-      throw new NotFoundException('简历不存在');
-    }
-
-    // 🆕 权限检查：如果简历有active合同，只有合同归属人能查看
-    if (currentUserId) {
-      const activeContract = await this.contractModel.findOne({
-        workerId: new Types.ObjectId(id),
-        contractStatus: 'active',
-      }).select('createdBy').lean().exec();
-
-      if (activeContract) {
-        const contractOwnerId = activeContract.createdBy?.toString();
-        if (contractOwnerId && contractOwnerId !== currentUserId) {
-          throw new NotFoundException('简历不存在');
-        }
-      }
-    }
-
-    // 手动获取lastUpdatedBy用户信息
-    this.logger.log(`🔍 开始处理lastUpdatedBy, 当前值: ${resume.lastUpdatedBy}, 类型: ${typeof resume.lastUpdatedBy}`);
-    if (resume.lastUpdatedBy) {
-      try {
-        const userCollection = this.resumeModel.db.collection('users');
-        this.logger.log(`🔍 查询用户信息: ${resume.lastUpdatedBy}`);
-        const lastUpdatedByUser = await userCollection.findOne(
-          { _id: resume.lastUpdatedBy },
-          { projection: { username: 1, name: 1 } }
-        );
-        this.logger.log(`🔍 查询到的用户信息:`, lastUpdatedByUser);
-        if (lastUpdatedByUser) {
-          (resume as any).lastUpdatedBy = lastUpdatedByUser;
-          this.logger.log(`🔍 成功设置lastUpdatedBy为用户对象`);
-        } else {
-          this.logger.warn(`🔍 未找到用户: ${resume.lastUpdatedBy}`);
-        }
-      } catch (error) {
-        this.logger.error(`🔍 获取lastUpdatedBy用户信息失败: ${error.message}`, error.stack);
-      }
-    } else {
-      this.logger.log(`🔍 lastUpdatedBy为空，跳过用户信息获取`);
-    }
-
-    // 获取员工评价
-    try {
-      const evaluations = await this.employeeEvaluationModel
-        .find({
-          employeeId: new Types.ObjectId(id),
-          status: 'published'
-        })
-        .sort({ evaluationDate: -1 })
-        .limit(10)
-        .lean()
-        .exec();
-
-      (resume as any).employeeEvaluations = evaluations;
-      this.logger.log(`✅ 获取到 ${evaluations.length} 条员工评价`);
-    } catch (error) {
-      this.logger.error(`获取员工评价失败: ${error.message}`, error.stack);
-      (resume as any).employeeEvaluations = [];
-    }
-
-    // 🆕 检测已签约合同，自动同步接单状态
-    try {
-      const syncedStatus = await this.syncSignedOrderStatus(resume._id.toString(), resume.orderStatus);
-      if (syncedStatus && syncedStatus !== resume.orderStatus) {
-        (resume as any).orderStatus = syncedStatus;
-      }
-    } catch (error) {
-      this.logger.error(`同步已签约状态失败: ${error.message}`, error.stack);
-    }
-
-    return resume;
+    return this.resumeQueryService.findOne(id, currentUserId);
   }
 
   async update(id: string, updateResumeDto: UpdateResumeDto, userId?: string) {
@@ -1447,52 +1164,10 @@ export class ResumeService {
   }
 
   /**
-   * 修复缺失的 updatedAt 字段
-   * @param resumeId 简历ID
-   * @param fallbackDate 回退日期（通常使用createdAt）
-   */
-  private async fixMissingUpdatedAt(resumeId: string, fallbackDate: Date) {
-    try {
-      this.logger.warn(`🔧 修复缺失的updatedAt字段: ${resumeId}`);
-      await this.resumeModel.findByIdAndUpdate(
-        resumeId,
-        { updatedAt: fallbackDate },
-        { new: true }
-      );
-    } catch (error) {
-      this.logger.error(`修复updatedAt字段失败: ${error.message}`);
-    }
-  }
-
-  /**
    * 批量修复所有缺失的 updatedAt 字段
    */
   public async batchFixMissingUpdatedAt() {
-    try {
-      this.logger.log('🔧 开始批量修复缺失的updatedAt字段...');
-
-      const resumesWithoutUpdatedAt = await this.resumeModel.find({
-        $or: [
-          { updatedAt: { $exists: false } },
-          { updatedAt: null }
-        ]
-      });
-
-      this.logger.log(`发现 ${resumesWithoutUpdatedAt.length} 条记录缺失updatedAt字段`);
-
-      for (const resume of resumesWithoutUpdatedAt) {
-        const fallbackDate = (resume as any).createdAt || new Date();
-        await this.resumeModel.findByIdAndUpdate(
-          resume._id,
-          { updatedAt: fallbackDate },
-          { new: true }
-        );
-      }
-
-      this.logger.log(`✅ 批量修复完成，共修复 ${resumesWithoutUpdatedAt.length} 条记录`);
-    } catch (error) {
-      this.logger.error(`批量修复updatedAt字段失败: ${error.message}`);
-    }
+    return this.resumeQueryService.batchFixMissingUpdatedAt();
   }
 
   /**
@@ -1907,7 +1582,7 @@ export class ResumeService {
    * 根据手机号查找简历
    */
   async findByPhone(phone: string) {
-    return await this.resumeModel.findOne({ phone }).lean();
+    return this.resumeQueryService.findByPhone(phone);
   }
 
   /**
@@ -1942,10 +1617,7 @@ export class ResumeService {
    * 根据身份证号查找简历
    */
   async findByIdNumber(idNumber: string): Promise<IResume | null> {
-    if (!idNumber) {
-      return null;
-    }
-    return await this.resumeModel.findOne({ idNumber }).exec();
+    return this.resumeQueryService.findByIdNumber(idNumber);
   }
 
   /**

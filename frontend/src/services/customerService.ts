@@ -146,8 +146,15 @@ export const customerService = {
     return response.data;
   },
 
-  // 🆕 同步客户线索等级为O类（当合同签约时调用）
-  async syncLeadLevelToO(customerId: string): Promise<void> {
-    await apiService.patch(`/api/customers/${customerId}/sync-lead-level-o`, {});
+  // 冻结线索（仅管理员）
+  async freezeCustomer(id: string, reason?: string): Promise<Customer> {
+    const response = await apiService.patch(`/api/customers/${id}/freeze`, { reason });
+    return response.data;
+  },
+
+  // 解冻线索（仅管理员）
+  async unfreezeCustomer(id: string): Promise<Customer> {
+    const response = await apiService.patch(`/api/customers/${id}/unfreeze`, {});
+    return response.data;
   },
 };

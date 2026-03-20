@@ -4,13 +4,12 @@ import { EmployeeEvaluationService } from './employee-evaluation.service';
 import { QueryEvaluationDto } from './dto/query-evaluation.dto';
 import { CreateEvaluationDto } from './dto/create-evaluation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 
 @ApiTags('员工评价')
 @Controller('employee-evaluations')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class EmployeeEvaluationController {
   private readonly logger = new Logger(EmployeeEvaluationController.name);
 
@@ -22,6 +21,7 @@ export class EmployeeEvaluationController {
    * CRM端创建员工评价
    */
   @Post()
+  @Permissions('resume:edit')
   @ApiOperation({ summary: 'CRM端创建员工评价' })
   @ApiResponse({ status: 201, description: '创建成功' })
   async create(@Body() createDto: CreateEvaluationDto, @Req() req: any) {
@@ -62,6 +62,7 @@ export class EmployeeEvaluationController {
    * 小程序端创建员工评价
    */
   @Post('miniprogram/create')
+  @Permissions('resume:edit')
   @ApiOperation({ summary: '小程序端创建员工评价' })
   @ApiResponse({ status: 201, description: '创建成功' })
   async createForMiniprogram(@Body() createDto: CreateEvaluationDto, @Req() req: any) {
@@ -99,6 +100,7 @@ export class EmployeeEvaluationController {
    * 小程序获取员工评价列表（公开接口，只读展示）
    */
   @Get('miniprogram/list')
+  @Permissions('resume:view')
   @ApiOperation({ summary: '小程序获取员工评价列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getListForMiniprogram(@Query() query: QueryEvaluationDto) {
@@ -126,6 +128,7 @@ export class EmployeeEvaluationController {
    * 小程序获取员工评价详情（公开接口）
    */
   @Get('miniprogram/:id')
+  @Permissions('resume:view')
   @ApiOperation({ summary: '小程序获取员工评价详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getDetailForMiniprogram(@Param('id') id: string) {
@@ -153,6 +156,7 @@ export class EmployeeEvaluationController {
    * 小程序获取员工评价统计（公开接口）
    */
   @Get('miniprogram/statistics/:employeeId')
+  @Permissions('resume:view')
   @ApiOperation({ summary: '小程序获取员工评价统计' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getStatisticsForMiniprogram(@Param('employeeId') employeeId: string) {
@@ -176,4 +180,3 @@ export class EmployeeEvaluationController {
     }
   }
 }
-

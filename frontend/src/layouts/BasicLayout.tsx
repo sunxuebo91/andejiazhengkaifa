@@ -79,7 +79,7 @@ const BasicLayout = () => {
     }
 
     // 客户管理菜单 - 需要客户相关权限  
-    if (true || hasPermission('customer:view') || hasPermission('customer:create')) {
+    if (hasPermission('customer:view') || hasPermission('customer:create')) {
       const customerMenu: MenuRoute = {
         path: '/customers',
         name: '客户管理',
@@ -88,7 +88,7 @@ const BasicLayout = () => {
       };
 
       // 客户列表 - 需要客户查看权限
-      if (true || hasPermission('customer:view')) {
+      if (hasPermission('customer:view')) {
         customerMenu.routes!.push({
           path: '/customers/list',
           name: '客户列表',
@@ -97,7 +97,7 @@ const BasicLayout = () => {
       }
 
       // 线索公海
-      if (true || hasPermission('customer:view')) {
+      if (hasPermission('customer:view')) {
         customerMenu.routes!.push({
           path: '/customers/public-pool',
           name: '线索公海',
@@ -106,7 +106,7 @@ const BasicLayout = () => {
       }
 
       // 创建客户 - 需要客户创建权限
-      if (true || hasPermission('customer:create')) {
+      if (hasPermission('customer:create')) {
         customerMenu.routes!.push({
           path: '/customers/create',
           name: '创建客户',
@@ -134,7 +134,7 @@ const BasicLayout = () => {
     }
 
     // 合同管理菜单 - 需要合同相关权限
-    if (true || hasPermission('contract:view') || hasPermission('contract:create')) {
+    if (hasPermission('contract:view') || hasPermission('contract:create')) {
       const contractMenu: MenuRoute = {
         path: '/contracts',
         name: '合同管理',
@@ -143,7 +143,7 @@ const BasicLayout = () => {
       };
 
       // 合同列表 - 需要合同查看权限
-      if (true || hasPermission('contract:view')) {
+      if (hasPermission('contract:view')) {
         contractMenu.routes!.push({
           path: '/contracts/list',
           name: '合同列表',
@@ -152,7 +152,7 @@ const BasicLayout = () => {
       }
 
       // 创建合同 - 需要合同创建权限
-      if (true || hasPermission('contract:create')) {
+      if (hasPermission('contract:create')) {
         contractMenu.routes!.push({
           path: '/contracts/create',
           name: '创建合同',
@@ -171,7 +171,7 @@ const BasicLayout = () => {
     }
 
     // 保险管理菜单 - 需要保险相关权限
-    if (true || hasPermission('insurance:view') || hasPermission('insurance:create')) {
+    if (hasPermission('insurance:view') || hasPermission('insurance:create')) {
       const insuranceMenu: MenuRoute = {
         path: '/insurance',
         name: '保险管理',
@@ -180,7 +180,7 @@ const BasicLayout = () => {
       };
 
       // 保单列表 - 需要保险查看权限
-      if (true || hasPermission('insurance:view')) {
+      if (hasPermission('insurance:view')) {
         insuranceMenu.routes!.push({
           path: '/insurance/list',
           name: '保单列表',
@@ -189,7 +189,7 @@ const BasicLayout = () => {
       }
 
       // 新建投保 - 需要保险创建权限
-      if (true || hasPermission('insurance:create')) {
+      if (hasPermission('insurance:create')) {
         insuranceMenu.routes!.push({
           path: '/insurance/create',
           name: '新建投保',
@@ -256,12 +256,14 @@ const BasicLayout = () => {
     };
     baseMenus.push(interviewMenu);
 
-    // 背调管理菜单 - 所有用户可见
-    baseMenus.push({
-      path: '/background-check',
-      name: '背调管理',
-      icon: <SearchOutlined />,
-    });
+    // 背调管理菜单
+    if (hasPermission('background-check:view')) {
+      baseMenus.push({
+        path: '/background-check',
+        name: '背调管理',
+        icon: <SearchOutlined />,
+      });
+    }
 
     // 褓贝后台菜单 - 管理员和经理可见
     if (hasRole('admin') || hasRole('manager')) {

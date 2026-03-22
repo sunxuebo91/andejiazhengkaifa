@@ -286,9 +286,16 @@ const ContractList: React.FC = () => {
       key: 'period',
       width: 200,
       render: (_: any, record: Contract) => {
-        // 优先使用 templateParams 中的合同时间
-        const startDateStr = record.templateParams?.['合同开始时间'] || record.templateParams?.['服务开始时间'];
-        const endDateStr = record.templateParams?.['合同结束时间'] || record.templateParams?.['服务结束时间'];
+        // 优先使用 templateParams 中的合同时间（支持合并格式和分拆年月日格式）
+        const tp = record.templateParams;
+        const startDateStr = tp?.['合同开始时间'] || tp?.['服务开始时间'] ||
+          (tp?.['开始年'] && tp?.['开始月'] && tp?.['开始日']
+            ? `${tp['开始年']}年${String(tp['开始月']).padStart(2, '0')}月${String(tp['开始日']).padStart(2, '0')}日`
+            : undefined);
+        const endDateStr = tp?.['合同结束时间'] || tp?.['服务结束时间'] ||
+          (tp?.['结束年'] && tp?.['结束月'] && tp?.['结束日']
+            ? `${tp['结束年']}年${String(tp['结束月']).padStart(2, '0')}月${String(tp['结束日']).padStart(2, '0')}日`
+            : undefined);
 
         // 统一格式化日期为 YYYY-MM-DD
         const formatDateUnified = (dateStr: string | undefined, fallback: string) => {
@@ -384,6 +391,26 @@ const ContractList: React.FC = () => {
       key: 'createdAt',
       width: 150,
       render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm'),
+    },
+    {
+      title: '背调',
+      key: 'hasBackgroundCheck',
+      width: 70,
+      render: (_: any, record: Contract) => (
+        (record as any).hasBackgroundCheck
+          ? <Tag color="green">是</Tag>
+          : <Tag color="default">否</Tag>
+      ),
+    },
+    {
+      title: '保险',
+      key: 'hasInsurance',
+      width: 70,
+      render: (_: any, record: Contract) => (
+        (record as any).hasInsurance
+          ? <Tag color="green">是</Tag>
+          : <Tag color="default">否</Tag>
+      ),
     },
     {
       title: '操作',

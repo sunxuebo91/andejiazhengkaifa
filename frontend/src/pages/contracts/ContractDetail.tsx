@@ -1089,6 +1089,30 @@ const ContractDetail: React.FC = () => {
     return dayjs(dateString).format('YYYY-MM-DD HH:mm:ss');
   };
 
+  // 从 templateParams 中获取合同开始日期（支持合并字段和分拆年月日字段）
+  const getContractStartDate = (c: typeof contract) => {
+    const tp = c?.templateParams;
+    if (tp?.['合同开始时间']) return tp['合同开始时间'];
+    if (tp?.['服务开始时间']) return tp['服务开始时间'];
+    // 分拆年月日字段 fallback（小程序部分模板使用 开始年/开始月/开始日）
+    if (tp?.['开始年'] && tp?.['开始月'] && tp?.['开始日']) {
+      return `${tp['开始年']}年${String(tp['开始月']).padStart(2, '0')}月${String(tp['开始日']).padStart(2, '0')}日`;
+    }
+    return c?.startDate ? formatDate(c.startDate) : '-';
+  };
+
+  // 从 templateParams 中获取合同结束日期（支持合并字段和分拆年月日字段）
+  const getContractEndDate = (c: typeof contract) => {
+    const tp = c?.templateParams;
+    if (tp?.['合同结束时间']) return tp['合同结束时间'];
+    if (tp?.['服务结束时间']) return tp['服务结束时间'];
+    // 分拆年月日字段 fallback
+    if (tp?.['结束年'] && tp?.['结束月'] && tp?.['结束日']) {
+      return `${tp['结束年']}年${String(tp['结束月']).padStart(2, '0')}月${String(tp['结束日']).padStart(2, '0')}日`;
+    }
+    return c?.endDate ? formatDate(c.endDate) : '-';
+  };
+
   const renderHistoryItem = (historyContract: any) => ({
     key: historyContract.contractId,
     color: historyContract.status === 'active' ? 'green' : 'gray',
@@ -1440,33 +1464,27 @@ const ContractDetail: React.FC = () => {
                 
                 <Descriptions.Item label="服务开始日期" span={1}>
                   <span style={{ fontWeight: 'bold' }}>
-                    {/* 优先使用 templateParams 中的合同时间 */}
-                    {contract.templateParams?.['合同开始时间'] ||
-                     contract.templateParams?.['服务开始时间'] ||
-                     formatDate(contract.startDate)}
+                    {/* 优先使用 templateParams 中的合同时间（支持合并格式和分拆年月日格式） */}
+                    {getContractStartDate(contract)}
                   </span>
                 </Descriptions.Item>
 
                 <Descriptions.Item label="服务结束日期" span={1}>
                   <span style={{ fontWeight: 'bold' }}>
-                    {contract.templateParams?.['合同结束时间'] ||
-                     contract.templateParams?.['服务结束时间'] ||
-                     formatDate(contract.endDate)}
+                    {getContractEndDate(contract)}
                   </span>
                 </Descriptions.Item>
 
                 <Descriptions.Item label="服务期限" span={1}>
                   <span style={{ color: '#52c41a' }}>
                     {(() => {
-                      // 优先从 templateParams 计算服务期限
-                      const startStr = contract.templateParams?.['合同开始时间'] || contract.templateParams?.['服务开始时间'];
-                      const endStr = contract.templateParams?.['合同结束时间'] || contract.templateParams?.['服务结束时间'];
-                      if (startStr && endStr) {
-                        const start = dayjs(startStr);
-                        const end = dayjs(endStr);
-                        if (start.isValid() && end.isValid()) {
-                          return end.diff(start, 'day') + 1;
-                        }
+                      // 优先从 templateParams 计算服务期限（支持分拆年月日字段）
+                      const startStr = getContractStartDate(contract);
+                      const endStr = getContractEndDate(contract);
+                      const start = dayjs(startStr, ['YYYY年MM月DD日', 'YYYY-MM-DD']);
+                      const end = dayjs(endStr, ['YYYY年MM月DD日', 'YYYY-MM-DD']);
+                      if (start.isValid() && end.isValid()) {
+                        return end.diff(start, 'day') + 1;
                       }
                       return dayjs(contract.endDate).diff(dayjs(contract.startDate), 'day') + 1;
                     })()} 天

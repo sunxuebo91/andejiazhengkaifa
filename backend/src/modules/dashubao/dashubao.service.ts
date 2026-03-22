@@ -7,6 +7,7 @@ import * as xml2js from 'xml2js';
 import { InsurancePolicy, InsurancePolicyDocument, PolicyStatus } from './models/insurance-policy.model';
 import { InsuranceSyncLog, InsuranceSyncLogDocument, SyncStatus } from './models/insurance-sync-log.model';
 import { Contract, ContractDocument } from '../contracts/models/contract.model';
+import { CustomerOperationLog } from '../customers/models/customer-operation-log.model';
 import {
   CreatePolicyDto,
   QueryPolicyDto,
@@ -60,6 +61,7 @@ export class DashubaoService {
     @InjectModel(InsurancePolicy.name) private policyModel: Model<InsurancePolicyDocument>,
     @InjectModel(InsuranceSyncLog.name) private syncLogModel: Model<InsuranceSyncLogDocument>,
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
+    @InjectModel(CustomerOperationLog.name) private operationLogModel: Model<CustomerOperationLog>,
   ) {
     // 从环境变量或使用提供的凭证
     this.config = {
@@ -72,6 +74,40 @@ export class DashubaoService {
 
     this.logger.log('大树保服务初始化完成');
     this.logger.log(`使用${this.config.isProduction ? '生产' : '测试'}环境`);
+  }
+
+  /**
+   * 写保险操作日志到 customer_operation_logs
+   */
+  private async writeOperationLog(params: {
+    policyId?: string;
+    policyNo?: string;
+    operationType: string;
+    operationName: string;
+    operatorId?: string;
+    details?: Record<string, any>;
+    requestId?: string;
+    ipAddress?: string;
+  }): Promise<void> {
+    try {
+      const operatorId = params.operatorId
+        ? new Types.ObjectId(params.operatorId)
+        : new Types.ObjectId('000000000000000000000000'); // 系统操作占位
+      await this.operationLogModel.create({
+        entityType: 'policy',
+        entityId: params.policyNo || params.policyId || 'unknown',
+        operationType: 'other',
+        operationName: params.operationName,
+        operatorId,
+        operatedAt: new Date(),
+        details: params.details,
+        requestId: params.requestId,
+        ipAddress: params.ipAddress,
+      });
+    } catch (err) {
+      // 日志写失败不阻断主流程
+      this.logger.warn(`⚠️  操作日志写入失败: ${err.message}`);
+    }
   }
 
   /**
@@ -470,7 +506,7 @@ export class DashubaoService {
   /**
    * 保单注销 (0004)
    */
-  async cancelPolicy(dto: CancelPolicyDto): Promise<DashubaoResponse> {
+  async cancelPolicy(dto: CancelPolicyDto, operatorId?: string): Promise<DashubaoResponse> {
     const bodyContent = `
     <Policy>
       <PolicyRef>${dto.policyNo}</PolicyRef>
@@ -485,6 +521,21 @@ export class DashubaoService {
         { policyNo: dto.policyNo },
         { status: PolicyStatus.CANCELLED }
       );
+      // 写操作日志
+      await this.writeOperationLog({
+        policyNo: dto.policyNo,
+        operationType: 'cancel',
+        operationName: '保单注销',
+        operatorId,
+        details: {
+          description: `保单 ${dto.policyNo} 注销成功`,
+          after: { status: PolicyStatus.CANCELLED },
+          relatedId: dto.policyNo,
+          relatedType: 'policy',
+        },
+      });
+    } else {
+      this.logger.warn(`保单注销失败: ${dto.policyNo}, 原因: ${response.Message}`);
     }
 
     return response;
@@ -738,18 +789,55 @@ export class DashubaoService {
   /**
    * 批改接口 (0007) - 替换被保险人
    */
-  async amendPolicy(dto: AmendPolicyDto): Promise<DashubaoResponse> {
+  async amendPolicy(dto: AmendPolicyDto, operatorId?: string): Promise<DashubaoResponse> {
+    // 从本地保单查询当前被保人信息，以保证与大树保系统一致
+    // 优先级: forceOldInsured（手动指定）> 本地DB insuredList[0] > 客户端传来的 oldInsured
+    const localPolicy = await this.policyModel.findOne({ policyNo: dto.policyNo }).exec();
+    const localInsured = localPolicy?.insuredList?.[0];
+
+    let oldIdCard: string;
+    let oldName: string;
+    let oldIdType: string;
+    let oldBirthDate: string;
+    let oldGender: string;
+
+    if (dto.forceOldInsured?.idNumber) {
+      // 手动强制指定（用于本地DB与大树保不同步的情况）
+      oldIdCard = dto.forceOldInsured.idNumber;
+      oldName = dto.forceOldInsured.insuredName;
+      oldIdType = dto.forceOldInsured.idType || '1';
+      oldBirthDate = dto.forceOldInsured.birthDate || this.extractBirthDateFromIdCard(oldIdCard);
+      oldGender = dto.forceOldInsured.gender || this.extractGenderFromIdCard(oldIdCard);
+      this.logger.log(`🔍 批改原被保人（强制指定）: ${oldName} / ${oldIdCard}`);
+    } else if (localInsured?.idNumber) {
+      // 从本地保单取
+      oldIdCard = localInsured.idNumber;
+      oldName = localInsured.insuredName;
+      oldIdType = localInsured.idType || '1';
+      oldBirthDate = localInsured.birthDate || this.extractBirthDateFromIdCard(oldIdCard);
+      oldGender = localInsured.gender || this.extractGenderFromIdCard(oldIdCard);
+      this.logger.log(`🔍 批改原被保人（来自本地保单）: ${oldName} / ${oldIdCard}`);
+    } else {
+      // 兜底：客户端传来的
+      oldIdCard = dto.oldInsured.idNumber;
+      oldName = dto.oldInsured.insuredName;
+      oldIdType = dto.oldInsured.idType || '1';
+      oldBirthDate = dto.oldInsured.birthDate || this.extractBirthDateFromIdCard(oldIdCard);
+      oldGender = dto.oldInsured.gender || this.extractGenderFromIdCard(oldIdCard);
+      this.logger.log(`🔍 批改原被保人（来自客户端，本地无记录）: ${oldName} / ${oldIdCard}`);
+    }
+
     // 根据大树保API文档，批改接口需要使用PolicyRef，并且被保人信息需要type属性
     const bodyContent = `
     <Policy>
       <PolicyRef>${dto.policyNo}</PolicyRef>
     </Policy>
     <Insured type="old">
-      <InsuredName>${dto.oldInsured.insuredName}</InsuredName>
-      <IdType>${dto.oldInsured.idType}</IdType>
-      <IdNumber>${dto.oldInsured.idNumber}</IdNumber>
-      <BirthDate>${dto.oldInsured.birthDate}</BirthDate>
-      <Gender>${dto.oldInsured.gender}</Gender>
+      <InsuredName>${oldName}</InsuredName>
+      <IdType>${oldIdType}</IdType>
+      <IdNumber>${oldIdCard}</IdNumber>
+      <BirthDate>${oldBirthDate}</BirthDate>
+      <Gender>${oldGender}</Gender>
     </Insured>
     <Insured type="new">
       <InsuredName>${dto.newInsured.insuredName}</InsuredName>
@@ -776,8 +864,17 @@ export class DashubaoService {
     this.logger.log(JSON.stringify(response, null, 2));
     this.logger.log('='.repeat(80));
 
-    // 如果批改成功，更新本地保单的被保险人信息
+    // 如果批改成功，更新本地保单的被保险人信息，并记录批改历史
     if (response.Success === 'true') {
+      const amendRecord = {
+        amendedAt: new Date(),
+        operatorId: operatorId || undefined,
+        oldInsuredName: oldName,
+        oldIdNumber: oldIdCard,
+        newInsuredName: dto.newInsured.insuredName,
+        newIdNumber: dto.newInsured.idNumber,
+        dashubaoResponse: response,
+      };
       await this.policyModel.updateOne(
         { policyNo: dto.policyNo },
         {
@@ -789,10 +886,29 @@ export class DashubaoService {
               birthDate: dto.newInsured.birthDate,
               gender: dto.newInsured.gender,
               mobile: dto.newInsured.mobile,
-            }
-          }
+            },
+          },
+          $push: { amendmentHistory: amendRecord },
         }
       );
+      this.logger.log(`✅ 保单 ${dto.policyNo} 批改成功: ${oldName} → ${dto.newInsured.insuredName}`);
+
+      // 写操作日志
+      await this.writeOperationLog({
+        policyNo: dto.policyNo,
+        operationType: 'amend',
+        operationName: '批改被保险人',
+        operatorId,
+        details: {
+          before: { insuredName: oldName, idNumber: oldIdCard },
+          after: { insuredName: dto.newInsured.insuredName, idNumber: dto.newInsured.idNumber },
+          description: `保单 ${dto.policyNo} 被保险人由【${oldName}】更换为【${dto.newInsured.insuredName}】`,
+          relatedId: dto.policyNo,
+          relatedType: 'policy',
+        },
+      });
+    } else {
+      this.logger.warn(`❌ 保单批改失败: ${dto.policyNo}, 原因: ${response.Message}`);
     }
 
     return response;
@@ -801,7 +917,7 @@ export class DashubaoService {
   /**
    * 批增接口 - 增加被保险人
    */
-  async addInsured(dto: AddInsuredDto): Promise<DashubaoResponse> {
+  async addInsured(dto: AddInsuredDto, operatorId?: string): Promise<DashubaoResponse> {
     const insuredListXml = dto.insuredList.map((insured, index) => `
     <Insured>
       <InsuredId>${insured.insuredId || (index + 1)}</InsuredId>
@@ -820,13 +936,52 @@ export class DashubaoService {
     </InsuredList>`;
 
     const xmlRequest = this.buildXmlRequest('0007', bodyContent);
-    return await this.sendRequest(xmlRequest);
+    const response = await this.sendRequest(xmlRequest);
+
+    if (response.Success === 'true') {
+      // 批增成功，把新的被保险人追加到本地 insuredList
+      for (const insured of dto.insuredList) {
+        await this.policyModel.updateOne(
+          { policyNo: dto.policyNo },
+          {
+            $push: {
+              insuredList: {
+                insuredName: insured.insuredName,
+                idType: insured.idType,
+                idNumber: insured.idNumber,
+                birthDate: insured.birthDate,
+                gender: insured.gender,
+                mobile: insured.mobile,
+                insuredType: '1',
+              },
+            },
+            $inc: { groupSize: 1 },
+          }
+        );
+      }
+      // 写操作日志
+      const names = dto.insuredList.map(i => i.insuredName).join('、');
+      await this.writeOperationLog({
+        policyNo: dto.policyNo,
+        operationType: 'add_insured',
+        operationName: '批增被保险人',
+        operatorId,
+        details: {
+          after: { addedInsured: dto.insuredList.map(i => ({ name: i.insuredName, idNumber: i.idNumber })) },
+          description: `保单 ${dto.policyNo} 批增被保险人: ${names}`,
+          relatedId: dto.policyNo,
+          relatedType: 'policy',
+        },
+      });
+    }
+
+    return response;
   }
 
   /**
    * 退保接口 (0014)
    */
-  async surrenderPolicy(dto: SurrenderPolicyDto): Promise<DashubaoResponse> {
+  async surrenderPolicy(dto: SurrenderPolicyDto, operatorId?: string): Promise<DashubaoResponse> {
     // 不使用 Policy 标签包裹（直接放在 Body 下）
     const bodyContent = `
     <PolicyNo>${dto.policyNo}</PolicyNo>
@@ -854,6 +1009,21 @@ export class DashubaoService {
         { policyNo: dto.policyNo },
         { status: PolicyStatus.SURRENDERED }
       );
+      // 写操作日志
+      await this.writeOperationLog({
+        policyNo: dto.policyNo,
+        operationType: 'surrender',
+        operationName: '保单退保',
+        operatorId,
+        details: {
+          after: { status: PolicyStatus.SURRENDERED },
+          description: `保单 ${dto.policyNo} 退保成功，原因: ${dto.removeReason}`,
+          relatedId: dto.policyNo,
+          relatedType: 'policy',
+        },
+      });
+    } else {
+      this.logger.warn(`退保失败: ${dto.policyNo}, 原因: ${response.Message}`);
     }
 
     return response;
@@ -900,7 +1070,9 @@ export class DashubaoService {
     if (query.resumeId) {
       filter.resumeId = new Types.ObjectId(query.resumeId);
     }
-    if (query.createdBy) {
+    // 按简历/阿姨查询时不限制 createdBy，显示该阿姨所有保险记录（不论谁购买）
+    // 只有在不指定具体阿姨（即普通员工看"我的保单列表"）时才按 createdBy 过滤
+    if (query.createdBy && !query.resumeId) {
       // 兼容 createdBy 可能是 ObjectId 或 string 类型
       filter.$or = [
         { createdBy: new Types.ObjectId(query.createdBy) },
@@ -1175,15 +1347,22 @@ export class DashubaoService {
         const gender = this.extractGenderFromIdCard(params.newWorker.idCard);
 
         // 调用大树保换人API
-        const oldBirthDate = this.extractBirthDateFromIdCard(params.oldWorker.idCard);
-        const oldGender = this.extractGenderFromIdCard(params.oldWorker.idCard);
+        // 以保单实际存储的被保人信息为准（大树保系统中的真实数据），而非合同字段
+        const actualOldInsured = policy.insuredList?.[0];
+        const oldIdCard = actualOldInsured?.idNumber || params.oldWorker.idCard;
+        const oldName = actualOldInsured?.insuredName || params.oldWorker.name;
+        const oldIdType = actualOldInsured?.idType || '1';
+        const oldBirthDate = actualOldInsured?.birthDate || this.extractBirthDateFromIdCard(oldIdCard);
+        const oldGender = actualOldInsured?.gender || this.extractGenderFromIdCard(oldIdCard);
+
+        this.logger.log(`🔍 原被保人信息（来自保单）: ${oldName} / ${oldIdCard}`);
 
         const response = await this.amendPolicy({
           policyNo: policy.policyNo,
           oldInsured: {
-            insuredName: params.oldWorker.name,
-            idType: '1', // 1-身份证
-            idNumber: params.oldWorker.idCard,
+            insuredName: oldName,
+            idType: oldIdType,
+            idNumber: oldIdCard,
             birthDate: oldBirthDate,
             gender: oldGender,
           },

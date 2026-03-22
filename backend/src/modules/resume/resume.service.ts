@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Resume, IResume } from './models/resume.entity';
@@ -9,6 +9,7 @@ import { UploadService } from '../upload/upload.service';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import { Contract, ContractDocument } from '../contracts/models/contract.model';
+import { User } from '../users/models/user.entity';
 
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
@@ -16,6 +17,8 @@ import { UpdateAvailabilityDto, BatchUpdateAvailabilityDto, QueryAvailabilityDto
 import { AvailabilityStatus } from './models/availability-period.schema';
 import { EmployeeEvaluation } from '../employee-evaluation/models/employee-evaluation.entity';
 import { ResumeQueryService } from './resume-query.service';
+import { DashubaoService } from '../dashubao/dashubao.service';
+import { BackgroundCheck, BackgroundCheckDocument } from '../zmdb/models/background-check.model';
 
 @Injectable()
 export class ResumeService {
@@ -33,6 +36,11 @@ export class ResumeService {
     @InjectModel(EmployeeEvaluation.name)
     private readonly employeeEvaluationModel: Model<EmployeeEvaluation>,
     private readonly resumeQueryService: ResumeQueryService,
+    @InjectModel(User.name)
+    private readonly userModel: Model<any>,
+    private readonly dashubaoService: DashubaoService,
+    @InjectModel(BackgroundCheck.name)
+    private readonly backgroundCheckModel: Model<BackgroundCheckDocument>,
   ) {}
 
   /**
@@ -240,6 +248,55 @@ export class ResumeService {
 
     await resume.deleteOne();
     return { message: '删除成功' };
+  }
+
+  /**
+   * 获取可分配的员工列表（管理员/经理用）
+   */
+  async getAssignableUsers(): Promise<Array<{ _id: string; name: string; username: string; role: string }>> {
+    const users = await this.userModel.find({
+      active: true,
+      role: { $in: ['admin', 'manager', 'employee'] },
+    }).select('_id name username role').lean();
+
+    return users.map((u: any) => ({
+      _id: u._id.toString(),
+      name: u.name,
+      username: u.username,
+      role: u.role,
+    }));
+  }
+
+  /**
+   * 分配阿姨给指定员工
+   */
+  async assignResume(resumeId: string, assignedToId: string, operatorId: string): Promise<IResume> {
+    const operator = await this.userModel.findById(operatorId).select('role name').lean();
+    if (!operator || !['admin', 'manager'].includes((operator as any).role)) {
+      throw new ForbiddenException('只有管理员或经理可以分配阿姨');
+    }
+
+    const resume = await this.resumeModel.findById(resumeId).exec();
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    const targetUser = await this.userModel.findById(assignedToId).select('name username active').lean();
+    if (!targetUser) {
+      throw new NotFoundException('指定的员工不存在');
+    }
+    if ((targetUser as any).active === false) {
+      throw new ConflictException('指定的员工未激活');
+    }
+
+    const updated = await this.resumeModel.findByIdAndUpdate(
+      resumeId,
+      { assignedTo: new Types.ObjectId(assignedToId), assignedAt: new Date() },
+      { new: true },
+    ).exec();
+
+    this.logger.log(`✅ 分配简历 ${resumeId}（${resume.name}）给员工 ${(targetUser as any).name}`);
+    return updated;
   }
 
   /**
@@ -1337,10 +1394,7 @@ export class ResumeService {
         throw new BadRequestException(`Excel文件缺少必需的列: ${missingColumns.join(', ')}`);
       }
 
-      // 解析每一行数据
-      const promises = [];
-
-      // 从第二行开始，跳过表头
+      // 从第二行开始，顺序处理每一行（避免并发导致手机号重复）
       for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
         const row = worksheet.getRow(rowNumber);
         const rowData: Record<string, any> = {};
@@ -1363,21 +1417,15 @@ export class ResumeService {
         // 转换数据为DTO格式
         const resumeData = this.mapExcelRowToResumeDto(rowData, userId);
 
-        // 创建简历(异步)
-        promises.push(
-          this.create(resumeData)
-            .then(() => {
-              result.success++;
-            })
-            .catch(error => {
-              result.fail++;
-              result.errors.push(`第 ${rowNumber} 行导入失败: ${error.message}`);
-            })
-        );
+        // 顺序创建简历（逐行等待，防止同批次相同手机号并发写入）
+        try {
+          await this.create(resumeData);
+          result.success++;
+        } catch (error) {
+          result.fail++;
+          result.errors.push(`第 ${rowNumber} 行导入失败: ${error.message}`);
+        }
       }
-
-      // 等待所有创建操作完成
-      await Promise.all(promises);
 
       // 清理临时文件
       fs.unlinkSync(filePath);
@@ -2330,6 +2378,91 @@ export class ResumeService {
       this.logger.error(`计算推荐理由标签失败: ${error.message}`, error.stack);
       return [];
     }
+  }
+
+  /**
+   * 查询简历对应劳动者的保险和背调状态
+   * 用于小程序接口：根据简历ID返回是否有效保险和背调记录
+   */
+  async checkWorkerStatus(
+    resumeId: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _user?: { userId?: string; role?: string; permissions?: string[] },
+  ): Promise<{ hasInsurance: boolean; hasBackgroundCheck: boolean; latestInsurance: any; latestBackgroundCheck: any }> {
+    // 1. 查找简历，获取身份证号
+    const resume = await this.resumeModel.findById(resumeId).select('idNumber').lean().exec();
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    const idNumber: string | undefined = (resume as any).idNumber;
+
+    if (!idNumber) {
+      // 没有身份证号，无法匹配保险/背调
+      return { hasInsurance: false, hasBackgroundCheck: false, latestInsurance: null, latestBackgroundCheck: null };
+    }
+
+    const normalizedId = idNumber.trim().toUpperCase();
+
+    // 2. 并发查询保险和背调
+    const [activePolicies, bgCheck] = await Promise.all([
+      this.dashubaoService.getActivePoliciesByIdCard(normalizedId),
+      this.backgroundCheckModel
+        .findOne({ idNo: normalizedId })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec(),
+    ]);
+
+    const latestInsurance = activePolicies.length > 0
+      ? activePolicies.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+      : null;
+    const hasInsurance = !!latestInsurance;
+    const hasBackgroundCheck = !!bgCheck;
+
+    this.logger.log(
+      `[checkWorkerStatus] resumeId=${resumeId}, idNumber=${normalizedId}, ` +
+      `hasInsurance=${hasInsurance}, hasBackgroundCheck=${hasBackgroundCheck}`,
+    );
+
+    return { hasInsurance, hasBackgroundCheck, latestInsurance, latestBackgroundCheck: bgCheck ?? null };
+  }
+
+  /**
+   * 直接根据身份证号查询劳动者的保险和背调状态
+   * 用于小程序接口：无需先查简历，直接输入身份证号
+   */
+  async checkWorkerStatusByIdCard(
+    idCard: string,
+  ): Promise<{ hasInsurance: boolean; hasBackgroundCheck: boolean; latestInsurance: any; latestBackgroundCheck: any }> {
+    if (!idCard || !idCard.trim()) {
+      return { hasInsurance: false, hasBackgroundCheck: false, latestInsurance: null, latestBackgroundCheck: null };
+    }
+
+    const normalizedId = idCard.trim().toUpperCase();
+
+    // 并发查询保险（有效保单）和背调记录
+    const [activePolicies, bgCheck] = await Promise.all([
+      this.dashubaoService.getActivePoliciesByIdCard(normalizedId),
+      this.backgroundCheckModel
+        .findOne({ idNo: normalizedId })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec(),
+    ]);
+
+    const latestInsurance = activePolicies.length > 0
+      ? activePolicies.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+      : null;
+    const hasInsurance = !!latestInsurance;
+    const hasBackgroundCheck = !!bgCheck;
+
+    this.logger.log(
+      `[checkWorkerStatusByIdCard] idCard=${normalizedId}, ` +
+      `hasInsurance=${hasInsurance}, hasBackgroundCheck=${hasBackgroundCheck}`,
+    );
+
+    return { hasInsurance, hasBackgroundCheck, latestInsurance, latestBackgroundCheck: bgCheck ?? null };
   }
 
 }

@@ -756,8 +756,7 @@ export class ZmdbService {
       }
     }
 
-    this.applyBackgroundCheckAccessFilter(query, user);
-
+    // 背调权限已公开：所有已登录用户均可查看全部背调记录
     this.logger.log(`背调列表查询 - 用户: ${user?.userId}, 角色: ${user?.role}, 权限: ${JSON.stringify(user?.permissions)}`);
     this.logger.log(`背调列表查询条件: ${JSON.stringify(query)}`);
 
@@ -789,7 +788,7 @@ export class ZmdbService {
     user?: { userId?: string; role?: string; permissions?: string[] },
   ): Promise<BackgroundCheck | null> {
     const query: Record<string, any> = { _id: id };
-    this.applyBackgroundCheckAccessFilter(query, user);
+    // 背调权限已公开，不限制 createdBy
 
     const record = await this.bgCheckModel
       .findOne(query)
@@ -805,7 +804,8 @@ export class ZmdbService {
    */
   async findByIdNo(
     idNo: string,
-    user?: { userId?: string; role?: string; permissions?: string[] },
+    // user 参数保留兼容性，但按身份证查时不限制 createdBy（需看该人员完整背调记录）
+    _user?: { userId?: string; role?: string; permissions?: string[] },
   ): Promise<BackgroundCheck | null> {
     if (!idNo) {
       return null;
@@ -814,7 +814,7 @@ export class ZmdbService {
     this.logger.log(`🔍 根据身份证号查询背调记录: ${idNo}`);
 
     const query: Record<string, any> = { idNo };
-    this.applyBackgroundCheckAccessFilter(query, user);
+    // 按特定人员身份证查询时不加 createdBy 过滤，显示所有人给该阿姨做的背调
 
     const record = await this.bgCheckModel
       .findOne(query)

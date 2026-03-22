@@ -46,8 +46,7 @@ export class DashubaoController {
   }
 
   private canDeletePolicy(user: any): boolean {
-    const approverUsername = process.env.POLICY_DELETE_APPROVER || 'sunxuebo';
-    return this.isAdmin(user) && user?.username === approverUsername;
+    return this.isAdmin(user);
   }
 
   @Post('policy')
@@ -153,8 +152,8 @@ export class DashubaoController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '批改 - 替换被保险人' })
   @ApiResponse({ status: 200, description: '批改成功' })
-  async amendPolicy(@Body() dto: AmendPolicyDto) {
-    return this.dashubaoService.amendPolicy(dto);
+  async amendPolicy(@Body() dto: AmendPolicyDto, @Request() req) {
+    return this.dashubaoService.amendPolicy(dto, req.user?.userId);
   }
 
   @Post('policy/add-insured')
@@ -163,8 +162,8 @@ export class DashubaoController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '批增 - 增加被保险人' })
   @ApiResponse({ status: 200, description: '批增成功' })
-  async addInsured(@Body() dto: AddInsuredDto) {
-    return this.dashubaoService.addInsured(dto);
+  async addInsured(@Body() dto: AddInsuredDto, @Request() req) {
+    return this.dashubaoService.addInsured(dto, req.user?.userId);
   }
 
   @Post('policy/surrender')
@@ -173,8 +172,8 @@ export class DashubaoController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '退保 - 已生效保单退保' })
   @ApiResponse({ status: 200, description: '退保成功' })
-  async surrenderPolicy(@Body() dto: SurrenderPolicyDto) {
-    return this.dashubaoService.surrenderPolicy(dto);
+  async surrenderPolicy(@Body() dto: SurrenderPolicyDto, @Request() req) {
+    return this.dashubaoService.surrenderPolicy(dto, req.user?.userId);
   }
 
   @Get('policy/rebate/:policyNo')
@@ -194,7 +193,7 @@ export class DashubaoController {
   async deletePolicy(@Param('id') id: string, @Request() req) {
     try {
       if (!this.canDeletePolicy(req.user)) {
-        throw new ForbiddenException('仅管理员且用户孙学博可删除保单');
+        throw new ForbiddenException('仅管理员可删除保单');
       }
 
       await this.dashubaoService.deletePolicy(id);
@@ -224,12 +223,9 @@ export class DashubaoController {
     @Query('resumeId') resumeId?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
-    @Request() req?,
   ) {
-    const user = req?.user;
-    // 管理员和经理可以看到所有保单，普通员工只能看自己创建的
-    const createdBy = this.isManagerOrAdmin(user) ? undefined : user?.userId;
-    return this.dashubaoService.getPolicies({ status, resumeId, page, limit, createdBy });
+    // 保险权限已公开，不再按角色过滤 createdBy
+    return this.dashubaoService.getPolicies({ status, resumeId, page, limit });
   }
 
   @Get('policy/:id')

@@ -347,10 +347,16 @@ export class AmendPolicyDto {
   @IsNotEmpty()
   policyNo: string;
 
-  @ApiProperty({ description: '原被保人信息' })
+  @ApiProperty({ description: '原被保人信息（后端会自动从本地保单取，此字段作为兜底）' })
   @ValidateNested()
   @Type(() => InsuredPersonDto)
   oldInsured: InsuredPersonDto;
+
+  @ApiProperty({ description: '强制指定原被保人信息（当本地DB与大树保不同步时使用）', required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InsuredPersonDto)
+  forceOldInsured?: InsuredPersonDto;
 
   @ApiProperty({ description: '新被保人信息' })
   @ValidateNested()

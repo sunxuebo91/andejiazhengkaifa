@@ -14,6 +14,8 @@ import { ESignModule } from '../esign/esign.module';
 import { ResumeModule } from '../resume/resume.module';
 import { ContractApprovalsModule } from '../contract-approvals/contract-approvals.module';
 import { DashubaoModule } from '../dashubao/dashubao.module';
+import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/background-check.model';
+import { InsurancePolicy, InsurancePolicySchema } from '../dashubao/models/insurance-policy.model';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { DashubaoModule } from '../dashubao/dashubao.module';
       { name: Customer.name, schema: CustomerSchema },
       { name: Resume.name, schema: ResumeSchema },
       { name: User.name, schema: UserSchema },
+      { name: BackgroundCheck.name, schema: BackgroundCheckSchema },
+      { name: InsurancePolicy.name, schema: InsurancePolicySchema },
     ]),
     ESignModule,
     forwardRef(() => ResumeModule),

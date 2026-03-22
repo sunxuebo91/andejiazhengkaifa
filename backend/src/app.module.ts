@@ -35,6 +35,7 @@ import { FormModule } from './modules/form/form.module';
 import { ShortUrlModule } from './modules/short-url/short-url.module';
 import { ContractApprovalsModule } from './modules/contract-approvals/contract-approvals.module';
 import { ZmdbModule } from './modules/zmdb/zmdb.module';
+import { AIModule } from './modules/ai/ai.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { MiniprogramLoggerMiddleware } from './common/middleware/miniprogram-logger.middleware';
@@ -89,6 +90,7 @@ import { MiniprogramLoggerMiddleware } from './common/middleware/miniprogram-log
     ShortUrlModule,
     ContractApprovalsModule,
     ZmdbModule,
+    AIModule,
   ],
   controllers: [AppController],
   providers: [

@@ -7,6 +7,7 @@ import { DashubaoService } from './dashubao.service';
 import { InsurancePolicy, InsurancePolicySchema } from './models/insurance-policy.model';
 import { InsuranceSyncLog, InsuranceSyncLogSchema } from './models/insurance-sync-log.model';
 import { Contract, ContractSchema } from '../contracts/models/contract.model';
+import { CustomerOperationLog, CustomerOperationLogSchema } from '../customers/models/customer-operation-log.model';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { Contract, ContractSchema } from '../contracts/models/contract.model';
       { name: InsurancePolicy.name, schema: InsurancePolicySchema },
       { name: InsuranceSyncLog.name, schema: InsuranceSyncLogSchema },
       { name: Contract.name, schema: ContractSchema },
+      { name: CustomerOperationLog.name, schema: CustomerOperationLogSchema },
     ]),
   ],
   controllers: [DashubaoController, DashubaoMiniprogramController],

@@ -22,7 +22,7 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
     code: 'manager',
     name: '经理',
     description: '可以管理团队、阿姨资源、客户和合同',
-    permissions: ['resume:all', 'customer:all', 'contract:all', 'insurance:all', 'background-check:all', 'user:view', 'admin:settings'],
+    permissions: ['resume:all', 'resume:assign', 'customer:all', 'contract:all', 'insurance:all', 'background-check:all', 'user:view', 'admin:settings'],
     active: true,
   },
   {
@@ -41,6 +41,7 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
       'contract:edit',
       'insurance:view',
       'insurance:create',
+      'insurance:edit',
       'background-check:view',
       'background-check:create',
     ],

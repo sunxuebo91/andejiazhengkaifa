@@ -610,6 +610,34 @@ export class ResumeController {
     }
   }
 
+  @Get('assignable-users')
+  @Permissions('resume:assign')
+  @ApiOperation({ summary: '获取可分配的员工列表（管理员/经理）' })
+  async getAssignableUsers() {
+    try {
+      const users = await this.resumeService.getAssignableUsers();
+      return { success: true, data: users };
+    } catch (error) {
+      return { success: false, data: null, message: error.message };
+    }
+  }
+
+  @Patch(':id/assign')
+  @Permissions('resume:assign')
+  @ApiOperation({ summary: '分配阿姨给指定员工（管理员/经理）' })
+  async assignResume(
+    @Param('id') id: string,
+    @Body() body: { assignedTo: string },
+    @Request() req,
+  ) {
+    try {
+      const resume = await this.resumeService.assignResume(id, body.assignedTo, req.user?.userId);
+      return { success: true, data: resume, message: '分配成功' };
+    } catch (error) {
+      return { success: false, data: null, message: error.message };
+    }
+  }
+
   @Get('options')
   @ApiOperation({ summary: '获取简历筛选选项' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -1288,6 +1316,63 @@ export class ResumeController {
         success: false,
         data: null,
         message: `数据验证失败: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * 查询简历对应劳动者的保险和背调状态
+   * 需要 resume:view 权限（JWT 已在类级别强制）
+   */
+  @Get('miniprogram/:id/check-status')
+  @Permissions('resume:view')
+  @ApiOperation({ summary: '【小程序】查询劳动者保险与背调状态' })
+  @ApiParam({ name: 'id', description: '简历ID（MongoDB ObjectId）' })
+  @ApiResponse({ status: 200, description: '查询成功', schema: { example: { success: true, data: { hasInsurance: true, hasBackgroundCheck: false }, message: '查询成功' } } })
+  async checkWorkerStatusForMiniprogram(
+    @Param('id') id: string,
+    @Req() req,
+  ) {
+    try {
+      this.logger.log(`🔍 小程序查询劳动者保险/背调状态: resumeId=${id}`);
+      const result = await this.resumeService.checkWorkerStatus(id, req.user);
+      return { success: true, data: result, message: '查询成功' };
+    } catch (error) {
+      this.logger.error(`❌ 查询劳动者保险/背调状态失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: { hasInsurance: false, hasBackgroundCheck: false },
+        message: error.message || '查询失败',
+      };
+    }
+  }
+
+  /**
+   * 直接通过身份证号查询劳动者保险与背调状态
+   * 需要 resume:view 权限
+   */
+  @Post('miniprogram/check-status-by-idcard')
+  @Permissions('resume:view')
+  @ApiOperation({ summary: '【小程序】通过身份证号查询劳动者保险与背调状态' })
+  @ApiBody({ schema: { type: 'object', properties: { idCard: { type: 'string', description: '身份证号' } }, required: ['idCard'] } })
+  @ApiResponse({ status: 200, description: '查询成功', schema: { example: { success: true, data: { hasInsurance: true, hasBackgroundCheck: false }, message: '查询成功' } } })
+  async checkWorkerStatusByIdCardForMiniprogram(
+    @Body('idCard') idCard: string,
+    @Req() req,
+  ) {
+    try {
+      this.logger.log(`🔍 小程序通过身份证号查询保险/背调状态: idCard=${idCard}`);
+      if (!idCard) {
+        return { success: false, data: { hasInsurance: false, hasBackgroundCheck: false }, message: '身份证号不能为空' };
+      }
+      const result = await this.resumeService.checkWorkerStatusByIdCard(idCard);
+      return { success: true, data: result, message: '查询成功' };
+    } catch (error) {
+      this.logger.error(`❌ 通过身份证号查询保险/背调状态失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: { hasInsurance: false, hasBackgroundCheck: false },
+        message: error.message || '查询失败',
       };
     }
   }

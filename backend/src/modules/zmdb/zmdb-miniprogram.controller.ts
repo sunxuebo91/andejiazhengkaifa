@@ -67,6 +67,7 @@ export class ZmdbMiniprogramController {
 
   /**
    * 根据身份证号查询背调记录
+   * 若报告已完成（status=4/16）但风险数据尚未拉取，自动触发拉取后再返回
    */
   @Get('reports/by-idno/:idNo')
   @Permissions('background-check:view')
@@ -74,7 +75,15 @@ export class ZmdbMiniprogramController {
   @ApiParam({ name: 'idNo', description: '身份证号' })
   @ApiResponse({ status: 200, description: '查询成功' })
   async findByIdNo(@Param('idNo') idNo: string, @Request() req) {
-    const record = await this.zmdbService.findByIdNo(idNo, req.user);
+    let record = await this.zmdbService.findByIdNo(idNo, req.user);
+
+    // 报告已完成但风险数据未拉取，自动同步一次
+    if (record?.reportId && (record.status === 4 || record.status === 16) && !record.reportResult) {
+      this.logger.log(`【小程序】自动拉取风险数据: reportId=${record.reportId}`);
+      await this.zmdbService.fetchAndSaveReportResult(record.reportId);
+      record = await this.zmdbService.findByIdNo(idNo, req.user);
+    }
+
     return {
       success: true,
       data: record,
@@ -84,6 +93,7 @@ export class ZmdbMiniprogramController {
 
   /**
    * 获取背调详情（包含风险评估结果）
+   * 若报告已完成（status=4/16）但风险数据尚未拉取，自动触发拉取后再返回
    */
   @Get('reports/:id')
   @Permissions('background-check:view')
@@ -91,10 +101,18 @@ export class ZmdbMiniprogramController {
   @ApiParam({ name: 'id', description: '背调记录ID（MongoDB ObjectId）' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getDetail(@Param('id') id: string, @Request() req) {
-    const record = await this.zmdbService.findOne(id, req.user);
+    let record = await this.zmdbService.findOne(id, req.user);
     if (!record) {
       return { success: false, data: null, message: '背调记录不存在' };
     }
+
+    // 报告已完成但风险数据未拉取，自动同步一次
+    if (record?.reportId && (record.status === 4 || record.status === 16) && !record.reportResult) {
+      this.logger.log(`【小程序】自动拉取风险数据: reportId=${record.reportId}`);
+      await this.zmdbService.fetchAndSaveReportResult(record.reportId);
+      record = await this.zmdbService.findOne(id, req.user);
+    }
+
     return { success: true, data: record, message: '获取成功' };
   }
 

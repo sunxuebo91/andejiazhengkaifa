@@ -98,6 +98,12 @@ export class Resume extends Document implements IResume {
   @Prop({ type: Types.ObjectId, ref: 'User', nullable: true })
   lastUpdatedBy?: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'User', nullable: true })
+  assignedTo?: Types.ObjectId;
+
+  @Prop({ nullable: true })
+  assignedAt?: Date;
+
   @ApiProperty({ description: '姓名' })
   @Prop()
   @IsString()
@@ -301,6 +307,9 @@ export class Resume extends Document implements IResume {
 }
 
 export const ResumeSchema = SchemaFactory.createForClass(Resume);
+
+// 手机号唯一索引（sparse 允许 null 值不参与唯一性检查）
+ResumeSchema.index({ phone: 1 }, { unique: true, sparse: true, background: true });
 
 // 确保idNumber字段的索引是稀疏的，这样null值不会参与唯一性检查
 // 移除之前的索引定义

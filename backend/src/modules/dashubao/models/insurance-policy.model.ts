@@ -2,6 +2,36 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 
+// 批改历史记录
+@Schema({ _id: false })
+export class AmendmentRecord {
+  @Prop({ required: true })
+  amendedAt: Date; // 批改时间
+
+  @Prop()
+  operatorId?: string; // 操作人ID
+
+  @Prop()
+  operatorName?: string; // 操作人名称
+
+  @Prop({ required: true })
+  oldInsuredName: string; // 原被保险人姓名
+
+  @Prop({ required: true })
+  oldIdNumber: string; // 原被保险人证件号
+
+  @Prop({ required: true })
+  newInsuredName: string; // 新被保险人姓名
+
+  @Prop({ required: true })
+  newIdNumber: string; // 新被保险人证件号
+
+  @Prop({ type: Object })
+  dashubaoResponse?: Record<string, any>; // 大树保API响应
+}
+
+export const AmendmentRecordSchema = SchemaFactory.createForClass(AmendmentRecord);
+
 // 被保险人信息
 @Schema({ _id: false })
 export class InsuredPerson {
@@ -266,6 +296,10 @@ export class InsurancePolicy {
   @ApiProperty({ description: '大树保原始响应' })
   @Prop({ type: Object })
   rawResponse?: Record<string, any>;
+
+  @ApiProperty({ description: '批改历史记录' })
+  @Prop({ type: [AmendmentRecordSchema], default: [] })
+  amendmentHistory?: AmendmentRecord[];
 }
 
 export type InsurancePolicyDocument = InsurancePolicy & Document;

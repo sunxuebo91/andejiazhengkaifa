@@ -13,6 +13,8 @@ import { ResumeService } from '../resume/resume.service';
 import { AvailabilityStatus } from '../resume/models/availability-period.schema';
 import { DashubaoService } from '../dashubao/dashubao.service';
 import { ESignService } from '../esign/esign.service';
+import { BackgroundCheck } from '../zmdb/models/background-check.model';
+import { InsurancePolicy } from '../dashubao/models/insurance-policy.model';
 import { AppLogger } from '../../common/logging/app-logger';
 import { RequestContextStore } from '../../common/logging/request-context';
 import { ContractsQueryService } from './contracts-query.service';
@@ -29,6 +31,8 @@ export class ContractsService {
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(Resume.name) private resumeModel: Model<IResume>,
     @InjectModel(User.name) private userModel: Model<User>,
+    @InjectModel(BackgroundCheck.name) private backgroundCheckModel: Model<any>,
+    @InjectModel(InsurancePolicy.name) private insurancePolicyModel: Model<any>,
     @Inject(forwardRef(() => ResumeService)) private resumeService: ResumeService,
     private dashubaoService: DashubaoService,
     private esignService: ESignService,
@@ -624,7 +628,15 @@ export class ContractsService {
         .map(c => c.createdBy);
 
       // 批量查询关联数据
-      const [customers, workers, users] = await Promise.all([
+      const contractIds = rawContracts.map(c => c._id);
+      // 身份证号统一规范化（去空格+大写），避免大小写/空格导致匹配失败
+      const workerIdCards = [...new Set(
+        rawContracts
+          .map(c => c.workerIdCard?.trim().toUpperCase())
+          .filter(Boolean)
+      )];
+
+      const [customers, workers, users, bgChecks, policies] = await Promise.all([
         validCustomerIds.length > 0
           ? this.customerModel.find({ _id: { $in: validCustomerIds } }).select('name phone').lean().exec()
           : [],
@@ -634,7 +646,58 @@ export class ContractsService {
         validCreatedByIds.length > 0
           ? this.userModel.find({ _id: { $in: validCreatedByIds } }).select('name username').lean().exec()
           : [],
+        // 背调：按 contractId 或 身份证号匹配
+        this.backgroundCheckModel.find({
+          $or: [
+            { contractId: { $in: contractIds } },
+            ...(workerIdCards.length > 0 ? [{ idNo: { $in: workerIdCards } }] : []),
+          ],
+        }).select('contractId idNo').lean().exec(),
+        // 保险：按 contractId 或 被保人身份证号匹配
+        this.insurancePolicyModel.find({
+          $or: [
+            { contractId: { $in: contractIds } },
+            ...(workerIdCards.length > 0 ? [{ 'insuredList.idNumber': { $in: workerIdCards } }] : []),
+          ],
+        }).select('contractId insuredList').lean().exec(),
       ]);
+
+      // 构建合同 workerIdCard → Set<contractId> 的一对多映射（同一工人可能有多份合同）
+      const idCardToContractIds = new Map<string, Set<string>>();
+      for (const c of rawContracts) {
+        if (c.workerIdCard) {
+          const normalizedCard = c.workerIdCard.trim().toUpperCase();
+          const cid = (c._id as any).toString();
+          if (!idCardToContractIds.has(normalizedCard)) {
+            idCardToContractIds.set(normalizedCard, new Set<string>());
+          }
+          idCardToContractIds.get(normalizedCard).add(cid);
+        }
+      }
+
+      // 辅助函数：根据身份证号将所有匹配合同加入目标 Set
+      const addContractsByIdCard = (targetSet: Set<string>, idCard: string) => {
+        if (!idCard) return;
+        const normalized = idCard.trim().toUpperCase();
+        const cids = idCardToContractIds.get(normalized);
+        if (cids) cids.forEach(cid => targetSet.add(cid));
+      };
+
+      // 构建背调命中的 contractId Set（contractId 直接匹配 + 身份证号反查）
+      const bgCheckContractIds = new Set<string>();
+      for (const b of bgChecks as any[]) {
+        if (b.contractId) bgCheckContractIds.add(b.contractId.toString());
+        if (b.idNo) addContractsByIdCard(bgCheckContractIds, b.idNo);
+      }
+
+      // 构建保险命中的 contractId Set（检查所有被保险人，不仅限于第一个）
+      const policyContractIds = new Set<string>();
+      for (const p of policies as any[]) {
+        if (p.contractId) policyContractIds.add(p.contractId.toString());
+        for (const insured of (p.insuredList || [])) {
+          if (insured?.idNumber) addContractsByIdCard(policyContractIds, insured.idNumber);
+        }
+      }
 
       // 创建查找映射
       const customerMap = new Map<string, any>(customers.map(c => [c._id.toString(), c] as [string, any]));
@@ -670,6 +733,11 @@ export class ContractsService {
           // 兼容旧数据：如果 createdBy 不是有效的 ObjectId（例如直接存了姓名），保留原值
           result.createdBy = contract.createdBy || null;
         }
+
+        // 背调和保险标记
+        const cid = (contract._id as any).toString();
+        result.hasBackgroundCheck = bgCheckContractIds.has(cid);
+        result.hasInsurance = policyContractIds.has(cid);
 
         return result;
       });

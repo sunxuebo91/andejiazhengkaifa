@@ -11,6 +11,9 @@ import { ResumeService } from './resume.service';
 import { UploadModule } from '../upload/upload.module';
 import { EmployeeEvaluation, EmployeeEvaluationSchema } from '../employee-evaluation/models/employee-evaluation.entity';
 import { Contract, ContractSchema } from '../contracts/models/contract.model';
+import { User, UserSchema } from '../users/models/user.entity';
+import { DashubaoModule } from '../dashubao/dashubao.module';
+import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/background-check.model';
 
 @Module({
   imports: [
@@ -19,9 +22,12 @@ import { Contract, ContractSchema } from '../contracts/models/contract.model';
       { name: WorkExperienceSchema.name, schema: WorkExperienceSchemaFactory },
       { name: FileInfoSchema.name, schema: FileInfoSchemaFactory },
       { name: EmployeeEvaluation.name, schema: EmployeeEvaluationSchema },
-      { name: Contract.name, schema: ContractSchema }
+      { name: Contract.name, schema: ContractSchema },
+      { name: User.name, schema: UserSchema },
+      { name: BackgroundCheck.name, schema: BackgroundCheckSchema },
     ]),
     UploadModule,
+    DashubaoModule,
     // 为分享令牌签发/验证提供 JwtService
     JwtModule.registerAsync({
       useFactory: () => {

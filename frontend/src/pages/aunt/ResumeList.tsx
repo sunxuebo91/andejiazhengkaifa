@@ -1,12 +1,13 @@
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber, Upload } from 'antd';
 import type { TablePaginationConfig, UploadProps } from 'antd';
-import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined } from '@ant-design/icons';
+import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined, UserSwitchOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import apiService from '../../services/api';
 import { createFollowUp } from '@/services/followUp.service';
+import { useAuth } from '@/contexts/AuthContext';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -64,6 +65,15 @@ interface ResumeData {
 const ResumeList = () => {
   const [form] = Form.useForm();
   const { message: messageApi } = App.useApp();
+  const { hasPermission } = useAuth();
+  const canAssign = hasPermission('resume:assign');
+
+  // 分配阿姨弹窗状态
+  const [assignModalVisible, setAssignModalVisible] = useState(false);
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignTargetResume, setAssignTargetResume] = useState<ResumeData | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<Array<{ _id: string; name: string; username: string; role: string }>>([]);
+  const [assignedToId, setAssignedToId] = useState<string | undefined>(undefined);
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpVisible, setFollowUpVisible] = useState(false);
   const [followUpForm] = Form.useForm();
@@ -88,6 +98,44 @@ const ResumeList = () => {
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 打开分配弹窗
+  const handleOpenAssign = async (record: ResumeData) => {
+    setAssignTargetResume(record);
+    setAssignedToId(record.assignedTo || undefined);
+    setAssignModalVisible(true);
+    if (assignableUsers.length === 0) {
+      try {
+        const res = await apiService.get('/api/resumes/assignable-users');
+        if (res.success) setAssignableUsers(res.data || []);
+      } catch (e) {
+        console.error('获取员工列表失败', e);
+      }
+    }
+  };
+
+  // 确认分配
+  const handleConfirmAssign = async () => {
+    if (!assignTargetResume || !assignedToId) {
+      messageApi.warning('请选择要分配的员工');
+      return;
+    }
+    setAssignLoading(true);
+    try {
+      const res = await apiService.patch(`/api/resumes/${assignTargetResume._id}/assign`, { assignedTo: assignedToId });
+      if (res.success) {
+        messageApi.success('分配成功');
+        setAssignModalVisible(false);
+        fetchResumeList({ ...searchParams, page: currentPage, pageSize });
+      } else {
+        messageApi.error(res.message || '分配失败');
+      }
+    } catch (e: any) {
+      messageApi.error(e.message || '分配失败');
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
   // 获取筛选选项
   const fetchFilterOptions = async () => {
@@ -620,6 +668,15 @@ const ResumeList = () => {
               onClick={() => handleFollowUp(record.id)}
             />
           </Tooltip>
+          {canAssign && (
+            <Tooltip title="分配给员工">
+              <Button
+                icon={<UserSwitchOutlined />}
+                size="small"
+                onClick={() => handleOpenAssign(record)}
+              />
+            </Tooltip>
+          )}
         </Space>
       ),
     },
@@ -896,6 +953,33 @@ const ResumeList = () => {
             <p>正在导入，请稍候...</p>
           </div>
         )}
+      </Modal>
+
+      {/* 分配阿姨弹窗 */}
+      <Modal
+        title={`分配阿姨：${assignTargetResume?.name || ''}`}
+        open={assignModalVisible}
+        onOk={handleConfirmAssign}
+        onCancel={() => setAssignModalVisible(false)}
+        confirmLoading={assignLoading}
+        okText="确认分配"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 8 }}>选择负责员工：</div>
+        <Select
+          style={{ width: '100%' }}
+          placeholder="请选择员工"
+          value={assignedToId}
+          onChange={(val) => setAssignedToId(val)}
+          showSearch
+          optionFilterProp="children"
+        >
+          {assignableUsers.map(u => (
+            <Option key={u._id} value={u._id}>
+              {u.name}（{u.username}）
+            </Option>
+          ))}
+        </Select>
       </Modal>
     </PageContainer>
   );

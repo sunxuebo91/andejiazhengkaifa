@@ -37,16 +37,6 @@ export class DashubaoMiniprogramController {
 
   constructor(private readonly dashubaoService: DashubaoService) {}
 
-  // 辅助方法：角色映射
-  private mapRoleToChineseRole(role: string): string {
-    const roleMap = {
-      'admin': '系统管理员',
-      'manager': '经理',
-      'employee': '普通员工',
-    };
-    return roleMap[role] || role;
-  }
-
   // ==================== 保单查询接口 ====================
 
   @Get('policies')
@@ -62,16 +52,9 @@ export class DashubaoMiniprogramController {
     @Query('resumeId') resumeId?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
-    @Request() req?,
   ) {
-    const userRole = this.mapRoleToChineseRole(req.user.role);
-    const userId = req.user.userId;
-
     const queryParams: any = { status, resumeId, page, limit };
-    // 普通员工只能看自己创建的保单
-    if (userRole === '普通员工') {
-      queryParams.createdBy = userId;
-    }
+    // 保险权限已公开：所有已登录用户均可查看全部保单
 
     const result = await this.dashubaoService.getPolicies(queryParams);
     return { success: true, data: result, message: '获取成功' };
@@ -82,14 +65,10 @@ export class DashubaoMiniprogramController {
   @ApiOperation({ summary: '【小程序】根据身份证号查询保单列表' })
   @ApiParam({ name: 'idCard', description: '被保险人身份证号' })
   @ApiResponse({ status: 200, description: '查询成功' })
-  async getPoliciesByIdCard(@Param('idCard') idCard: string, @Request() req) {
+  async getPoliciesByIdCard(@Param('idCard') idCard: string) {
     const policies = await this.dashubaoService.getPoliciesByIdCard(idCard);
-    // 普通员工只能看自己创建的保单
-    const userRole = this.mapRoleToChineseRole(req.user.role);
-    const filtered = userRole === '普通员工'
-      ? policies.filter(p => p.createdBy?.toString() === req.user.userId)
-      : policies;
-    return { success: true, data: filtered, message: '获取成功' };
+    // 保险权限已公开，不过滤 createdBy
+    return { success: true, data: policies, message: '获取成功' };
   }
 
   @Get('policy/by-policy-no/:policyNo')
@@ -97,11 +76,9 @@ export class DashubaoMiniprogramController {
   @ApiOperation({ summary: '【小程序】根据保单号查询保单' })
   @ApiParam({ name: 'policyNo', description: '大树保保单号' })
   @ApiResponse({ status: 200, description: '查询成功' })
-  async getPolicyByPolicyNo(@Param('policyNo') policyNo: string, @Request() req) {
+  async getPolicyByPolicyNo(@Param('policyNo') policyNo: string) {
     const policy = await this.dashubaoService.getPolicyByPolicyNo(policyNo);
-    if (policy && this.mapRoleToChineseRole(req.user.role) === '普通员工' && policy.createdBy?.toString() !== req.user.userId) {
-      return { success: true, data: null, message: '保单不存在' };
-    }
+    // 保险权限已公开，不过滤 createdBy
     return { success: true, data: policy, message: policy ? '获取成功' : '保单不存在' };
   }
 
@@ -110,11 +87,9 @@ export class DashubaoMiniprogramController {
   @ApiOperation({ summary: '【小程序】根据商户单号查询保单' })
   @ApiParam({ name: 'policyRef', description: '渠道流水号（商户单号）' })
   @ApiResponse({ status: 200, description: '查询成功' })
-  async getPolicyByPolicyRef(@Param('policyRef') policyRef: string, @Request() req) {
+  async getPolicyByPolicyRef(@Param('policyRef') policyRef: string) {
     const policy = await this.dashubaoService.getPolicyByPolicyRef(policyRef);
-    if (policy && this.mapRoleToChineseRole(req.user.role) === '普通员工' && policy.createdBy?.toString() !== req.user.userId) {
-      return { success: true, data: null, message: '保单不存在' };
-    }
+    // 保险权限已公开，不过滤 createdBy
     return { success: true, data: policy, message: policy ? '获取成功' : '保单不存在' };
   }
 
@@ -123,11 +98,9 @@ export class DashubaoMiniprogramController {
   @ApiOperation({ summary: '【小程序】根据ID获取保单详情' })
   @ApiParam({ name: 'id', description: '保单记录ID' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getPolicyById(@Param('id') id: string, @Request() req) {
+  async getPolicyById(@Param('id') id: string) {
     const policy = await this.dashubaoService.getPolicyById(id);
-    if (policy && this.mapRoleToChineseRole(req.user.role) === '普通员工' && policy.createdBy?.toString() !== req.user.userId) {
-      return { success: true, data: null, message: '保单不存在' };
-    }
+    // 保险权限已公开，不过滤 createdBy
     return { success: true, data: policy, message: policy ? '获取成功' : '保单不存在' };
   }
 
@@ -248,9 +221,9 @@ export class DashubaoMiniprogramController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】注销保单（未生效保单）' })
   @ApiResponse({ status: 200, description: '注销成功' })
-  async cancelPolicy(@Body() dto: CancelPolicyDto) {
+  async cancelPolicy(@Body() dto: CancelPolicyDto, @Request() req) {
     try {
-      const result = await this.dashubaoService.cancelPolicy(dto);
+      const result = await this.dashubaoService.cancelPolicy(dto, req.user?.userId);
       // 根据大树保返回的 Success 字段判断注销是否成功
       if (result.Success === 'true') {
         return { success: true, data: result, message: '注销成功' };
@@ -271,9 +244,9 @@ export class DashubaoMiniprogramController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】退保（已生效保单）' })
   @ApiResponse({ status: 200, description: '退保成功' })
-  async surrenderPolicy(@Body() dto: SurrenderPolicyDto) {
+  async surrenderPolicy(@Body() dto: SurrenderPolicyDto, @Request() req) {
     try {
-      const result = await this.dashubaoService.surrenderPolicy(dto);
+      const result = await this.dashubaoService.surrenderPolicy(dto, req.user?.userId);
       // 根据大树保返回的 Success 字段判断退保是否成功
       if (result.Success === 'true') {
         return { success: true, data: result, message: '退保成功' };
@@ -318,9 +291,9 @@ export class DashubaoMiniprogramController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】批改保单（替换被保险人）' })
   @ApiResponse({ status: 200, description: '批改成功' })
-  async amendPolicy(@Body() dto: AmendPolicyDto) {
+  async amendPolicy(@Body() dto: AmendPolicyDto, @Request() req) {
     try {
-      const result = await this.dashubaoService.amendPolicy(dto);
+      const result = await this.dashubaoService.amendPolicy(dto, req.user?.userId);
       return { success: true, data: result, message: '批改成功' };
     } catch (error) {
       return { success: false, data: null, message: error.message || '批改失败' };
@@ -332,9 +305,9 @@ export class DashubaoMiniprogramController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】批增（增加被保险人）' })
   @ApiResponse({ status: 200, description: '批增成功' })
-  async addInsured(@Body() dto: AddInsuredDto) {
+  async addInsured(@Body() dto: AddInsuredDto, @Request() req) {
     try {
-      const result = await this.dashubaoService.addInsured(dto);
+      const result = await this.dashubaoService.addInsured(dto, req.user?.userId);
       return { success: true, data: result, message: '批增成功' };
     } catch (error) {
       return { success: false, data: null, message: error.message || '批增失败' };

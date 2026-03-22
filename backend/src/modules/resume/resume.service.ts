@@ -738,9 +738,10 @@ export class ResumeService {
     }
 
     // 正常创建模式：调用核心创建逻辑
+    // 优先使用小程序传来的 leadSource，否则默认为 'other'
     const savedResume = await this.coreCreate(dto, {
       userId,
-      leadSource: 'other',  // 销售创建的简历
+      leadSource: (dto as any).leadSource || 'other',
       idempotencyKey
     });
 
@@ -857,7 +858,7 @@ export class ResumeService {
     data: any,
     options: {
       userId?: string;
-      leadSource?: 'self-registration' | 'sales' | 'other';
+      leadSource?: string;  // 支持所有有效的 leadSource 值
       status?: string;
     }
   ): any {
@@ -893,7 +894,7 @@ export class ResumeService {
     data: CreateResumeV2Dto,
     options: {
       userId?: string;
-      leadSource: 'self-registration' | 'sales' | 'other';
+      leadSource: string;  // 支持所有有效的 leadSource 值
       idempotencyKey?: string;
     }
   ): Promise<IResume> {

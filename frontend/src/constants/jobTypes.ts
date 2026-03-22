@@ -6,6 +6,6 @@ export const JOB_TYPE_MAP = {
   'zhujia-baomu': '住家保姆',
   'yangchong': '养宠',
   'xiaoshi': '小时工',
-  'yuexin': '月嫂',
+  'yuesao': '月嫂',
   'zhujia-hulao': '住家护老'
-} as const; 
+} as const;

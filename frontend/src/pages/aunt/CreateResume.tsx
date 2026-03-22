@@ -119,7 +119,7 @@ const EDUCATION_MAP = {
 type WorkExperienceItem = WorkExperience;
 
 // 扩展Resume类型以包含前端特有的字段
-interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'workExperience' | 'education'> {
+interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'education'> {
   gender: GenderType;
   jobType: JobType;
   education: Education;
@@ -654,15 +654,24 @@ const CreateResume: React.FC = () => {
             }
           } else {
             // 如果是新建模式，将文件添加到待上传列表
+            // 注意：保存压缩后的文件作为 originFileObj，避免在提交时再次压缩
             const newFile: CustomUploadFile = {
               uid: file.uid,
               name: file.name,
               status: "done" as const,
               thumbUrl: tempPreviewUrl,
-              originFileObj: file, // 保持原始 RcFile 类型
-              size: processedFile.size, // 使用压缩后的大小
+              originFileObj: processedFile as unknown as RcFile, // 使用压缩后的文件
+              size: processedFile.size,
               isExisting: false
             };
+
+            console.log(`📁 创建模式：添加文件到待上传列表`, {
+              type,
+              fileName: file.name,
+              originalSize: file.size,
+              compressedSize: processedFile.size,
+              hasOriginFileObj: !!newFile.originFileObj
+            });
 
             // 同时更新两套状态
             setFileUploadState(prev => ({
@@ -1645,7 +1654,32 @@ const CreateResume: React.FC = () => {
         const medicalReportFileList = (medicalReportFiles as CustomUploadFile[])
           .map(file => file.originFileObj)
           .filter((file): file is RcFile => file !== undefined);
-        
+
+        // 获取 4 个新照片类型的文件
+        console.log('📸 创建模式：收集新照片类型文件');
+        console.log('  - fileUploadState.confinementMeal:', fileUploadState.confinementMeal);
+        console.log('  - fileUploadState.cooking:', fileUploadState.cooking);
+        console.log('  - fileUploadState.complementaryFood:', fileUploadState.complementaryFood);
+        console.log('  - fileUploadState.positiveReview:', fileUploadState.positiveReview);
+
+        const confinementMealFileList = fileUploadState.confinementMeal.files
+          .map(file => file.originFileObj)
+          .filter((file): file is RcFile => file !== undefined);
+        const cookingFileList = fileUploadState.cooking.files
+          .map(file => file.originFileObj)
+          .filter((file): file is RcFile => file !== undefined);
+        const complementaryFoodFileList = fileUploadState.complementaryFood.files
+          .map(file => file.originFileObj)
+          .filter((file): file is RcFile => file !== undefined);
+        const positiveReviewFileList = fileUploadState.positiveReview.files
+          .map(file => file.originFileObj)
+          .filter((file): file is RcFile => file !== undefined);
+
+        console.log('  - confinementMealFileList 数量:', confinementMealFileList.length);
+        console.log('  - cookingFileList 数量:', cookingFileList.length);
+        console.log('  - complementaryFoodFileList 数量:', complementaryFoodFileList.length);
+        console.log('  - positiveReviewFileList 数量:', positiveReviewFileList.length);
+
         // 处理表单值，确保idNumber为空字符串时被转为undefined
         const formValues = { ...values };
         if (formValues.idNumber === '') {
@@ -1704,7 +1738,15 @@ const CreateResume: React.FC = () => {
             console.warn('⚠️ 身份证背面压缩失败，使用原文件:', error);
           }
         }
-        
+
+        // 4 个新照片类型已经在 beforeUpload 中压缩过了，直接使用
+        // 注意：这些文件现在是 Blob 对象，需要转换为 File 对象
+        console.log('📸 4 个新照片类型（已在 beforeUpload 中压缩）:');
+        console.log('  - 月子餐照片:', confinementMealFileList.length, '张');
+        console.log('  - 烹饪照片:', cookingFileList.length, '张');
+        console.log('  - 辅食添加照片:', complementaryFoodFileList.length, '张');
+        console.log('  - 好评展示照片:', positiveReviewFileList.length, '张');
+
         console.log('✅ 文件压缩完成');
         
         // 构建完整的表单数据
@@ -1727,6 +1769,12 @@ const CreateResume: React.FC = () => {
         compressedPhotoFiles.forEach(file => formData.append('photoFiles', file as File));
         compressedCertificateFiles.forEach(file => formData.append('certificateFiles', file as File));
         compressedMedicalFiles.forEach(file => formData.append('medicalReportFiles', file as File));
+
+        // 添加 4 个新照片类型（已在 beforeUpload 中压缩）
+        confinementMealFileList.forEach(file => formData.append('confinementMealPhotos', file as File));
+        cookingFileList.forEach(file => formData.append('cookingPhotos', file as File));
+        complementaryFoodFileList.forEach(file => formData.append('complementaryFoodPhotos', file as File));
+        positiveReviewFileList.forEach(file => formData.append('positiveReviewPhotos', file as File));
 
         // 添加自我介绍视频
         if (selfIntroductionVideo && selfIntroductionVideo.url) {
@@ -2329,6 +2377,7 @@ const CreateResume: React.FC = () => {
                       <Option value="community">社群线索</Option>
                       <Option value="door-to-door">地推</Option>
                       <Option value="shared-order">合单</Option>
+                      <Option value="sales">销售录入</Option>
                       <Option value="other">其他</Option>
                     </Select>
                   </Form.Item>

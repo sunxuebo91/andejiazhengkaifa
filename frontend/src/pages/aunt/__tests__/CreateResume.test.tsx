@@ -249,7 +249,7 @@ describe('CreateResume 组件', () => {
       phone: '13800138000',
       gender: 'male',
       nativePlace: '北京市',
-      jobType: 'yuexin',
+      jobType: 'yuesao',
       education: 'college',
       experienceYears: 5,
       idCardFrontUrl: 'http://example.com/front.jpg',

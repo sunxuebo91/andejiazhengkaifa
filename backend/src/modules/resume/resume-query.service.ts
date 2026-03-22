@@ -64,7 +64,7 @@ export class ResumeQueryService {
       query.$or = [
         { name: { $regex: keyword, $options: 'i' } },
         { phone: { $regex: keyword, $options: 'i' } },
-        { expectedPosition: { $regex: keyword, $options: 'i' } },
+        { idNumber: { $regex: keyword, $options: 'i' } },
       ];
     }
     if (jobType) query.jobType = jobType;

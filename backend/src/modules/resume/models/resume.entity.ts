@@ -38,24 +38,18 @@ interface AvailabilityPeriod {
 
 // 定义Resume接口
 export interface IResume extends Document {
-  title: string;
-  content: string;
   userId: Types.ObjectId;
   lastUpdatedBy?: Types.ObjectId;
-  fileIds: Types.ObjectId[];
   name: string;
   gender: Gender;
   age: number;
   phone: string;
   wechat?: string;
   idNumber?: string;
-  expectedPosition: string;
   jobType: JobType;
   expectedSalary: number;
   maternityNurseLevel?: MaternityNurseLevel;
-  workExperience: number;
   education: Education;
-  workHistory: WorkExperience[];
   skills: Skill[];
   selfIntroduction?: string;
   status: string;
@@ -98,20 +92,11 @@ export interface IResume extends Document {
 
 @Schema({ timestamps: true, collection: 'resumes' })
 export class Resume extends Document implements IResume {
-  @Prop()
-  title: string;
-
-  @Prop()
-  content: string;
-
   @Prop({ type: Types.ObjectId, ref: 'User' })
   userId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', nullable: true })
   lastUpdatedBy?: Types.ObjectId;
-
-  @Prop({ type: [{ type: Types.ObjectId }] })
-  fileIds: Types.ObjectId[];
 
   @ApiProperty({ description: '姓名' })
   @Prop()
@@ -145,11 +130,6 @@ export class Resume extends Document implements IResume {
   @IsOptional()
   idNumber?: string;
 
-  @ApiProperty({ description: '期望职位' })
-  @Prop()
-  @IsString()
-  expectedPosition: string;
-
   @ApiProperty({ description: '工作类型', enum: JobType })
   @Prop({ type: String, enum: JobType })
   @IsEnum(JobType)
@@ -166,20 +146,10 @@ export class Resume extends Document implements IResume {
   @IsOptional()
   maternityNurseLevel?: MaternityNurseLevel;
 
-  @ApiProperty({ description: '工作经验（年）' })
-  @Prop()
-  @IsNumber()
-  workExperience: number;
-
   @ApiProperty({ description: '学历', enum: Education })
   @Prop({ type: String, enum: Education })
   @IsEnum(Education)
   education: Education;
-
-  @ApiProperty({ description: '工作经历' })
-  @Prop({ type: [WorkExperienceSchema], default: [] })
-  @IsArray()
-  workHistory: WorkExperience[];
 
   @ApiProperty({ description: '技能特长', enum: Skill, isArray: true })
   @Prop({ type: [String], enum: Skill, default: [] })

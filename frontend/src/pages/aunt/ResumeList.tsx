@@ -21,7 +21,7 @@ const orderStatusMap: Record<string, { text: string; color: string; icon: string
 
 // 工种映射
 const jobTypeMap: Record<string, string> = {
-  yuexin: '月嫂',
+  yuesao: '月嫂',
   'zhujia-yuer': '住家育儿嫂',
   'baiban-yuer': '白班育儿',
   baojie: '保洁',

@@ -95,8 +95,6 @@ export class ResumeController {
           format: 'binary',
           description: '自我介绍视频（最大10MB）'
         },
-        title: { type: 'string' },
-        content: { type: 'string' },
       },
     },
   })
@@ -133,6 +131,9 @@ export class ResumeController {
         positiveReviewPhotos: files.positiveReviewPhotos?.length || 0,
         rawBody: Object.keys(req.body),
       });
+
+      // 日志：检查 leadSource 的值
+      this.logger.log(`📋 创建简历 - 接收到的 leadSource: ${dto.leadSource || '未传递'}, body.leadSource: ${req.body?.leadSource || '未传递'}`);
 
       // 将分类的文件重新组合成单一数组，并生成对应的文件类型数组
       const filesArray: Express.Multer.File[] = [];
@@ -375,7 +376,7 @@ export class ResumeController {
           { value: 'male', label: '男' }
         ],
         jobType: [
-          { value: 'yuexin', label: '月嫂' },
+          { value: 'yuesao', label: '月嫂' },
           { value: 'zhujia-yuer', label: '住家育儿' },
           { value: 'baiban-yuer', label: '白班育儿' },
           { value: 'baojie', label: '保洁' },
@@ -1403,7 +1404,7 @@ export class ResumeController {
       avatarProcessed: resume.avatarProcessed,
       avatarRound: resume.avatarRound,
       // 工作经历（保留必要信息）
-      workExperiences: resume.workExperiences || resume.workHistory || [],
+      workExperiences: resume.workExperiences || [],
       // 🆕 新增的4个相册字段（公开展示）
       confinementMealPhotos: resume.confinementMealPhotos || [], // 🍲 月子餐照片
       cookingPhotos: resume.cookingPhotos || [], // 👨‍🍳 烹饪照片
@@ -1624,11 +1625,14 @@ export class ResumeController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '删除简历' })
+  @Roles('admin')
+  @Permissions('resume:delete')
+  @ApiOperation({ summary: '删除简历（仅管理员）' })
   @ApiResponse({ status: 200, description: '删除成功' })
-  async remove(@Param('id') id: string) {
+  @ApiResponse({ status: 403, description: '无权限' })
+  async remove(@Param('id') id: string, @Req() req) {
     try {
-      this.logger.log(`删除简历: id=${id}`);
+      this.logger.log(`管理员 ${req.user?.username} 删除简历: id=${id}`);
       await this.resumeService.remove(id);
       return {
         success: true,

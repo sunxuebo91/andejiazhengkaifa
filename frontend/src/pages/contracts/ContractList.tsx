@@ -227,7 +227,7 @@ const ContractList: React.FC = () => {
 
   const getContractTypeColor = (type: ContractType) => {
     const colors: Record<ContractType, string> = {
-      [ContractType.YUEXIN]: 'purple',
+      [ContractType.YUESAO]: 'purple',
       [ContractType.ZHUJIA_YUER]: 'green',
       [ContractType.BAOJIE]: 'blue',
       [ContractType.ZHUJIA_BAOMU]: 'cyan',

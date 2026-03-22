@@ -28,12 +28,15 @@ import {
   CheckCircleOutlined,
   CloseOutlined,
   DownloadOutlined,
-  SafetyOutlined
+  SafetyOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import apiService from '../../services/api';
-import { getCurrentUser } from '@/services/auth';
+import { getCurrentUser, hasRole } from '@/services/auth';
+import { resumeService } from '@/services/resume.service';
 import { createFollowUp, getFollowUpsByResumeId, deleteFollowUp, followUpTypeMap, type FollowUpRecord } from '@/services/followUp.service';
 import { backgroundCheckService } from '../../services/backgroundCheckService';
 import { BackgroundCheck, BG_STATUS_MAP } from '../../types/background-check.types';
@@ -152,7 +155,7 @@ type ZodiacSignMapType = {
 
 type JobTypeMapType = {
   [key: string]: string;
-  yuexin: string;
+  yuesao: string;
   'zhujia-yuer': string;
   'baiban-yuer': string;
   baojie: string;
@@ -275,7 +278,7 @@ const zodiacSignMap: ZodiacSignMapType = {
 
 // 工种映射
 const jobTypeMap: JobTypeMapType = {
-  yuexin: '月嫂',
+  yuesao: '月嫂',
   'zhujia-yuer': '住家育儿嫂',
   'baiban-yuer': '白班育儿',
   baojie: '保洁',
@@ -325,7 +328,8 @@ const leadSourceMap: LeadSourceMapType = {
   community: '社群线索',
   'door-to-door': '地推',
   'shared-order': '合单',
-  'self-registration': '自助注册',  // ⭐ 新增：自助注册来源
+  'self-registration': '自助注册',
+  sales: '销售录入',  // ⭐ 新增：销售录入来源
   other: '其他'
 };
 
@@ -680,6 +684,48 @@ const ResumeDetail = () => {
     } else {
       messageApi.error('无法获取简历数据');
     }
+  };
+
+  // 处理删除操作（仅管理员可用）
+  const handleDelete = () => {
+    if (!resume?._id) {
+      messageApi.error('无法获取简历ID');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认删除',
+      icon: <ExclamationCircleOutlined />,
+      content: (
+        <div>
+          <p>确定要删除 <strong>{resume.name}</strong> 的简历吗？</p>
+          <p style={{ color: '#ff4d4f' }}>此操作不可恢复！</p>
+        </div>
+      ),
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const response = await resumeService.delete(resume._id!);
+          if (response.success) {
+            messageApi.success('简历删除成功');
+            // 设置刷新标记，让列表页面知道需要刷新
+            localStorage.setItem('shouldRefreshResumeList', 'true');
+            // 跳转回列表页
+            setTimeout(() => {
+              navigate('/aunt/list');
+            }, 1000);
+          } else {
+            messageApi.error(response.message || '删除失败');
+          }
+        } catch (error: any) {
+          console.error('删除简历失败:', error);
+          const errorMsg = error.response?.data?.message || error.message || '删除失败，请重试';
+          messageApi.error(errorMsg);
+        }
+      },
+    });
   };
 
   // 改进的文件预览渲染函数
@@ -1663,16 +1709,24 @@ const ResumeDetail = () => {
                   {resume?.name || '简历详情'}
                 </Typography.Title>
               </div>
-              <div>
-                <Button 
-                  type="primary" 
-                  icon={<EditOutlined />} 
+              <Space>
+                <Button
+                  type="primary"
+                  icon={<EditOutlined />}
                   onClick={handleEdit}
-                  style={{ marginRight: '8px' }}
                 >
                   编辑简历
                 </Button>
-              </div>
+                {hasRole('admin') && (
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={handleDelete}
+                  >
+                    删除简历
+                  </Button>
+                )}
+              </Space>
             </div>
           }
         >
@@ -2428,7 +2482,7 @@ const ResumeDetail = () => {
           </Card>
 
           {/* 档期日历卡片 - 仅月嫂显示 */}
-          {resume?.jobType === 'yuexin' && (
+          {resume?.jobType === 'yuesao' && (
             <Card title="月嫂档期" style={{ marginBottom: 24 }}>
               <AvailabilityCalendar
                 resumeId={resume._id}

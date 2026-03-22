@@ -60,7 +60,7 @@ export interface Contract {
 }
 
 export enum ContractType {
-  YUEXIN = '月嫂',
+  YUESAO = '月嫂',
   ZHUJIA_YUER = '住家育儿嫂',
   BAOJIE = '保洁',
   ZHUJIA_BAOMU = '住家保姆',

@@ -15,7 +15,7 @@ export enum JobType {
   ZHUJIA_BAOMU = 'zhujia-baomu', // 住家保姆
   YANGCHONG = 'yangchong',     // 养宠
   XIAOSHI = 'xiaoshi',         // 小时工
-  YUEXIN = 'yuexin',           // 月嫂
+  YUESAO = 'yuesao',           // 月嫂（修正拼音）
   ZHUJIA_HULAO = 'zhujia-hulao' // 住家护老
 }
 
@@ -28,7 +28,7 @@ export const JOB_TYPE_MAP = {
   [JobType.ZHUJIA_BAOMU]: '住家保姆',
   [JobType.YANGCHONG]: '养宠',
   [JobType.XIAOSHI]: '小时工',
-  [JobType.YUEXIN]: '月嫂',
+  [JobType.YUESAO]: '月嫂',
   [JobType.ZHUJIA_HULAO]: '住家护老'
 } as const;
 

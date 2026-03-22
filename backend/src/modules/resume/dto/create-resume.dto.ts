@@ -69,15 +69,15 @@ export enum ZodiacSign {
 }
 
 export enum JobType {
-  YUEXIN = 'yuexin',
-  ZHUJIA_YUER = 'zhujia-yuer',
-  BAIBAN_YUER = 'baiban-yuer',
-  BAOJIE = 'baojie',
-  BAIBAN_BAOMU = 'baiban-baomu',
-  ZHUJIA_BAOMU = 'zhujia-baomu',
-  YANGCHONG = 'yangchong',
-  XIAOSHI = 'xiaoshi',
-  ZHUJIA_HULAO = 'zhujia-hulao'
+  YUESAO = 'yuesao',           // 月嫂（修正拼音）
+  ZHUJIA_YUER = 'zhujia-yuer', // 住家育儿嫂
+  BAIBAN_YUER = 'baiban-yuer', // 白班育儿
+  BAOJIE = 'baojie',           // 保洁
+  BAIBAN_BAOMU = 'baiban-baomu', // 白班保姆
+  ZHUJIA_BAOMU = 'zhujia-baomu', // 住家保姆
+  YANGCHONG = 'yangchong',     // 养宠
+  XIAOSHI = 'xiaoshi',         // 小时工
+  ZHUJIA_HULAO = 'zhujia-hulao' // 住家护老
 }
 
 export enum OrderStatus {
@@ -117,6 +117,7 @@ export enum LeadSource {
   DOOR_TO_DOOR = 'door-to-door',
   SHARED_ORDER = 'shared-order',
   SELF_REGISTRATION = 'self-registration',
+  SALES = 'sales',           // 销售录入
   OTHER = 'other'
 }
 
@@ -196,10 +197,10 @@ export class CreateResumeV2Dto {
 
   @ApiProperty({
     description: '工作类型',
-    enum: ['yuexin', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao']
+    enum: ['yuesao', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao']
   })
   @IsNotEmpty({ message: '工种不能为空' })
-  @IsEnum(['yuexin', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao'],
+  @IsEnum(['yuesao', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao'],
     { message: '请选择正确的工种' })
   jobType: string;
 
@@ -495,9 +496,9 @@ export class CreateResumeV2Dto {
   @IsEnum(['accepting', 'not-accepting', 'on-service', 'signed'], { message: '请选择正确的接单状态' })
   orderStatus?: string;
 
-  @ApiProperty({ description: '线索来源', enum: ['referral', 'paid-lead', 'community', 'door-to-door', 'shared-order', 'other'], required: false })
+  @ApiProperty({ description: '线索来源', enum: ['referral', 'paid-lead', 'community', 'door-to-door', 'shared-order', 'self-registration', 'sales', 'other'], required: false })
   @IsOptional()
-  @IsEnum(['referral', 'paid-lead', 'community', 'door-to-door', 'shared-order', 'other'], { message: '请选择正确的线索来源' })
+  @IsEnum(['referral', 'paid-lead', 'community', 'door-to-door', 'shared-order', 'self-registration', 'sales', 'other'], { message: '请选择正确的线索来源' })
   leadSource?: string;
 
   @ApiProperty({

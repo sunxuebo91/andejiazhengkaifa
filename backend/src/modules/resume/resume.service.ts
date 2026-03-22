@@ -35,6 +35,10 @@ export class ResumeService {
     private readonly resumeQueryService: ResumeQueryService,
   ) {}
 
+  /**
+   * 带文件创建简历
+   * ✅ 已重构：调用 coreCreate() 核心逻辑 + 文件处理
+   */
   async createWithFiles(
     createResumeDto: CreateResumeDto & { userId: string },
     files: Express.Multer.File[] = [],
@@ -44,102 +48,27 @@ export class ResumeService {
       throw new BadRequestException('用户ID不能为空');
     }
 
-    // 检查手机号是否重复
-    const existingResumeWithPhone = await this.resumeModel.findOne({
-      phone: createResumeDto.phone
-    });
-    if (existingResumeWithPhone) {
-      throw new ConflictException('该手机号已被其他简历使用');
-    }
+    // 1. 数据规范化
+    const normalizedData = this.normalizeData(createResumeDto);
 
-    // 如果提供了身份证号，检查是否重复
-    if (createResumeDto.idNumber) {
-      const existingResumeWithIdNumber = await this.resumeModel.findOne({
-        idNumber: createResumeDto.idNumber
-      });
-      if (existingResumeWithIdNumber) {
-        throw new ConflictException('该身份证号已被其他简历使用');
-      }
-    }
+    // 2. 统一去重检查（手机号 + 身份证号）
+    await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber);
 
-    // 确保files是数组
+    // 3. 处理文件上传
     const filesArray = Array.isArray(files) ? files : [];
     const fileUploadErrors: string[] = [];
+    const categorizedFiles = await this.processFileUploads(filesArray, fileTypes, fileUploadErrors);
 
-    // 分类存储文件信息
-    const categorizedFiles = {
-      idCardFront: null,
-      idCardBack: null,
-      photoUrls: [],
-      certificateUrls: [],
-      medicalReportUrls: [],
-      certificates: [],
-      reports: [],
-      selfIntroductionVideo: null
-    };
+    // 4. 构建简历数据
+    // 优先使用前端传来的 leadSource，如果没有则默认为 'sales'
+    const resumeData = this.buildResumeData(normalizedData, {
+      userId: createResumeDto.userId,
+      leadSource: (createResumeDto as any).leadSource || 'sales',
+      status: 'pending'
+    });
 
-    // 只有在有文件时才处理文件上传
-    if (filesArray.length > 0) {
-      // 上传文件
-      for (let i = 0; i < filesArray.length; i++) {
-        const file = filesArray[i];
-        const fileType = fileTypes[i] || 'other';
-
-        if (file) {  // 确保文件存在
-          try {
-            // uploadService.uploadFile 返回完整的COS URL
-            const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
-
-            if (fileUrl) {
-              this.logger.debug(`文件上传成功，URL: ${fileUrl}`);
-
-              const fileInfo = {
-                url: fileUrl,  // 直接使用返回的完整URL
-                filename: file.originalname,
-                mimetype: file.mimetype,
-                size: file.size
-              };
-
-              // 根据文件类型分类存储
-              switch (fileType) {
-                case 'idCardFront':
-                  categorizedFiles.idCardFront = fileInfo;
-                  break;
-                case 'idCardBack':
-                  categorizedFiles.idCardBack = fileInfo;
-                  break;
-                case 'personalPhoto':
-                  categorizedFiles.photoUrls.push(fileUrl);
-                  break;
-                case 'certificate':
-                  categorizedFiles.certificates.push(fileInfo);
-                  categorizedFiles.certificateUrls.push(fileUrl);
-                  break;
-                case 'medicalReport':
-                  categorizedFiles.reports.push(fileInfo);
-                  categorizedFiles.medicalReportUrls.push(fileUrl);
-                  break;
-                case 'selfIntroductionVideo':
-                  categorizedFiles.selfIntroductionVideo = fileInfo;
-                  break;
-                default:
-                  // 默认归类为个人照片
-                  categorizedFiles.photoUrls.push(fileUrl);
-                  break;
-              }
-            }
-          } catch (error) {
-            this.logger.error(`文件上传失败: ${error.message}`);
-            fileUploadErrors.push(`文件 ${file.originalname} 上传失败: ${error.message}`);
-          }
-        }
-      }
-    }
-
-    // 创建简历对象
-    const resumeData = {
-      ...createResumeDto,
-      fileIds: [], // 暂时清空fileIds，因为我们现在直接使用URL
+    // 合并文件信息
+    Object.assign(resumeData, {
       idCardFront: categorizedFiles.idCardFront,
       idCardBack: categorizedFiles.idCardBack,
       photoUrls: categorizedFiles.photoUrls,
@@ -147,27 +76,30 @@ export class ResumeService {
       medicalReportUrls: categorizedFiles.medicalReportUrls,
       certificates: categorizedFiles.certificates,
       reports: categorizedFiles.reports,
-      selfIntroductionVideo: categorizedFiles.selfIntroductionVideo
-    };
+      selfIntroductionVideo: categorizedFiles.selfIntroductionVideo,
+      // 新增 4 个照片字段
+      confinementMealPhotos: categorizedFiles.confinementMealPhotos,
+      cookingPhotos: categorizedFiles.cookingPhotos,
+      complementaryFoodPhotos: categorizedFiles.complementaryFoodPhotos,
+      positiveReviewPhotos: categorizedFiles.positiveReviewPhotos
+    });
 
-    // 如果idNumber为null、空字符串或undefined，则删除它，避免唯一索引问题
-    if (resumeData.idNumber === null || resumeData.idNumber === '' || resumeData.idNumber === undefined) {
-      delete resumeData.idNumber;
-      this.logger.log('检测到空的idNumber字段，已从数据中删除');
+    // 处理预上传的自我介绍视频 URL（通过 VideoUpload 组件预先上传）
+    if (!categorizedFiles.selfIntroductionVideo && createResumeDto.selfIntroductionVideoUrl) {
+      this.logger.debug(`使用预上传的视频URL: ${createResumeDto.selfIntroductionVideoUrl}`);
+      resumeData.selfIntroductionVideo = {
+        url: createResumeDto.selfIntroductionVideoUrl,
+        filename: 'selfIntroductionVideo.mp4',
+        mimetype: 'video/mp4'
+      };
     }
 
+    // 5. 创建并保存
     try {
       const resume = new this.resumeModel(resumeData);
       const savedResume = await resume.save();
 
-      this.logger.log(`简历创建成功，文件信息: ${JSON.stringify({
-        idCardFront: !!savedResume.idCardFront,
-        idCardBack: !!savedResume.idCardBack,
-        photoCount: savedResume.photoUrls?.length || 0,
-        certificateCount: savedResume.certificates?.length || 0,
-        reportCount: savedResume.reports?.length || 0,
-        selfIntroductionVideo: !!savedResume.selfIntroductionVideo
-      })}`);
+      this.logger.log(`✅ createWithFiles 成功: ${savedResume._id}`);
 
       return {
         success: true,
@@ -182,6 +114,105 @@ export class ResumeService {
     }
   }
 
+  /**
+   * 处理文件上传（提取为独立方法）
+   */
+  private async processFileUploads(
+    files: Express.Multer.File[],
+    fileTypes: string[],
+    errors: string[]
+  ): Promise<{
+    idCardFront: any;
+    idCardBack: any;
+    photoUrls: string[];
+    certificateUrls: string[];
+    medicalReportUrls: string[];
+    certificates: any[];
+    reports: any[];
+    selfIntroductionVideo: any;
+    confinementMealPhotos: any[];
+    cookingPhotos: any[];
+    complementaryFoodPhotos: any[];
+    positiveReviewPhotos: any[];
+  }> {
+    const categorizedFiles = {
+      idCardFront: null as any,
+      idCardBack: null as any,
+      photoUrls: [] as string[],
+      certificateUrls: [] as string[],
+      medicalReportUrls: [] as string[],
+      certificates: [] as any[],
+      reports: [] as any[],
+      selfIntroductionVideo: null as any,
+      confinementMealPhotos: [] as any[],
+      cookingPhotos: [] as any[],
+      complementaryFoodPhotos: [] as any[],
+      positiveReviewPhotos: [] as any[]
+    };
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileType = fileTypes[i] || 'other';
+
+      if (!file) continue;
+
+      try {
+        const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
+        if (!fileUrl) continue;
+
+        const fileInfo = {
+          url: fileUrl,
+          filename: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size
+        };
+
+        switch (fileType) {
+          case 'idCardFront':
+            categorizedFiles.idCardFront = fileInfo;
+            break;
+          case 'idCardBack':
+            categorizedFiles.idCardBack = fileInfo;
+            break;
+          case 'personalPhoto':
+            categorizedFiles.photoUrls.push(fileUrl);
+            break;
+          case 'certificate':
+            categorizedFiles.certificates.push(fileInfo);
+            categorizedFiles.certificateUrls.push(fileUrl);
+            break;
+          case 'medicalReport':
+            categorizedFiles.reports.push(fileInfo);
+            categorizedFiles.medicalReportUrls.push(fileUrl);
+            break;
+          case 'selfIntroductionVideo':
+            categorizedFiles.selfIntroductionVideo = fileInfo;
+            break;
+          case 'confinementMealPhoto':
+            categorizedFiles.confinementMealPhotos.push(fileInfo);
+            break;
+          case 'cookingPhoto':
+            categorizedFiles.cookingPhotos.push(fileInfo);
+            break;
+          case 'complementaryFoodPhoto':
+            categorizedFiles.complementaryFoodPhotos.push(fileInfo);
+            break;
+          case 'positiveReviewPhoto':
+            categorizedFiles.positiveReviewPhotos.push(fileInfo);
+            break;
+          default:
+            categorizedFiles.photoUrls.push(fileUrl);
+            break;
+        }
+      } catch (error) {
+        this.logger.error(`文件上传失败: ${error.message}`);
+        errors.push(`文件 ${file.originalname} 上传失败: ${error.message}`);
+      }
+    }
+
+    return categorizedFiles;
+  }
+
   async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string) {
     return this.resumeQueryService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity, currentUserId);
   }
@@ -190,106 +221,12 @@ export class ResumeService {
     return this.resumeQueryService.findOne(id, currentUserId);
   }
 
+  /**
+   * 更新简历
+   * ✅ 已重构：调用 coreUpdate() 核心逻辑
+   */
   async update(id: string, updateResumeDto: UpdateResumeDto, userId?: string) {
-    const updateData: any = { ...updateResumeDto };
-
-    // 设置最后更新人
-    if (userId) {
-      updateData.lastUpdatedBy = new Types.ObjectId(userId);
-    }
-
-    // 🔧 修复：同步更新 certificateUrls 和 certificates 字段
-    // 当小程序提交空数组时，需要同时清空两个字段
-    if (updateResumeDto.certificateUrls !== undefined) {
-      updateData.certificateUrls = updateResumeDto.certificateUrls;
-      // 同步更新 certificates 字段（包括空数组的情况）
-      if (Array.isArray(updateResumeDto.certificateUrls)) {
-        if (updateResumeDto.certificateUrls.length === 0) {
-          // 如果是空数组，清空 certificates
-          updateData.certificates = [];
-        } else {
-          // 如果有数据，转换为 FileInfo 格式
-          updateData.certificates = updateResumeDto.certificateUrls.map(url => ({
-            url: url,
-            filename: url.split('/').pop() || '',
-            mimetype: 'image/jpeg',
-            size: 0
-          }));
-        }
-      }
-    }
-
-    // 🔧 修复：同步更新 medicalReportUrls 和 reports 字段
-    if (updateResumeDto.medicalReportUrls !== undefined) {
-      updateData.medicalReportUrls = updateResumeDto.medicalReportUrls;
-      // 同步更新 reports 字段（包括空数组的情况）
-      if (Array.isArray(updateResumeDto.medicalReportUrls)) {
-        if (updateResumeDto.medicalReportUrls.length === 0) {
-          updateData.reports = [];
-        } else {
-          updateData.reports = updateResumeDto.medicalReportUrls.map(url => ({
-            url: url,
-            filename: url.split('/').pop() || '',
-            mimetype: url.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
-            size: 0
-          }));
-        }
-      }
-    }
-
-    // 🔧 修复：同步更新 photoUrls 和 personalPhoto 字段
-    if (updateResumeDto.photoUrls !== undefined) {
-      updateData.photoUrls = updateResumeDto.photoUrls;
-      // 同步更新 personalPhoto 字段（包括空数组的情况）
-      if (Array.isArray(updateResumeDto.photoUrls)) {
-        if (updateResumeDto.photoUrls.length === 0) {
-          updateData.personalPhoto = [];
-        } else {
-          updateData.personalPhoto = updateResumeDto.photoUrls.map(url => ({
-            url: url,
-            filename: url.split('/').pop() || '',
-            mimetype: 'image/jpeg',
-            size: 0
-          }));
-        }
-      }
-    }
-
-    this.logger.log(`📝 更新简历 ${id}，字段同步情况:`);
-    if (updateResumeDto.certificateUrls !== undefined) {
-      this.logger.log(`  - certificateUrls: ${updateData.certificateUrls?.length || 0} 项`);
-      this.logger.log(`  - certificates: ${updateData.certificates?.length || 0} 项 (已同步)`);
-    }
-    if (updateResumeDto.medicalReportUrls !== undefined) {
-      this.logger.log(`  - medicalReportUrls: ${updateData.medicalReportUrls?.length || 0} 项`);
-      this.logger.log(`  - reports: ${updateData.reports?.length || 0} 项 (已同步)`);
-    }
-    if (updateResumeDto.photoUrls !== undefined) {
-      this.logger.log(`  - photoUrls: ${updateData.photoUrls?.length || 0} 项`);
-      this.logger.log(`  - personalPhoto: ${updateData.personalPhoto?.length || 0} 项 (已同步)`);
-    }
-
-    const resume = await this.resumeModel
-      .findByIdAndUpdate(
-        new Types.ObjectId(id),
-        updateData,
-        {
-          new: true,
-          // 确保触发timestamps的updatedAt更新
-          timestamps: true,
-          runValidators: true
-        }
-      )
-      .populate('userId', 'username name')
-      .populate('lastUpdatedBy', 'username name')
-      .exec();
-
-    if (!resume) {
-      throw new NotFoundException('简历不存在');
-    }
-
-    this.logger.log(`✅ 简历更新成功: ${id}, updatedAt: ${(resume as any).updatedAt}`);
-    return resume;
+    return this.coreUpdate(id, updateResumeDto, { userId });
   }
 
   async remove(id: string) {
@@ -298,32 +235,30 @@ export class ResumeService {
       throw new NotFoundException('简历不存在');
     }
 
-    // 删除关联的文件
-    for (const fileId of resume.fileIds) {
-      await this.uploadService.deleteFile(fileId.toString());
-    }
+    // 注意：不再删除关联的 COS 文件，因为文件可能被其他地方引用
+    // 如果需要删除 COS 文件，应该单独实现清理逻辑
 
     await resume.deleteOne();
     return { message: '删除成功' };
   }
 
+  /**
+   * @deprecated 使用 addFileWithType 代替
+   * 此方法已废弃，保留仅为兼容性
+   */
   async addFiles(id: string, files: Express.Multer.File[]) {
     const resume = await this.resumeModel.findById(new Types.ObjectId(id));
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
 
-    const fileIds = [...resume.fileIds];
-
-    // 上传新文件
+    // 上传新文件到 personalPhoto
     for (const file of files) {
-      const fileId = await this.uploadService.uploadFile(file);
-      fileIds.push(new Types.ObjectId(fileId));
+      await this.addFileWithType(id, file, 'personalPhoto');
     }
 
-    // 更新简历
-    resume.fileIds = fileIds;
-    return resume.save();
+    // 返回更新后的简历
+    return this.resumeModel.findById(new Types.ObjectId(id));
   }
 
   async addFileWithType(id: string, file: Express.Multer.File, fileType: string) {
@@ -467,11 +402,6 @@ export class ResumeService {
       fileId = fileUrlOrId;
       fileUrl = `/api/upload/file/${fileId}`;
       this.logger.debug(`根据fileId构建URL: ${fileUrl}`);
-    }
-
-    // 从简历中移除文件ID (如果有的话)
-    if (fileId) {
-      resume.fileIds = resume.fileIds.filter(id => id.toString() !== fileId);
     }
 
     // 从所有URL数组中移除对应的文件URL
@@ -780,118 +710,135 @@ export class ResumeService {
 
   /**
    * V2版本创建简历 - 支持幂等性、去重和规范化
+   * ✅ 已重构：调用 coreCreate() 核心逻辑
    */
   async createV2(dto: CreateResumeV2Dto, idempotencyKey?: string, userId?: string) {
-    // 1. 幂等性检查
-    if (idempotencyKey) {
-      const cacheKey = `idempotency:${idempotencyKey}`;
-      const cached = this.idempotencyCache.get(cacheKey);
-      if (cached) {
-        this.logger.log(`幂等性命中，返回缓存结果: ${idempotencyKey}`);
-        return cached;
-      }
-    }
-
-    // 2. 数据规范化和校验
-    const normalizedDto = this.normalizeResumeData(dto);
-
-    // 3. 手机号去重检查
-    const existingResume = await this.resumeModel.findOne({ phone: normalizedDto.phone });
-    if (existingResume) {
-      if (dto.createOrUpdate) {
-        // 允许更新模式
-        const updatedResume = await this.updateExistingResume(existingResume._id.toString(), normalizedDto, userId);
+    // 特殊处理 createOrUpdate 模式（允许更新已存在的手机号）
+    if (dto.createOrUpdate) {
+      const normalizedPhone = dto.phone?.replace(/\D/g, '');
+      const existingResume = await this.resumeModel.findOne({ phone: normalizedPhone });
+      if (existingResume) {
+        // 更新模式：调用核心更新逻辑
+        const updatedResume = await this.coreUpdate(existingResume._id.toString(), dto as any, { userId });
         const result = {
           id: updatedResume._id.toString(),
           createdAt: (updatedResume as any).createdAt,
           action: 'UPDATED'
         };
 
-        // 缓存结果
+        // 缓存结果（幂等性）
         if (idempotencyKey) {
-          this.idempotencyCache.set(`idempotency:${idempotencyKey}`, result);
-          // 5分钟后清除缓存
-          setTimeout(() => this.idempotencyCache.delete(`idempotency:${idempotencyKey}`), 5 * 60 * 1000);
+          const cacheKey = `idempotency:${idempotencyKey}`;
+          this.idempotencyCache.set(cacheKey, result);
+          setTimeout(() => this.idempotencyCache.delete(cacheKey), 5 * 60 * 1000);
         }
 
         return result;
-      } else {
-        // 返回409冲突
+      }
+    }
+
+    // 正常创建模式：调用核心创建逻辑
+    const savedResume = await this.coreCreate(dto, {
+      userId,
+      leadSource: 'other',  // 销售创建的简历
+      idempotencyKey
+    });
+
+    return {
+      id: savedResume._id.toString(),
+      createdAt: (savedResume as any).createdAt,
+      action: 'CREATED'
+    };
+  }
+
+  // ========================================
+  // 🔥 核心业务逻辑层 - 统一简历创建/更新逻辑
+  // ========================================
+
+  /**
+   * 统一去重检查（手机号 + 身份证号）
+   * @param phone 手机号
+   * @param idNumber 身份证号
+   * @param excludeId 排除的简历ID（更新时排除自身）
+   * @throws ConflictException 如果存在重复
+   */
+  private async validateUniqueness(
+    phone?: string,
+    idNumber?: string,
+    excludeId?: string
+  ): Promise<void> {
+    // 手机号去重检查
+    if (phone) {
+      const phoneQuery: any = { phone };
+      if (excludeId) {
+        phoneQuery._id = { $ne: new Types.ObjectId(excludeId) };
+      }
+      const existingWithPhone = await this.resumeModel.findOne(phoneQuery);
+      if (existingWithPhone) {
         throw new ConflictException({
           message: '该手机号已被使用',
-          existingId: existingResume._id.toString()
+          error: 'DUPLICATE_PHONE',
+          existingId: existingWithPhone._id.toString()
         });
       }
     }
 
-    // 4. 创建新简历
-    const resumeData: any = {
-      ...normalizedDto,
-      userId: userId ? new Types.ObjectId(userId) : undefined,
-      status: 'pending',
-      fileIds: [],
-      // ⭐ 强制设置 leadSource 为销售创建，不信任前端传递的值
-      leadSource: 'other'  // 销售创建的简历默认为 'other'，可根据业务需求调整
-    };
-
-    // 清理空值避免索引问题
-    if (!resumeData.idNumber) {
-      delete resumeData.idNumber;
-    }
-
-    try {
-      const resume = new this.resumeModel(resumeData);
-      const savedResume = await resume.save();
-
-      const result = {
-        id: savedResume._id.toString(),
-        createdAt: (savedResume as any).createdAt,
-        action: 'CREATED'
-      };
-
-      // 缓存结果
-      if (idempotencyKey) {
-        this.idempotencyCache.set(`idempotency:${idempotencyKey}`, result);
-        setTimeout(() => this.idempotencyCache.delete(`idempotency:${idempotencyKey}`), 5 * 60 * 1000);
+    // 身份证号去重检查
+    if (idNumber) {
+      const idQuery: any = { idNumber };
+      if (excludeId) {
+        idQuery._id = { $ne: new Types.ObjectId(excludeId) };
       }
-
-      this.logger.log(`v2简历创建成功: ${result.id}`);
-      return result;
-    } catch (error) {
-      this.logger.error('v2简历创建失败:', error);
-      throw new BadRequestException(`创建简历失败: ${error.message}`);
+      const existingWithIdNumber = await this.resumeModel.findOne(idQuery);
+      if (existingWithIdNumber) {
+        throw new ConflictException({
+          message: '该身份证号已被使用',
+          error: 'DUPLICATE_ID_NUMBER',
+          existingId: existingWithIdNumber._id.toString()
+        });
+      }
     }
   }
 
   /**
-   * 数据规范化处理
+   * 统一数据规范化处理
+   * @param data 原始输入数据
+   * @returns 规范化后的数据
    */
-  private normalizeResumeData(dto: CreateResumeV2Dto) {
-    const normalized = { ...dto };
+  private normalizeData(data: any): any {
+    const normalized = { ...data };
 
-    // 规范化手机号（已在DTO中处理，这里再次确保）
-    if (normalized.phone) {
+    // 规范化手机号（去除非数字字符）
+    if (normalized.phone && typeof normalized.phone === 'string') {
       normalized.phone = normalized.phone.replace(/\D/g, '');
     }
 
-    // 规范化字符串字段
-    ['name', 'nativePlace', 'selfIntroduction'].forEach(field => {
+    // 规范化身份证号（去除空格，X转大写）
+    if (normalized.idNumber && typeof normalized.idNumber === 'string') {
+      normalized.idNumber = normalized.idNumber.trim().toUpperCase();
+    }
+
+    // 规范化字符串字段（去除首尾空格，合并连续空格）
+    const stringFields = ['name', 'nativePlace', 'selfIntroduction', 'currentAddress', 'hukouAddress', 'wechat'];
+    stringFields.forEach(field => {
       if (normalized[field] && typeof normalized[field] === 'string') {
         normalized[field] = normalized[field].trim().replace(/[\u3000\s]+/g, ' ');
       }
     });
 
     // 确保数组字段
-    if (!Array.isArray(normalized.skills)) {
+    if (normalized.skills !== undefined && !Array.isArray(normalized.skills)) {
       normalized.skills = [];
     }
-    if (!Array.isArray(normalized.serviceArea)) {
+    if (normalized.serviceArea !== undefined && !Array.isArray(normalized.serviceArea)) {
       normalized.serviceArea = [];
     }
 
     // 技能枚举校验和过滤
-    const validSkills = ['chanhou', 'teshu-yinger', 'yiliaobackground', 'yuying', 'zaojiao', 'fushi', 'ertui', 'waiyu', 'zhongcan', 'xican', 'mianshi', 'jiashi', 'shouyi', 'muying', 'cuiru', 'yuezican', 'yingyang', 'liliao-kangfu', 'shuangtai-huli', 'yanglao-huli'];
-    normalized.skills = normalized.skills.filter(skill => validSkills.includes(skill));
+    if (Array.isArray(normalized.skills)) {
+      const validSkills = ['chanhou', 'teshu-yinger', 'yiliaobackground', 'yuying', 'zaojiao', 'fushi', 'ertui', 'waiyu', 'zhongcan', 'xican', 'mianshi', 'jiashi', 'shouyi', 'muying', 'cuiru', 'yuezican', 'yingyang', 'liliao-kangfu', 'shuangtai-huli', 'yanglao-huli'];
+      normalized.skills = normalized.skills.filter(skill => validSkills.includes(skill));
+    }
 
     // 设置默认值
     if (normalized.experienceYears === undefined) {
@@ -902,57 +849,234 @@ export class ResumeService {
   }
 
   /**
-   * 更新已存在的简历
+   * 统一构建简历数据
+   * @param data 规范化后的数据
+   * @param options 构建选项
    */
-  private async updateExistingResume(id: string, data: any, userId?: string) {
-    const updateData = { ...data };
+  private buildResumeData(
+    data: any,
+    options: {
+      userId?: string;
+      leadSource?: 'self-registration' | 'sales' | 'other';
+      status?: string;
+    }
+  ): any {
+    const resumeData: any = {
+      ...data,
+      status: options.status || 'pending',
+    };
 
-    // ⭐ 安全检查：不允许更新 leadSource 字段，保持原有来源标记
+    // 设置用户ID
+    if (options.userId) {
+      resumeData.userId = new Types.ObjectId(options.userId);
+    }
+
+    // 设置来源（强制设置，不信任前端传递的值）
+    if (options.leadSource) {
+      resumeData.leadSource = options.leadSource;
+    }
+
+    // 清理空值避免唯一索引问题
+    if (!resumeData.idNumber || resumeData.idNumber === '') {
+      delete resumeData.idNumber;
+    }
+
+    return resumeData;
+  }
+
+  /**
+   * 🔥 核心创建方法 - 所有创建入口的统一逻辑
+   * @param data 简历数据
+   * @param options 创建选项
+   */
+  private async coreCreate(
+    data: CreateResumeV2Dto,
+    options: {
+      userId?: string;
+      leadSource: 'self-registration' | 'sales' | 'other';
+      idempotencyKey?: string;
+    }
+  ): Promise<IResume> {
+    // 1. 幂等性检查
+    if (options.idempotencyKey) {
+      const cacheKey = `idempotency:${options.idempotencyKey}`;
+      const cached = this.idempotencyCache.get(cacheKey);
+      if (cached) {
+        this.logger.log(`幂等性命中，返回缓存结果: ${options.idempotencyKey}`);
+        return cached;
+      }
+    }
+
+    // 2. 数据规范化
+    const normalizedData = this.normalizeData(data);
+
+    // 3. 统一去重检查
+    await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber);
+
+    // 4. 构建简历数据
+    const resumeData = this.buildResumeData(normalizedData, {
+      userId: options.userId,
+      leadSource: options.leadSource,
+      status: 'pending'
+    });
+
+    // 5. 创建并保存
+    try {
+      const resume = new this.resumeModel(resumeData);
+      const savedResume = await resume.save();
+
+      // 缓存结果（幂等性）
+      if (options.idempotencyKey) {
+        const cacheKey = `idempotency:${options.idempotencyKey}`;
+        this.idempotencyCache.set(cacheKey, savedResume);
+        setTimeout(() => this.idempotencyCache.delete(cacheKey), 5 * 60 * 1000);
+      }
+
+      this.logger.log(`✅ 核心创建成功: ${savedResume._id}, 来源: ${options.leadSource}`);
+      return savedResume;
+    } catch (error) {
+      // 处理 MongoDB 唯一索引冲突
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyPattern || {})[0];
+        if (field === 'phone') {
+          throw new ConflictException({ message: '该手机号已被使用', error: 'DUPLICATE_PHONE' });
+        } else if (field === 'idNumber') {
+          throw new ConflictException({ message: '该身份证号已被使用', error: 'DUPLICATE_ID_NUMBER' });
+        }
+        throw new ConflictException({ message: '数据重复', error: 'DUPLICATE_ERROR' });
+      }
+      this.logger.error('核心创建失败:', error);
+      throw new BadRequestException(`创建简历失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 🔥 核心更新方法 - 所有更新入口的统一逻辑
+   * @param id 简历ID
+   * @param data 更新数据
+   * @param options 更新选项
+   */
+  private async coreUpdate(
+    id: string,
+    data: UpdateResumeDto,
+    options: {
+      userId?: string;
+    } = {}
+  ): Promise<IResume> {
+    // 1. 数据规范化
+    const normalizedData = this.normalizeData(data);
+
+    // 2. 统一去重检查（排除自身）
+    await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber, id);
+
+    // 3. 构建更新数据
+    const updateData: any = { ...normalizedData };
+
+    // 设置最后更新人
+    if (options.userId) {
+      updateData.lastUpdatedBy = new Types.ObjectId(options.userId);
+    }
+
+    // 允许更新 leadSource 字段
     if (updateData.leadSource !== undefined) {
-      this.logger.warn(`⚠️ 前端尝试修改 leadSource 字段，已忽略`);
-      delete updateData.leadSource;
+      this.logger.debug(`📋 更新 leadSource: ${updateData.leadSource}`);
     }
 
-    if (userId) {
-      updateData.lastUpdatedBy = new Types.ObjectId(userId);
-    }
+    // 4. 同步更新文件字段（URL数组 ↔ FileInfo对象）
+    this.syncFileFields(updateData);
 
-    const resume = await this.resumeModel.findByIdAndUpdate(
-      new Types.ObjectId(id),
-      updateData,
-      { new: true, runValidators: true }
-    );
+    // 5. 执行更新
+    const resume = await this.resumeModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(id),
+        updateData,
+        { new: true, timestamps: true, runValidators: true }
+      )
+      .populate('userId', 'username name')
+      .populate('lastUpdatedBy', 'username name')
+      .exec();
 
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
 
+    this.logger.log(`✅ 核心更新成功: ${id}`);
     return resume;
   }
 
   /**
-   * 兼容测试用例的 create 方法
+   * 同步文件字段（URL数组 ↔ FileInfo对象）
+   * 确保 photoUrls/personalPhoto, certificateUrls/certificates 等字段同步
    */
-  async create(createResumeDto: CreateResumeDto) {
-    // 检查手机号唯一性
-    const exist = await this.resumeModel.findOne({ phone: createResumeDto.phone });
-    if (exist) {
-      throw new ConflictException('该手机号已被使用');
+  private syncFileFields(updateData: any): void {
+    // 同步 certificateUrls ↔ certificates
+    if (updateData.certificateUrls !== undefined) {
+      if (Array.isArray(updateData.certificateUrls)) {
+        if (updateData.certificateUrls.length === 0) {
+          updateData.certificates = [];
+        } else {
+          updateData.certificates = updateData.certificateUrls.map(url => ({
+            url: url,
+            filename: url.split('/').pop() || '',
+            mimetype: 'image/jpeg',
+            size: 0
+          }));
+        }
+      }
     }
 
-    // 复制DTO以避免修改原始对象
-    const resumeData = { ...createResumeDto };
-
-    // 如果idNumber为null、空字符串或undefined，则删除它，避免唯一索引问题
-    if (resumeData.idNumber === null || resumeData.idNumber === '' || resumeData.idNumber === undefined) {
-      delete resumeData.idNumber;
-      this.logger.log('检测到空的idNumber字段，已从数据中删除');
+    // 同步 medicalReportUrls ↔ reports
+    if (updateData.medicalReportUrls !== undefined) {
+      if (Array.isArray(updateData.medicalReportUrls)) {
+        if (updateData.medicalReportUrls.length === 0) {
+          updateData.reports = [];
+        } else {
+          updateData.reports = updateData.medicalReportUrls.map(url => ({
+            url: url,
+            filename: url.split('/').pop() || '',
+            mimetype: url.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
+            size: 0
+          }));
+        }
+      }
     }
 
-    const resume = new this.resumeModel(resumeData);
-    return resume.save();
+    // 同步 photoUrls ↔ personalPhoto
+    if (updateData.photoUrls !== undefined) {
+      if (Array.isArray(updateData.photoUrls)) {
+        if (updateData.photoUrls.length === 0) {
+          updateData.personalPhoto = [];
+        } else {
+          updateData.personalPhoto = updateData.photoUrls.map(url => ({
+            url: url,
+            filename: url.split('/').pop() || '',
+            mimetype: 'image/jpeg',
+            size: 0
+          }));
+        }
+      }
+    }
   }
 
+  // ========================================
+  // 以下为兼容保留的方法
+  // ========================================
+
+  /**
+   * 兼容测试用例的 create 方法
+   * ✅ 已重构：调用 coreCreate() 核心逻辑
+   */
+  async create(createResumeDto: CreateResumeDto) {
+    return this.coreCreate(createResumeDto as any, {
+      leadSource: 'other',
+      userId: (createResumeDto as any).userId
+    });
+  }
+
+  /**
+   * 带文件更新简历
+   * ✅ 已重构：调用 coreUpdate() 核心逻辑 + 文件处理
+   */
   async updateWithFiles(
     id: string,
     updateResumeDto: UpdateResumeDto,
@@ -960,70 +1084,41 @@ export class ResumeService {
     fileTypes?: string[],
     userId?: string
   ) {
-    // 检查身份证号是否重复
-    if (updateResumeDto.idNumber) {
-      const existingResume = await this.resumeModel.findOne({
-        idNumber: updateResumeDto.idNumber,
-        _id: { $ne: id } // 排除当前简历
-      });
+    // 1. 数据规范化
+    const normalizedData = this.normalizeData(updateResumeDto);
 
-      if (existingResume) {
-        throw new ConflictException('身份证号已被其他简历使用');
-      }
-    }
+    // 2. 统一去重检查（手机号 + 身份证号，排除自身）
+    await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber, id);
 
+    // 3. 检查简历是否存在
     const resume = await this.resumeModel.findById(new Types.ObjectId(id));
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
 
-    // 处理文件上传
-    const categorizedFiles: any = {};
+    // 4. 处理文件上传
     const filesArray = Array.isArray(files) ? files : [];
     const fileTypesArray = Array.isArray(fileTypes) ? fileTypes : [];
+    const uploadedFiles = await this.processUpdateFileUploads(filesArray, fileTypesArray);
 
-    // 上传新文件
-    for (let i = 0; i < filesArray.length; i++) {
-      const file = filesArray[i];
-      const fileType = fileTypesArray[i] || 'personalPhoto'; // 默认为个人照片
-
-      // 上传文件，获取完整的COS URL
-      const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
-
-      this.logger.debug(`更新简历文件上传成功，URL: ${fileUrl}`);
-
-      const fileInfo = {
-        url: fileUrl,  // 直接使用返回的完整URL
-        filename: file.originalname,
-        mimetype: file.mimetype,
-        size: file.size
-      };
-
-      // 根据文件类型分类存储
-      if (!categorizedFiles[fileType]) {
-        categorizedFiles[fileType] = [];
-      }
-      categorizedFiles[fileType].push(fileInfo);
-    }
-
-    // 更新简历基本信息，但跳过undefined值和文件相关字段
-    this.logger.log(`📋 updateWithFiles 接收到的DTO: ${JSON.stringify({
-      learningIntention: updateResumeDto.learningIntention,
-      currentStage: updateResumeDto.currentStage,
-      allKeys: Object.keys(updateResumeDto)
-    })}`);
-
-    const updateFields = Object.keys(updateResumeDto)
-      .filter(key => updateResumeDto[key] !== undefined && updateResumeDto[key] !== null)
+    // 5. 构建更新数据（排除文件相关字段）
+    const updateFields = Object.keys(normalizedData)
+      .filter(key => normalizedData[key] !== undefined && normalizedData[key] !== null)
       .filter(key => !['idCardFront', 'idCardBack', 'photoUrls', 'certificateUrls', 'medicalReportUrls', 'certificates', 'reports', 'personalPhoto'].includes(key))
       .reduce((obj, key) => {
-        obj[key] = updateResumeDto[key];
+        obj[key] = normalizedData[key];
         return obj;
-      }, {});
+      }, {} as Record<string, any>);
 
-    this.logger.log(`✅ 准备更新的字段: ${JSON.stringify(updateFields)}`);
+    // 允许更新 leadSource 字段
+    if ((updateFields as any).leadSource !== undefined) {
+      this.logger.debug(`📋 更新 leadSource: ${(updateFields as any).leadSource}`);
+    }
 
-    // 只更新非undefined和非文件相关的字段
+    // 同步文件字段
+    this.syncFileFields(updateFields);
+
+    // 更新基本字段
     Object.assign(resume, updateFields);
 
     // 设置最后更新人
@@ -1031,66 +1126,91 @@ export class ResumeService {
       resume.lastUpdatedBy = new Types.ObjectId(userId);
     }
 
-    // 更新分类文件信息
-    Object.keys(categorizedFiles).forEach(type => {
-      switch (type) {
-        case 'personalPhoto':
-          // 支持多张个人照片
-          if (!resume.personalPhoto) resume.personalPhoto = [];
-          resume.personalPhoto.push(...categorizedFiles[type]);
-          if (!resume.photoUrls) resume.photoUrls = [];
-          resume.photoUrls.push(...categorizedFiles[type].map(f => f.url));
-          break;
-        case 'idCardFront':
-          resume.idCardFront = categorizedFiles[type][0];
-          break;
-        case 'idCardBack':
-          resume.idCardBack = categorizedFiles[type][0];
-          break;
-        case 'certificate':
-          if (!resume.certificates) resume.certificates = [];
-          resume.certificates.push(...categorizedFiles[type]);
-          if (!resume.certificateUrls) resume.certificateUrls = [];
-          resume.certificateUrls.push(...categorizedFiles[type].map(f => f.url));
-          break;
-        case 'medicalReport':
-          if (!resume.reports) resume.reports = [];
-          resume.reports.push(...categorizedFiles[type]);
-          if (!resume.medicalReportUrls) resume.medicalReportUrls = [];
-          resume.medicalReportUrls.push(...categorizedFiles[type].map(f => f.url));
-          break;
-        case 'selfIntroductionVideo':
-          resume.selfIntroductionVideo = categorizedFiles[type][0];
-          break;
-        default:
-          // 默认归类为个人照片
-          if (!resume.photoUrls) resume.photoUrls = [];
-          resume.photoUrls.push(...categorizedFiles[type].map(f => f.url));
-          break;
-      }
-    });
+    // 6. 合并新上传的文件
+    this.mergeUploadedFilesToResume(resume, uploadedFiles);
 
-    // 保存更新后的简历
+    // 7. 保存
     const savedResume = await resume.save();
 
-    this.logger.log(`📝 简历更新成功详情:`);
-    this.logger.log(`  - 简历ID: ${id}`);
-    this.logger.log(`  - 姓名: ${savedResume.name}`);
-    this.logger.log(`  - updatedAt: ${(savedResume as any).updatedAt}`);
-    this.logger.log(`  - createdAt: ${(savedResume as any).createdAt}`);
-    this.logger.log(`  - 文件统计: ${JSON.stringify({
-      idCardFront: !!savedResume.idCardFront,
-      idCardBack: !!savedResume.idCardBack,
-      photoCount: savedResume.photoUrls?.length || 0,
-      certificateCount: savedResume.certificates?.length || 0,
-      reportCount: savedResume.reports?.length || 0
-    })}`);
+    this.logger.log(`✅ updateWithFiles 成功: ${id}`);
 
     return {
       success: true,
       data: savedResume,
       message: '简历更新成功'
     };
+  }
+
+  /**
+   * 处理更新时的文件上传
+   */
+  private async processUpdateFileUploads(
+    files: Express.Multer.File[],
+    fileTypes: string[]
+  ): Promise<Record<string, any[]>> {
+    const categorizedFiles: Record<string, any[]> = {};
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileType = fileTypes[i] || 'personalPhoto';
+
+      const fileUrl = await this.uploadService.uploadFile(file, { type: fileType });
+
+      const fileInfo = {
+        url: fileUrl,
+        filename: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size
+      };
+
+      if (!categorizedFiles[fileType]) {
+        categorizedFiles[fileType] = [];
+      }
+      categorizedFiles[fileType].push(fileInfo);
+    }
+
+    return categorizedFiles;
+  }
+
+  /**
+   * 合并上传的文件到简历对象
+   */
+  private mergeUploadedFilesToResume(resume: any, uploadedFiles: Record<string, any[]>): void {
+    Object.keys(uploadedFiles).forEach(type => {
+      switch (type) {
+        case 'personalPhoto':
+          if (!resume.personalPhoto) resume.personalPhoto = [];
+          resume.personalPhoto.push(...uploadedFiles[type]);
+          if (!resume.photoUrls) resume.photoUrls = [];
+          resume.photoUrls.push(...uploadedFiles[type].map((f: any) => f.url));
+          break;
+        case 'idCardFront':
+          resume.idCardFront = uploadedFiles[type][0];
+          break;
+        case 'idCardBack':
+          resume.idCardBack = uploadedFiles[type][0];
+          break;
+        case 'certificate':
+          if (!resume.certificates) resume.certificates = [];
+          resume.certificates.push(...uploadedFiles[type]);
+          if (!resume.certificateUrls) resume.certificateUrls = [];
+          resume.certificateUrls.push(...uploadedFiles[type].map((f: any) => f.url));
+          break;
+        case 'medicalReport':
+          if (!resume.reports) resume.reports = [];
+          resume.reports.push(...uploadedFiles[type]);
+          if (!resume.medicalReportUrls) resume.medicalReportUrls = [];
+          resume.medicalReportUrls.push(...uploadedFiles[type].map((f: any) => f.url));
+          break;
+        case 'selfIntroductionVideo':
+          resume.selfIntroductionVideo = uploadedFiles[type][0];
+          break;
+        default:
+          if (!resume.photoUrls) resume.photoUrls = [];
+          resume.photoUrls.push(...uploadedFiles[type].map((f: any) => f.url));
+          break;
+      }
+    });
   }
 
   /**
@@ -1280,7 +1400,7 @@ export class ResumeService {
   private mapExcelRowToResumeDto(rowData: Record<string, any>, userId: string): CreateResumeDto {
     // 工种映射
     const jobTypeMap: Record<string, string> = {
-      '月嫂': 'yuexin',
+      '月嫂': 'yuesao',
       '住家育儿嫂': 'zhujia-yuer',
       '白班育儿': 'baiban-yuer',
       '保洁': 'baojie',
@@ -1335,13 +1455,8 @@ export class ResumeService {
       dto.wechat = rowData['微信']?.toString().trim();
     }
 
-    if (rowData['期望职位']) {
-      dto.expectedPosition = rowData['期望职位']?.toString().trim();
-    }
-
     if (rowData['工作经验']) {
       dto.experienceYears = Number(rowData['工作经验']) || 0;
-      dto.workExperience = Number(rowData['工作经验']) || 0;
     }
 
     if (rowData['学历']) {
@@ -1438,7 +1553,6 @@ export class ResumeService {
       jobType: r.jobType,
       education: r.education,
       experienceYears: r.experienceYears,
-      expectedPosition: r.expectedPosition,
       expectedSalary: r.expectedSalary,
       nativePlace: r.nativePlace,
       skills: r.skills,
@@ -1448,8 +1562,8 @@ export class ResumeService {
       // 自我介绍视频（公开可见）
       selfIntroductionVideo: r.selfIntroductionVideo || null,
       selfIntroductionVideoUrl: r.selfIntroductionVideo?.url || null,
-      // 工作经历（保留必要字段）
-      workExperiences: r.workExperiences || r.workHistory || []
+      // 工作经历
+      workExperiences: r.workExperiences || []
     };
 
     // 去掉强敏感信息（即使存在也不返回）
@@ -1831,62 +1945,13 @@ export class ResumeService {
 
   /**
    * 阿姨自助注册 - 创建简历（无需JWT认证）
+   * ✅ 已重构：调用 coreCreate() 核心逻辑
    */
   async createSelfRegister(dto: CreateResumeV2Dto): Promise<IResume> {
-    // 数据规范化
-    const normalizedDto = this.normalizeResumeData(dto);
-
-    // 检查手机号是否已存在
-    const existingResume = await this.resumeModel.findOne({ phone: normalizedDto.phone });
-    if (existingResume) {
-      throw new ConflictException('该手机号已注册');
-    }
-
-    // 检查身份证号是否已存在（如果提供）
-    if (normalizedDto.idNumber) {
-      const existingWithIdNumber = await this.resumeModel.findOne({ idNumber: normalizedDto.idNumber });
-      if (existingWithIdNumber) {
-        throw new ConflictException('该身份证号已注册');
-      }
-    }
-
-    // 创建简历数据
-    const resumeData: any = {
-      ...normalizedDto,
-      leadSource: 'self-registration',  // 强制设置，使用leadSource字段标记来源
-      status: 'draft',                  // 强制设置
-      userId: null,                     // 自助注册时没有userId
-      fileIds: [],
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
-    // 清理空值避免索引问题
-    if (!resumeData.idNumber) {
-      delete resumeData.idNumber;
-    }
-
-    try {
-      const resume = new this.resumeModel(resumeData);
-      const savedResume = await resume.save();
-      this.logger.log(`✅ 自助注册简历创建成功: ${savedResume._id}`);
-      return savedResume;
-    } catch (error) {
-      this.logger.error('❌ 自助注册简历创建失败:', error);
-
-      // 处理MongoDB唯一索引冲突
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern || {})[0];
-        if (field === 'phone') {
-          throw new ConflictException('该手机号已注册');
-        } else if (field === 'idNumber') {
-          throw new ConflictException('该身份证号已注册');
-        }
-        throw new ConflictException('数据重复');
-      }
-
-      throw new BadRequestException(`创建简历失败: ${error.message}`);
-    }
+    return this.coreCreate(dto, {
+      leadSource: 'self-registration',
+      userId: undefined  // 自助注册没有 userId
+    });
   }
 
   /**
@@ -1918,7 +1983,7 @@ export class ResumeService {
       serviceArea: resume.serviceArea || [],
       expectedSalary: resume.expectedSalary,
       maternityNurseLevel: resume.maternityNurseLevel || null, // 月嫂档位
-      workExperiences: resume.workExperiences || resume.workHistory || [],
+      workExperiences: resume.workExperiences || [],
       // 文件信息 - 完整对象格式（包含 url, filename, size, mimetype）
       idCardFront: resume.idCardFront,
       idCardBack: resume.idCardBack,
@@ -2243,8 +2308,8 @@ export class ResumeService {
 
       // 2. 从工作经历中的客户评价提取标签
       const resume = await this.resumeModel.findById(resumeId);
-      if (resume && resume.workHistory && Array.isArray(resume.workHistory)) {
-        for (const workExp of resume.workHistory) {
+      if (resume && resume.workExperiences && Array.isArray(resume.workExperiences)) {
+        for (const workExp of resume.workExperiences) {
           if (workExp.customerReview) {
             const extractedTags = this.extractTagsFromComment(workExp.customerReview);
             for (const tag of extractedTags) {

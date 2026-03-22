@@ -418,7 +418,7 @@ const ESignatureStepPage: React.FC = () => {
             nativePlace: worker.nativePlace,
             salary: worker.expectedSalary ? worker.expectedSalary.toString() : undefined,
             expectedSalary: worker.expectedSalary ? worker.expectedSalary.toString() : undefined,
-            workExperience: worker.workExperience ? worker.workExperience.toString() : undefined,
+            workExperience: worker.experienceYears ? worker.experienceYears.toString() : undefined,
             education: worker.education
           });
         });
@@ -521,7 +521,7 @@ const ESignatureStepPage: React.FC = () => {
               nativePlace: worker.nativePlace,
               salary: worker.expectedSalary ? worker.expectedSalary.toString() : undefined,
               expectedSalary: worker.expectedSalary ? worker.expectedSalary.toString() : undefined,
-              workExperience: worker.workExperience ? worker.workExperience.toString() : undefined,
+              workExperience: worker.experienceYears ? worker.experienceYears.toString() : undefined,
               education: worker.education
             });
           });

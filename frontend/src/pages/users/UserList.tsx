@@ -175,6 +175,9 @@ const UserList: React.FC = () => {
           admin: { text: '管理员', color: 'red' },
           manager: { text: '经理', color: 'blue' },
           employee: { text: '员工', color: 'green' },
+          operator: { text: '运营', color: 'purple' },
+          admissions: { text: '招生老师', color: 'cyan' },
+          dispatch: { text: '派单老师', color: 'orange' },
         };
         const { text, color } = roleMap[role] || { text: role, color: 'default' };
         return <Tag color={color}>{text}</Tag>;

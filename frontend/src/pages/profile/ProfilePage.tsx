@@ -26,6 +26,16 @@ const ProfilePage: React.FC = () => {
     navigate('/settings/account', { state: { activeTab: 'security' } });
   };
 
+  const roleDisplayMap: Record<string, string> = {
+    admin: '管理员',
+    manager: '经理',
+    employee: '普通员工',
+    operator: '运营',
+    admissions: '招生老师',
+    dispatch: '派单老师',
+  };
+  const roleDisplay = roleDisplayMap[user.role] || user.role;
+
   return (
     <PageContainer
       header={{
@@ -39,7 +49,7 @@ const ProfilePage: React.FC = () => {
           </div>
           <div>
             <Title level={3} style={{ margin: 0 }}>{user.name}</Title>
-            <Paragraph type="secondary">{user.role === 'admin' ? '管理员' : user.role === 'manager' ? '经理' : '普通员工'}</Paragraph>
+            <Paragraph type="secondary">{roleDisplay}</Paragraph>
             <Paragraph type="secondary" style={{ fontSize: '12px', margin: 0 }}>点击头像可以更换</Paragraph>
           </div>
         </div>
@@ -80,7 +90,7 @@ const ProfilePage: React.FC = () => {
           <Descriptions.Item label="角色">
             <Space>
               <TeamOutlined />
-              {user.role === 'admin' ? '管理员' : user.role === 'manager' ? '经理' : '普通员工'}
+              {roleDisplay}
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label="注册时间">

@@ -25,6 +25,8 @@ import { UpdateTrainingLeadDto } from './dto/update-training-lead.dto';
 import { TrainingLeadQueryDto } from './dto/training-lead-query.dto';
 import { CreateTrainingLeadFollowUpDto } from './dto/create-training-lead-follow-up.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 
 // Multer配置 - Excel文件上传
@@ -43,20 +45,23 @@ const multerConfig = {
 
 @ApiTags('培训线索管理')
 @Controller('training-leads')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class TrainingLeadsController {
   private readonly logger = new Logger(TrainingLeadsController.name);
 
   constructor(private readonly trainingLeadsService: TrainingLeadsService) {}
 
-  // 检查是否是管理员或经理
+  // 检查是否是管理员或经理（有全局查看权限的角色：admin/manager/operator/admissions）
+  // dispatch/employee 只能查看自己创建的线索
   private isManagerOrAdmin(user: any): boolean {
     return user?.role === '系统管理员' || user?.role === 'admin' ||
-           user?.role === '经理' || user?.role === 'manager';
+           user?.role === '经理' || user?.role === 'manager' ||
+           user?.role === 'operator' || user?.role === 'admissions';
   }
 
   @Post()
+  @Permissions('training-lead:create')
   @ApiOperation({ summary: '创建培训线索' })
   @ApiResponse({ status: 201, description: '创建成功' })
   @ApiResponse({ status: 400, description: '参数错误' })
@@ -71,6 +76,7 @@ export class TrainingLeadsController {
   }
 
   @Post('import-excel')
+  @Permissions('training-lead:create')
   @UseInterceptors(FileInterceptor('file', multerConfig))
   @ApiOperation({ summary: '批量导入培训线索（Excel格式）' })
   @ApiConsumes('multipart/form-data')
@@ -116,6 +122,7 @@ export class TrainingLeadsController {
   }
 
   @Get()
+  @Permissions('training-lead:view')
   @ApiOperation({ summary: '获取培训线索列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findAll(@Query() query: TrainingLeadQueryDto, @Request() req) {
@@ -133,6 +140,7 @@ export class TrainingLeadsController {
   }
 
   @Get(':id')
+  @Permissions('training-lead:view')
   @ApiOperation({ summary: '获取培训线索详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 404, description: '线索不存在' })
@@ -146,6 +154,7 @@ export class TrainingLeadsController {
   }
 
   @Patch(':id')
+  @Permissions('training-lead:edit')
   @ApiOperation({ summary: '更新培训线索' })
   @ApiResponse({ status: 200, description: '更新成功' })
   @ApiResponse({ status: 404, description: '线索不存在' })
@@ -160,6 +169,7 @@ export class TrainingLeadsController {
   }
 
   @Delete(':id')
+  @Permissions('training-lead:delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '删除培训线索' })
   @ApiResponse({ status: 200, description: '删除成功' })
@@ -173,6 +183,7 @@ export class TrainingLeadsController {
   }
 
   @Post(':id/follow-ups')
+  @Permissions('training-lead:edit')
   @ApiOperation({ summary: '添加跟进记录' })
   @ApiResponse({ status: 201, description: '添加成功' })
   @ApiResponse({ status: 404, description: '线索不存在' })
@@ -190,6 +201,7 @@ export class TrainingLeadsController {
   }
 
   @Get(':id/follow-ups')
+  @Permissions('training-lead:view')
   @ApiOperation({ summary: '获取跟进记录列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 404, description: '线索不存在' })
@@ -203,6 +215,7 @@ export class TrainingLeadsController {
   }
 
   @Post('generate-share-token')
+  @Permissions('training-lead:create')
   @ApiOperation({ summary: '生成分享链接和二维码' })
   @ApiResponse({ status: 201, description: '生成成功' })
   async generateShareToken(@Request() req) {

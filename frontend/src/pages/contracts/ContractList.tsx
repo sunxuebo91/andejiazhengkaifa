@@ -240,35 +240,56 @@ const ContractList: React.FC = () => {
     return colors[type] || 'default';
   };
 
+  // 从合同记录中解析结束日期（复用 templateParams 解析逻辑）
+  const getContractEndDate = (record: Contract): ReturnType<typeof dayjs> | null => {
+    const tp = record.templateParams;
+    const endDateStr = tp?.['合同结束时间'] || tp?.['服务结束时间'] ||
+      (tp?.['结束年'] && tp?.['结束月'] && tp?.['结束日']
+        ? `${tp['结束年']}年${String(tp['结束月']).padStart(2, '0')}月${String(tp['结束日']).padStart(2, '0')}日`
+        : undefined);
+
+    if (endDateStr) {
+      const m = endDateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日?/);
+      if (m) return dayjs(`${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`);
+      const parsed = dayjs(endDateStr);
+      if (parsed.isValid()) return parsed;
+    }
+    if (record.endDate) {
+      const parsed = dayjs(record.endDate);
+      if (parsed.isValid()) return parsed;
+    }
+    return null;
+  };
+
   const columns = [
     {
       title: '合同编号',
       dataIndex: 'contractNumber',
       key: 'contractNumber',
-      width: 150,
+      width: 130,
       render: (text: string) => (
-        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>{text}</span>
+        <span style={{ fontWeight: 600, color: '#1890ff', fontSize: 12 }}>{text}</span>
       ),
     },
     {
       title: '客户信息',
       key: 'customer',
-      width: 200,
+      width: 120,
       render: (_: any, record: Contract) => (
         <div>
-          <div style={{ fontWeight: 'bold' }}>{record.customerName}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>{record.customerPhone}</div>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>{record.customerName}</div>
+          <div style={{ fontSize: 11, color: '#999' }}>{record.customerPhone}</div>
         </div>
       ),
     },
     {
       title: '服务人员',
       key: 'worker',
-      width: 200,
+      width: 120,
       render: (_: any, record: Contract) => (
         <div>
-          <div style={{ fontWeight: 'bold' }}>{record.workerName}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>{record.workerPhone}</div>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>{record.workerName}</div>
+          <div style={{ fontSize: 11, color: '#999' }}>{record.workerPhone}</div>
         </div>
       ),
     },
@@ -276,55 +297,41 @@ const ContractList: React.FC = () => {
       title: '合同类型',
       dataIndex: 'contractType',
       key: 'contractType',
-      width: 100,
+      width: 90,
       render: (type: ContractType) => (
-        <Tag color={getContractTypeColor(type)}>{type}</Tag>
+        <Tag color={getContractTypeColor(type)} style={{ fontSize: 11 }}>{type}</Tag>
       ),
     },
     {
       title: '服务期间',
       key: 'period',
-      width: 200,
+      width: 148,
       render: (_: any, record: Contract) => {
-        // 优先使用 templateParams 中的合同时间（支持合并格式和分拆年月日格式）
         const tp = record.templateParams;
         const startDateStr = tp?.['合同开始时间'] || tp?.['服务开始时间'] ||
           (tp?.['开始年'] && tp?.['开始月'] && tp?.['开始日']
             ? `${tp['开始年']}年${String(tp['开始月']).padStart(2, '0')}月${String(tp['开始日']).padStart(2, '0')}日`
             : undefined);
-        const endDateStr = tp?.['合同结束时间'] || tp?.['服务结束时间'] ||
-          (tp?.['结束年'] && tp?.['结束月'] && tp?.['结束日']
-            ? `${tp['结束年']}年${String(tp['结束月']).padStart(2, '0')}月${String(tp['结束日']).padStart(2, '0')}日`
-            : undefined);
 
-        // 统一格式化日期为 YYYY-MM-DD
-        const formatDateUnified = (dateStr: string | undefined, fallback: string) => {
-          if (dateStr) {
-            // 尝试解析中文日期格式 "2026年02月27日"
-            const chineseMatch = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日?/);
-            if (chineseMatch) {
-              const [, year, month, day] = chineseMatch;
-              return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-            }
-            // 尝试标准日期解析
-            const parsed = dayjs(dateStr);
-            if (parsed.isValid()) {
-              return parsed.format('YYYY-MM-DD');
-            }
-            return dateStr;
+        const fmtDate = (s: string | undefined, fallback: string) => {
+          if (s) {
+            const m = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日?/);
+            if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+            const p = dayjs(s);
+            if (p.isValid()) return p.format('YYYY-MM-DD');
+            return s;
           }
           return dayjs(fallback).format('YYYY-MM-DD');
         };
 
-        const displayStart = formatDateUnified(startDateStr, record.startDate);
-        const displayEnd = formatDateUnified(endDateStr, record.endDate);
+        const displayStart = fmtDate(startDateStr, record.startDate);
+        const endDayjs = getContractEndDate(record);
+        const displayEnd = endDayjs ? endDayjs.format('YYYY-MM-DD') : dayjs(record.endDate).format('YYYY-MM-DD');
 
         return (
-          <div>
+          <div style={{ fontSize: 12 }}>
             <div>{displayStart}</div>
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              至 {displayEnd}
-            </div>
+            <div style={{ color: '#999' }}>至 {displayEnd}</div>
           </div>
         );
       },
@@ -333,9 +340,9 @@ const ContractList: React.FC = () => {
       title: '服务费',
       dataIndex: 'customerServiceFee',
       key: 'customerServiceFee',
-      width: 120,
+      width: 88,
       render: (fee: number) => (
-        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+        <span style={{ fontWeight: 600, color: '#1890ff', fontSize: 13 }}>
           {fee ? `¥${fee.toLocaleString()}` : '-'}
         </span>
       ),
@@ -343,7 +350,7 @@ const ContractList: React.FC = () => {
     {
       title: '状态',
       key: 'status',
-      width: 150,
+      width: 120,
       render: (_: any, record: Contract) => {
         // 如果有爱签合同编号，显示爱签状态组件（迷你版）
         if (record.esignContractNo) {
@@ -369,56 +376,64 @@ const ContractList: React.FC = () => {
       title: '创建人',
       dataIndex: 'createdBy',
       key: 'createdBy',
-      width: 150,
+      width: 72,
       render: (_: any, record: Contract) => {
         const creator = record.createdBy as any;
-        if (!creator) {
-          return '-';
-        }
+        if (!creator) return '-';
         if (typeof creator === 'string') {
-          // 隐藏占位值或仅有 ObjectId 的情况
-          if (creator === 'temp' || /^[a-fA-F0-9]{24}$/.test(creator)) {
-            return '-';
-          }
-          return creator;
+          if (creator === 'temp' || /^[a-fA-F0-9]{24}$/.test(creator)) return '-';
+          return <span style={{ fontSize: 12 }}>{creator}</span>;
         }
-        return creator.name || creator.username || '-';
+        return <span style={{ fontSize: 12 }}>{creator.name || creator.username || '-'}</span>;
       },
     },
     {
       title: '创建时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 150,
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm'),
+      width: 128,
+      render: (date: string) => <span style={{ fontSize: 12 }}>{dayjs(date).format('YYYY-MM-DD HH:mm')}</span>,
     },
     {
       title: '背调',
       key: 'hasBackgroundCheck',
-      width: 70,
+      width: 56,
       render: (_: any, record: Contract) => (
         (record as any).hasBackgroundCheck
-          ? <Tag color="green">是</Tag>
-          : <Tag color="default">否</Tag>
+          ? <Tag color="green" style={{ fontSize: 11, padding: '0 4px' }}>是</Tag>
+          : <Tag color="default" style={{ fontSize: 11, padding: '0 4px' }}>否</Tag>
       ),
     },
     {
       title: '保险',
       key: 'hasInsurance',
-      width: 70,
+      width: 56,
       render: (_: any, record: Contract) => (
         (record as any).hasInsurance
-          ? <Tag color="green">是</Tag>
-          : <Tag color="default">否</Tag>
+          ? <Tag color="green" style={{ fontSize: 11, padding: '0 4px' }}>是</Tag>
+          : <Tag color="default" style={{ fontSize: 11, padding: '0 4px' }}>否</Tag>
       ),
+    },
+    {
+      title: '临近到期',
+      key: 'expiringSoon',
+      width: 68,
+      render: (_: any, record: Contract) => {
+        const endDate = getContractEndDate(record);
+        if (!endDate || !endDate.isValid()) return <Tag style={{ fontSize: 11, padding: '0 4px' }}>-</Tag>;
+        const daysLeft = endDate.diff(dayjs().startOf('day'), 'day');
+        if (daysLeft < 0) return <Tag color="red" style={{ fontSize: 11, padding: '0 4px' }}>已过期</Tag>;
+        if (daysLeft <= 30) return <Tag color="orange" style={{ fontSize: 11, padding: '0 4px' }}>是</Tag>;
+        return <Tag color="default" style={{ fontSize: 11, padding: '0 4px' }}>否</Tag>;
+      },
     },
     {
       title: '操作',
       key: 'action',
-      width: 240,
+      width: 170,
       fixed: 'right' as const,
       render: (_: any, record: Contract) => (
-        <Space wrap>
+        <Space size={4}>
           <Button
             type="primary"
             size="small"
@@ -450,45 +465,25 @@ const ContractList: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: '16px' }}>
       {/* 统计卡片 */}
-      <Row gutter={16} style={{ marginBottom: '24px' }}>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="合同总数"
-              value={statistics.total}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="签约中"
-              value={statistics.active}
-              valueStyle={{ color: '#52c41a' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="已签约"
-              value={statistics.completed}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="其他状态"
-              value={statistics.cancelled}
-              valueStyle={{ color: '#ff4d4f' }}
-            />
-          </Card>
-        </Col>
+      <Row gutter={12} style={{ marginBottom: '12px' }}>
+        {[
+          { title: '合同总数', value: statistics.total, color: '#1890ff' },
+          { title: '签约中', value: statistics.active, color: '#52c41a' },
+          { title: '已签约', value: statistics.completed, color: '#1890ff' },
+          { title: '其他状态', value: statistics.cancelled, color: '#ff4d4f' },
+        ].map(item => (
+          <Col span={6} key={item.title}>
+            <Card size="small" bodyStyle={{ padding: '12px 16px' }}>
+              <Statistic
+                title={<span style={{ fontSize: 12 }}>{item.title}</span>}
+                value={item.value}
+                valueStyle={{ color: item.color, fontSize: 22 }}
+              />
+            </Card>
+          </Col>
+        ))}
       </Row>
 
       <Card
@@ -514,7 +509,7 @@ const ContractList: React.FC = () => {
         }
       >
         {/* 搜索筛选 */}
-        <Row gutter={16} style={{ marginBottom: '16px' }}>
+        <Row gutter={8} style={{ marginBottom: '12px' }}>
           <Col span={6}>
             <Input
               placeholder="搜索合同编号、客户姓名、手机号"
@@ -574,6 +569,7 @@ const ContractList: React.FC = () => {
 
         {/* 合同列表 */}
         <Table
+          size="small"
           columns={columns}
           dataSource={contracts}
           rowKey="_id"
@@ -588,7 +584,7 @@ const ContractList: React.FC = () => {
               `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
           }}
           onChange={handleTableChange}
-          scroll={{ x: 1200 }}
+          scroll={{ x: 1380 }}
         />
       </Card>
 

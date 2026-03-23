@@ -39,6 +39,9 @@ export class ContractsMiniProgramController {
       'admin': '系统管理员',
       'manager': '经理',
       'employee': '普通员工',
+      'operator': '运营',
+      'dispatch': '派单老师',
+      'admissions': '招生老师',
     };
     return roleMap[role] || role;
   }
@@ -66,8 +69,9 @@ export class ContractsMiniProgramController {
       const userRole = this.mapRoleToChineseRole(req.user.role);
       const userId = req.user.userId;
 
-      // 普通员工只能看自己创建的合同
-      const createdByFilter = userRole === '普通员工' ? userId : undefined;
+      // 普通员工、派单老师、招生老师只能看自己创建的合同
+      const restrictedRoles = ['普通员工', '派单老师', '招生老师'];
+      const createdByFilter = restrictedRoles.includes(userRole) ? userId : undefined;
 
       const result = await this.contractsService.findAll(
         parseInt(page),

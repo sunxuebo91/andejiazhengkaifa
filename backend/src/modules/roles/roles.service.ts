@@ -138,6 +138,8 @@ export class RolesService implements OnModuleInit {
         continue;
       }
 
+      // 只补全缺失的元数据（code/name/description/active），不覆盖权限
+      // 权限由管理员通过 UI 维护，重启不会丢失
       const updateData: Partial<Role> = {};
       if (!existingRole.code) {
         updateData.code = roleData.code;
@@ -148,10 +150,9 @@ export class RolesService implements OnModuleInit {
       if (existingRole.description !== roleData.description) {
         updateData.description = roleData.description;
       }
+      // 仅当角色没有任何权限时才用常量初始化（防止空权限角色无法登录）
       const existingPermissions = Array.isArray(existingRole.permissions) ? existingRole.permissions : [];
-      const nextPermissions = [...roleData.permissions].sort().join(',');
-      const currentPermissions = [...existingPermissions].sort().join(',');
-      if (currentPermissions !== nextPermissions) {
+      if (existingPermissions.length === 0) {
         updateData.permissions = roleData.permissions;
       }
       if (existingRole.active !== roleData.active) {

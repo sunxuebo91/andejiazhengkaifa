@@ -69,11 +69,8 @@ export class CustomersController {
   private canAccessCustomer(customer: any, user: any): boolean {
     const userRole = this.mapRoleToChineseRole(user.role);
 
-    if (userRole === '系统管理员') {
-      return true; // 管理员可以访问所有客户
-    } else if (userRole === '经理') {
-      // 经理可以访问部门内的客户（这里简化为所有客户，实际应该根据部门过滤）
-      return true;
+    if (['系统管理员', '经理', '运营', '派单老师'].includes(userRole)) {
+      return true; // 管理员/经理/运营/派单老师可以访问所有客户
     } else if (userRole === '普通员工') {
       // 🔥 修复：普通员工只能访问自己负责的客户
       // assignedTo 可能是 ObjectId、ObjectId字符串、或 populate 后的对象
@@ -297,7 +294,7 @@ export class CustomersController {
   @ApiOperation({ summary: '批量分配客户（仅管理员和经理）' })
   @ApiBody({ type: BatchAssignCustomerDto })
   @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'operator')
   @Permissions('customer:edit')
   async batchAssignCustomers(
     @Body() dto: BatchAssignCustomerDto,
@@ -371,7 +368,7 @@ export class CustomersController {
   @Get('public-pool/statistics')
   @ApiOperation({ summary: '获取公海统计数据（管理员和经理）' })
   @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'operator')
   @Permissions('customer:view')
   async getPublicPoolStatistics(): Promise<ApiResponse> {
     try {
@@ -409,7 +406,7 @@ export class CustomersController {
   @ApiOperation({ summary: '管理员从公海分配客户（仅管理员和经理）' })
   @ApiBody({ type: AssignFromPoolDto })
   @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'operator')
   @Permissions('customer:edit')
   async assignFromPool(@Body() dto: AssignFromPoolDto, @Request() req): Promise<ApiResponse> {
     try {
@@ -633,15 +630,17 @@ export class CustomersController {
     const roleMap = {
       'admin': '系统管理员',
       'manager': '经理',
-      'employee': '普通员工'
+      'employee': '普通员工',
+      'operator': '运营',
+      'dispatch': '派单老师',
+      'admissions': '招生老师',
     };
     return roleMap[role] || role;
   }
 
   @Get('miniprogram/statistics')
   @ApiOperation({ summary: '小程序获取客户统计信息（基于角色权限）' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getStatisticsForMiniprogram(@Query() query: CustomerQueryDto, @Request() req): Promise<ApiResponse> {
     try {
       const userRole = this.mapRoleToChineseRole(req.user.role);
@@ -673,8 +672,7 @@ export class CustomersController {
 
   @Get('miniprogram/today-todo-stats')
   @ApiOperation({ summary: '小程序获取客户信息统计' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getTodayTodoStatsForMiniprogram(@Request() req): Promise<ApiResponse> {
     try {
       const userId = req.user.userId;
@@ -688,8 +686,7 @@ export class CustomersController {
 
   @Get('miniprogram/performance-progress')
   @ApiOperation({ summary: '小程序获取业绩进度' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getPerformanceProgressForMiniprogram(@Request() req): Promise<ApiResponse> {
     try {
       const userId = req.user.userId;
@@ -703,8 +700,7 @@ export class CustomersController {
 
   @Get('miniprogram/contract-stats')
   @ApiOperation({ summary: '小程序获取合同统计' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getContractStatsForMiniprogram(@Request() req): Promise<ApiResponse> {
     try {
       const userId = req.user.userId;
@@ -718,8 +714,7 @@ export class CustomersController {
 
   @Get('miniprogram/list')
   @ApiOperation({ summary: '小程序获取客户列表（支持权限控制和数据脱敏）' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getListForMiniprogram(@Query() query: CustomerQueryDto, @Request() req): Promise<ApiResponse> {
     try {
       const userRole = this.mapRoleToChineseRole(req.user.role);
@@ -756,8 +751,7 @@ export class CustomersController {
   @ApiHeader({ name: 'Idempotency-Key', description: '幂等性键，防止重复提交', required: false })
   @ApiHeader({ name: 'api-version', description: 'API版本', required: false })
   @ApiHeader({ name: 'x-request-id', description: '请求追踪ID', required: false })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:create')
   @HttpCode(HttpStatus.CREATED)
   async createForMiniprogram(
     @Body() createCustomerDto: CreateCustomerDto,
@@ -812,8 +806,7 @@ export class CustomersController {
   @Get('miniprogram/:id')
   @ApiOperation({ summary: '小程序获取客户详情（权限控制）' })
   @ApiParam({ name: 'id', description: '客户ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getOneForMiniprogram(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
     try {
       const customer = await this.customersService.findOne(id);
@@ -846,8 +839,7 @@ export class CustomersController {
   @Patch('miniprogram/:id')
   @ApiOperation({ summary: '小程序更新客户信息（权限控制）' })
   @ApiParam({ name: 'id', description: '客户ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:edit')
   async updateForMiniprogram(
     @Param('id') id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
@@ -905,14 +897,18 @@ export class CustomersController {
   @Patch('miniprogram/:id/assign')
   @ApiOperation({ summary: '小程序分配客户（仅管理员和经理）' })
   @ApiParam({ name: 'id', description: '客户ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', '系统管理员', '经理')
+  @Permissions('customer:edit')
   async assignCustomerForMiniprogram(
     @Param('id') id: string,
     @Body() dto: AssignCustomerDto,
     @Request() req,
   ): Promise<ApiResponse> {
     try {
+      // 普通员工和招生老师不允许分配客户
+      const userRole = this.mapRoleToChineseRole(req.user.role);
+      if (['普通员工', '招生老师'].includes(userRole)) {
+        throw new ForbiddenException('无权限分配客户');
+      }
       this.logger.debug(`👥 小程序分配客户 ${id} 给 ${dto.assignedTo}`);
 
       const updatedCustomer = await this.customersService.assignCustomer(
@@ -967,8 +963,7 @@ export class CustomersController {
   @Post('miniprogram/:id/follow-ups')
   @ApiOperation({ summary: '小程序创建客户跟进记录（权限控制）' })
   @ApiParam({ name: 'id', description: '客户ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:edit')
   async createFollowUpForMiniprogram(
     @Param('id') id: string,
     @Body() createFollowUpDto: CreateCustomerFollowUpDto,
@@ -997,8 +992,7 @@ export class CustomersController {
   @Get('miniprogram/:id/follow-ups')
   @ApiOperation({ summary: '小程序获取客户跟进记录（权限控制）' })
   @ApiParam({ name: 'id', description: '客户ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getFollowUpsForMiniprogram(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
     try {
       // 权限检查
@@ -1020,8 +1014,7 @@ export class CustomersController {
   @Get('miniprogram/:id/assignment-logs')
   @ApiOperation({ summary: '小程序获取客户分配历史（权限控制）' })
   @ApiParam({ name: 'id', description: '客户ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getAssignmentLogsForMiniprogram(@Param('id') id: string, @Request() req): Promise<ApiResponse> {
     try {
       const customer = await this.customersService.findOne(id);
@@ -1043,8 +1036,7 @@ export class CustomersController {
   @ApiOperation({ summary: '小程序释放客户到公海' })
   @ApiParam({ name: 'id', description: '客户ID' })
   @ApiBody({ type: ReleaseToPoolDto })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:edit')
   async releaseToPoolForMiniprogram(
     @Param('id') id: string,
     @Body() dto: ReleaseToPoolDto,
@@ -1066,8 +1058,7 @@ export class CustomersController {
 
   @Get('miniprogram/employees/list')
   @ApiOperation({ summary: '小程序获取员工列表（用于分配客户）' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager', 'employee', '系统管理员', '经理', '普通员工')
+  @Permissions('customer:view')
   async getEmployeesForMiniprogram(@Request() req): Promise<ApiResponse> {
     try {
       const userRole = this.mapRoleToChineseRole(req.user.role);
@@ -1077,18 +1068,16 @@ export class CustomersController {
       // 根据角色返回不同的员工列表
       let employees: any[] = [];
 
-      if (userRole === '系统管理员') {
-        // 管理员：返回所有活跃员工
-        const result = await this.usersService.findAll(1, 1000); // 获取所有用户
-        employees = result.items.filter(user => user.active);
-      } else if (userRole === '经理') {
-        // 经理：返回本部门员工
+      if (['系统管理员', '运营'].includes(userRole)) {
+        // 管理员/运营：返回所有活跃员工
         const result = await this.usersService.findAll(1, 1000);
-        employees = result.items.filter(user =>
-          user.active && user.department === userDepartment
-        );
+        employees = result.items.filter(user => user.active);
+      } else if (['经理', '派单老师'].includes(userRole)) {
+        // 经理/派单老师：返回所有活跃员工（用于分配客户）
+        const result = await this.usersService.findAll(1, 1000);
+        employees = result.items.filter(user => user.active);
       } else {
-        // 普通员工：只返回自己
+        // 普通员工/招生老师：只返回自己
         const currentUser = await this.usersService.findById(userId);
         if (currentUser) {
           employees = [currentUser];

@@ -200,30 +200,32 @@ const BasicLayout = () => {
       baseMenus.push(insuranceMenu);
     }
 
-    // 培训线索管理菜单 - 所有用户可见
-    const trainingLeadMenu: MenuRoute = {
-      path: '/training-leads',
-      name: '职培管理',
-      icon: <BookOutlined />,
-      routes: [
-        {
-          path: '/training-leads',
-          name: '学员线索',
-          icon: <UnorderedListOutlined />,
-        },
-        {
-          path: '/forms/submissions',
-          name: '表单列表',
-          icon: <UnorderedListOutlined />,
-        },
-        {
-          path: '/forms',
-          name: '表单管理',
-          icon: <FormOutlined />,
-        },
-      ],
-    };
-    baseMenus.push(trainingLeadMenu);
+    // 培训线索管理菜单 - 需要职培管理权限
+    if (hasPermission('training-lead:view') || hasPermission('training-lead:create')) {
+      const trainingLeadMenu: MenuRoute = {
+        path: '/training-leads',
+        name: '职培管理',
+        icon: <BookOutlined />,
+        routes: [
+          {
+            path: '/training-leads',
+            name: '学员线索',
+            icon: <UnorderedListOutlined />,
+          },
+          {
+            path: '/forms/submissions',
+            name: '表单列表',
+            icon: <UnorderedListOutlined />,
+          },
+          {
+            path: '/forms',
+            name: '表单管理',
+            icon: <FormOutlined />,
+          },
+        ],
+      };
+      baseMenus.push(trainingLeadMenu);
+    }
 
     // 视频面试菜单 - 所有用户可见
     const interviewMenu: MenuRoute = {

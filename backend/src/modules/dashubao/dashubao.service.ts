@@ -1215,17 +1215,41 @@ export class DashubaoService {
   }
 
   async getActivePoliciesByIdCard(idCard: string): Promise<InsurancePolicyDocument[]> {
-    return this.policyModel.find({
+    // 计算当天日期字符串（格式 YYYYMMDDHHmmss）用于 expireDate 比较
+    const now = new Date();
+    const todayStr = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+      '000000',
+    ].join('');
+
+    const policies = await this.policyModel.find({
       'insuredList.idNumber': idCard,
       status: 'active',
     }).exec();
+
+    // 过滤掉 expireDate 已过期的保单
+    return policies.filter(p => !(p as any).expireDate || (p as any).expireDate >= todayStr);
   }
 
   async getActivePoliciesByContractId(contractId: string | Types.ObjectId | unknown): Promise<InsurancePolicyDocument[]> {
-    return this.policyModel.find({
+    // 计算当天日期字符串（格式 YYYYMMDDHHmmss），用于 expireDate 比较
+    const now = new Date();
+    const todayStr = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+      '000000',
+    ].join('');
+
+    const policies = await this.policyModel.find({
       contractId,
       status: 'active',
     }).exec();
+
+    // 过滤掉 expireDate 已过期的保单
+    return policies.filter(p => !(p as any).expireDate || (p as any).expireDate >= todayStr);
   }
 
   async bindPolicyToContract(

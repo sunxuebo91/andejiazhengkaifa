@@ -73,6 +73,8 @@ export class ZmdbService {
       || permissions.includes('admin:settings')
       || role === 'admin'
       || role === 'manager'
+      || role === 'operator'
+      || role === 'dispatch'
       || role === '系统管理员'
       || role === '管理员'
       || role === '经理'

@@ -1,4 +1,4 @@
-export const ROLE_CODES = ['admin', 'manager', 'employee'] as const;
+export const ROLE_CODES = ['admin', 'manager', 'employee', 'operator', 'admissions', 'dispatch'] as const;
 
 export type RoleCode = typeof ROLE_CODES[number];
 
@@ -47,6 +47,72 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
     ],
     active: true,
   },
+  {
+    code: 'operator',
+    name: '运营',
+    description: '可查看全部内容并操作，但不能删除任何数据',
+    permissions: [
+      'resume:view',
+      'resume:create',
+      'resume:edit',
+      'customer:view',
+      'customer:create',
+      'customer:edit',
+      'contract:view',
+      'contract:create',
+      'contract:edit',
+      'insurance:view',
+      'insurance:create',
+      'insurance:edit',
+      'background-check:view',
+      'background-check:create',
+      'background-check:edit',
+      'training-lead:view',
+      'training-lead:create',
+      'training-lead:edit',
+      'user:view',
+    ],
+    active: true,
+  },
+  {
+    code: 'admissions',
+    name: '招生老师',
+    description: '负责职培管理和阿姨简历管理',
+    permissions: [
+      'resume:view',
+      'resume:create',
+      'resume:edit',
+      'training-lead:view',
+      'training-lead:create',
+      'training-lead:edit',
+      'user:view',
+    ],
+    active: true,
+  },
+  {
+    code: 'dispatch',
+    name: '派单老师',
+    description: '负责客户管理、阿姨管理、合同管理、背调管理和保险管理',
+    permissions: [
+      'resume:view',
+      'resume:create',
+      'resume:edit',
+      'customer:view',
+      'customer:create',
+      'customer:edit',
+      'contract:view',
+      'contract:create',
+      'contract:edit',
+      'insurance:view',
+      'insurance:create',
+      'insurance:edit',
+      'background-check:view',
+      'background-check:create',
+      'background-check:edit',
+      'user:view',
+    ],
+    active: true,
+  },
 ];
 
 const ROLE_ALIASES: Record<string, RoleCode> = {
@@ -63,6 +129,15 @@ const ROLE_ALIASES: Record<string, RoleCode> = {
   普通员工: 'employee',
   员工: 'employee',
   销售: 'employee',
+  operator: 'operator',
+  运营: 'operator',
+  运营专员: 'operator',
+  admissions: 'admissions',
+  招生老师: 'admissions',
+  招生: 'admissions',
+  dispatch: 'dispatch',
+  派单老师: 'dispatch',
+  派单: 'dispatch',
 };
 
 const DEFAULT_ROLE_MAP = new Map<RoleCode, DefaultRoleDefinition>(

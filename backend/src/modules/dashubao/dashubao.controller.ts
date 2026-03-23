@@ -30,10 +30,13 @@ import {
 } from './dto/create-policy.dto';
 import { PolicyStatus } from './models/insurance-policy.model';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('大树保保险')
 @Controller('dashubao')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DashubaoController {
   constructor(private readonly dashubaoService: DashubaoService) {}
 
@@ -50,7 +53,7 @@ export class DashubaoController {
   }
 
   @Post('policy')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:create')
   @ApiBearerAuth()
   @ApiOperation({ summary: '投保确认 - 创建保单' })
   @ApiResponse({ status: 201, description: '保单创建成功' })
@@ -61,7 +64,7 @@ export class DashubaoController {
   }
 
   @Post('policy/query')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '保单查询 - 从大树保查询保单状态' })
@@ -71,7 +74,7 @@ export class DashubaoController {
   }
 
   @Post('policy/cancel')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:edit')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '保单注销 - 注销未生效保单' })
@@ -81,7 +84,7 @@ export class DashubaoController {
   }
 
   @Post('policy/print')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '保单打印 - 获取电子保单PDF' })
@@ -99,7 +102,7 @@ export class DashubaoController {
   }
 
   @Post('policy/invoice')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '电子发票 - 申请电子发票' })
@@ -109,7 +112,7 @@ export class DashubaoController {
   }
 
   @Post('policy/payment/:policyRef')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:create')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '支付订单 - 获取微信支付信息（支持MINI小程序支付和MWEB H5支付）' })
@@ -147,7 +150,7 @@ export class DashubaoController {
   }
 
   @Post('policy/amend')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:edit')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '批改 - 替换被保险人' })
@@ -157,7 +160,7 @@ export class DashubaoController {
   }
 
   @Post('policy/add-insured')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:edit')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '批增 - 增加被保险人' })
@@ -167,7 +170,7 @@ export class DashubaoController {
   }
 
   @Post('policy/surrender')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:edit')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '退保 - 已生效保单退保' })
@@ -177,7 +180,7 @@ export class DashubaoController {
   }
 
   @Get('policy/rebate/:policyNo')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '返佣查询 - 查询返佣信息' })
   @ApiResponse({ status: 200, description: '查询成功' })
@@ -186,7 +189,7 @@ export class DashubaoController {
   }
 
   @Delete('policy/:id')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:delete')
   @ApiBearerAuth()
   @ApiOperation({ summary: '删除本地保单（仅管理员且指定用户）' })
   @ApiResponse({ status: 200, description: '删除成功' })
@@ -210,7 +213,7 @@ export class DashubaoController {
   }
 
   @Get('policies')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取本地保单列表（管理员/经理看所有，员工只看自己创建的）' })
   @ApiQuery({ name: 'status', required: false, enum: PolicyStatus })
@@ -229,7 +232,7 @@ export class DashubaoController {
   }
 
   @Get('policy/:id')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '根据ID获取保单详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -238,7 +241,7 @@ export class DashubaoController {
   }
 
   @Get('policy/by-policy-no/:policyNo')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '根据保单号获取保单详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -247,7 +250,7 @@ export class DashubaoController {
   }
 
   @Get('policy/by-policy-ref/:policyRef')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '根据商户单号获取保单详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -256,7 +259,7 @@ export class DashubaoController {
   }
 
   @Post('policy/sync/:policyNo')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:edit')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '同步保单状态 - 从大树保同步最新状态' })
@@ -266,7 +269,7 @@ export class DashubaoController {
   }
 
   @Get('policies/by-id-card/:idCard')
-  @UseGuards(JwtAuthGuard)
+  @Permissions('insurance:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '根据被保险人身份证号查询保单列表' })
   @ApiResponse({ status: 200, description: '查询成功' })

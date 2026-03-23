@@ -38,9 +38,11 @@ export class ContractsController {
     return user.role === '系统管理员' || user.role === 'admin';
   }
 
-  // 检查是否是管理员或经理
+  // 检查是否是管理员或经理（有全局查看权限的角色：admin/manager/operator）
+  // dispatch/admissions/employee 只能查看自己的数据
   private isManagerOrAdmin(user: any): boolean {
-    return this.isAdmin(user) || user.role === '经理' || user.role === 'manager';
+    return this.isAdmin(user) || user.role === '经理' || user.role === 'manager' ||
+           user.role === 'operator';
   }
 
   private extractUserId(value: any): string | undefined {

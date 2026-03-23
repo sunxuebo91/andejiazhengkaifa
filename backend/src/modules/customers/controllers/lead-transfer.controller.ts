@@ -50,7 +50,7 @@ export class LeadTransferController {
   }
 
   @Get('rules')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'operator')
   @Permissions('customer:view')
   @ApiOperation({ summary: '获取规则列表' })
   async getRules(): Promise<ApiResponse> {
@@ -63,7 +63,7 @@ export class LeadTransferController {
   }
 
   @Get('rules/:id/predict')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'operator')
   @Permissions('customer:view')
   @ApiOperation({ summary: '预测下次流转情况' })
   async predictNextTransfer(@Param('id') id: string): Promise<ApiResponse> {
@@ -76,7 +76,7 @@ export class LeadTransferController {
   }
 
   @Get('rules/:id')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'operator')
   @Permissions('customer:view')
   @ApiOperation({ summary: '获取规则详情' })
   async getRule(@Param('id') id: string): Promise<ApiResponse> {
@@ -139,7 +139,7 @@ export class LeadTransferController {
   // ==================== 流转记录 ====================
 
   @Get('records')
-  @Roles('admin', 'manager', 'employee')
+  @Roles('admin', 'manager', 'employee', 'operator', 'dispatch')
   @Permissions('customer:view')
   @ApiOperation({ summary: '获取流转记录' })
   async getRecords(@Query() query: LeadTransferQueryDto): Promise<ApiResponse> {
@@ -152,7 +152,7 @@ export class LeadTransferController {
   }
 
   @Get('statistics')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'operator')
   @Permissions('customer:view')
   @ApiOperation({ summary: '获取流转统计' })
   async getStatistics(
@@ -168,7 +168,7 @@ export class LeadTransferController {
   }
 
   @Get('user-statistics/:userId')
-  @Roles('admin', 'manager', 'employee')
+  @Roles('admin', 'manager', 'employee', 'operator', 'dispatch')
   @Permissions('customer:view')
   @ApiOperation({ summary: '获取用户流转统计' })
   async getUserStatistics(

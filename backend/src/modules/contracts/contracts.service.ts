@@ -636,6 +636,15 @@ export class ContractsService {
           .filter(Boolean)
       )];
 
+      // 计算当天日期字符串（格式 YYYYMMDDHHmmss），用于 expireDate 比较
+      const now = new Date();
+      const todayStr = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0'),
+        '000000',
+      ].join('');
+
       const [customers, workers, users, bgChecks, policies] = await Promise.all([
         validCustomerIds.length > 0
           ? this.customerModel.find({ _id: { $in: validCustomerIds } }).select('name phone').lean().exec()
@@ -646,21 +655,27 @@ export class ContractsService {
         validCreatedByIds.length > 0
           ? this.userModel.find({ _id: { $in: validCreatedByIds } }).select('name username').lean().exec()
           : [],
-        // 背调：按 contractId 或 身份证号匹配
+        // 背调：按 contractId 或 身份证号匹配，只取最新一条（任何状态均算有效背调）
         this.backgroundCheckModel.find({
           $or: [
             { contractId: { $in: contractIds } },
             ...(workerIdCards.length > 0 ? [{ idNo: { $in: workerIdCards } }] : []),
           ],
         }).select('contractId idNo').lean().exec(),
-        // 保险：按 contractId 或 被保人身份证号匹配
+        // 保险：只查状态为 active（已生效）且未过期的保单
         this.insurancePolicyModel.find({
+          status: 'active',
           $or: [
             { contractId: { $in: contractIds } },
             ...(workerIdCards.length > 0 ? [{ 'insuredList.idNumber': { $in: workerIdCards } }] : []),
           ],
-        }).select('contractId insuredList').lean().exec(),
+        }).select('contractId insuredList expireDate').lean().exec(),
       ]);
+
+      // 过滤掉 expireDate 已过期的保单（按日期字符串比较，格式 YYYYMMDDHHmmss）
+      const validPolicies = (policies as any[]).filter(
+        p => !p.expireDate || p.expireDate >= todayStr,
+      );
 
       // 构建合同 workerIdCard → Set<contractId> 的一对多映射（同一工人可能有多份合同）
       const idCardToContractIds = new Map<string, Set<string>>();
@@ -690,9 +705,9 @@ export class ContractsService {
         if (b.idNo) addContractsByIdCard(bgCheckContractIds, b.idNo);
       }
 
-      // 构建保险命中的 contractId Set（检查所有被保险人，不仅限于第一个）
+      // 构建保险命中的 contractId Set（只使用已生效且未过期的保单，检查所有被保险人）
       const policyContractIds = new Set<string>();
-      for (const p of policies as any[]) {
+      for (const p of validPolicies) {
         if (p.contractId) policyContractIds.add(p.contractId.toString());
         for (const insured of (p.insuredList || [])) {
           if (insured?.idNumber) addContractsByIdCard(policyContractIds, insured.idNumber);
@@ -821,9 +836,16 @@ export class ContractsService {
         const policies = await this.dashubaoService.getPoliciesByIdCard(contract.workerIdCard);
 
         if (policies && policies.length > 0) {
-          // 只返回有效的保险信息（未过期、未注销、未退保）
+          // 只返回真正在生效中的保险：状态为 active（已生效）且 expireDate 未过期
+          const now2 = new Date();
+          const todayStr2 = [
+            now2.getFullYear(),
+            String(now2.getMonth() + 1).padStart(2, '0'),
+            String(now2.getDate()).padStart(2, '0'),
+            '000000',
+          ].join('');
           const activePolicies = policies.filter(p =>
-            p.status === 'active' || p.status === 'processing' || p.status === 'pending'
+            p.status === 'active' && (!p.expireDate || p.expireDate >= todayStr2)
           );
 
           // 🔍 调试：检查原始保单数据

@@ -60,6 +60,13 @@ const permissionsData: Permission[] = [
   { key: 'background-check:edit', label: '编辑背调', description: '允许同步、取消、处理背调记录' },
   { key: 'background-check:all', label: '背调管理(全部)', description: '背调管理全部权限，包含查看、创建、编辑' },
 
+  // 职培管理权限
+  { key: 'training-lead:view', label: '查看培训线索', description: '允许查看培训线索列表和详情' },
+  { key: 'training-lead:create', label: '创建培训线索', description: '允许创建新的培训线索' },
+  { key: 'training-lead:edit', label: '编辑培训线索', description: '允许编辑培训线索信息' },
+  { key: 'training-lead:delete', label: '删除培训线索', description: '允许删除培训线索' },
+  { key: 'training-lead:all', label: '职培管理(全部)', description: '职培管理全部权限，包含查看、创建、编辑、删除' },
+
   // 用户管理权限
   { key: 'user:view', label: '查看用户', description: '允许查看用户列表' },
   { key: 'user:create', label: '创建用户', description: '允许创建新用户' },
@@ -98,6 +105,10 @@ const permissionGroups = [
   {
     title: '背调管理',
     permissions: permissionsData.filter(p => p.key.startsWith('background-check:'))
+  },
+  {
+    title: '职培管理',
+    permissions: permissionsData.filter(p => p.key.startsWith('training-lead:'))
   },
   {
     title: '系统管理',

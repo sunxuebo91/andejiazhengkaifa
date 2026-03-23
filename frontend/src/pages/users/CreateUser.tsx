@@ -162,6 +162,9 @@ const CreateUser: React.FC = () => {
               <Option value="admin">管理员</Option>
               <Option value="manager">经理</Option>
               <Option value="employee">普通员工</Option>
+              <Option value="operator">运营</Option>
+              <Option value="admissions">招生老师</Option>
+              <Option value="dispatch">派单老师</Option>
             </Select>
           </Form.Item>
 

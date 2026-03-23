@@ -22,6 +22,15 @@ const ROLE_ALIAS_MAP: Record<string, string> = {
   普通员工: 'employee',
   员工: 'employee',
   销售: 'employee',
+  operator: 'operator',
+  运营: 'operator',
+  运营专员: 'operator',
+  admissions: 'admissions',
+  招生老师: 'admissions',
+  招生: 'admissions',
+  dispatch: 'dispatch',
+  派单老师: 'dispatch',
+  派单: 'dispatch',
 };
 
 const normalizeRole = (role?: string): string => {

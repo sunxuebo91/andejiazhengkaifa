@@ -26,6 +26,7 @@ const permissionMap: Record<string, { text: string; color: string }> = {
   'resume:create': { text: '创建阿姨简历', color: 'green' },
   'resume:edit': { text: '编辑阿姨简历', color: 'cyan' },
   'resume:delete': { text: '删除阿姨简历', color: 'red' },
+  'resume:assign': { text: '分配阿姨', color: 'gold' },
   // 客户管理
   'customer:all': { text: '客户管理(全部)', color: 'gold' },
   'customer:view': { text: '查看客户', color: 'blue' },
@@ -49,6 +50,12 @@ const permissionMap: Record<string, { text: string; color: string }> = {
   'background-check:view': { text: '查看背调', color: 'blue' },
   'background-check:create': { text: '创建背调', color: 'green' },
   'background-check:edit': { text: '编辑背调', color: 'cyan' },
+  // 培训线索管理
+  'training-lead:all': { text: '培训线索(全部)', color: 'lime' },
+  'training-lead:view': { text: '查看培训线索', color: 'blue' },
+  'training-lead:create': { text: '创建培训线索', color: 'green' },
+  'training-lead:edit': { text: '编辑培训线索', color: 'cyan' },
+  'training-lead:delete': { text: '删除培训线索', color: 'red' },
   // 用户管理
   'user:all': { text: '用户管理(全部)', color: 'green' },
   'user:view': { text: '查看用户', color: 'blue' },

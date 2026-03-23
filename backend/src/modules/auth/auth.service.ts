@@ -145,7 +145,8 @@ export class AuthService {
           avatar: user.avatar || null,
           role: user.role,
           department: user.department || null,
-          permissions: user.permissions
+          permissions: user.permissions,
+          createdAt: user.createdAt,
         },
       };
     } catch (error) {
@@ -155,6 +156,18 @@ export class AuthService {
       this.logger.error('Login error:', error);
       throw new InternalServerErrorException('登录过程中发生错误');
     }
+  }
+
+  private getRoleLabel(role: string): string {
+    const roleMap: Record<string, string> = {
+      'admin': '系统管理员',
+      'manager': '经理',
+      'employee': '员工',
+      'operator': '运营',
+      'dispatch': '派单老师',
+      'admissions': '招生老师',
+    };
+    return roleMap[role] || role;
   }
 
   async miniprogramLogin(code: string, phone: string, ip: string, userAgent: string) {
@@ -203,8 +216,10 @@ export class AuthService {
             email: currentUser.email,
             avatar: currentUser.avatar || null,
             role: currentUser.role,
+            roleLabel: this.getRoleLabel(currentUser.role),
             department: currentUser.department || null,
-            permissions: currentUser.permissions
+            permissions: currentUser.permissions,
+            createdAt: currentUser.createdAt,
           },
           openid: newOpenid
         },
@@ -333,6 +348,7 @@ export class AuthService {
       email: user.email,
       avatar: user.avatar || null,
       role: user.role,
+      roleLabel: this.getRoleLabel(user.role),
       department: user.department || null,
       permissions: user.permissions,
       active: user.active,

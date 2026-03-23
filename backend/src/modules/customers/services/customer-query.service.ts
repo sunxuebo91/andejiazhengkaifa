@@ -297,8 +297,9 @@ export class CustomerQueryService {
     if (currentUserId) {
       const currentUser = await this.userModel.findById(currentUserId).select('role').lean();
       const role = (currentUser as any)?.role;
-      const isEmployee = role === 'employee' || role === '普通员工';
-      if (isEmployee) {
+      // 普通员工、派单老师、招生老师只能看自己负责（assignedTo）或创建（createdBy）的客户
+      const isRestrictedRole = ['employee', '普通员工', 'dispatch', 'admissions'].includes(role);
+      if (isRestrictedRole) {
         searchConditions.$and = (searchConditions.$and || []).concat([
           {
             $or: [

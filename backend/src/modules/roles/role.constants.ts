@@ -55,6 +55,7 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
       'resume:view',
       'resume:create',
       'resume:edit',
+      'resume:assign',
       'customer:view',
       'customer:create',
       'customer:edit',

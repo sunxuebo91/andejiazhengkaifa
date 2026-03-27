@@ -29,6 +29,7 @@ import {
   TRAINING_TYPE_OPTIONS
 } from '../../types/training-lead.types';
 import TrainingLeadFollowUpModal from '../../components/TrainingLeadFollowUpModal';
+import AIBulkImportModal from '../../components/AIBulkImportModal';
 import { useAuth } from '../../contexts/AuthContext';
 
 const { Search } = Input;
@@ -51,7 +52,10 @@ const TrainingLeadList: React.FC = () => {
     leadName: ''
   });
 
-  // 批量导入状态
+  // AI批量导入状态
+  const [aiImportModalVisible, setAiImportModalVisible] = useState(false);
+
+  // 旧版批量导入状态（保留兼容）
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<{
@@ -347,13 +351,7 @@ const TrainingLeadList: React.FC = () => {
       width: 120,
       render: (text: string) => text || '-'
     },
-    {
-      title: '微信号',
-      dataIndex: 'wechatId',
-      key: 'wechatId',
-      width: 120,
-      render: (text: string) => text || '-'
-    },
+
     {
       title: '培训类型',
       dataIndex: 'trainingType',
@@ -376,7 +374,7 @@ const TrainingLeadList: React.FC = () => {
       key: 'followUpStatus',
       width: 110,
       render: (followUpStatus: string | null) => {
-        if (!followUpStatus) return null;
+        if (!followUpStatus) return <Tag color="#52c41a">已跟进</Tag>;
 
         // 根据不同状态显示不同颜色
         let color = '#52c41a'; // 默认绿色（已跟进）
@@ -406,30 +404,21 @@ const TrainingLeadList: React.FC = () => {
       key: 'studentOwner',
       width: 100,
       render: (studentOwner: any) => {
-        if (!studentOwner) return '-';
-        return typeof studentOwner === 'object' ? studentOwner.name : '-';
+        if (!studentOwner) return <span style={{ color: '#bfbfbf' }}>未分配</span>;
+        return typeof studentOwner === 'object' ? studentOwner.name : <span style={{ color: '#bfbfbf' }}>未分配</span>;
       }
     },
     {
-      title: '最后跟进',
+      title: '最后跟进时间',
       dataIndex: 'lastFollowUpAt',
       key: 'lastFollowUpAt',
       width: 150,
       render: (text: string) => {
-        if (!text) return '-';
+        if (!text) return <span style={{ color: '#bfbfbf' }}>暂无跟进</span>;
         return dayjs(text).format('YYYY-MM-DD HH:mm');
       }
     },
-    {
-      title: '用户归属',
-      dataIndex: 'referredBy',
-      key: 'referredBy',
-      width: 100,
-      render: (referredBy: any) => {
-        if (!referredBy) return '-';
-        return typeof referredBy === 'object' ? referredBy.name : '-';
-      }
-    },
+
     {
       title: '操作',
       key: 'action',
@@ -588,9 +577,9 @@ const TrainingLeadList: React.FC = () => {
                 </Button>
                 <Button
                   icon={<UploadOutlined />}
-                  onClick={() => setImportModalVisible(true)}
+                  onClick={() => setAiImportModalVisible(true)}
                 >
-                  批量导入
+                  AI批量导入
                 </Button>
                 <Button
                   type="primary"
@@ -635,7 +624,14 @@ const TrainingLeadList: React.FC = () => {
         onSuccess={handleFollowUpSuccess}
       />
 
-      {/* Excel导入弹窗 */}
+      {/* AI批量导入弹窗 */}
+      <AIBulkImportModal
+        open={aiImportModalVisible}
+        onCancel={() => setAiImportModalVisible(false)}
+        onSuccess={() => { fetchLeads(); }}
+      />
+
+      {/* 旧版Excel导入弹窗（保留兼容） */}
       <Modal
         title="批量导入培训线索"
         open={importModalVisible}
@@ -759,7 +755,7 @@ const TrainingLeadList: React.FC = () => {
               <ul style={{ paddingLeft: 20 }}>
                 <li>将链接或二维码分享给阿姨</li>
                 <li>阿姨通过您的链接提交的培训线索将自动归属于您</li>
-                <li>您可以在列表的"用户归属"列查看归属信息</li>
+                <li>您可以在列表的"学员归属"列查看归属信息</li>
               </ul>
             </div>
           </div>

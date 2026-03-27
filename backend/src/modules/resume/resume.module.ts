@@ -14,6 +14,7 @@ import { Contract, ContractSchema } from '../contracts/models/contract.model';
 import { User, UserSchema } from '../users/models/user.entity';
 import { DashubaoModule } from '../dashubao/dashubao.module';
 import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/background-check.model';
+import { AIModule } from '../ai/ai.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/backgroun
     ]),
     UploadModule,
     DashubaoModule,
+    AIModule,
     // 为分享令牌签发/验证提供 JwtService
     JwtModule.registerAsync({
       useFactory: () => {

@@ -521,6 +521,12 @@ export class ContractsService {
 
             this.logger.log(`✅ 爱签电子合同创建成功: ${esignResult.contractNo}`);
 
+            // 同步客户状态为签约中
+            const contractIdStr = (updatedContract || savedContract)._id.toString();
+            this.syncCustomerOnContractSigning(contractIdStr).catch(err => {
+              this.logger.error(`客户签约中同步失败（create）:`, err);
+            });
+
             // 返回更新后的合同对象，包含签署链接
             return updatedContract || savedContract;
           } else {
@@ -987,6 +993,87 @@ export class ContractsService {
     }
   }
 
+  /**
+   * 合同签约后同步客户状态：contractStatus→已签约，leadLevel→O类
+   * 直接操作 customerModel，避免循环依赖
+   */
+  async syncCustomerOnContractActive(contractId: string): Promise<void> {
+    try {
+      const contract = await this.contractModel.findById(contractId).exec();
+      if (!contract) return;
+
+      // 按 customerId 或 customerPhone 查找客户
+      let customer: CustomerDocument | null = null;
+      if (contract.customerId) {
+        customer = await this.customerModel.findById(contract.customerId).exec();
+      }
+      if (!customer && contract.customerPhone) {
+        customer = await this.customerModel.findOne({ phone: contract.customerPhone }).exec();
+      }
+      if (!customer) {
+        this.logger.warn(`syncCustomerOnContractActive: 未找到对应客户, contractId=${contractId}`);
+        return;
+      }
+
+      // 已经同步过则跳过
+      if (customer.contractStatus === '已签约' && customer.leadLevel === 'O类') {
+        this.logger.log(`syncCustomerOnContractActive: 客户已是已签约/O类，跳过 customerId=${customer._id}`);
+        return;
+      }
+
+      const updateData: any = { lastActivityAt: new Date() };
+      if (customer.contractStatus !== '已签约') updateData.contractStatus = '已签约';
+      if (customer.leadLevel !== 'O类') updateData.leadLevel = 'O类';
+
+      await this.customerModel.findByIdAndUpdate(customer._id, updateData).exec();
+      this.logger.log(`✅ 客户状态已同步为已签约/O类: ${customer.name} (${customer._id})`);
+    } catch (error) {
+      this.logger.error(`syncCustomerOnContractActive 失败: contractId=${contractId}`, error);
+    }
+  }
+
+  /**
+   * 合同进入签约中时同步客户状态：contractStatus→签约中
+   * 不改变 leadLevel，不降级已签约客户
+   */
+  async syncCustomerOnContractSigning(contractId: string): Promise<void> {
+    try {
+      const contract = await this.contractModel.findById(contractId).exec();
+      if (!contract) return;
+
+      let customer: CustomerDocument | null = null;
+      if (contract.customerId) {
+        customer = await this.customerModel.findById(contract.customerId).exec();
+      }
+      if (!customer && contract.customerPhone) {
+        customer = await this.customerModel.findOne({ phone: contract.customerPhone }).exec();
+      }
+      if (!customer) {
+        this.logger.warn(`syncCustomerOnContractSigning: 未找到对应客户, contractId=${contractId}`);
+        return;
+      }
+
+      // 不降级已签约客户
+      if (customer.contractStatus === '已签约') {
+        this.logger.log(`syncCustomerOnContractSigning: 客户已是已签约，跳过 customerId=${customer._id}`);
+        return;
+      }
+
+      if (customer.contractStatus === '签约中') {
+        this.logger.log(`syncCustomerOnContractSigning: 客户已是签约中，跳过 customerId=${customer._id}`);
+        return;
+      }
+
+      await this.customerModel.findByIdAndUpdate(customer._id, {
+        contractStatus: '签约中',
+        lastActivityAt: new Date(),
+      }).exec();
+      this.logger.log(`✅ 客户状态已同步为签约中: ${customer.name} (${customer._id})`);
+    } catch (error) {
+      this.logger.error(`syncCustomerOnContractSigning 失败: contractId=${contractId}`, error);
+    }
+  }
+
   async findContractsPendingEsignSync(limit = 50): Promise<ContractDocument[]> {
     return this.contractModel
       .find({
@@ -1083,6 +1170,17 @@ export class ContractsService {
       this.syncInsuranceOnContractActive(contract._id.toString()).catch(error => {
         this.logger.error(`保险同步失败（异步）:`, error);
       });
+      // 同步客户状态为已签约/O类
+      this.syncCustomerOnContractActive(contract._id.toString()).catch(error => {
+        this.logger.error(`客户状态同步失败（异步）:`, error);
+      });
+    }
+
+    const isNowSigning = contract.contractStatus === 'signing';
+    if (statusChanged && isNowSigning) {
+      this.syncCustomerOnContractSigning(contract._id.toString()).catch(error => {
+        this.logger.error(`客户签约中同步失败（异步）:`, error);
+      });
     }
 
     return contract;
@@ -1175,8 +1273,8 @@ export class ContractsService {
 
     // 验证管理员权限
     const adminUser = await this.userModel.findById(adminUserId).select('role name username').lean();
-    if (!adminUser || !['admin', 'manager'].includes((adminUser as any).role)) {
-      throw new ForbiddenException('只有管理员或经理可以分配合同');
+    if (!adminUser || !['admin', 'manager', 'operator'].includes((adminUser as any).role)) {
+      throw new ForbiddenException('只有管理员、经理或运营可以分配合同');
     }
 
     // 验证合同
@@ -1238,7 +1336,7 @@ export class ContractsService {
   async getAssignableUsers(): Promise<Array<{ _id: string; name: string; username: string; role: string }>> {
     const users = await this.userModel.find({
       active: true,
-      role: { $in: ['admin', 'manager', 'employee'] }
+      role: { $in: ['admin', 'manager', 'employee', 'operator', 'dispatch', 'admissions'] }
     }).select('_id name username role').lean();
 
     return users.map(u => ({
@@ -1576,6 +1674,12 @@ export class ContractsService {
             // 返回更新后的合同（包含爱签信息）
             const updatedContract = await this.contractModel.findById(newContract._id).exec();
             this.logger.log(`✅ 换人合同爱签电子合同创建成功: ${esignResult.contractNo}`);
+
+            // 同步客户状态为签约中
+            this.syncCustomerOnContractSigning(newContract._id.toString()).catch(err => {
+              this.logger.error(`客户签约中同步失败（换人合同）:`, err);
+            });
+
             return updatedContract;
           } else {
             this.logger.warn(`⚠️ 换人合同爱签电子合同创建失败: ${esignResult.message}`);
@@ -1680,6 +1784,9 @@ export class ContractsService {
       // 步骤5：触发保险同步
       this.logger.log(`🔄 开始保险同步...`);
       await this.syncInsuranceOnContractActive(contractId);
+
+      // 步骤5.5：同步客户状态为已签约/O类
+      await this.syncCustomerOnContractActive(contractId);
 
       // 步骤6：查询最终状态
       const updatedContract = await this.contractModel.findById(contractId).exec();
@@ -1933,5 +2040,66 @@ export class ContractsService {
     });
 
     this.logger.log(`🎉 保险换人完成: 成功 ${successCount}/${policies.length}`);
+  }
+
+  /**
+   * 自动轮询同步"签约中"合同的爱签状态
+   * 供定时任务调用，每隔一段时间自动将已签约合同更新为 active 并同步客户状态
+   */
+  async autoSyncSigningContracts(): Promise<{ synced: number; errors: number }> {
+    let synced = 0;
+    let errors = 0;
+    try {
+      const signingContracts = await this.findContractsPendingEsignSync(100);
+      this.logger.log(`🔄 定时同步：找到 ${signingContracts.length} 份待同步合同`);
+
+      for (const contract of signingContracts) {
+        try {
+          if (!contract.esignContractNo) continue;
+
+          const esignResponse = await this.esignService.getContractStatus(contract.esignContractNo);
+          if (!esignResponse?.data) continue;
+
+          const esignStatus = esignResponse.data.status?.toString();
+          const contractId = contract._id.toString();
+
+          if (esignStatus === '2' && contract.contractStatus !== 'active') {
+            // 已签约：更新合同 → 同步保险 → 同步客户
+            await this.contractModel.findByIdAndUpdate(contractId, {
+              contractStatus: 'active',
+              esignStatus: '2',
+              esignSignedAt: new Date(),
+              updatedAt: new Date(),
+            });
+            await this.syncInsuranceOnContractActive(contractId).catch(e =>
+              this.logger.error(`自动同步保险失败 ${contractId}:`, e)
+            );
+            await this.syncCustomerOnContractActive(contractId).catch(e =>
+              this.logger.error(`自动同步客户状态失败 ${contractId}:`, e)
+            );
+            this.logger.log(`✅ 合同 ${contract.contractNumber} 已自动同步为已签约`);
+            synced++;
+          } else if (esignStatus === '1' && contract.contractStatus !== 'signing') {
+            // 签约中：确保客户状态同步
+            await this.contractModel.findByIdAndUpdate(contractId, {
+              esignStatus: '1',
+              contractStatus: 'signing',
+              updatedAt: new Date(),
+            });
+            await this.syncCustomerOnContractSigning(contractId).catch(e =>
+              this.logger.error(`自动同步客户签约中状态失败 ${contractId}:`, e)
+            );
+            synced++;
+          }
+        } catch (err) {
+          this.logger.error(`自动同步合同 ${contract.contractNumber} 失败:`, err);
+          errors++;
+        }
+      }
+    } catch (err) {
+      this.logger.error('自动同步签约合同批量任务失败:', err);
+      errors++;
+    }
+    return { synced, errors };
   }
 }

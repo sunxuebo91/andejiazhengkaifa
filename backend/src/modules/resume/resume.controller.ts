@@ -529,6 +529,7 @@ export class ResumeController {
     @Query('nativePlace') nativePlace?: string,
     @Query('ethnicity') ethnicity?: string,
     @Query('_t') timestamp?: string, // 时间戳参数
+    @Query('isDraft') isDraftStr?: string,
     @Req() req?: any
   ) {
     try {
@@ -582,6 +583,11 @@ export class ResumeController {
 
       this.logger.log(`解析后的参数: page=${page}, pageSize=${pageSize}, maxAge=${maxAge}`);
 
+      // 解析 isDraft 过滤参数
+      let isDraftFilter: boolean | undefined = undefined;
+      if (isDraftStr === 'true') isDraftFilter = true;
+      else if (isDraftStr === 'false') isDraftFilter = false;
+
       // 调用服务获取数据
       const result = await this.resumeService.findAll(
         page,
@@ -592,7 +598,8 @@ export class ResumeController {
         maxAge,
         nativePlace,
         ethnicity,
-        currentUserId
+        currentUserId,
+        isDraftFilter,
       );
 
       return {
@@ -1527,8 +1534,16 @@ export class ResumeController {
 
       // 🆕 添加URL数组格式的字段（兼容小程序）
       const resumeData = resume.toObject ? resume.toObject() : resume;
+      // 与列表接口保持一致：优先工装照，其次个人照片，最后兼容旧photoUrls
+      const avatarUrl =
+        resumeData?.uniformPhoto?.url ||
+        (Array.isArray(resumeData?.personalPhoto) && resumeData.personalPhoto.length > 0 ? resumeData.personalPhoto[0]?.url : undefined) ||
+        (Array.isArray(resumeData?.photoUrls) && resumeData.photoUrls.length > 0 ? resumeData.photoUrls[0] : undefined) ||
+        '';
       const enhancedData = {
         ...resumeData,
+        // 🆕 头像字段（与列表接口 /resumes/list 保持一致）
+        avatarUrl,
         // 🆕 新增的4个相册字段的URL数组（兼容旧版）
         confinementMealPhotoUrls: (resumeData.confinementMealPhotos || []).map((photo: any) => photo.url).filter(Boolean),
         cookingPhotoUrls: (resumeData.cookingPhotos || []).map((photo: any) => photo.url).filter(Boolean),

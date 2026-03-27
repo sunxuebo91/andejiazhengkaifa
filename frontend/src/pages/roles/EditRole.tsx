@@ -30,6 +30,7 @@ const permissionsData: Permission[] = [
   { key: 'resume:view', label: '查看阿姨简历', description: '允许查看阿姨简历列表和详情' },
   { key: 'resume:create', label: '创建阿姨简历', description: '允许创建新的阿姨简历' },
   { key: 'resume:edit', label: '编辑阿姨简历', description: '允许编辑阿姨简历' },
+  { key: 'resume:assign', label: '分配阿姨', description: '允许将阿姨分配给指定员工' },
   { key: 'resume:delete', label: '删除阿姨简历', description: '允许删除阿姨简历' },
   { key: 'resume:all', label: '阿姨管理(全部)', description: '阿姨管理全部权限，包含查看、创建、编辑、删除' },
 

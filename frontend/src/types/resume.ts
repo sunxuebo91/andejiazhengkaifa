@@ -78,6 +78,7 @@ export interface WorkExperience {
   district?: string;         // 北京XX区
   customerName?: string;     // 客户姓名
   customerReview?: string;   // 客户评价
+  jobType?: string;          // 工种
   photos?: FileInfo[];       // 工作照片
 }
 

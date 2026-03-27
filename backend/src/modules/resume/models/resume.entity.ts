@@ -25,6 +25,7 @@ interface WorkExperience {
   district?: string;
   customerName?: string;
   customerReview?: string;
+  jobType?: string;
   photos?: FileInfo[];
 }
 
@@ -43,7 +44,8 @@ export interface IResume extends Document {
   name: string;
   gender: Gender;
   age: number;
-  phone: string;
+  phone?: string;
+  isDraft?: boolean;
   wechat?: string;
   idNumber?: string;
   jobType: JobType;
@@ -88,6 +90,8 @@ export interface IResume extends Document {
   currentStage?: CurrentStage;
   internalEvaluation?: string;
   availabilityCalendar?: AvailabilityPeriod[];
+  uniformPhoto?: FileInfo;
+  faceTrainingResourceId?: string;
 }
 
 @Schema({ timestamps: true, collection: 'resumes' })
@@ -120,9 +124,15 @@ export class Resume extends Document implements IResume {
   age: number;
 
   @ApiProperty({ description: '手机号' })
-  @Prop()
+  @Prop({ nullable: true })
   @IsString()
-  phone: string;
+  @IsOptional()
+  phone?: string;
+
+  @ApiProperty({ description: '是否草稿（无手机号时自动标记）' })
+  @Prop({ type: Boolean, default: false })
+  @IsOptional()
+  isDraft?: boolean;
 
   @ApiProperty({ description: '微信' })
   @Prop({ nullable: true })
@@ -304,6 +314,17 @@ export class Resume extends Document implements IResume {
   @IsString()
   @IsOptional()
   internalEvaluation?: string;
+
+  @ApiProperty({ description: 'AI生成工装照片' })
+  @Prop({ type: FileInfoSchema, nullable: true })
+  @IsOptional()
+  uniformPhoto?: FileInfo;
+
+  @ApiProperty({ description: 'FaceChain LoRA训练后的resource_id' })
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  faceTrainingResourceId?: string;
 }
 
 export const ResumeSchema = SchemaFactory.createForClass(Resume);

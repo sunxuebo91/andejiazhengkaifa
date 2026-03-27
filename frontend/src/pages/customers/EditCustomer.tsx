@@ -267,9 +267,9 @@ const EditCustomer: React.FC = () => {
                     <Option
                       key={status}
                       value={status}
-                      disabled={status === '已签约' && user?.role !== 'admin'}
+                      disabled={(status === '已签约' || status === '签约中') && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '')}
                     >
-                      {status}{status === '已签约' && user?.role !== 'admin' ? ' (系统自动设置)' : ''}
+                      {status}{(status === '已签约' || status === '签约中') && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '') ? ' (系统自动设置)' : ''}
                     </Option>
                   ))}
                 </Select>
@@ -306,9 +306,9 @@ const EditCustomer: React.FC = () => {
                     <Option
                       key={level}
                       value={level}
-                      disabled={level === 'O类' && user?.role !== 'admin'}
+                      disabled={level === 'O类' && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '')}
                     >
-                      {level}{level === 'O类' && user?.role !== 'admin' ? ' (仅管理员可设置)' : ''}
+                      {level}{level === 'O类' && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '') ? ' (仅管理员可设置)' : ''}
                     </Option>
                   ))}
                 </Select>

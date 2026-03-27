@@ -53,6 +53,7 @@ export class ResumeQueryService {
     nativePlace?: string,
     ethnicity?: string,
     currentUserId?: string,
+    isDraft?: boolean,
   ) {
     if (!this.hasCheckedUpdatedAt) {
       await this.batchFixMissingUpdatedAt();
@@ -72,6 +73,13 @@ export class ResumeQueryService {
     if (maxAge !== undefined && maxAge !== null) query.age = { $lte: maxAge };
     if (nativePlace) query.nativePlace = nativePlace;
     if (ethnicity) query.ethnicity = ethnicity;
+    if (isDraft === true) {
+      query.isDraft = true;
+    } else if (isDraft === false) {
+      // 标准简历：isDraft 为 false 或字段不存在（兼容旧数据）
+      query.isDraft = { $ne: true };
+    }
+    // isDraft === undefined 时不加过滤，返回全部
 
     const total = await this.resumeModel.countDocuments(query).exec();
 
@@ -146,9 +154,11 @@ export class ResumeQueryService {
     }
 
     const itemsWithAvatar = items.map((item: any) => {
+      // 优先使用工装照作为头像，其次个人照片，最后兼容旧photoUrls
+      const uniformUrl = item?.uniformPhoto?.url;
       const firstPersonal = Array.isArray(item?.personalPhoto) && item.personalPhoto.length > 0 ? item.personalPhoto[0]?.url : undefined;
       const firstLegacy = Array.isArray(item?.photoUrls) && item.photoUrls.length > 0 ? item.photoUrls[0] : undefined;
-      return { ...item, avatarUrl: firstPersonal || firstLegacy || '' };
+      return { ...item, avatarUrl: uniformUrl || firstPersonal || firstLegacy || '' };
     });
 
     return {

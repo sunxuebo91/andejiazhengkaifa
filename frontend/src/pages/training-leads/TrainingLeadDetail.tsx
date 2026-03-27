@@ -20,7 +20,8 @@ import {
   TrainingLead,
   TrainingLeadFollowUp,
   LEAD_STATUS_OPTIONS,
-  FOLLOW_UP_TYPE_OPTIONS
+  FOLLOW_UP_TYPE_OPTIONS,
+  LEAD_GRADE_OPTIONS
 } from '../../types/training-lead.types';
 import TrainingLeadFollowUpModal from '../../components/TrainingLeadFollowUpModal';
 
@@ -151,8 +152,21 @@ const TrainingLeadDetail: React.FC = () => {
           <Descriptions bordered column={2}>
             <Descriptions.Item label="学员编号">{lead.studentId}</Descriptions.Item>
             <Descriptions.Item label="客户姓名">{lead.name}</Descriptions.Item>
-            <Descriptions.Item label="手机号">{lead.phone || '-'}</Descriptions.Item>
-            <Descriptions.Item label="微信号">{lead.wechatId || '-'}</Descriptions.Item>
+            <Descriptions.Item label="性别">{lead.gender || '-'}</Descriptions.Item>
+            <Descriptions.Item label="年龄">{lead.age != null ? `${lead.age}岁` : '-'}</Descriptions.Item>
+            <Descriptions.Item label="电话号码">{lead.phone || '-'}</Descriptions.Item>
+            <Descriptions.Item label="微信">{lead.wechatId || '-'}</Descriptions.Item>
+            <Descriptions.Item label="渠道来源">{lead.leadSource || '-'}</Descriptions.Item>
+            <Descriptions.Item label="培训类型">{lead.trainingType || '-'}</Descriptions.Item>
+            <Descriptions.Item label="咨询职位">{lead.consultPosition || '-'}</Descriptions.Item>
+            <Descriptions.Item label="意向程度">{lead.intentionLevel || '-'}</Descriptions.Item>
+            <Descriptions.Item label="线索等级">
+              {lead.leadGrade ? (
+                <Tag color={LEAD_GRADE_OPTIONS.find(o => o.value === lead.leadGrade)?.color || 'default'}>
+                  {lead.leadGrade}
+                </Tag>
+              ) : '-'}
+            </Descriptions.Item>
             <Descriptions.Item label="状态">
               <Space>
                 <Tag color={getStatusColor(lead.status)}>{lead.status}</Tag>
@@ -163,7 +177,7 @@ const TrainingLeadDetail: React.FC = () => {
                 )}
               </Space>
             </Descriptions.Item>
-            <Descriptions.Item label="培训类型">{lead.trainingType || '-'}</Descriptions.Item>
+            <Descriptions.Item label="所在地区">{lead.address || '-'}</Descriptions.Item>
             <Descriptions.Item label="意向课程" span={2}>
               {lead.intendedCourses && lead.intendedCourses.length > 0 ? (
                 <Space wrap>
@@ -182,7 +196,6 @@ const TrainingLeadDetail: React.FC = () => {
                 </Space>
               ) : '-'}
             </Descriptions.Item>
-            <Descriptions.Item label="意向程度">{lead.intentionLevel || '-'}</Descriptions.Item>
             <Descriptions.Item label="期望开课时间">
               {lead.expectedStartDate ? dayjs(lead.expectedStartDate).format('YYYY-MM-DD') : '-'}
             </Descriptions.Item>
@@ -195,15 +208,13 @@ const TrainingLeadDetail: React.FC = () => {
             <Descriptions.Item label="服务费金额">
               {lead.serviceFeeAmount != null ? `¥${lead.serviceFeeAmount}` : '-'}
             </Descriptions.Item>
-            <Descriptions.Item label="线索来源">{lead.leadSource || '-'}</Descriptions.Item>
-            <Descriptions.Item label="所在地区">{lead.address || '-'}</Descriptions.Item>
             <Descriptions.Item label="是否报征">
               <Tag color={lead.isReported ? '#52c41a' : '#8c8c8c'}>
                 {lead.isReported ? '是' : '否'}
               </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="学员归属">{formatUser(lead.studentOwner)}</Descriptions.Item>
-            <Descriptions.Item label="创建人">{formatUser(lead.createdBy)}</Descriptions.Item>
+            <Descriptions.Item label="录入人">{formatUser(lead.createdBy)}</Descriptions.Item>
             <Descriptions.Item label="分配给">{formatUser(lead.assignedTo)}</Descriptions.Item>
             <Descriptions.Item label="创建时间">
               {dayjs(lead.createdAt).format('YYYY-MM-DD HH:mm:ss')}

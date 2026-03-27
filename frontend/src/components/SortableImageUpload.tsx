@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Upload, Image, message } from 'antd';
-import { PlusOutlined, DeleteOutlined, DragOutlined } from '@ant-design/icons';
+import { Upload, Image, message, Button, Dropdown } from 'antd';
+import { PlusOutlined, DeleteOutlined, DragOutlined, ReloadOutlined, EllipsisOutlined } from '@ant-design/icons';
 import type { UploadFile, UploadProps } from 'antd';
 import type { UploadFileStatus } from 'antd/es/upload/interface';
 import {
@@ -29,6 +29,7 @@ interface BaseFileProps extends UploadFile {
   isExisting?: boolean;
   size?: number;
   type?: string;
+  uniformPhotoUrl?: string; // AI生成的工装照URL，存在则表示已生成过
 }
 
 type NewFile = BaseFileProps & {
@@ -48,6 +49,9 @@ interface SortableImageUploadProps {
   onChange: (fileList: CustomUploadFile[]) => void;
   onPreview?: (file: UploadFile) => void;
   onRemove?: (file: UploadFile) => void;
+  onRegenerate?: (file: CustomUploadFile) => void;
+  onMoveToCategory?: (file: CustomUploadFile, category: string) => void;
+  availableCategories?: Array<{ value: string; label: string }>;
   maxCount?: number;
   beforeUpload?: UploadProps['beforeUpload'];
   customRequest?: UploadProps['customRequest'];
@@ -60,6 +64,9 @@ interface SortableImageItemProps {
   file: CustomUploadFile;
   onPreview?: (file: UploadFile) => void;
   onRemove?: (file: UploadFile) => void;
+  onRegenerate?: (file: CustomUploadFile) => void;
+  onMoveToCategory?: (file: CustomUploadFile, category: string) => void;
+  availableCategories?: Array<{ value: string; label: string }>;
   disabled?: boolean;
 }
 
@@ -67,6 +74,9 @@ const SortableImageItem: React.FC<SortableImageItemProps> = ({
   file,
   onPreview,
   onRemove,
+  onRegenerate,
+  onMoveToCategory,
+  availableCategories,
   disabled = false,
 }) => {
   const {
@@ -108,7 +118,8 @@ const SortableImageItem: React.FC<SortableImageItemProps> = ({
     };
   }, [localObjectUrl]);
 
-  const displayUrl = file.url || file.thumbUrl || localObjectUrl;
+  // 优先展示 thumbUrl（AI生成的工装照），其次是远程 url，最后是本地临时预览
+  const displayUrl = file.thumbUrl || file.url || localObjectUrl;
 
   // 调试日志
   console.log('🖼️ SortableImageItem file:', file);
@@ -187,6 +198,40 @@ const SortableImageItem: React.FC<SortableImageItemProps> = ({
           </div>
         )}
 
+        {/* 移到XX栏按钮 */}
+        {!disabled && onMoveToCategory && availableCategories && availableCategories.length > 0 && (
+          <Dropdown
+            menu={{
+              items: availableCategories.map(cat => ({
+                key: cat.value,
+                label: `移到${cat.label}`,
+                onClick: () => onMoveToCategory(file, cat.value),
+              })),
+            }}
+            trigger={['click']}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 4,
+                right: 4,
+                zIndex: 2,
+                cursor: 'pointer',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                borderRadius: 4,
+                padding: '2px 4px',
+                color: 'white',
+                fontSize: 12,
+                lineHeight: '16px',
+              }}
+              title="移到其他分类"
+              onClick={e => e.stopPropagation()}
+            >
+              <EllipsisOutlined />
+            </div>
+          </Dropdown>
+        )}
+
         {/* 图片预览 */}
         <Image
           src={displayUrl}
@@ -242,6 +287,25 @@ const SortableImageItem: React.FC<SortableImageItemProps> = ({
           </div>
         )}
       </div>
+
+      {/* 生成工装 / 重新生成：有图片可用且不在上传中才显示 */}
+      {onRegenerate && (file.url || file.thumbUrl || file.originFileObj) && file.status !== 'uploading' && !disabled && (
+        <Button
+          size="small"
+          icon={<ReloadOutlined />}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRegenerate(file);
+          }}
+          style={{
+            marginTop: 4,
+            width: 112,
+            fontSize: 11,
+          }}
+        >
+          {file.uniformPhotoUrl ? '重新生成' : '生成工装'}
+        </Button>
+      )}
     </div>
   );
 };
@@ -251,6 +315,9 @@ const SortableImageUpload: React.FC<SortableImageUploadProps> = ({
   onChange,
   onPreview,
   onRemove,
+  onRegenerate,
+  onMoveToCategory,
+  availableCategories,
   maxCount = 5,
   beforeUpload,
   customRequest,
@@ -355,6 +422,9 @@ const SortableImageUpload: React.FC<SortableImageUploadProps> = ({
                 file={file}
                 onPreview={handlePreview}
                 onRemove={handleRemove}
+                onRegenerate={onRegenerate}
+                onMoveToCategory={onMoveToCategory}
+                availableCategories={availableCategories}
                 disabled={disabled}
               />
             ))}

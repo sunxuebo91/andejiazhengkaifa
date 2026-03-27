@@ -581,6 +581,131 @@ export class TrainingLeadsService {
   }
 
   /**
+   * 批量创建培训线索（用于AI导入预览后确认）
+   * 遇到重复手机号时跳过，不中断整体流程
+   */
+  async bulkCreateLeads(
+    leads: Array<Partial<CreateTrainingLeadDto>>,
+    userId: string,
+  ): Promise<{ success: number; fail: number; errors: string[]; created: any[] }> {
+    const result = { success: 0, fail: 0, errors: [] as string[], created: [] as any[] };
+
+    const VALID_GENDER = ['男', '女', '其他'];
+    const VALID_LEAD_SOURCE = ['美团', '抖音', '快手', '小红书', '转介绍', '幼亲舒', 'BOSS', 'BOSS直聘', '其他'];
+    const VALID_TRAINING_TYPE = ['月嫂', '育儿嫂', '保姆', '护老', '师资'];
+    const VALID_CONSULT_POS = ['育婴师', '母婴护理师', '养老护理员', '住家保姆', '其他'];
+    const VALID_INTENTION = ['高', '中', '低'];
+
+    // 标准化 leadSource：去空格、BOSS变体统一为"BOSS直聘"
+    const normalizeLeadSource = (s?: string) => {
+      if (!s) return s;
+      const t = s.replace(/\s+/g, '');
+      if (/^BOSS/i.test(t)) return 'BOSS直聘';
+      return s.trim();
+    };
+
+    for (let i = 0; i < leads.length; i++) {
+      const lead = { ...leads[i] };
+      try {
+        if (!lead.name) {
+          result.fail++;
+          result.errors.push(`第 ${i + 1} 条：姓名不能为空`);
+          continue;
+        }
+        if (!lead.phone && !lead.wechatId) {
+          result.fail++;
+          result.errors.push(`第 ${i + 1} 条 [${lead.name}]：手机号和微信号至少填写一个`);
+          continue;
+        }
+        // 清理 enum 字段：空字符串或非法值 → undefined，避免 Mongoose 校验失败
+        if (!lead.gender || !VALID_GENDER.includes(lead.gender)) lead.gender = undefined;
+        lead.leadSource = normalizeLeadSource(lead.leadSource);
+        if (!lead.leadSource || !VALID_LEAD_SOURCE.includes(lead.leadSource)) lead.leadSource = undefined;
+        if (!lead.trainingType || !VALID_TRAINING_TYPE.includes(lead.trainingType)) lead.trainingType = undefined;
+        if (!lead.consultPosition || !VALID_CONSULT_POS.includes(lead.consultPosition)) lead.consultPosition = undefined;
+        if (!lead.intentionLevel || !VALID_INTENTION.includes(lead.intentionLevel)) lead.intentionLevel = undefined;
+        // 清理空字符串 phone（unique sparse 索引遇到多个空串会冲突）
+        if (!lead.phone) lead.phone = undefined;
+        if (!lead.wechatId) lead.wechatId = undefined;
+
+        // 提取跟进字段，不传给 create
+        const followUpPerson: string | undefined = (lead as any).followUpPerson || undefined;
+        let followUpContent: string | undefined = (lead as any).followUpContent || undefined;
+        const followUpType: string | undefined = (lead as any).followUpType || undefined;
+        const followUpTime: string | undefined = (lead as any).followUpTime || undefined;
+
+        // AI 常见 mapping 错误：把"跟进记录"列放进了 remarks 而非 followUpContent
+        // 修正策略：有跟进人 + 跟进内容为空 + 备注有内容 → 把备注内容作为跟进内容
+        if (followUpPerson && !followUpContent && (lead as any).remarks) {
+          followUpContent = (lead as any).remarks;
+          delete (lead as any).remarks; // 避免同时写入备注和跟进记录
+          this.logger.log(`第 ${i + 1} 条 [${lead.name}]：检测到AI将跟进记录放入remarks，已自动修正到followUpContent`);
+        }
+        delete (lead as any).followUpPerson;
+        delete (lead as any).followUpContent;
+        delete (lead as any).followUpType;
+        delete (lead as any).followUpTime;
+
+        // 按姓名匹配系统账号：跟进人/创建人/发起人/录入人 → 若匹配成功，用该用户作为线索创建人和归属人
+        let resolvedCreatorId = userId;
+        let resolvedFollowUpUserId = new Types.ObjectId(userId);
+        if (followUpPerson) {
+          const trimmedName = followUpPerson.trim();
+          const matchedUser = await this.userModel.findOne({ name: trimmedName, suspended: { $ne: true } }).select('_id').lean();
+          if (matchedUser) {
+            const matchedId = (matchedUser as any)._id;
+            resolvedCreatorId = matchedId.toString();
+            resolvedFollowUpUserId = matchedId;
+            // 同时设为学员归属（归属人）
+            (lead as any).studentOwner = matchedId.toString();
+            this.logger.log(`第 ${i + 1} 条 [${lead.name}]：识别到人员 "${trimmedName}"，创建人和归属人设为该用户`);
+          } else {
+            this.logger.warn(`第 ${i + 1} 条 [${lead.name}]：人员 "${trimmedName}" 未找到对应系统账号，使用导入人`);
+          }
+        }
+
+        const created = await this.create(lead as CreateTrainingLeadDto, resolvedCreatorId);
+        result.success++;
+        result.created.push(created);
+
+        this.logger.log(`第 ${i + 1} 条 [${lead.name}]：followUpPerson=${followUpPerson || '无'} followUpContent长度=${followUpContent?.length || 0}`);
+
+        // 有跟进内容则创建跟进记录
+        if (followUpContent && followUpContent.length >= 1) {
+          try {
+            const VALID_FOLLOW_TYPE = ['电话', '微信', '到店', '其他'];
+            const resolvedType = (followUpType && VALID_FOLLOW_TYPE.includes(followUpType)) ? followUpType : '电话';
+            const followUpDate = followUpTime ? new Date(followUpTime) : new Date();
+            const followUp = new this.followUpModel({
+              leadId: (created as any)._id,
+              type: resolvedType,
+              content: followUpContent,
+              createdBy: resolvedFollowUpUserId,
+              ...(followUpTime ? { nextFollowUpDate: undefined, createdAt: followUpDate } : {}),
+            });
+            await followUp.save();
+            // 同步更新线索的最后跟进时间
+            await this.trainingLeadModel.findByIdAndUpdate(
+              (created as any)._id,
+              { lastFollowUpAt: followUpDate }
+            );
+          } catch (fuErr) {
+            this.logger.warn(`第 ${i + 1} 条 [${lead.name}] 跟进记录创建失败: ${fuErr.message}`);
+          }
+        }
+      } catch (error) {
+        result.fail++;
+        const errMsg = `第 ${i + 1} 条 [${lead.name || ''}]：${error.message}`;
+        result.errors.push(errMsg);
+        this.logger.warn(`批量创建失败 - ${errMsg}`);
+      }
+    }
+
+    this.logger.log(`批量创建线索完成，成功: ${result.success}，失败: ${result.fail}`);
+    return result;
+  }
+
+  /**
    * 生成分享令牌（用于追踪线索归属）
    */
   async createShareToken(userId: string, expiresInHours = 720): Promise<{ token: string; expireAt: string; shareUrl: string; qrCodeUrl: string }> {

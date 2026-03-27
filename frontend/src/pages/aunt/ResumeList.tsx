@@ -43,6 +43,7 @@ interface SearchParams {
   nativePlace?: string;
   ethnicity?: string;
   orderStatus?: keyof typeof orderStatusMap;
+  isDraft?: boolean;
 }
 
 interface ResumeData {
@@ -368,11 +369,12 @@ const ResumeList = () => {
     nativePlace?: string;
     ethnicity?: string;
     orderStatus?: keyof typeof orderStatusMap;
+    resumeType?: 'draft' | 'standard' | '';
   }) => {
     // 如果正在加载，不处理
     if (loading) return;
 
-    const { keyword, jobType, maxAge, nativePlace, ethnicity, orderStatus } = values;
+    const { keyword, jobType, maxAge, nativePlace, ethnicity, orderStatus, resumeType } = values;
 
     // 构建搜索参数
     const searchQuery: SearchParams = {};
@@ -383,6 +385,8 @@ const ResumeList = () => {
     if (nativePlace) searchQuery.nativePlace = nativePlace;
     if (ethnicity) searchQuery.ethnicity = ethnicity;
     if (orderStatus) searchQuery.orderStatus = orderStatus;
+    if (resumeType === 'draft') searchQuery.isDraft = true;
+    else if (resumeType === 'standard') searchQuery.isDraft = false;
 
     // 如果有筛选条件，自动禁用自动刷新
     if (Object.keys(searchQuery).length > 0 && autoRefreshEnabled) {
@@ -586,7 +590,12 @@ const ResumeList = () => {
       title: '姓名',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string) => <span>{text}</span>,
+      render: (text: string, record: ResumeData) => (
+        <span>
+          {text}
+          {record.isDraft && <Tag color="orange" style={{ marginLeft: 6, fontSize: 11 }}>草稿</Tag>}
+        </span>
+      ),
     },
     {
       title: '手机号',
@@ -797,6 +806,18 @@ const ResumeList = () => {
                 allowClear
                 options={Object.entries(orderStatusMap).map(([value, { text }]) => ({ value, label: text }))}
                 style={{ width: '120px' }}
+              />
+            </Form.Item>
+
+            <Form.Item name="resumeType" style={{ marginBottom: 0 }}>
+              <Select
+                placeholder="简历类型"
+                allowClear
+                style={{ width: '120px' }}
+                options={[
+                  { value: 'standard', label: '标准简历' },
+                  { value: 'draft', label: '草稿简历' },
+                ]}
               />
             </Form.Item>
 

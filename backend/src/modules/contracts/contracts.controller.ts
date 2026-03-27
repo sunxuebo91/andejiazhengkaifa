@@ -675,6 +675,62 @@ export class ContractsController {
   }
 
   /**
+   * 手动同步爱签合同状态到数据库（并同步客户状态）
+   */
+  @Post(':id/sync-esign-status')
+  async syncEsignStatus(@Param('id') contractId: string) {
+    try {
+      const contract = await this.contractsService.findOne(contractId);
+      if (!contract.esignContractNo) {
+        return { success: false, message: '该合同未关联爱签合同' };
+      }
+
+      const esignResponse = await this.esignService.getContractStatus(contract.esignContractNo);
+      if (!esignResponse || !esignResponse.data) {
+        return { success: false, message: '查询爱签状态失败' };
+      }
+
+      const esignStatus = esignResponse.data.status?.toString();
+      const updateData: any = { esignStatus };
+
+      if (esignStatus === '2') {
+        updateData.contractStatus = 'active';
+        updateData.esignSignedAt = new Date();
+      } else if (esignStatus === '1') {
+        updateData.contractStatus = 'signing';
+      } else if (esignStatus === '0') {
+        updateData.contractStatus = 'draft';
+      } else if (esignStatus === '6' || esignStatus === '7') {
+        updateData.contractStatus = 'cancelled';
+      }
+
+      await this.contractsService.updateContractStatusDirectly(contractId, updateData);
+
+      if (updateData.contractStatus === 'active') {
+        await this.contractsService.syncInsuranceOnContractActive(contractId).catch(e =>
+          this.logger.error('保险同步失败:', e)
+        );
+        await this.contractsService.syncCustomerOnContractActive(contractId).catch(e =>
+          this.logger.error('客户状态同步失败:', e)
+        );
+      } else if (updateData.contractStatus === 'signing') {
+        await this.contractsService.syncCustomerOnContractSigning(contractId).catch(e =>
+          this.logger.error('客户签约中同步失败:', e)
+        );
+      }
+
+      return {
+        success: true,
+        message: '爱签状态同步成功',
+        data: { esignStatus, contractStatus: updateData.contractStatus },
+      };
+    } catch (error) {
+      this.logger.error('同步爱签状态失败:', error);
+      return { success: false, message: error.message || '同步失败' };
+    }
+  }
+
+  /**
    * 手动触发保险同步（用于重试失败的同步）
    * 增强功能：先查询爱签API确认合同状态，再触发保险同步
    */

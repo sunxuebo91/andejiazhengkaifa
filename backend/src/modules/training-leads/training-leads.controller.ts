@@ -19,6 +19,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
+import * as ExcelJS from 'exceljs';
 import { TrainingLeadsService } from './training-leads.service';
 import { CreateTrainingLeadDto } from './dto/create-training-lead.dto';
 import { UpdateTrainingLeadDto } from './dto/update-training-lead.dto';
@@ -28,6 +29,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { QwenAIService, ParsedTrainingLead } from '../ai/qwen-ai.service';
 
 // Multer配置 - Excel文件上传
 const multerConfig = {
@@ -38,9 +40,20 @@ const multerConfig = {
       cb(null, `training-leads-${uniqueSuffix}.xlsx`);
     },
   }),
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
-  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+};
+
+// Multer配置 - 图片上传（AI识别）
+const imageUploadConfig = {
+  storage: diskStorage({
+    destination: './uploads',
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = file.originalname.split('.').pop() || 'jpg';
+      cb(null, `leads-img-${uniqueSuffix}.${ext}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
 };
 
 @ApiTags('培训线索管理')
@@ -50,7 +63,10 @@ const multerConfig = {
 export class TrainingLeadsController {
   private readonly logger = new Logger(TrainingLeadsController.name);
 
-  constructor(private readonly trainingLeadsService: TrainingLeadsService) {}
+  constructor(
+    private readonly trainingLeadsService: TrainingLeadsService,
+    private readonly qwenAIService: QwenAIService,
+  ) {}
 
   // 检查是否是管理员或经理（有全局查看权限的角色：admin/manager/operator/admissions）
   // dispatch/employee 只能查看自己创建的线索
@@ -119,6 +135,133 @@ export class TrainingLeadsController {
         message: `Excel导入失败: ${error.message}`
       };
     }
+  }
+
+  // ==================== AI 批量导入 ====================
+
+  @Post('ai-preview-image')
+  @Permissions('training-lead:create')
+  @UseInterceptors(FileInterceptor('file', imageUploadConfig))
+  @ApiOperation({ summary: 'AI识别图片中的职培线索（返回预览，不写入数据库）' })
+  @ApiConsumes('multipart/form-data')
+  async aiPreviewImage(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    if (!file) throw new BadRequestException('请上传图片文件');
+    try {
+      const fs = await import('fs');
+      const imageBuffer = fs.readFileSync(file.path);
+      const imageBase64 = imageBuffer.toString('base64');
+      const mimeType = file.mimetype || 'image/jpeg';
+      const leads = await this.qwenAIService.parseTrainingLeadsFromImage(imageBase64, mimeType);
+      fs.unlinkSync(file.path);
+      return { success: true, data: leads, message: `AI识别到 ${leads.length} 条线索` };
+    } catch (error) {
+      this.logger.error(`AI图片识别失败: ${error.message}`);
+      return { success: false, data: [], message: `识别失败: ${error.message}` };
+    }
+  }
+
+  @Post('ai-preview-excel')
+  @Permissions('training-lead:create')
+  @UseInterceptors(FileInterceptor('file', multerConfig))
+  @ApiOperation({ summary: 'AI识别Excel中的职培线索（自动映射字段，返回预览，不写入数据库）' })
+  @ApiConsumes('multipart/form-data')
+  async aiPreviewExcel(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    if (!file) throw new BadRequestException('请上传Excel文件');
+    const fs = await import('fs');
+    try {
+      // 使用流式读取，避免将整个 Excel 载入内存（防止内存爆炸）
+      const MAX_ROWS = 200;
+      const rows: string[] = [];
+      let rowIdx = 0;
+
+      const StreamReader = (ExcelJS as any).stream?.xlsx?.WorkbookReader;
+      if (!StreamReader) throw new Error('ExcelJS 流式读取不可用');
+
+      const workbookReader = new StreamReader(file.path, { sharedStrings: 'cache', hyperlinks: 'ignore', worksheets: 'emit', entries: 'emit' });
+
+      await new Promise<void>((resolve, reject) => {
+        let firstSheet = false;
+        workbookReader.on('worksheet', (worksheet: any) => {
+          if (firstSheet) return; // 只处理第一个 sheet
+          firstSheet = true;
+          worksheet.on('row', (row: any) => {
+            if (rowIdx >= MAX_ROWS) return;
+            const vals: any[] = row.values ?? [];
+            // row.values 是 1-indexed，index 0 为 null
+            const cells: string[] = [];
+            for (let i = 1; i < vals.length; i++) {
+              cells.push(this.serializeRawValue(vals[i]));
+            }
+            if (cells.some(c => c.length > 0)) {
+              rows.push(cells.join('\t'));
+            }
+            rowIdx++;
+          });
+          worksheet.on('end', resolve);
+          worksheet.on('error', reject);
+        });
+        workbookReader.on('end', resolve);
+        workbookReader.on('error', reject);
+        workbookReader.read();
+      });
+
+      if (rows.length === 0) throw new BadRequestException('Excel文件中没有有效数据');
+
+      // 限制总文本长度，防止超出 AI 上下文
+      let tableText = rows.join('\n');
+      if (tableText.length > 10000) {
+        tableText = tableText.slice(0, 10000);
+        this.logger.warn(`Excel 文本过长，已截断至 10000 字符`);
+      }
+
+      this.logger.log(`Excel 流式读取完成，共 ${rows.length} 行，文本长度 ${tableText.length}`);
+      const leads = await this.qwenAIService.parseTrainingLeadsFromExcelText(tableText);
+      return { success: true, data: leads, message: `AI识别到 ${leads.length} 条线索` };
+    } catch (error) {
+      this.logger.error(`AI Excel识别失败: ${error?.message || error}`);
+      return { success: false, data: [], message: `识别失败: ${error?.message || '未知错误'}` };
+    } finally {
+      try { fs.unlinkSync(file.path); } catch (_) {}
+    }
+  }
+
+  /** 将流式读取的原始单元格值安全序列化为字符串 */
+  private serializeRawValue(val: any): string {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val.trim();
+    if (typeof val === 'number') return String(val);
+    if (typeof val === 'boolean') return String(val);
+    if (val instanceof Date) return val.toLocaleDateString('zh-CN');
+    if (typeof val === 'object') {
+      if ('result' in val) {
+        const res = val.result;
+        if (res === null || res === undefined) return '';
+        if (typeof res === 'object' && 'error' in res) return '';
+        if (res instanceof Date) return res.toLocaleDateString('zh-CN');
+        return String(res);
+      }
+      if ('richText' in val) {
+        return (val.richText as any[]).map((r: any) => r.text ?? '').join('').trim();
+      }
+      if ('error' in val) return '';
+      if ('text' in val) return String(val.text).trim();
+    }
+    return String(val);
+  }
+
+  @Post('bulk-create')
+  @Permissions('training-lead:create')
+  @ApiOperation({ summary: '批量创建职培线索（确认AI预览后调用）' })
+  async bulkCreate(@Body() body: { leads: ParsedTrainingLead[] }, @Request() req) {
+    if (!body.leads || !Array.isArray(body.leads) || body.leads.length === 0) {
+      throw new BadRequestException('请提供有效的线索数据');
+    }
+    const result = await this.trainingLeadsService.bulkCreateLeads(body.leads as any[], req.user.userId);
+    return {
+      success: true,
+      data: result,
+      message: `成功创建 ${result.success} 条线索，失败 ${result.fail} 条`
+    };
   }
 
   @Get()

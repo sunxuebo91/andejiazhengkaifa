@@ -642,8 +642,8 @@ const CustomerList: React.FC = () => {
           >
             添加跟进
           </Button>
-          {/* 分配按钮（仅管理员/经理可见） */}
-          <Authorized role={["admin", "manager"]} noMatch={null}>
+          {/* 分配按钮（仅管理员/经理/运营可见） */}
+          <Authorized role={["admin", "manager", "operator"]} noMatch={null}>
             <Button
               size="small"
               onClick={() => {
@@ -848,7 +848,7 @@ const CustomerList: React.FC = () => {
           <div style={{ marginBottom: 16, padding: '12px 16px', background: '#e6f7ff', borderRadius: 4 }}>
             <Space>
               <span>已选择 {selectedRowKeys.length} 个客户</span>
-              <Authorized role={['admin', 'manager']}>
+              <Authorized role={['admin', 'manager', 'operator']}>
                 <Button type="primary" onClick={() => setBatchAssignModalVisible(true)}>
                   批量分配
                 </Button>

@@ -33,6 +33,9 @@ export interface TrainingLead {
   _id: string;
   studentId: string;
   name: string;
+  gender?: string;
+  age?: number;
+  consultPosition?: string;
   phone?: string;
   wechatId?: string;
   leadSource?: string;
@@ -40,6 +43,7 @@ export interface TrainingLead {
   intendedCourses?: string[];
   reportedCertificates?: string[];
   intentionLevel?: string;
+  leadGrade?: string;
   expectedStartDate?: string;
   budget?: number;
   courseAmount?: number;
@@ -74,6 +78,9 @@ export interface TrainingLeadFollowUp {
 // 创建培训线索DTO
 export interface CreateTrainingLeadDto {
   name: string;
+  gender?: string;
+  age?: number;
+  consultPosition?: string;
   phone?: string;
   wechatId?: string;
   leadSource?: string;
@@ -81,6 +88,7 @@ export interface CreateTrainingLeadDto {
   intendedCourses?: string[];
   reportedCertificates?: string[];
   intentionLevel?: string;
+  leadGrade?: string;
   expectedStartDate?: string;
   budget?: number;
   courseAmount?: number;
@@ -148,6 +156,7 @@ export const LEAD_SOURCE_OPTIONS = [
   { label: '小红书', value: '小红书' },
   { label: '转介绍', value: '转介绍' },
   { label: '幼亲舒', value: '幼亲舒' },
+  { label: 'BOSS直聘', value: 'BOSS直聘' },
   { label: '其他', value: '其他' }
 ];
 
@@ -183,4 +192,12 @@ export const FOLLOW_UP_TYPE_OPTIONS = [
   { label: '微信', value: FollowUpType.WECHAT, icon: '💬' },
   { label: '到店', value: FollowUpType.VISIT, icon: '🏠' },
   { label: '其他', value: FollowUpType.OTHER, icon: '📝' }
+];
+
+export const LEAD_GRADE_OPTIONS = [
+  { label: 'A', value: 'A', color: '#f5222d' },
+  { label: 'B', value: 'B', color: '#fa8c16' },
+  { label: 'C', value: 'C', color: '#faad14' },
+  { label: 'D', value: 'D', color: '#52c41a' },
+  { label: 'O', value: 'O', color: '#8c8c8c' },
 ];

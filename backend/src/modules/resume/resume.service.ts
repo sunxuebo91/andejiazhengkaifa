@@ -19,6 +19,7 @@ import { EmployeeEvaluation } from '../employee-evaluation/models/employee-evalu
 import { ResumeQueryService } from './resume-query.service';
 import { DashubaoService } from '../dashubao/dashubao.service';
 import { BackgroundCheck, BackgroundCheckDocument } from '../zmdb/models/background-check.model';
+import { QwenAIService } from '../ai/qwen-ai.service';
 
 @Injectable()
 export class ResumeService {
@@ -41,6 +42,7 @@ export class ResumeService {
     private readonly dashubaoService: DashubaoService,
     @InjectModel(BackgroundCheck.name)
     private readonly backgroundCheckModel: Model<BackgroundCheckDocument>,
+    private readonly qwenAIService: QwenAIService,
   ) {}
 
   /**
@@ -72,8 +74,22 @@ export class ResumeService {
     const resumeData = this.buildResumeData(normalizedData, {
       userId: createResumeDto.userId,
       leadSource: (createResumeDto as any).leadSource || 'sales',
-      status: 'pending'
+      status: 'pending',
+      isDraft: !normalizedData.phone,
     });
+
+    // 处理预上传的个人照片URL（创建模式下已由 /api/ai/swap-uniform 上传）
+    if (createResumeDto.preUploadedPhotoUrls) {
+      try {
+        const preUrls: string[] = JSON.parse(createResumeDto.preUploadedPhotoUrls);
+        if (Array.isArray(preUrls) && preUrls.length > 0) {
+          categorizedFiles.photoUrls.push(...preUrls);
+          this.logger.log(`使用 ${preUrls.length} 个预上传的个人照片URL`);
+        }
+      } catch {
+        this.logger.warn('解析 preUploadedPhotoUrls 失败，忽略该字段');
+      }
+    }
 
     // 合并文件信息
     Object.assign(resumeData, {
@@ -102,12 +118,32 @@ export class ResumeService {
       };
     }
 
+    // 处理预生成的工装照URL（前端已通过 /api/ai/swap-uniform 生成，无需二次AI处理）
+    if (createResumeDto.preGeneratedUniformPhotoUrl) {
+      resumeData.uniformPhoto = {
+        url: createResumeDto.preGeneratedUniformPhotoUrl,
+        filename: 'uniform-photo.jpg',
+        mimetype: 'image/jpeg',
+      };
+      this.logger.log(`使用预生成的工装照: ${createResumeDto.preGeneratedUniformPhotoUrl.substring(0, 60)}...`);
+    }
+
     // 5. 创建并保存
     try {
       const resume = new this.resumeModel(resumeData);
       const savedResume = await resume.save();
 
       this.logger.log(`✅ createWithFiles 成功: ${savedResume._id}`);
+
+      // 异步触发AI换装（仅在没有预生成工装照时）
+      if (!createResumeDto.preGeneratedUniformPhotoUrl && categorizedFiles.photoUrls && categorizedFiles.photoUrls.length > 0) {
+        const resumeId = (savedResume._id as any).toString();
+        for (const photoUrl of categorizedFiles.photoUrls) {
+          this.triggerUniformPhotoGeneration(resumeId, photoUrl).catch(err =>
+            this.logger.error(`AI换装失败 (resumeId=${resumeId}): ${err.message}`)
+          );
+        }
+      }
 
       return {
         success: true,
@@ -221,8 +257,8 @@ export class ResumeService {
     return categorizedFiles;
   }
 
-  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string) {
-    return this.resumeQueryService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity, currentUserId);
+  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string, isDraft?: boolean) {
+    return this.resumeQueryService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity, currentUserId, isDraft);
   }
 
   async findOne(id: string, currentUserId?: string) {
@@ -256,7 +292,7 @@ export class ResumeService {
   async getAssignableUsers(): Promise<Array<{ _id: string; name: string; username: string; role: string }>> {
     const users = await this.userModel.find({
       active: true,
-      role: { $in: ['admin', 'manager', 'employee'] },
+      role: { $in: ['admin', 'manager', 'employee', 'operator', 'dispatch', 'admissions'] },
     }).select('_id name username role').lean();
 
     return users.map((u: any) => ({
@@ -272,8 +308,8 @@ export class ResumeService {
    */
   async assignResume(resumeId: string, assignedToId: string, operatorId: string): Promise<IResume> {
     const operator = await this.userModel.findById(operatorId).select('role name').lean();
-    if (!operator || !['admin', 'manager'].includes((operator as any).role)) {
-      throw new ForbiddenException('只有管理员或经理可以分配阿姨');
+    if (!operator || !['admin', 'manager', 'operator'].includes((operator as any).role)) {
+      throw new ForbiddenException('只有管理员、经理或运营可以分配阿姨');
     }
 
     const resume = await this.resumeModel.findById(resumeId).exec();
@@ -426,6 +462,13 @@ export class ResumeService {
       const savedResume = await resumeDoc.save();
       this.logger.debug(`简历更新成功，当前文件统计: photoUrls=${savedResume.photoUrls?.length || 0}, certificates=${savedResume.certificates?.length || 0}, reports=${savedResume.reports?.length || 0}`);
 
+      // 上传个人照片后异步触发AI换装（不阻塞当前请求）
+      if (fileType === 'personalPhoto') {
+        this.triggerUniformPhotoGeneration(id, fileUrl).catch(err =>
+          this.logger.error(`AI换装失败 (resumeId=${id}): ${err.message}`)
+        );
+      }
+
       // 返回包含文件URL的结果
       return {
         resume: savedResume,
@@ -436,6 +479,140 @@ export class ResumeService {
       this.logger.error(`文件上传处理失败: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  /**
+   * 异步触发AI换装：将个人照片头部替换到工装模板上，结果保存到uniformPhoto字段
+   * @param resumeId 简历ID
+   * @param personalPhotoUrl 已上传的个人照片COS URL
+   */
+  /**
+   * 从环境变量中解析所有可用的工装模板URL列表
+   * 支持两种配置方式：
+   *   1. UNIFORM_TEMPLATE_URLS=url1,url2,url3  （多模板，推荐）
+   *   2. UNIFORM_TEMPLATE_URL=url1             （单模板，向下兼容）
+   */
+  private getUniformTemplateUrls(): string[] {
+    const multi = process.env.UNIFORM_TEMPLATE_URLS;
+    if (multi) {
+      return multi.split(',').map(u => u.trim()).filter(Boolean);
+    }
+    const single = process.env.UNIFORM_TEMPLATE_URL;
+    return single ? [single.trim()] : [];
+  }
+
+  private async triggerUniformPhotoGeneration(resumeId: string, personalPhotoUrl: string): Promise<void> {
+    const templateUrls = this.getUniformTemplateUrls();
+    if (templateUrls.length === 0) {
+      this.logger.warn('未配置任何工装模板URL（UNIFORM_TEMPLATE_URLS 或 UNIFORM_TEMPLATE_URL），跳过AI换装');
+      return;
+    }
+
+    if (!this.qwenAIService.isUniformSwapConfigured()) {
+      this.logger.warn('AI换装服务未配置，跳过AI换装');
+      return;
+    }
+
+    // 随机选取一个模板，保证每次生成结果不重复
+    const templateUrl = templateUrls[Math.floor(Math.random() * templateUrls.length)];
+    const templateIndex = templateUrls.indexOf(templateUrl) + 1;
+    this.logger.log(`[AI换装] 开始处理: resumeId=${resumeId}，共${templateUrls.length}个模板，本次使用模板${templateIndex}`);
+
+    let imageBuffer: Buffer;
+
+    // 优先使用豆包Seedream（效果更自然），失败则回退到FaceChain
+    if (this.qwenAIService.isSeedreamConfigured()) {
+      try {
+        this.logger.log(`[AI换装] 使用豆包Seedream模式`);
+        imageBuffer = await this.qwenAIService.swapHeadWithSeedream(personalPhotoUrl, templateUrl);
+      } catch (seedreamErr) {
+        this.logger.warn(`[AI换装] Seedream失败(${seedreamErr.message})，回退到FaceChain模式`);
+        imageBuffer = await this.fallbackToFaceChain(resumeId, personalPhotoUrl, templateUrl);
+      }
+    } else {
+      imageBuffer = await this.fallbackToFaceChain(resumeId, personalPhotoUrl, templateUrl);
+    }
+
+    // 伪造 Multer.File 对象，复用 UploadService 上传到 COS
+    const fakeFile = {
+      buffer: imageBuffer,
+      originalname: `uniform-photo-${Date.now()}.jpg`,
+      mimetype: 'image/jpeg',
+      size: imageBuffer.length,
+      fieldname: 'uniformPhoto',
+      encoding: '7bit',
+    } as Express.Multer.File;
+
+    const uniformPhotoUrl = await this.uploadService.uploadFile(fakeFile, { type: 'personalPhoto' });
+
+    const uniformFileInfo = {
+      url: uniformPhotoUrl,
+      filename: fakeFile.originalname,
+      mimetype: 'image/jpeg',
+      size: imageBuffer.length,
+    };
+
+    // 将结果保存到简历 uniformPhoto 字段，同时移除源个人照片
+    const resumeDoc = await this.resumeModel.findById(new Types.ObjectId(resumeId)).exec();
+    if (resumeDoc) {
+      resumeDoc.uniformPhoto = uniformFileInfo as any;
+
+      // 从 personalPhoto 数组中移除用于生成工装照的源照片
+      if (Array.isArray(resumeDoc.personalPhoto)) {
+        resumeDoc.personalPhoto = resumeDoc.personalPhoto.filter(
+          (p: any) => p.url !== personalPhotoUrl
+        );
+      }
+      // 从 photoUrls 数组中同步移除
+      if (Array.isArray(resumeDoc.photoUrls)) {
+        resumeDoc.photoUrls = resumeDoc.photoUrls.filter(
+          (url: string) => url !== personalPhotoUrl
+        );
+      }
+
+      await resumeDoc.save();
+    }
+
+    this.logger.log(`[AI换装] 完成: resumeId=${resumeId}, uniformPhotoUrl=${uniformPhotoUrl}, 已移除源照片`);
+  }
+
+  /**
+   * 回退到FaceChain模式（LoRA训练 + 生成）
+   */
+  private async fallbackToFaceChain(resumeId: string, personalPhotoUrl: string, templateUrl: string): Promise<Buffer> {
+    let resourceId: string | undefined;
+    try {
+      const resume = await this.resumeModel.findById(new Types.ObjectId(resumeId)).exec();
+      if (resume?.faceTrainingResourceId) {
+        resourceId = resume.faceTrainingResourceId;
+        this.logger.log(`[AI换装-FaceChain] 已有LoRA resource_id=${resourceId}，跳过训练直接生成`);
+      } else {
+        const photoUrls: string[] = [];
+        if (resume?.personalPhoto && resume.personalPhoto.length > 0) {
+          for (const photo of resume.personalPhoto) {
+            if ((photo as any)?.url) photoUrls.push((photo as any).url);
+          }
+        }
+        if (!photoUrls.includes(personalPhotoUrl)) {
+          photoUrls.unshift(personalPhotoUrl);
+        }
+        const trainingPhotos = photoUrls.slice(0, 10);
+
+        this.logger.log(`[AI换装-FaceChain] 开始LoRA训练, ${trainingPhotos.length}张照片`);
+        resourceId = await this.qwenAIService.trainFaceLoRA(trainingPhotos);
+
+        await this.resumeModel.findByIdAndUpdate(
+          new Types.ObjectId(resumeId),
+          { faceTrainingResourceId: resourceId },
+        ).exec();
+        this.logger.log(`[AI换装-FaceChain] LoRA训练完成，resource_id=${resourceId} 已保存`);
+      }
+    } catch (trainErr) {
+      this.logger.warn(`[AI换装-FaceChain] LoRA训练失败(${trainErr.message})，回退到免训练模式`);
+      resourceId = undefined;
+    }
+
+    return this.qwenAIService.swapHeadToUniform(personalPhotoUrl, templateUrl, resourceId);
   }
 
   async removeFile(id: string, fileUrlOrId: string) {
@@ -820,6 +997,90 @@ export class ResumeService {
    * @param excludeId 排除的简历ID（更新时排除自身）
    * @throws ConflictException 如果存在重复
    */
+  /** 计算两份草稿的字段重合率（0~1） */
+  private calcDraftSimilarity(a: any, b: any): number {
+    const weighted: Array<{ key: string; weight: number; compare?: (x: any, y: any) => boolean }> = [
+      // 强标识字段
+      { key: 'phone',           weight: 3 },
+      { key: 'idNumber',        weight: 3 },
+      { key: 'wechat',          weight: 2 },
+      // 基本信息
+      { key: 'gender',          weight: 1 },
+      { key: 'nativePlace',     weight: 2 },
+      { key: 'jobType',         weight: 1 },
+      { key: 'education',       weight: 1 },
+      { key: 'maritalStatus',   weight: 1 },
+      { key: 'ethnicity',       weight: 1 },
+      { key: 'zodiac',          weight: 1 },
+      { key: 'religion',        weight: 1 },
+      { key: 'age',             weight: 2, compare: (x, y) => Math.abs(Number(x) - Number(y)) <= 1 },
+      { key: 'birthDate',       weight: 2, compare: (x, y) => String(x).slice(0, 7) === String(y).slice(0, 7) },
+      { key: 'height',          weight: 1, compare: (x, y) => Math.abs(Number(x) - Number(y)) <= 2 },
+      { key: 'weight',          weight: 1, compare: (x, y) => Math.abs(Number(x) - Number(y)) <= 2 },
+      { key: 'experienceYears', weight: 1, compare: (x, y) => Math.abs(Number(x) - Number(y)) <= 1 },
+      { key: 'expectedSalary',  weight: 1, compare: (x, y) => Math.abs(Number(x) - Number(y)) <= 500 },
+      // 技能数组：Jaccard 相似度 ≥ 0.5 算匹配
+      {
+        key: 'skills', weight: 2,
+        compare: (x: string[], y: string[]) => {
+          if (!Array.isArray(x) || !Array.isArray(y) || x.length === 0 || y.length === 0) return false;
+          const setA = new Set(x);
+          const intersection = y.filter(v => setA.has(v)).length;
+          const union = new Set([...x, ...y]).size;
+          return union > 0 && intersection / union >= 0.5;
+        },
+      },
+      // 自我介绍文本：字符重合率 ≥ 50% 算匹配
+      {
+        key: 'selfIntroduction', weight: 2,
+        compare: (x: string, y: string) => {
+          if (!x || !y) return false;
+          const shorter = x.length <= y.length ? x : y;
+          const longer  = x.length <= y.length ? y : x;
+          const matched = shorter.split('').filter(ch => longer.includes(ch)).length;
+          return shorter.length > 0 && matched / shorter.length >= 0.5;
+        },
+      },
+    ];
+
+    let matchWeight = 0;
+    let totalWeight = 0;
+
+    for (const { key, weight, compare } of weighted) {
+      const av = a[key];
+      const bv = b[key];
+      const aEmpty = av === undefined || av === null || av === '' || (Array.isArray(av) && av.length === 0);
+      const bEmpty = bv === undefined || bv === null || bv === '' || (Array.isArray(bv) && bv.length === 0);
+      if (aEmpty || bEmpty) continue; // 任一方没有该字段，跳过
+      totalWeight += weight;
+      const equal = compare ? compare(av, bv) : av === bv;
+      if (equal) matchWeight += weight;
+    }
+
+    return totalWeight === 0 ? 0 : matchWeight / totalWeight;
+  }
+
+  /** 草稿去重：同名草稿重合率≥80% 则删除较早的那份 */
+  private async deduplicateDraft(newData: any): Promise<void> {
+    const candidates = await this.resumeModel
+      .find({ name: newData.name, isDraft: true })
+      .sort({ createdAt: 1 }) // 最旧的排前面
+      .limit(10)
+      .lean();
+
+    for (const old of candidates) {
+      const similarity = this.calcDraftSimilarity(newData, old);
+      if (similarity >= 0.8) {
+        await this.resumeModel.deleteOne({ _id: old._id });
+        this.logger.log('草稿去重：删除重复草稿', {
+          deletedId: String(old._id),
+          name: newData.name,
+          similarity: Math.round(similarity * 100),
+        });
+      }
+    }
+  }
+
   private async validateUniqueness(
     phone?: string,
     idNumber?: string,
@@ -917,11 +1178,13 @@ export class ResumeService {
       userId?: string;
       leadSource?: string;  // 支持所有有效的 leadSource 值
       status?: string;
+      isDraft?: boolean;
     }
   ): any {
     const resumeData: any = {
       ...data,
       status: options.status || 'pending',
+      isDraft: options.isDraft ?? false,
     };
 
     // 设置用户ID
@@ -937,6 +1200,9 @@ export class ResumeService {
     // 清理空值避免唯一索引问题
     if (!resumeData.idNumber || resumeData.idNumber === '') {
       delete resumeData.idNumber;
+    }
+    if (!resumeData.phone || resumeData.phone === '') {
+      delete resumeData.phone;
     }
 
     return resumeData;
@@ -971,11 +1237,17 @@ export class ResumeService {
     // 3. 统一去重检查
     await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber);
 
+    // 3b. 草稿去重：无手机号时检查同名草稿字段重合率，≥80% 则删除旧草稿
+    if (!normalizedData.phone && normalizedData.name) {
+      await this.deduplicateDraft(normalizedData);
+    }
+
     // 4. 构建简历数据
     const resumeData = this.buildResumeData(normalizedData, {
       userId: options.userId,
       leadSource: options.leadSource,
-      status: 'pending'
+      status: 'pending',
+      isDraft: !normalizedData.phone,
     });
 
     // 5. 创建并保存
@@ -1191,6 +1463,15 @@ export class ResumeService {
     const savedResume = await resume.save();
 
     this.logger.log(`✅ updateWithFiles 成功: ${id}`);
+
+    // 异步触发AI换装（针对更新时上传的新个人照片）
+    if (uploadedFiles['personalPhoto'] && uploadedFiles['personalPhoto'].length > 0) {
+      for (const fileInfo of uploadedFiles['personalPhoto']) {
+        this.triggerUniformPhotoGeneration(id, fileInfo.url).catch(err =>
+          this.logger.error(`AI换装失败 (resumeId=${id}): ${err.message}`)
+        );
+      }
+    }
 
     return {
       success: true,
@@ -1850,15 +2131,6 @@ export class ResumeService {
       };
     }
 
-    if (!dto.phone || !/^1[3-9]\d{9}$/.test(dto.phone)) {
-      return {
-        success: false,
-        message: '数据验证失败',
-        error: 'VALIDATION_ERROR',
-        details: [{ field: 'phone', message: '手机号格式不正确' }],
-      };
-    }
-
     if (!dto.age || dto.age < 18 || dto.age > 65) {
       return {
         success: false,
@@ -2016,6 +2288,7 @@ export class ResumeService {
       id: resume._id || resume.id,
       name: resume.name,
       phone: resume.phone,
+      isDraft: resume.isDraft ?? !resume.phone,
       age: resume.age,
       gender: resume.gender,
       jobType: resume.jobType,
@@ -2036,7 +2309,10 @@ export class ResumeService {
       // 文件信息 - 完整对象格式（包含 url, filename, size, mimetype）
       idCardFront: resume.idCardFront,
       idCardBack: resume.idCardBack,
-      personalPhoto: resume.personalPhoto || [],
+      // 如果有工装照，将其插入个人照片数组最前面，确保小程序能显示
+      personalPhoto: resume.uniformPhoto?.url
+        ? [resume.uniformPhoto, ...(resume.personalPhoto || [])]
+        : (resume.personalPhoto || []),
       certificates: resume.certificates || [], // 技能证书图片（FileInfo 对象数组）
       reports: resume.reports || [], // 体检报告（FileInfo 对象数组）
       selfIntroductionVideo: resume.selfIntroductionVideo || null, // 自我介绍视频
@@ -2045,10 +2321,15 @@ export class ResumeService {
       cookingPhotos: resume.cookingPhotos || [], // 烹饪照片
       complementaryFoodPhotos: resume.complementaryFoodPhotos || [], // 辅食添加照片
       positiveReviewPhotos: resume.positiveReviewPhotos || [], // 好评展示照片
+      uniformPhoto: resume.uniformPhoto || null, // AI生成工装照片
+      uniformPhotoUrl: resume.uniformPhoto?.url || null, // 工装照URL（兼容）
       // 兼容旧格式 - 仅 URL 字符串数组
       idCardFrontUrl: resume.idCardFront?.url,
       idCardBackUrl: resume.idCardBack?.url,
-      photoUrls: resume.photoUrls || [],
+      // 如果有工装照，将其URL插入photoUrls最前面
+      photoUrls: resume.uniformPhoto?.url
+        ? [resume.uniformPhoto.url, ...(resume.photoUrls || [])]
+        : (resume.photoUrls || []),
       certificateUrls: resume.certificateUrls || [], // 技能证书图片 URL 数组（兼容旧版）
       medicalReportUrls: resume.medicalReportUrls || [], // 体检报告 URL 数组（兼容旧版）
       selfIntroductionVideoUrl: resume.selfIntroductionVideo?.url || null, // 视频 URL 兼容

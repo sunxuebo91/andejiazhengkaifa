@@ -804,10 +804,20 @@ export class ContractsMiniProgramController {
 
       await this.contractsService.updateContractStatusDirectly(contractId, updateData);
 
-      // 如果状态变为 active，手动触发保险同步
+      // 如果状态变为 active，手动触发保险同步及客户状态同步
       if (updateData.contractStatus === ContractStatus.ACTIVE) {
         await this.contractsService.syncInsuranceOnContractActive(contractId).catch(error => {
           this.logger.error('保险同步失败:', error.message);
+        });
+        await this.contractsService.syncCustomerOnContractActive(contractId).catch(error => {
+          this.logger.error('客户状态同步失败:', error.message);
+        });
+      }
+
+      // 如果状态变为 signing，同步客户为签约中
+      if (updateData.contractStatus === ContractStatus.SIGNING) {
+        await this.contractsService.syncCustomerOnContractSigning(contractId).catch(error => {
+          this.logger.error('客户签约中同步失败:', error.message);
         });
       }
 
@@ -882,12 +892,26 @@ export class ContractsMiniProgramController {
                 updateData,
               );
 
-              // 如果状态变为 active，触发保险同步
+              // 如果状态变为 active，触发保险同步及客户状态同步
               if (newContractStatus === ContractStatus.ACTIVE) {
                 await this.contractsService.syncInsuranceOnContractActive(
                   contract._id.toString()
                 ).catch(error => {
                   this.logger.error(`保险同步失败 (${contract.contractNumber}):`, error.message);
+                });
+                await this.contractsService.syncCustomerOnContractActive(
+                  contract._id.toString()
+                ).catch(error => {
+                  this.logger.error(`客户状态同步失败 (${contract.contractNumber}):`, error.message);
+                });
+              }
+
+              // 如果状态变为 signing，同步客户为签约中
+              if (newContractStatus === ContractStatus.SIGNING) {
+                await this.contractsService.syncCustomerOnContractSigning(
+                  contract._id.toString()
+                ).catch(error => {
+                  this.logger.error(`客户签约中同步失败 (${contract.contractNumber}):`, error.message);
                 });
               }
 

@@ -44,7 +44,7 @@ export interface Resume {
   medicalReportUrls?: string[];
 
   // 文件对象 - 新格式
-  personalPhoto?: { url: string; filename?: string; size?: number; mimetype?: string };
+  personalPhoto?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }> | { url: string; filename?: string; size?: number; mimetype?: string };
   certificates?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   reports?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   selfIntroductionVideo?: { url: string; filename?: string; size?: number; mimetype?: string };

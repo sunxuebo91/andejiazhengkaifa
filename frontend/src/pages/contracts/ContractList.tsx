@@ -59,7 +59,7 @@ const ContractList: React.FC = () => {
 
   // 权限检查 - 支持多种管理员角色标识
   const isAdmin = user?.role === '系统管理员' || user?.role === 'admin' || user?.role === '管理员';
-  const isManagerOrAdmin = isAdmin || user?.role === '经理' || user?.role === 'manager';
+  const isManagerOrAdmin = isAdmin || user?.role === '经理' || user?.role === 'manager' || user?.role === 'operator' || user?.role === '运营';
 
   useEffect(() => {
     fetchContracts();

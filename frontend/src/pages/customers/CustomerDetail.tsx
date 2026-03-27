@@ -339,7 +339,7 @@ const CustomerDetail: React.FC = () => {
         }
         extra={
           <Space>
-            <Authorized role={["admin","manager"]} noMatch={null}>
+            <Authorized role={["admin","manager","operator"]} noMatch={null}>
               <Button onClick={() => setAssignModal({ visible: true, customerId: customer._id })}>
                 分配负责人
               </Button>

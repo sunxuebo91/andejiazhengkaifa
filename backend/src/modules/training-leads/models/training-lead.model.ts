@@ -29,6 +29,18 @@ export class TrainingLead {
   @Prop({ required: true })
   name: string;
 
+  @ApiProperty({ description: '性别', enum: ['男', '女', '其他'] })
+  @Prop({ enum: ['男', '女', '其他'] })
+  gender: string;
+
+  @ApiProperty({ description: '年龄' })
+  @Prop({ min: 0, max: 120 })
+  age: number;
+
+  @ApiProperty({ description: '咨询职位', enum: ['育婴师', '母婴护理师', '养老护理员', '住家保姆', '其他'] })
+  @Prop({ enum: ['育婴师', '母婴护理师', '养老护理员', '住家保姆', '其他'] })
+  consultPosition: string;
+
   @ApiProperty({ description: '手机号（与微信号二选一）' })
   @Prop({ unique: true, sparse: true })
   phone: string;
@@ -39,7 +51,7 @@ export class TrainingLead {
 
   @ApiProperty({ description: '线索来源' })
   @Prop({
-    enum: ['美团', '抖音', '快手', '小红书', '转介绍', '其他']
+    enum: ['美团', '抖音', '快手', '小红书', '转介绍', '幼亲舒', 'BOSS', 'BOSS直聘', '其他']
   })
   leadSource: string;
 
@@ -90,6 +102,10 @@ export class TrainingLead {
     enum: Object.values(IntentionLevel)
   })
   intentionLevel: string;
+
+  @ApiProperty({ description: '线索等级', enum: ['A', 'B', 'C', 'D', 'O'] })
+  @Prop({ enum: ['A', 'B', 'C', 'D', 'O'] })
+  leadGrade: string;
 
   @ApiProperty({ description: '期望开课时间' })
   @Prop()

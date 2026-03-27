@@ -1,7 +1,7 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App, message, Rate, List, Space, Tag } from 'antd';
-import { useState, useEffect } from 'react';
-import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined, StarFilled } from '@ant-design/icons';
+import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App, message, Rate, List, Space, Dropdown } from 'antd';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { UploadFile, RcFile } from 'antd/es/upload/interface';
 import type { UploadChangeParam } from 'antd/es/upload';
@@ -19,8 +19,13 @@ import type { Resume } from '../../services/resume.service';
 import { isLoggedIn } from '../../services/auth';
 import { JOB_TYPE_MAP } from '../../constants/jobTypes'; // 引入共享的工种映射
 import SortableImageUpload from '../../components/SortableImageUpload';
+import AIPhotoClassifyModal from '../../components/AIPhotoClassifyModal';
+import type { ClassifiedFile } from '../../components/AIPhotoClassifyModal';
+import { CATEGORY_LABELS } from '../../components/AIPhotoClassifyModal';
 import VideoUpload from '../../components/VideoUpload';
 import { generateOrderNumber } from '../../utils/orderNumberGenerator';
+import { contractService } from '../../services/contractService';
+import type { Contract } from '../../types/contract.types';
 import { BEIJING_DISTRICTS } from '../../constants/beijingDistricts';
 // 扩展 dayjs 功能
 dayjs.extend(customParseFormat);
@@ -57,6 +62,7 @@ const ethnicities = [
 // 在文件顶部添加调试模式常量
 // 调试模式开关，生产环境设为false
 const DEBUG_MODE = false;
+const LOCAL_WECHAT_PASTE_HELPER_URL = 'http://127.0.0.1:43821';
 
 // Define a base type for file properties
 type BaseFileProps = {
@@ -67,6 +73,8 @@ type BaseFileProps = {
   originFileObj?: RcFile;
   size?: number;
   type?: string;
+  // AI生成的工装照URL（仅用于个人照片，在创建模式下由/api/ai/swap-uniform接口生成）
+  uniformPhotoUrl?: string;
 };
 
 // Define types for new and existing files
@@ -133,7 +141,7 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'education'
   emergencyContactPhone?: string;
   selfIntroduction?: string;
   internalEvaluation?: string;
-  // 文件相关字段 - 旧格式
+  // 文件相关字段 - 新格式
   idCardFront?: { url: string };
   idCardBack?: { url: string };
   photoUrls?: string[];
@@ -142,7 +150,7 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'education'
   idCardFrontUrl?: string;
   idCardBackUrl?: string;
   // 文件相关字段 - 新格式
-  personalPhoto?: { url: string; filename?: string; size?: number; mimetype?: string };
+  personalPhoto?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }> | { url: string; filename?: string; size?: number; mimetype?: string };
   certificates?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   reports?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   confinementMealPhotos?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
@@ -318,6 +326,703 @@ const CreateResume: React.FC = () => {
   const [evaluationForm] = Form.useForm();
   const [evaluationLoading, setEvaluationLoading] = useState(false);
 
+  // AI识别相关状态
+  const [aiModalVisible, setAiModalVisible] = useState(false);
+  const [aiText, setAiText] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiImage, setAiImage] = useState<string | null>(null); // base64 图片数据（不含data:前缀）
+  const [aiImageMimeType, setAiImageMimeType] = useState<string>('image/png');
+  const [aiImagePreview, setAiImagePreview] = useState<string | null>(null); // 用于预览的完整data URL
+  const [aiPastedImages, setAiPastedImages] = useState<string[]>([]); // 从HTML粘贴中提取的内联图片(data URL)
+  const lastAiPasteSignatureRef = useRef<{ signature: string; timestamp: number }>({ signature: '', timestamp: 0 });
+
+  // AI图片分类相关状态
+  const [aiPhotoClassifyVisible, setAiPhotoClassifyVisible] = useState(false);
+
+  // 合同关联选择器状态
+  const [contractPicker, setContractPicker] = useState<{
+    open: boolean;
+    loading: boolean;
+    contracts: Contract[];
+    targetIndex: number;
+  }>({ open: false, loading: false, contracts: [], targetIndex: -1 });
+
+  const blobToDataUrl = useCallback((blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }, []);
+
+  // 从HTML中提取所有图片URL（微信等平台粘贴时图片嵌在HTML中）
+  const extractImagesFromHtml = useCallback((html: string): string[] => {
+    const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+    const urls: string[] = [];
+    let match;
+    while ((match = imgRegex.exec(html)) !== null) {
+      const src = match[1];
+      // 接受 data/http(s)/file URL，以及微信复制出来的 Windows 本地图片路径
+      if (
+        src.startsWith('data:image/') ||
+        src.startsWith('http://') ||
+        src.startsWith('https://') ||
+        src.startsWith('file://') ||
+        /^[a-zA-Z]:\\/.test(src)
+      ) {
+        urls.push(src);
+      }
+    }
+    return urls;
+  }, []);
+
+  const readImagesFromClipboardApi = useCallback(async (): Promise<string[]> => {
+    if (!navigator.clipboard?.read) {
+      return [];
+    }
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      const dataUrls: string[] = [];
+
+      for (const item of clipboardItems) {
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (!imageType) continue;
+
+        const blob = await item.getType(imageType);
+        const dataUrl = await blobToDataUrl(blob);
+        dataUrls.push(dataUrl);
+      }
+
+      return dataUrls;
+    } catch (error) {
+      console.warn('[AI简历粘贴] navigator.clipboard.read() 读取失败:', error);
+      return [];
+    }
+  }, [blobToDataUrl]);
+
+  const readImagesFromLocalHelper = useCallback(async (paths: string[]): Promise<string[]> => {
+    if (paths.length === 0) {
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${LOCAL_WECHAT_PASTE_HELPER_URL}/api/read-images`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ paths }),
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const payload = await response.json();
+      const images = Array.isArray(payload?.images) ? payload.images : [];
+      return images
+        .map((item: { dataUrl?: string }) => item?.dataUrl)
+        .filter((dataUrl: string | undefined): dataUrl is string => typeof dataUrl === 'string' && dataUrl.startsWith('data:image/'));
+    } catch (error) {
+      console.warn('[AI简历粘贴] 本机微信图片助手不可用:', error);
+      return [];
+    }
+  }, []);
+
+  const appendAiPastedImages = useCallback((dataUrls: string[]) => {
+    if (dataUrls.length === 0) {
+      return;
+    }
+
+    setAiPastedImages(prev => {
+      const all = [...prev, ...dataUrls];
+      const unique = Array.from(new Set(all));
+      return unique.slice(0, 20);
+    });
+  }, []);
+
+  // 将AI弹窗中粘贴的图片直接分配到指定照片分类（含身份证正反面+OCR）
+  type AssignCategory = 'photo' | 'cooking' | 'complementaryFood' | 'positiveReview' | 'idCardFront' | 'idCardBack';
+
+  const handleAssignImageToCategory = useCallback(async (dataUrl: string, imgIndex: number, category: AssignCategory) => {
+    try {
+      // 1. 将 data URL 转为 File
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const ext = blob.type === 'image/png' ? 'png' : 'jpg';
+      const fileName = `paste_${Date.now()}_${imgIndex}.${ext}`;
+      const file = new File([blob], fileName, { type: blob.type }) as unknown as RcFile;
+      (file as any).uid = `ai-paste-${Date.now()}-${imgIndex}`;
+
+      // ---- 身份证正面/背面：设置预览 + 触发 OCR ----
+      if (category === 'idCardFront' || category === 'idCardBack') {
+        const side = category === 'idCardFront' ? 'front' : 'back';
+        const newFile: CustomUploadFile = {
+          uid: (file as any).uid,
+          name: fileName,
+          status: 'done' as const,
+          url: URL.createObjectURL(file),
+          originFileObj: file,
+          isExisting: false,
+          type: file.type,
+        };
+        setIdCardFiles(prev => ({ ...prev, [side]: [newFile] }));
+
+        // 触发 OCR 识别
+        try {
+          setIsOcrProcessing(true);
+          const ocrResult = await ImageService.ocrIdCard(file, side);
+          const formValues = ImageService.extractIdCardInfo(ocrResult);
+          if (Object.keys(formValues).length > 0) {
+            form.setFieldsValue(formValues);
+            messageApi.success(`身份证${side === 'front' ? '正面' : '背面'}识别成功`);
+          } else {
+            messageApi.warning('未能识别到身份证信息，请手动填写');
+          }
+        } catch (error) {
+          console.error('OCR识别失败:', error);
+          messageApi.error(error instanceof Error ? error.message : '身份证识别失败，请手动填写');
+        } finally {
+          setIsOcrProcessing(false);
+        }
+
+        // 从粘贴图片列表中移除
+        setAiPastedImages(prev => prev.filter((_, i) => i !== imgIndex));
+        return;
+      }
+
+      // ---- 其他照片分类 ----
+      // 2. 压缩
+      let processedFile: File = file;
+      try {
+        processedFile = await ImageService.compressImage(file, 'photo');
+      } catch {
+        processedFile = file;
+      }
+
+      const tempPreviewUrl = URL.createObjectURL(processedFile);
+
+      const fileTypeMapping: Record<string, string> = {
+        'photo': 'personalPhoto',
+        'cooking': 'cookingPhoto',
+        'complementaryFood': 'complementaryFoodPhoto',
+        'positiveReview': 'positiveReviewPhoto',
+      };
+
+      if (editingResume?._id) {
+        // 编辑模式：上传到服务器
+        const formData = new FormData();
+        formData.append('file', processedFile);
+        formData.append('type', fileTypeMapping[category]);
+        const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
+        if (response.success) {
+          const newFile: CustomUploadFile = {
+            uid: (file as any).uid,
+            name: fileName,
+            url: response.data?.fileUrl,
+            thumbUrl: tempPreviewUrl,
+            status: 'done' as const,
+            originFileObj: file,
+            size: processedFile.size,
+            isExisting: false,
+          };
+          setFileUploadState(prev => ({
+            ...prev,
+            [category]: { ...prev[category], files: [...prev[category].files, newFile] },
+          }));
+          if (category === 'photo') setPhotoFiles(prev => [...prev, newFile]);
+          messageApi.success(`已添加到${categoryLabels[category]}`);
+        } else {
+          messageApi.error(response.message || '上传失败');
+          return;
+        }
+      } else {
+        // 创建模式：本地保存，提交时再上传
+        const newFile: CustomUploadFile = {
+          uid: (file as any).uid,
+          name: fileName,
+          status: 'done' as const,
+          thumbUrl: tempPreviewUrl,
+          originFileObj: processedFile as unknown as RcFile,
+          size: processedFile.size,
+          isExisting: false,
+        };
+        setFileUploadState(prev => ({
+          ...prev,
+          [category]: { ...prev[category], files: [...prev[category].files, newFile] },
+        }));
+        if (category === 'photo') setPhotoFiles(prev => [...prev, newFile]);
+        messageApi.success(`已添加到${categoryLabels[category]}`);
+      }
+
+      // 3. 从粘贴图片列表中移除
+      setAiPastedImages(prev => prev.filter((_, i) => i !== imgIndex));
+    } catch (err) {
+      console.error('分配图片到分类失败:', err);
+      messageApi.error('分配图片失败，请重试');
+    }
+  }, [editingResume, messageApi, form]);
+
+  const categoryLabels: Record<string, string> = {
+    photo: '个人照片',
+    cooking: '烹饪照片',
+    complementaryFood: '辅食照片',
+    positiveReview: '好评截图',
+    idCardFront: '身份证正面',
+    idCardBack: '身份证背面',
+  };
+
+  // 将外部图片URL通过canvas转成data URL（避免CORS问题时回退为原URL）
+  const loadImageAsDataUrl = useCallback((url: string): Promise<string> => {
+    return new Promise((resolve) => {
+      if (url.startsWith('data:')) {
+        resolve(url);
+        return;
+      }
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0);
+          const dataUrl = canvas.toDataURL('image/png');
+          resolve(dataUrl);
+        } catch {
+          // canvas tainted by CORS, 直接使用原URL显示
+          resolve(url);
+        }
+      };
+      img.onerror = () => resolve(url); // 加载失败也保留原URL
+      img.src = url;
+    });
+  }, []);
+
+  // 处理粘贴图片（window 级 + div onPaste 共用）
+  // 支持多次粘贴累积：收集剪贴板中所有图片
+  const handleAiModalPaste = useCallback(async (e: ClipboardEvent | React.ClipboardEvent) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+    const items = clipboardData.items;
+    const files = clipboardData.files;
+    const html = clipboardData.getData('text/html');
+
+    const signatureParts: string[] = [];
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        signatureParts.push(`${items[i].kind}:${items[i].type}`);
+      }
+    }
+    if (files) {
+      for (let i = 0; i < files.length; i++) {
+        signatureParts.push(`file:${files[i].type}:${files[i].size}`);
+      }
+    }
+    signatureParts.push(`html:${html.length}`);
+    const signature = signatureParts.join('|');
+    const now = Date.now();
+    if (
+      signature &&
+      lastAiPasteSignatureRef.current.signature === signature &&
+      now - lastAiPasteSignatureRef.current.timestamp < 300
+    ) {
+      return;
+    }
+    lastAiPasteSignatureRef.current = { signature, timestamp: now };
+
+    // 调试：输出剪贴板所有类型
+    if (items) {
+      const types: string[] = [];
+      for (let i = 0; i < items.length; i++) {
+        types.push(`${items[i].kind}:${items[i].type}`);
+      }
+      console.log('[AI简历粘贴] 剪贴板items:', types.join(', '), '| files数量:', files?.length || 0);
+    }
+
+    // 1. 收集剪贴板中所有图片文件（items + files 去重）
+    const imageFiles: File[] = [];
+    const seenNames = new Set<string>();
+
+    // 从 items 收集
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            const key = `${file.name}-${file.size}`;
+            if (!seenNames.has(key)) {
+              seenNames.add(key);
+              imageFiles.push(file);
+            }
+          }
+        }
+      }
+    }
+
+    // 从 files 收集（某些浏览器/平台 files 里有额外图片）
+    if (files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith('image/')) {
+          const key = `${file.name}-${file.size}`;
+          if (!seenNames.has(key)) {
+            seenNames.add(key);
+            imageFiles.push(file);
+          }
+        }
+      }
+    }
+
+    console.log('[AI简历粘贴] 找到图片文件数:', imageFiles.length);
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      // 读取所有图片文件并添加到 aiPastedImages
+      imageFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          appendAiPastedImages([dataUrl]);
+        };
+        reader.readAsDataURL(file);
+      });
+      return;
+    }
+
+    // 2. 没有直接的图片文件时，尝试从 HTML 内容中提取图片（微信等平台粘贴）
+    if (html) {
+      console.log('[AI简历粘贴] HTML内容(前500字):', html.substring(0, 500));
+      const imgUrls = extractImagesFromHtml(html);
+      console.log('[AI简历粘贴] 从HTML提取到图片URL数量:', imgUrls.length);
+      if (imgUrls.length > 0) {
+        const remoteImgUrls = imgUrls.filter(url => !/^[a-zA-Z]:\\/.test(url) && !url.startsWith('file://'));
+        const localImgPaths = imgUrls.filter(url => /^[a-zA-Z]:\\/.test(url));
+        const hasLocalImagePath = localImgPaths.length > 0;
+
+        const htmlDataUrls = remoteImgUrls.length > 0
+          ? await Promise.all(remoteImgUrls.map(url => loadImageAsDataUrl(url)))
+          : [];
+
+        const helperDataUrls = hasLocalImagePath ? await readImagesFromLocalHelper(localImgPaths) : [];
+        const clipboardDataUrls = helperDataUrls.length === 0 && hasLocalImagePath
+          ? await readImagesFromClipboardApi()
+          : [];
+        const mergedDataUrls = [...htmlDataUrls, ...helperDataUrls, ...clipboardDataUrls];
+
+        if (mergedDataUrls.length > 0) {
+          console.log('[AI简历粘贴] 成功读取真实图片数量:', mergedDataUrls.length);
+          appendAiPastedImages(mergedDataUrls);
+          return;
+        }
+
+        if (hasLocalImagePath) {
+          messageApi.warning(`检测到 ${imgUrls.length} 张微信图片引用，但当前浏览器未拿到真实图片数据。请启动本机微信图片助手，或改用单张粘贴/拖入上传区。`);
+        }
+      }
+    }
+  }, [appendAiPastedImages, extractImagesFromHtml, loadImageAsDataUrl, messageApi, readImagesFromClipboardApi, readImagesFromLocalHelper]);
+
+  // 弹窗打开时在 window 上兜底监听粘贴（焦点在 textarea 时也能捕获图片）
+  useEffect(() => {
+    if (!aiModalVisible) return;
+    const listener = (e: ClipboardEvent) => handleAiModalPaste(e);
+    window.addEventListener('paste', listener);
+    return () => window.removeEventListener('paste', listener);
+  }, [aiModalVisible, handleAiModalPaste]);
+
+  // AI识别 - 将简历文本解析为表单字段
+  const SURNAMES = ['李','王','张','刘','陈','赵','黄','周','吴','徐','孙','朱','马','胡','林','郑','何','高','梁','郭'];
+  const generateCustomerName = () => {
+    const surname = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
+    return surname + (Math.random() < 0.5 ? '先生' : '女士');
+  };
+
+  const REVIEW_TEMPLATES: Record<string, string[]> = {
+    yuesao: [
+      '照顾产妇和新生儿非常专业，服务态度好，强烈推荐！',
+      '月嫂技术过硬，细心体贴，宝宝和妈妈恢复都很好。',
+      '非常尽责，把产妇和宝宝照顾得很好，值得信赖。',
+      '专业负责，经验丰富，服务周到，全家都很满意。',
+      '照顾精心到位，产妇身体恢复好，新生儿护理专业。',
+    ],
+    'zhujia-yuer': [
+      '育儿经验丰富，孩子喜欢她，家长非常放心满意。',
+      '住家育儿嫂责任心强，孩子活泼健康，非常推荐。',
+      '带孩子耐心细心，孩子成长进步很快，很满意。',
+      '专业认真负责，孩子在她照顾下身体健康活泼。',
+    ],
+    'baiban-yuer': [
+      '白天照顾孩子专业细心，孩子喜欢她，家长放心。',
+      '育儿经验丰富，孩子在她照顾下健康快乐成长。',
+      '细心负责，孩子活泼开朗，家长非常满意推荐。',
+    ],
+    'zhujia-baomu': [
+      '做家务干净利落，为人诚实，相处融洽，非常满意。',
+      '勤劳踏实，把家里打理得整整齐齐，值得信赖。',
+      '住家保姆很负责，做饭好吃，家务干净，推荐。',
+    ],
+    'baiban-baomu': [
+      '做事勤快，家务整洁，为人善良，全家都满意。',
+      '白班保姆认真负责，把家里打理得非常干净整洁。',
+    ],
+    baojie: [
+      '打扫非常仔细认真，家里干净整洁，非常满意推荐。',
+      '保洁服务专业，每次都打扫得一尘不染，值得推荐。',
+    ],
+    'zhujia-hulao': [
+      '照顾老人耐心细致，老人很喜欢她，服务非常周到。',
+      '护理经验丰富，老人恢复很好，家属非常放心满意。',
+      '专业护老，对老人体贴入微，家人非常信任她。',
+    ],
+    default: [
+      '服务态度好，工作认真负责，家人都非常满意推荐。',
+      '专业负责，细心周到，相处融洽，非常值得推荐。',
+      '工作能力强，为人实在诚恳，服务让人非常放心。',
+    ],
+  };
+
+  const generateCustomerReview = (jobType?: string) => {
+    const list = (jobType && REVIEW_TEMPLATES[jobType]) || REVIEW_TEMPLATES.default;
+    return list[Math.floor(Math.random() * list.length)];
+  };
+
+  const handleOrderNumberGenerate = async (expIndex: number) => {
+    const phone = form.getFieldValue('phone');
+    const workerName = form.getFieldValue('name');
+    if (phone || workerName) {
+      setContractPicker(prev => ({ ...prev, open: false, loading: true, targetIndex: expIndex }));
+      try {
+        const contracts = await contractService.searchByWorkerInfo({ phone, name: workerName });
+        if (contracts && contracts.length > 0) {
+          setContractPicker({ open: true, loading: false, contracts, targetIndex: expIndex });
+          return;
+        }
+      } catch {
+        // 查询失败则直接生成
+      } finally {
+        setContractPicker(prev => ({ ...prev, loading: false }));
+      }
+    }
+    // 无合同记录，直接生成
+    const experiences = form.getFieldValue('workExperiences');
+    experiences[expIndex] = { ...experiences[expIndex], orderNumber: generateOrderNumber() };
+    form.setFieldsValue({ workExperiences: experiences });
+  };
+
+  const handleSelectContract = (contractNumber: string) => {
+    const { targetIndex } = contractPicker;
+    const experiences = form.getFieldValue('workExperiences');
+    experiences[targetIndex] = { ...experiences[targetIndex], orderNumber: contractNumber };
+    form.setFieldsValue({ workExperiences: experiences });
+    setContractPicker(prev => ({ ...prev, open: false }));
+  };
+
+  const normalizeProvince = (place: string): string => {
+    if (!place) return '';
+    // 精确匹配
+    const exact = provinces.find(p => p === place);
+    if (exact) return exact;
+    // 短名称匹配：如"湖南"→"湖南省"，"北京"→"北京市"
+    const match = provinces.find(p => p.startsWith(place) || place.startsWith(p.slice(0, 2)));
+    if (match) return match;
+    // 处理"山西运城"、"湖南长沙"等带城市的籍贯：尝试用前两个字匹配省份
+    if (place.length >= 2) {
+      const prefix = place.slice(0, 2);
+      const prefixMatch = provinces.find(p => p.startsWith(prefix));
+      if (prefixMatch) return prefixMatch;
+      // 也尝试用前三个字匹配（如"内蒙古"、"黑龙江"）
+      if (place.length >= 3) {
+        const prefix3 = place.slice(0, 3);
+        const prefix3Match = provinces.find(p => p.startsWith(prefix3));
+        if (prefix3Match) return prefix3Match;
+      }
+    }
+    return place;
+  };
+
+  const inferJobTypeFromText = (text?: string): JobType | undefined => {
+    if (!text) return undefined;
+    const normalized = text.replace(/\s+/g, '');
+
+    if (/(小时工|钟点工)/.test(normalized)) return JobType.XIAOSHI;
+    if (/(护老|养老院|半自理|不自理|卧床|老人|护理员|养老护理)/.test(normalized)) return JobType.ZHUJIA_HULAO;
+    if (/(月嫂|月子中心|产妇|新生儿|月子护理)/.test(normalized)) return JobType.YUESAO;
+    if (/(白班).*(育儿|带宝宝|主带|辅带宝宝|宝宝|大宝|小宝|孩子|小孩|幼儿园|婴儿|带娃)|(?:育儿|带宝宝|主带|辅带宝宝|宝宝|大宝|小宝|孩子|小孩|幼儿园|婴儿|带娃).*(白班)/.test(normalized)) return JobType.BAIBAN_YUER;
+    if (/(育儿|带宝宝|主带|辅带宝宝|早教|读绘本|宝宝|大宝|小宝|幼儿园|孩子|小孩|婴儿|带娃)/.test(normalized)) return JobType.ZHUJIA_YUER;
+    if (/(白班).*(做饭|家务|保姆|高端家务|生活助理|私人助理)|(?:做饭|家务|保姆|高端家务|生活助理|私人助理).*(白班)/.test(normalized)) return JobType.BAIBAN_BAOMU;
+    if (/(保洁)/.test(normalized)) return JobType.BAOJIE;
+    if (/(养宠|宠物)/.test(normalized)) return JobType.YANGCHONG;
+    if (/(做饭|家务|保姆|高端家务|生活助理|私人助理|收纳整理)/.test(normalized)) return JobType.ZHUJIA_BAOMU;
+    return undefined;
+  };
+
+  const handleAIParse = async () => {
+    const isImageMode = !!aiImage;
+
+    if (!isImageMode) {
+      // 文本模式：预处理文本
+      const cleanedText = aiText
+        .replace(/\[图片\]/g, '')
+        .replace(/\[表情\]/g, '')
+        .replace(/\[语音\]/g, '')
+        .replace(/\[视频\]/g, '')
+        .replace(/\[文件\]/g, '')
+        .replace(/\[链接\]/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      if (!cleanedText || cleanedText.length < 10) {
+        messageApi.warning('请粘贴简历文本（至少10个字符）');
+        return;
+      }
+    }
+
+    setAiLoading(true);
+    try {
+      let res: any;
+      if (isImageMode) {
+        // 图片模式
+        res = await apiService.post('/api/ai/parse-resume-image', {
+          image: aiImage,
+          mimeType: aiImageMimeType,
+        });
+      } else {
+        // 文本模式
+        const cleanedText = aiText
+          .replace(/\[图片\]/g, '')
+          .replace(/\[表情\]/g, '')
+          .replace(/\[语音\]/g, '')
+          .replace(/\[视频\]/g, '')
+          .replace(/\[文件\]/g, '')
+          .replace(/\[链接\]/g, '')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+        res = await apiService.post('/api/ai/parse-resume', { text: cleanedText });
+      }
+      if (!res.success || !res.data) {
+        messageApi.error(res.message || 'AI识别失败');
+        return;
+      }
+      const p = res.data;
+      const formValues: Record<string, any> = {};
+
+      // 基本信息
+      if (p.name)                formValues.name            = p.name;
+      if (p.age)                 formValues.age             = p.age;
+      if (p.gender)              formValues.gender          = p.gender;
+      if (p.phone)               formValues.phone           = p.phone;
+      if (p.wechat)              formValues.wechat          = p.wechat;
+      if (p.birthDate)           formValues.birthDate       = p.birthDate;
+      if (p.currentAddress)      formValues.currentAddress  = p.currentAddress;
+      if (p.hukouAddress)        formValues.hukouAddress    = p.hukouAddress;
+      if (p.idNumber)            formValues.idNumber        = p.idNumber;
+      if (p.nativePlace)         formValues.nativePlace     = normalizeProvince(p.nativePlace);
+      if (p.ethnicity)           formValues.ethnicity       = p.ethnicity;
+      if (p.education)           formValues.education       = p.education;
+      if (p.maritalStatus)       formValues.maritalStatus   = p.maritalStatus;
+      if (p.zodiac)              formValues.zodiac          = p.zodiac;
+      if (p.constellation)       formValues.zodiacSign      = p.constellation; // 字段名不同
+      if (p.religion)            formValues.religion        = p.religion;
+
+      // 工作信息
+      if (p.jobType)             formValues.jobType         = p.jobType;
+      if (p.experienceYears)     formValues.experienceYears = p.experienceYears;
+      if (p.expectedSalary)      formValues.expectedSalary  = p.expectedSalary;
+      if (p.skills?.length)      formValues.skills          = p.skills;
+      // 自我介绍：将 selfIntroduction 和 familySituation 合并写入
+      {
+        const parts: string[] = [];
+        if (p.selfIntroduction) parts.push(p.selfIntroduction);
+        if (p.familySituation) parts.push(`家庭情况：${p.familySituation}`);
+        if (parts.length > 0) formValues.selfIntroduction = parts.join('\n');
+      }
+
+      // 工作经历
+      if (p.workExperiences?.length) {
+        formValues.workExperiences = p.workExperiences.map((exp: any) => {
+          const jobType = inferJobTypeFromText(exp.description);
+          return {
+            startDate:      exp.startDate      || '',
+            endDate:        exp.endDate        || '',
+            jobType,
+            description:    exp.description    || '',
+            district:       exp.district       || undefined,
+            customerName:   exp.customerName   || generateCustomerName(),
+            customerReview: exp.customerReview || generateCustomerReview(jobType),
+            orderNumber:    generateOrderNumber(),
+          };
+        });
+      }
+
+      form.setFieldsValue(formValues);
+
+      const filled = Object.keys(formValues).filter(k => k !== 'workExperiences').length
+        + (formValues.workExperiences ? 1 : 0);
+      messageApi.success(`AI识别完成，已填充 ${filled} 个字段`);
+      setAiModalVisible(false);
+      setAiText('');
+      setAiImage(null);
+      setAiImagePreview(null);
+      setAiImageMimeType('image/png');
+      setAiPastedImages([]);
+    } catch (err: any) {
+      messageApi.error(err.message || 'AI识别请求失败');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // AI图片分类确认回调：将分类结果的文件添加到对应的 fileUploadState 分类
+  const handleAIPhotoClassifyConfirm = (results: ClassifiedFile[]) => {
+    type PhotoCategoryKey = 'photo' | 'certificate' | 'medical' | 'confinementMeal' | 'cooking' | 'complementaryFood' | 'positiveReview';
+    setFileUploadState(prev => {
+      const next = { ...prev };
+      results.forEach(item => {
+        const cat = item.category as PhotoCategoryKey;
+        if (!next[cat]) return;
+        const newFile: CustomUploadFile = {
+          uid: `ai-classify-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: item.file.name,
+          status: 'done',
+          thumbUrl: item.previewUrl,
+          originFileObj: item.file as RcFile,
+          size: item.file.size,
+          isExisting: false,
+        };
+        next[cat] = { ...next[cat], files: [...next[cat].files, newFile] };
+      });
+      return next;
+    });
+    const summary = results.reduce<Record<string, number>>((acc, item) => {
+      const label = CATEGORY_LABELS[item.category as keyof typeof CATEGORY_LABELS] || item.category;
+      acc[label] = (acc[label] || 0) + 1;
+      return acc;
+    }, {});
+    const summaryText = Object.entries(summary).map(([k, v]) => `${k}×${v}`).join('、');
+    messageApi.success(`已添加 ${results.length} 张图片：${summaryText}`);
+  };
+
+  // 将某分类下的图片移到另一分类
+  type PhotoCategoryKey = 'photo' | 'certificate' | 'medical' | 'confinementMeal' | 'cooking' | 'complementaryFood' | 'positiveReview';
+  const handleMoveToCategory = (fromCategory: PhotoCategoryKey) => (file: CustomUploadFile, toCategory: string) => {
+    setFileUploadState(prev => {
+      const toCat = toCategory as PhotoCategoryKey;
+      if (!prev[toCat] || fromCategory === toCat) return prev;
+      const fromFiles = prev[fromCategory].files.filter(f => f.uid !== file.uid);
+      const toFiles = [...prev[toCat].files, file];
+      return {
+        ...prev,
+        [fromCategory]: { ...prev[fromCategory], files: fromFiles },
+        [toCat]: { ...prev[toCat], files: toFiles },
+      };
+    });
+  };
+
   // 将 validateFile 移到组件内部
   const validateFile = (file: RcFile, type: 'idCard' | 'photo' | 'certificate' | 'medical' | 'confinementMeal' | 'cooking' | 'complementaryFood' | 'positiveReview'): boolean => {
     // 检查文件大小
@@ -388,13 +1093,115 @@ const CreateResume: React.FC = () => {
       }
     };
 
+  // 重新生成AI工装照
+  const handleRegeneratePhoto = async (file: CustomUploadFile) => {
+    // 如果文件还没上传（AI分类填充的本地文件），先上传到 COS 获得 URL
+    let photoUrl = file.url;
+    if (!photoUrl) {
+      if (!file.originFileObj) {
+        messageApi.warning('无原始照片，无法生成工装');
+        return;
+      }
+      const hideUploading = messageApi.loading('正在上传原图，请稍候...', 0);
+      try {
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file.originFileObj as File);
+        const uploadRes = await apiService.upload('/api/ai/upload-photo', uploadFormData, 'POST');
+        hideUploading();
+        if (!uploadRes.success || !uploadRes.data?.photoUrl) {
+          messageApi.error('上传原图失败，请重试');
+          return;
+        }
+        photoUrl = uploadRes.data.photoUrl;
+        // 顺便把 url 回填，避免下次再次上传
+        setFileUploadState(prev => ({
+          ...prev,
+          photo: { ...prev.photo, files: prev.photo.files.map(f => f.uid === file.uid ? { ...f, url: photoUrl! } : f) },
+        }));
+        setPhotoFiles(prev => prev.map(f => f.uid === file.uid ? { ...f, url: photoUrl! } : f));
+      } catch (err) {
+        hideUploading();
+        messageApi.error('上传原图失败，请重试');
+        return;
+      }
+    }
+    // 立即设为上传中状态，触发图片上的"上传中..."遮罩
+    const uploadingFile: NewFile = {
+      uid: file.uid,
+      name: file.name,
+      url: photoUrl,
+      thumbUrl: file.thumbUrl,
+      size: file.size,
+      type: file.type,
+      uniformPhotoUrl: file.uniformPhotoUrl,
+      status: 'uploading' as const,
+      isExisting: false,
+    };
+    setFileUploadState(prev => ({
+      ...prev,
+      photo: { ...prev.photo, files: prev.photo.files.map(f => f.uid === file.uid ? uploadingFile : f) },
+    }));
+    setPhotoFiles(prev => prev.map(f => f.uid === file.uid ? uploadingFile : f));
+
+    const hideLoading = messageApi.loading('正在重新生成AI工装照，请稍候（约30-60秒）...', 0);
+    try {
+      // 将COS URL传给后端，由后端服务端下载并调用AI（避免浏览器CORS限制）
+      const aiResponse = await apiService.post('/api/ai/swap-uniform-by-url', { photoUrl }, { timeout: 120000 });
+      hideLoading();
+
+      if (aiResponse.success && aiResponse.data?.personalPhotoUrl) {
+        const { personalPhotoUrl, uniformPhotoUrl } = aiResponse.data;
+        const doneFile: CustomUploadFile = {
+          uid: file.uid,
+          name: file.name,
+          status: 'done' as const,
+          url: personalPhotoUrl,
+          thumbUrl: uniformPhotoUrl || file.thumbUrl,
+          uniformPhotoUrl: uniformPhotoUrl,
+          size: file.size,
+          isExisting: false,
+        };
+        setFileUploadState(prev => ({
+          ...prev,
+          photo: { ...prev.photo, files: prev.photo.files.map(f => f.uid === file.uid ? doneFile : f) },
+        }));
+        setPhotoFiles(prev => prev.map(f => f.uid === file.uid ? doneFile : f));
+        messageApi.success('AI工装照重新生成成功！');
+      } else {
+        throw new Error(aiResponse.message || '重新生成失败');
+      }
+    } catch (err) {
+      hideLoading();
+      console.error('[AI重新换装] 失败:', err);
+      // 恢复为之前的状态
+      const restoredFile: NewFile = {
+        uid: file.uid,
+        name: file.name,
+        url: photoUrl,
+        thumbUrl: file.thumbUrl,
+        size: file.size,
+        type: file.type,
+        uniformPhotoUrl: file.uniformPhotoUrl,
+        status: 'done' as const,
+        isExisting: false,
+      };
+      setFileUploadState(prev => ({
+        ...prev,
+        photo: { ...prev.photo, files: prev.photo.files.map(f => f.uid === file.uid ? restoredFile : f) },
+      }));
+      setPhotoFiles(prev => prev.map(f => f.uid === file.uid ? restoredFile : f));
+      messageApi.warning('AI工装照重新生成失败，请稍后重试');
+    }
+  };
+
   // 修改预览处理函数
   const handlePreview = (file: UploadFile) => {
     if (!file.url && !file.preview && file.originFileObj) {
       file.preview = URL.createObjectURL(file.originFileObj);
     }
     
-    const fileUrl = file.url || (file.preview as string) || '';
+    // 优先预览 AI 生成的工装照（thumbUrl），其次是原始照片（url/preview）
+    const fileUrl = (file as any).uniformPhotoUrl || file.thumbUrl || file.url || (file.preview as string) || '';
     const fileName = file.name || file.url?.substring(file.url.lastIndexOf('/') + 1) || '';
     
     // 判断是否为PDF文件
@@ -524,7 +1331,10 @@ const CreateResume: React.FC = () => {
   };
 
   // 修改文件上传列表渲染函数
-  const renderUploadList = (type: keyof FileUploadState) => {
+  const renderUploadList = (
+    type: keyof FileUploadState,
+    moveOptions?: { onMoveToCategory: (file: CustomUploadFile, cat: string) => void; availableCategories: Array<{ value: string; label: string }> }
+  ) => {
     const currentFiles = fileUploadState[type].files;
     const isMaxReached = (() => {
       switch (type) {
@@ -547,19 +1357,10 @@ const CreateResume: React.FC = () => {
       }
     })();
 
-    return (
-      <Upload
-        listType="picture-card"
-        fileList={currentFiles}
-        onPreview={handlePreview}
-        onRemove={handleRemoveFile(type)}
-        beforeUpload={async (file) => {
-          // 移除"先保存基本信息"的限制
-
+    const beforeUploadHandler = async (file: RcFile) => {
           // 🔄 添加图片压缩处理
           let processedFile: File = file;
           try {
-            // 压缩类型映射
             const compressionTypeMapping = {
               'photo': 'photo',
               'certificate': 'certificate',
@@ -583,7 +1384,6 @@ const CreateResume: React.FC = () => {
           const formData = new FormData();
           formData.append('file', processedFile);
 
-          // 修复文件类型参数映射
           const fileTypeMapping = {
             'photo': 'personalPhoto',
             'certificate': 'certificate',
@@ -603,10 +1403,8 @@ const CreateResume: React.FC = () => {
 
           formData.append('type', mappedType);
           console.log(`📂 文件上传类型映射: ${type} -> ${mappedType}`);
-          // 本地临时缩略图，确保上传完成前也能显示
           const tempPreviewUrl = URL.createObjectURL(processedFile);
 
-          // 如果是编辑模式且有简历ID，直接上传
           if (editingResume?._id) {
             try {
               const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
@@ -614,15 +1412,14 @@ const CreateResume: React.FC = () => {
                 const newFile: CustomUploadFile = {
                   uid: file.uid,
                   name: file.name,
-                  url: response.data?.fileUrl, // 统一使用fileUrl字段
+                  url: response.data?.fileUrl,
                   thumbUrl: tempPreviewUrl,
                   status: "done" as const,
-                  originFileObj: file, // 保持原始 RcFile 类型
-                  size: processedFile.size, // 使用压缩后的大小
+                  originFileObj: file,
+                  size: processedFile.size,
                   isExisting: false
                 };
 
-                // 同时更新两套状态
                 setFileUploadState(prev => ({
                   ...prev,
                   [type]: {
@@ -631,7 +1428,6 @@ const CreateResume: React.FC = () => {
                   }
                 }));
 
-                // 同时更新单独的状态变量（兼容旧逻辑）
                 switch (type) {
                   case 'photo':
                     setPhotoFiles(prev => [...prev, newFile]);
@@ -653,14 +1449,12 @@ const CreateResume: React.FC = () => {
               messageApi.error("上传文件时出错");
             }
           } else {
-            // 如果是新建模式，将文件添加到待上传列表
-            // 注意：保存压缩后的文件作为 originFileObj，避免在提交时再次压缩
             const newFile: CustomUploadFile = {
               uid: file.uid,
               name: file.name,
               status: "done" as const,
               thumbUrl: tempPreviewUrl,
-              originFileObj: processedFile as unknown as RcFile, // 使用压缩后的文件
+              originFileObj: processedFile as unknown as RcFile,
               size: processedFile.size,
               isExisting: false
             };
@@ -673,7 +1467,6 @@ const CreateResume: React.FC = () => {
               hasOriginFileObj: !!newFile.originFileObj
             });
 
-            // 同时更新两套状态
             setFileUploadState(prev => ({
               ...prev,
               [type]: {
@@ -682,7 +1475,6 @@ const CreateResume: React.FC = () => {
               }
             }));
 
-            // 同时更新单独的状态变量（兼容旧逻辑）
             switch (type) {
               case 'photo':
                 setPhotoFiles(prev => [...prev, newFile]);
@@ -695,14 +1487,50 @@ const CreateResume: React.FC = () => {
                 break;
             }
           }
-          return false; // 阻止 antd Upload 自动上传
-        }}
+          return false;
+    };
+
+    // 当有 moveOptions 时，只渲染 SortableImageUpload（避免出现两个上传按钮）
+    if (moveOptions) {
+      return (
+        <SortableImageUpload
+          fileList={fileUploadState[type].files}
+          onChange={(newList) => setFileUploadState(prev => ({ ...prev, [type]: { ...prev[type], files: newList as CustomUploadFile[] } }))}
+          onPreview={handlePreview}
+          onRemove={handleRemoveFile(type)}
+          onMoveToCategory={moveOptions.onMoveToCategory}
+          availableCategories={moveOptions.availableCategories}
+          maxCount={(() => {
+            switch (type) {
+              case 'confinementMeal': return FILE_UPLOAD_CONFIG.maxConfinementMealCount;
+              case 'cooking': return FILE_UPLOAD_CONFIG.maxCookingCount;
+              case 'complementaryFood': return FILE_UPLOAD_CONFIG.maxComplementaryFoodCount;
+              case 'positiveReview': return FILE_UPLOAD_CONFIG.maxPositiveReviewCount;
+              default: return 9999;
+            }
+          })()}
+          beforeUpload={beforeUploadHandler}
+          disabled={false}
+        />
+      );
+    }
+
+    return (
+    <div>
+      <Upload
+        listType="picture-card"
+        fileList={currentFiles}
+        onPreview={handlePreview}
+        onRemove={handleRemoveFile(type)}
+        beforeUpload={beforeUploadHandler}
         onChange={handleFileChange(type)}
         accept={type === 'medical' ? '.jpg,.jpeg,.png,.pdf' : '.jpg,.jpeg,.png'}
         multiple
+        showUploadList={true}
       >
         {isMaxReached ? null : uploadButton}
       </Upload>
+    </div>
     );
   };
 
@@ -796,6 +1624,7 @@ const CreateResume: React.FC = () => {
             district: exp.district || undefined,
             customerName: exp.customerName || undefined,
             customerReview: exp.customerReview || undefined,
+            jobType: exp.jobType || undefined,
             photos: exp.photos || []
           })) || [{ startDate: '', endDate: '', description: '' }] // 确保至少有一条工作经历
         };
@@ -831,19 +1660,26 @@ const CreateResume: React.FC = () => {
         console.log('  - 新格式个人照片:', extendedResume.personalPhoto);
         console.log('  - 旧格式个人照片:', extendedResume.photoUrls);
 
-        // 处理新格式的个人照片
-        if (extendedResume.personalPhoto?.url) {
-          console.log('  ✅ 添加新格式个人照片:', extendedResume.personalPhoto.url);
-          allPhotoFiles.push({
-            uid: `existing-photo-new-0`,
-            name: extendedResume.personalPhoto.filename || '个人照片',
-            status: 'done' as const,
-            url: extendedResume.personalPhoto.url,
-            isExisting: true,
-            size: extendedResume.personalPhoto.size || 0
-          });
-          addedPhotoUrls.add(extendedResume.personalPhoto.url);
-        }
+        // 处理新格式的个人照片（数组或单对象）
+        const personalPhotoArr = extendedResume.personalPhoto
+          ? (Array.isArray(extendedResume.personalPhoto)
+              ? extendedResume.personalPhoto
+              : [extendedResume.personalPhoto])
+          : [];
+
+        personalPhotoArr.forEach((photo, index) => {
+          if (photo?.url && !addedPhotoUrls.has(photo.url)) {
+            allPhotoFiles.push({
+              uid: `existing-photo-new-${index}`,
+              name: photo.filename || `个人照片${index + 1}`,
+              status: 'done' as const,
+              url: photo.url,
+              isExisting: true,
+              size: photo.size || 0
+            });
+            addedPhotoUrls.add(photo.url);
+          }
+        });
 
         // 处理旧格式的个人照片（去重）
         if (extendedResume.photoUrls && extendedResume.photoUrls.length > 0) {
@@ -1595,21 +2431,45 @@ const CreateResume: React.FC = () => {
         // 更新个人照片排序
         if (fileUploadState.photo.files.length > 0) {
           console.log('📸 更新个人照片排序');
-          const photoData = {
-            photos: fileUploadState.photo.files.map(file => ({
+
+          // 找到已生成工装照的源文件
+          const uniformFile = fileUploadState.photo.files.find(f => f.uniformPhotoUrl);
+
+          // 排除已生成工装照的源照片（用工装照替代）
+          const photosToSave = fileUploadState.photo.files
+            .filter(file => !file.uniformPhotoUrl) // 排除有工装照的源照片
+            .map(file => ({
               url: file.url,
               filename: file.name,
               size: file.size,
               mimetype: file.type || 'image/jpeg'
-            }))
-          };
+            }));
+
+          const photoData = { photos: photosToSave };
 
           try {
             await apiService.patch(`/api/resumes/${editingResume._id}/personal-photos`, photoData);
             console.log('✅ 个人照片排序更新成功');
           } catch (error) {
             console.error('❌ 个人照片排序更新失败:', error);
-            // 不阻断流程，只记录错误
+          }
+
+          // 保存工装照（如果有生成过）
+          if (uniformFile?.uniformPhotoUrl) {
+            console.log('👔 保存工装照:', uniformFile.uniformPhotoUrl);
+            try {
+              await apiService.patch(`/api/resumes/${editingResume._id}`, {
+                uniformPhoto: {
+                  url: uniformFile.uniformPhotoUrl,
+                  filename: `uniform-${uniformFile.name || 'photo'}.jpg`,
+                  mimetype: 'image/jpeg',
+                  size: 0,
+                },
+              });
+              console.log('✅ 工装照保存成功');
+            } catch (error) {
+              console.error('❌ 工装照保存失败:', error);
+            }
           }
         }
 
@@ -1645,9 +2505,18 @@ const CreateResume: React.FC = () => {
         // 获取所有文件对象
         const frontFile = (idCardFiles.front[0] as CustomUploadFile)?.originFileObj;
         const backFile = (idCardFiles.back[0] as CustomUploadFile)?.originFileObj;
+
+        // 分两类：已预上传（有url无originFileObj） 和 待上传（有originFileObj）
+        const preUploadedPhotos = (photoFiles as CustomUploadFile[]).filter(f => f.url && !f.originFileObj);
         const photoFileList = (photoFiles as CustomUploadFile[])
+          .filter(f => !f.url && f.originFileObj)
           .map(file => file.originFileObj)
           .filter((file): file is RcFile => file !== undefined);
+
+        // 预生成工装照URL（取第一张有uniformPhotoUrl的照片）
+        const preGeneratedUniformPhotoUrl = preUploadedPhotos.find(f => f.uniformPhotoUrl)?.uniformPhotoUrl;
+        // 排除已生成工装照的源照片（用工装照替代，源照片不再单独保存）
+        const preUploadedPhotoUrls = preUploadedPhotos.filter(f => !f.uniformPhotoUrl).map(f => f.url!).filter(Boolean);
         const certificateFileList = (certificateFiles as CustomUploadFile[])
           .map(file => file.originFileObj)
           .filter((file): file is RcFile => file !== undefined);
@@ -1781,7 +2650,19 @@ const CreateResume: React.FC = () => {
           // 如果视频已经上传到服务器，只需要传URL
           formData.append('selfIntroductionVideoUrl', selfIntroductionVideo.url);
         }
-        
+
+        // 传递预上传的个人照片URL（已由AI换装接口处理，无需重复上传）
+        if (preUploadedPhotoUrls.length > 0) {
+          formData.append('preUploadedPhotoUrls', JSON.stringify(preUploadedPhotoUrls));
+          console.log('📸 传递预上传个人照片URL:', preUploadedPhotoUrls.length, '张');
+        }
+
+        // 传递预生成的工装照URL（跳过后端AI二次生成）
+        if (preGeneratedUniformPhotoUrl) {
+          formData.append('preGeneratedUniformPhotoUrl', preGeneratedUniformPhotoUrl);
+          console.log('🥼 传递预生成工装照URL:', preGeneratedUniformPhotoUrl.substring(0, 60) + '...');
+        }
+
         const response = await apiService.upload('/api/resumes', formData, 'POST');
         
         console.log('🆕 创建API响应:', response);
@@ -1881,6 +2762,7 @@ const CreateResume: React.FC = () => {
             district: exp.district || undefined,
             customerName: exp.customerName || undefined,
             customerReview: exp.customerReview || undefined,
+            jobType: exp.jobType || undefined,
             photos: exp.photos || []
           }))
       };
@@ -1908,7 +2790,7 @@ const CreateResume: React.FC = () => {
     <Form.Item
       label={label}
       name={field}
-      rules={field === 'medicalExamDate' ? [] : [{ required: true, message: `请选择${label}` }]}
+      rules={field === 'medicalExamDate' || field === 'birthDate' ? [] : [{ required: true, message: `请选择${label}` }]}
       getValueProps={(value: string | undefined) => ({
         value: value ? dayjs(value) : null
       })}
@@ -1946,10 +2828,17 @@ const CreateResume: React.FC = () => {
         },
         onBack: () => window.history.back(),
         extra: [
-          <Button 
-            key="refresh" 
-            type="default" 
-            onClick={checkBackendConnection} 
+          <Button
+            key="ai"
+            type="primary"
+            onClick={() => setAiModalVisible(true)}
+          >
+            🤖 AI识别填充
+          </Button>,
+          <Button
+            key="refresh"
+            type="default"
+            onClick={checkBackendConnection}
             icon={<ReloadOutlined />}
           >
             刷新连接
@@ -2068,14 +2957,18 @@ const CreateResume: React.FC = () => {
               <Row gutter={24} style={{ marginBottom: 16 }}>
                 <Col span={8}>
                   <Form.Item
-                    label="手机号码"
+                    label={
+                      <span>
+                        手机号码
+                        <span style={{ color: '#888', fontSize: 12, marginLeft: 6 }}>（不填则保存为草稿）</span>
+                      </span>
+                    }
                     name="phone"
                     rules={[
-                      { required: true, message: '请输入手机号码' },
                       { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号码' }
                     ]}
                   >
-                    <Input placeholder="请输入手机号码" autoComplete="tel" />
+                    <Input placeholder="请输入手机号码（可选）" autoComplete="tel" />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
@@ -2481,7 +3374,7 @@ const CreateResume: React.FC = () => {
                           <List.Item key={evaluation.id || index}>
                             <Card
                               style={{ width: '100%' }}
-                              bodyStyle={{ padding: '16px' }}
+                              styles={{ body: { padding: '16px' } }}
                             >
                               <Space direction="vertical" style={{ width: '100%' }} size="small">
                                 {/* 评分和评价人 */}
@@ -2696,6 +3589,21 @@ const CreateResume: React.FC = () => {
                               </Col>
                             </Row>
                             <Row gutter={24}>
+                              <Col span={12}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'jobType']}
+                                  label="工种"
+                                >
+                                  <Select placeholder="请选择工种" allowClear>
+                                    {Object.entries(JOB_TYPE_MAP).map(([value, label]) => (
+                                      <Option key={value} value={value}>{label}</Option>
+                                    ))}
+                                  </Select>
+                                </Form.Item>
+                              </Col>
+                            </Row>
+                            <Row gutter={24}>
                               <Col span={24}>
                                 <Form.Item
                                   {...restField}
@@ -2731,15 +3639,8 @@ const CreateResume: React.FC = () => {
                                       <Button
                                         type="link"
                                         size="small"
-                                        onClick={() => {
-                                          const orderNumber = generateOrderNumber();
-                                          const experiences = form.getFieldValue('workExperiences');
-                                          experiences[name] = {
-                                            ...experiences[name],
-                                            orderNumber
-                                          };
-                                          form.setFieldsValue({ workExperiences: experiences });
-                                        }}
+                                        loading={contractPicker.loading && contractPicker.targetIndex === name}
+                                        onClick={() => handleOrderNumberGenerate(name)}
                                       >
                                         生成
                                       </Button>
@@ -2771,14 +3672,46 @@ const CreateResume: React.FC = () => {
                                   name={[name, 'customerName']}
                                   label="客户姓名"
                                 >
-                                  <Input placeholder="请输入客户姓名" />
+                                  <Input
+                                    placeholder="请输入客户姓名"
+                                    suffix={
+                                      <Button
+                                        type="link"
+                                        size="small"
+                                        onClick={() => {
+                                          const experiences = form.getFieldValue('workExperiences');
+                                          experiences[name] = { ...experiences[name], customerName: generateCustomerName() };
+                                          form.setFieldsValue({ workExperiences: experiences });
+                                        }}
+                                      >
+                                        随机生成
+                                      </Button>
+                                    }
+                                  />
                                 </Form.Item>
                               </Col>
                               <Col span={12}>
                                 <Form.Item
                                   {...restField}
                                   name={[name, 'customerReview']}
-                                  label="客户评价"
+                                  label={
+                                    <Space size={4}>
+                                      <span>客户评价</span>
+                                      <Button
+                                        type="link"
+                                        size="small"
+                                        style={{ padding: 0, height: 'auto', fontSize: 12 }}
+                                        onClick={() => {
+                                          const experiences = form.getFieldValue('workExperiences');
+                                          const jobType = experiences[name]?.jobType || form.getFieldValue('jobType');
+                                          experiences[name] = { ...experiences[name], customerReview: generateCustomerReview(jobType) };
+                                          form.setFieldsValue({ workExperiences: experiences });
+                                        }}
+                                      >
+                                        随机生成
+                                      </Button>
+                                    </Space>
+                                  }
                                 >
                                   <Input.TextArea
                                     rows={2}
@@ -2943,6 +3876,7 @@ const CreateResume: React.FC = () => {
                       }}
                       onPreview={handlePreview}
                       onRemove={handleRemoveFile('photo')}
+                      onRegenerate={handleRegeneratePhoto}
                       maxCount={FILE_UPLOAD_CONFIG.maxPhotoCount}
                       beforeUpload={async (file: RcFile) => {
                         // 校验
@@ -2954,11 +3888,12 @@ const CreateResume: React.FC = () => {
                         } catch {
                           processedFile = file;
                         }
-                        const formData = new FormData();
-                        formData.append('file', processedFile);
-                        formData.append('type', 'personalPhoto');
                         const tempPreviewUrl = URL.createObjectURL(processedFile);
                         if (editingResume?._id) {
+                          // 编辑模式：上传到简历
+                          const formData = new FormData();
+                          formData.append('file', processedFile);
+                          formData.append('type', 'personalPhoto');
                           try {
                             const response = await apiService.upload(`/api/resumes/${editingResume._id}/upload`, formData);
                             if (response.success) {
@@ -2986,20 +3921,44 @@ const CreateResume: React.FC = () => {
                             messageApi.error('上传文件时出错');
                           }
                         } else {
-                          const newFile: CustomUploadFile = {
-                            uid: file.uid,
-                            name: file.name,
-                            status: 'done',
-                            thumbUrl: tempPreviewUrl,
-                            originFileObj: file,
-                            size: processedFile.size,
-                            isExisting: false,
-                          };
-                          setFileUploadState(prev => ({
-                            ...prev,
-                            photo: { ...prev.photo, files: [...prev.photo.files, newFile] },
-                          }));
-                          setPhotoFiles(prev => [...prev, newFile]);
+                          // 创建模式：只上传到COS，不触发AI（点击"生成工装"按钮才触发）
+                          const uploadFormData = new FormData();
+                          uploadFormData.append('file', processedFile);
+                          try {
+                            const response = await apiService.upload('/api/ai/upload-photo', uploadFormData, 'POST');
+                            const photoUrl = response.success ? response.data?.photoUrl : undefined;
+                            const newFile: CustomUploadFile = {
+                              uid: file.uid,
+                              name: file.name,
+                              status: 'done',
+                              url: photoUrl,
+                              thumbUrl: tempPreviewUrl,
+                              size: processedFile.size,
+                              isExisting: false,
+                            };
+                            setFileUploadState(prev => ({
+                              ...prev,
+                              photo: { ...prev.photo, files: [...prev.photo.files, newFile] },
+                            }));
+                            setPhotoFiles(prev => [...prev, newFile]);
+                          } catch (err) {
+                            console.error('上传照片失败:', err);
+                            // 即使上传失败也保留本地预览
+                            const newFile: CustomUploadFile = {
+                              uid: file.uid,
+                              name: file.name,
+                              status: 'done',
+                              thumbUrl: tempPreviewUrl,
+                              originFileObj: processedFile as unknown as RcFile,
+                              size: processedFile.size,
+                              isExisting: false,
+                            };
+                            setFileUploadState(prev => ({
+                              ...prev,
+                              photo: { ...prev.photo, files: [...prev.photo.files, newFile] },
+                            }));
+                            setPhotoFiles(prev => [...prev, newFile]);
+                          }
                         }
                         return false;
                       }}
@@ -3064,7 +4023,21 @@ const CreateResume: React.FC = () => {
           {/* 作品展示区域 */}
           <Form.Item noStyle>
             <Card
-              title={<Divider orientation="left">作品展示</Divider>}
+              title={
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Divider orientation="left" style={{ margin: 0 }}>作品展示</Divider>
+                  <Button
+                    size="small"
+                    type="primary"
+                    ghost
+                    icon={<span>🤖</span>}
+                    onClick={() => setAiPhotoClassifyVisible(true)}
+                    style={{ marginLeft: 16 }}
+                  >
+                    AI批量分类图片
+                  </Button>
+                </div>
+              }
               style={{ marginBottom: 24 }}
             >
               <Row gutter={24}>
@@ -3075,7 +4048,15 @@ const CreateResume: React.FC = () => {
                     extra={<span style={{ fontSize: '12px', color: '#999' }}>最多30张</span>}
                     style={{ marginBottom: 16 }}
                   >
-                    {renderUploadList('confinementMeal')}
+                    {renderUploadList('confinementMeal', {
+                      onMoveToCategory: handleMoveToCategory('confinementMeal'),
+                      availableCategories: [
+                        { value: 'cooking', label: '烹饪照片' },
+                        { value: 'complementaryFood', label: '辅食照片' },
+                        { value: 'positiveReview', label: '好评截图' },
+                        { value: 'photo', label: '个人照片' },
+                      ],
+                    })}
                   </Card>
                 </Col>
 
@@ -3086,7 +4067,15 @@ const CreateResume: React.FC = () => {
                     extra={<span style={{ fontSize: '12px', color: '#999' }}>最多30张</span>}
                     style={{ marginBottom: 16 }}
                   >
-                    {renderUploadList('cooking')}
+                    {renderUploadList('cooking', {
+                      onMoveToCategory: handleMoveToCategory('cooking'),
+                      availableCategories: [
+                        { value: 'confinementMeal', label: '月子餐照片' },
+                        { value: 'complementaryFood', label: '辅食照片' },
+                        { value: 'positiveReview', label: '好评截图' },
+                        { value: 'photo', label: '个人照片' },
+                      ],
+                    })}
                   </Card>
                 </Col>
 
@@ -3097,7 +4086,15 @@ const CreateResume: React.FC = () => {
                     extra={<span style={{ fontSize: '12px', color: '#999' }}>最多30张</span>}
                     style={{ marginBottom: 16 }}
                   >
-                    {renderUploadList('complementaryFood')}
+                    {renderUploadList('complementaryFood', {
+                      onMoveToCategory: handleMoveToCategory('complementaryFood'),
+                      availableCategories: [
+                        { value: 'confinementMeal', label: '月子餐照片' },
+                        { value: 'cooking', label: '烹饪照片' },
+                        { value: 'positiveReview', label: '好评截图' },
+                        { value: 'photo', label: '个人照片' },
+                      ],
+                    })}
                   </Card>
                 </Col>
 
@@ -3108,7 +4105,15 @@ const CreateResume: React.FC = () => {
                     extra={<span style={{ fontSize: '12px', color: '#999' }}>最多30张</span>}
                     style={{ marginBottom: 16 }}
                   >
-                    {renderUploadList('positiveReview')}
+                    {renderUploadList('positiveReview', {
+                      onMoveToCategory: handleMoveToCategory('positiveReview'),
+                      availableCategories: [
+                        { value: 'confinementMeal', label: '月子餐照片' },
+                        { value: 'cooking', label: '烹饪照片' },
+                        { value: 'complementaryFood', label: '辅食照片' },
+                        { value: 'photo', label: '个人照片' },
+                      ],
+                    })}
                   </Card>
                 </Col>
               </Row>
@@ -3145,6 +4150,218 @@ const CreateResume: React.FC = () => {
         onCancel={() => setPreviewState(prev => ({ ...prev, visible: false }))}
       >
         <img alt="预览图片" style={{ width: '100%' }} src={previewState.image} />
+      </Modal>
+
+      {/* AI识别填充弹窗 */}
+      <Modal
+        title="🤖 AI识别简历"
+        open={aiModalVisible}
+        onCancel={() => { setAiModalVisible(false); setAiText(''); setAiImage(null); setAiImagePreview(null); setAiPastedImages([]); }}
+        width={680}
+        footer={[
+          <Button key="cancel" onClick={() => { setAiModalVisible(false); setAiText(''); setAiImage(null); setAiImagePreview(null); setAiPastedImages([]); }}>
+            取消
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={aiLoading}
+            onClick={handleAIParse}
+            disabled={!aiImage && (!aiText || aiText.trim().length < 10)}
+          >
+            {aiImage ? '识别图片并填充' : '识别并填充'}
+          </Button>,
+        ]}
+      >
+        {/* 整个内容区域监听粘贴事件，确保图片粘贴能被捕获 */}
+        <div
+          tabIndex={-1}
+          onPaste={(e) => { e.nativeEvent.stopImmediatePropagation(); handleAiModalPaste(e); }}
+          style={{ outline: 'none' }}
+        >
+          <div style={{ marginBottom: 8, color: '#666', fontSize: 13 }}>
+            将简历文字粘贴到下方，或直接 <b>Ctrl+V 粘贴截图</b>，AI将自动识别并填充到表单中。
+            <br /><span style={{ fontSize: 12, color: '#999' }}>💡 支持多次粘贴：先粘贴文字，再逐个粘贴图片，图片会自动累加显示。</span>
+          </div>
+          {aiImagePreview && (
+            <div style={{ marginBottom: 12, textAlign: 'center', position: 'relative' }}>
+              <img
+                src={aiImagePreview}
+                alt="粘贴的截图"
+                style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, border: '1px solid #d9d9d9' }}
+              />
+              <Button
+                size="small"
+                danger
+                style={{ position: 'absolute', top: 4, right: 4 }}
+                onClick={() => { setAiImage(null); setAiImagePreview(null); }}
+              >
+                移除图片
+              </Button>
+              <div style={{ marginTop: 4, color: '#52c41a', fontSize: 12 }}>
+                ✅ 已粘贴截图，点击"识别图片并填充"开始识别
+              </div>
+            </div>
+          )}
+          {aiText.includes('[图片]') && !aiImagePreview && (
+            <div style={{ marginBottom: 8, padding: '8px 12px', background: aiPastedImages.length > 0 ? '#f6ffed' : '#fff7e6', border: `1px solid ${aiPastedImages.length > 0 ? '#b7eb8f' : '#ffe58f'}`, borderRadius: 6, fontSize: 12 }}>
+              {aiPastedImages.length === 0 ? (
+                <>
+                  <div style={{ color: '#faad14', marginBottom: 4 }}>
+                    ⚠️ 检测到文本中包含[图片]等占位符（来自微信等平台复制），识别时会自动忽略这些标记。
+                  </div>
+                  <div style={{ color: '#666' }}>
+                    💡 如需识别图片：回到微信收藏，<b>逐个复制图片</b>后在此处 <b>Ctrl+V</b> 粘贴，图片会累加显示在下方。也可以<b>截图</b>后粘贴。
+                  </div>
+                </>
+              ) : (
+                <div style={{ color: '#52c41a' }}>
+                  ✅ 已检测到文本中的[图片]占位符，已粘贴 {aiPastedImages.length} 张图片。可继续粘贴更多图片，或点击下方图片选择一张进行AI识别。
+                </div>
+              )}
+            </div>
+          )}
+          {aiPastedImages.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 12, color: '#666' }}>📷 已粘贴的图片（{aiPastedImages.length}张）：</span>
+                <Button size="small" danger onClick={() => setAiPastedImages([])}>清除全部</Button>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {aiPastedImages.map((imgUrl, idx) => (
+                  <div key={idx} style={{ position: 'relative', display: 'inline-block' }}>
+                    <img
+                      src={imgUrl}
+                      alt={`粘贴图片${idx + 1}`}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        objectFit: 'cover',
+                        borderRadius: 6,
+                        border: '1px solid #d9d9d9',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        // 点击图片设为AI识别图片
+                        const mimeMatch = imgUrl.match(/^data:(image\/[^;]+);base64,/);
+                        const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+                        const base64 = imgUrl.replace(/^data:image\/[^;]+;base64,/, '');
+                        setAiImage(base64);
+                        setAiImageMimeType(mime);
+                        setAiImagePreview(imgUrl);
+                      }}
+                      title="点击选择此图片进行AI识别"
+                    />
+                    {/* 删除按钮 */}
+                    <span
+                      onClick={() => setAiPastedImages(prev => prev.filter((_, i) => i !== idx))}
+                      style={{
+                        position: 'absolute', top: -4, right: -4,
+                        background: '#ff4d4f', color: '#fff', borderRadius: '50%',
+                        width: 16, height: 16, fontSize: 10, lineHeight: '16px',
+                        textAlign: 'center', cursor: 'pointer',
+                      }}
+                    >✕</span>
+                    {/* 移动到分类按钮 */}
+                    <Dropdown
+                      menu={{
+                        items: [
+                          { key: 'idCardFront', label: '移到身份证正面（自动OCR识别）' },
+                          { key: 'idCardBack', label: '移到身份证背面' },
+                          { type: 'divider' as const },
+                          { key: 'photo', label: '移到个人照片' },
+                          { key: 'cooking', label: '移到烹饪照片' },
+                          { key: 'complementaryFood', label: '移到辅食照片' },
+                          { key: 'positiveReview', label: '移到好评截图' },
+                        ],
+                        onClick: ({ key }) => handleAssignImageToCategory(imgUrl, idx, key as AssignCategory),
+                      }}
+                      trigger={['click']}
+                      placement="bottomRight"
+                    >
+                      <span
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: 'absolute', bottom: 2, right: 2,
+                          background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 4,
+                          width: 20, height: 20, fontSize: 12, lineHeight: '20px',
+                          textAlign: 'center', cursor: 'pointer',
+                        }}
+                        title="移动到照片分类"
+                      >
+                        <FolderOpenOutlined />
+                      </span>
+                    </Dropdown>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+                💡 点击图片可选择进行AI识别，点击右下角 <FolderOpenOutlined /> 可直接移到对应照片分类
+              </div>
+            </div>
+          )}
+          <Input.TextArea
+            rows={(aiImagePreview || aiPastedImages.length > 0) ? 6 : 14}
+            placeholder={'粘贴简历文本，或直接 Ctrl+V 粘贴截图\n\n例如：\n姓名：张三\n年龄：35\n籍贯：湖南\n手机：13800138000\n工种：月嫂\n...'}
+            value={aiText}
+            onChange={e => setAiText(
+              e.target.value
+                .replace(/\[图片\]/g, '')
+                .replace(/[ \t]+\n/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+            )}
+            maxLength={5000}
+            showCount
+          />
+        </div>
+      </Modal>
+
+      {/* AI图片批量分类弹窗 */}
+      <AIPhotoClassifyModal
+        open={aiPhotoClassifyVisible}
+        onCancel={() => setAiPhotoClassifyVisible(false)}
+        jobType={form.getFieldValue('jobType')}
+        onConfirm={handleAIPhotoClassifyConfirm}
+      />
+
+      {/* 合同关联选择器 */}
+      <Modal
+        title="选择关联合同"
+        open={contractPicker.open}
+        onCancel={() => setContractPicker(prev => ({ ...prev, open: false }))}
+        footer={[
+          <Button key="cancel" onClick={() => setContractPicker(prev => ({ ...prev, open: false }))}>取消</Button>,
+          <Button
+            key="new"
+            onClick={() => handleSelectContract(generateOrderNumber())}
+          >
+            不关联，生成新订单号
+          </Button>,
+        ]}
+        width={560}
+      >
+        <div style={{ marginBottom: 12, color: '#666' }}>
+          找到 {contractPicker.contracts.length} 条合同记录，点击选择关联：
+        </div>
+        <List
+          size="small"
+          bordered
+          dataSource={contractPicker.contracts}
+          renderItem={(contract) => (
+            <List.Item
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleSelectContract(contract.contractNumber)}
+              actions={[<Button type="link" size="small">选择</Button>]}
+            >
+              <Space direction="vertical" size={2}>
+                <span><b>{contract.contractNumber}</b></span>
+                <span style={{ fontSize: 12, color: '#999' }}>
+                  {contract.customerName} · {contract.startDate?.slice(0, 10)} ~ {contract.endDate?.slice(0, 10)}
+                </span>
+              </Space>
+            </List.Item>
+          )}
+        />
       </Modal>
 
       {/* 添加员工评价弹窗 */}

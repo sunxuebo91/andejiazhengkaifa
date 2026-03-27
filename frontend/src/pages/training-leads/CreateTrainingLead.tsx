@@ -136,8 +136,24 @@ const CreateTrainingLead: React.FC = () => {
               </Col>
 
               <Col xs={24} sm={12} md={8}>
+                <Form.Item label="性别" name="gender">
+                  <Select placeholder="请选择性别" allowClear>
+                    <Option value="男">男</Option>
+                    <Option value="女">女</Option>
+                    <Option value="其他">其他</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="年龄" name="age">
+                  <InputNumber style={{ width: '100%' }} placeholder="请输入年龄" min={0} max={120} precision={0} />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={12} md={8}>
                 <Form.Item
-                  label="手机号"
+                  label="电话号码"
                   name="phone"
                   rules={[
                     { required: true, message: '请输入手机号' },
@@ -150,13 +166,25 @@ const CreateTrainingLead: React.FC = () => {
 
               <Col xs={24} sm={12} md={8}>
                 <Form.Item
-                  label="微信号"
+                  label="微信"
                   name="wechatId"
                   rules={[
                     { max: 50, message: '微信号不能超过50个字符' }
                   ]}
                 >
                   <Input placeholder="请输入微信号" />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="咨询职位" name="consultPosition">
+                  <Select placeholder="请选择咨询职位" allowClear>
+                    <Option value="育婴师">育婴师</Option>
+                    <Option value="母婴护理师">母婴护理师</Option>
+                    <Option value="养老护理员">养老护理员</Option>
+                    <Option value="住家保姆">住家保姆</Option>
+                    <Option value="其他">其他</Option>
+                  </Select>
                 </Form.Item>
               </Col>
             </Row>

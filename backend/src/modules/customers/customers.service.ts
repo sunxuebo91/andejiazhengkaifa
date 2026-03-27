@@ -276,11 +276,12 @@ export class CustomersService {
       throw new NotFoundException('客户不存在');
     }
 
-    // 🔒 权限检查：O类线索等级只能由管理员手动修改
+    // 🔒 权限检查：O类线索等级只能由管理员/运营/派单老师手动修改
     if (updateCustomerDto.leadLevel === 'O类' && userId) {
       const user = await this.userModel.findById(userId).select('role').lean();
-      if (!user || user.role !== 'admin') {
-        throw new ForbiddenException('只有管理员可以手动设置线索等级为O类');
+      const allowedRoles = ['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'];
+      if (!user || !allowedRoles.includes(user.role)) {
+        throw new ForbiddenException('只有管理员、运营或派单老师可以手动设置线索等级为O类');
       }
     }
 
@@ -771,8 +772,8 @@ export class CustomersService {
   async assignCustomer(customerId: string, assignedTo: string, assignmentReason: string | undefined, adminUserId: string): Promise<Customer> {
     // 验证管理员/经理权限
     const adminUser = await this.userModel.findById(adminUserId).select('role name username active').lean();
-    if (!adminUser || !['admin', 'manager'].includes((adminUser as any).role)) {
-      throw new ForbiddenException('只有管理员或经理可以分配客户');
+    if (!adminUser || !['admin', 'manager', 'operator'].includes((adminUser as any).role)) {
+      throw new ForbiddenException('只有管理员、经理或运营可以分配客户');
     }
 
     // 验证客户
@@ -789,7 +790,7 @@ export class CustomersService {
     if ((targetUser as any).active === false) {
       throw new ConflictException('指定的负责人未激活');
     }
-    if (!['admin', 'employee', 'manager'].includes((targetUser as any).role)) {
+    if (!['admin', 'employee', 'manager', 'operator', 'dispatch', 'admissions'].includes((targetUser as any).role)) {
       throw new ConflictException('指定的负责人角色不允许被分配');
     }
 
@@ -897,8 +898,8 @@ export class CustomersService {
   ): Promise<{ success: number; failed: number; errors: Array<{ customerId: string; error: string }> }> {
     // 验证管理员/经理权限
     const adminUser = await this.userModel.findById(adminUserId).select('role name username active').lean();
-    if (!adminUser || !['admin', 'manager'].includes((adminUser as any).role)) {
-      throw new ForbiddenException('只有管理员或经理可以批量分配客户');
+    if (!adminUser || !['admin', 'manager', 'operator'].includes((adminUser as any).role)) {
+      throw new ForbiddenException('只有管理员、经理或运营可以批量分配客户');
     }
 
     // 验证目标用户
@@ -909,7 +910,7 @@ export class CustomersService {
     if ((targetUser as any).active === false) {
       throw new ConflictException('指定的负责人未激活');
     }
-    if (!['admin', 'employee', 'manager'].includes((targetUser as any).role)) {
+    if (!['admin', 'employee', 'manager', 'operator', 'dispatch', 'admissions'].includes((targetUser as any).role)) {
       throw new ConflictException('指定的负责人角色不允许被分配');
     }
 

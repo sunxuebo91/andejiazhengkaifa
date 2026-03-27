@@ -13,6 +13,7 @@
   },
   "scripts": {
     "guard": "node config-guard.js",
-    "ai-guard": "node ai-config-guard.js"
+    "ai-guard": "node ai-config-guard.js",
+    "wechat-paste-helper": "node tools/wechat-paste-helper/server.js"
   }
 }

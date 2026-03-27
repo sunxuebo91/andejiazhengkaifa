@@ -119,15 +119,29 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         const currentUser = getCurrentUser();
         if (currentUser) {
           const formattedUser = formatUser(currentUser);
-          
           setUser(formattedUser);
-          
-          // 获取用户权限
+
+          // 先用本地缓存快速渲染
           const userPermissions = await getUserPermissions();
           setPermissions(normalizePermissions(userPermissions));
         }
       }
       setLoading(false);
+
+      // 后台静默刷新服务器最新用户信息（确保权限始终是最新的，解决 localStorage 缓存过期问题）
+      if (isLoggedIn()) {
+        fetchCurrentUser()
+          .then(updatedUser => {
+            const formattedUser = formatUser(updatedUser);
+            setUser(formattedUser);
+            if (formattedUser.permissions) {
+              setPermissions(normalizePermissions(formattedUser.permissions));
+            }
+          })
+          .catch(() => {
+            // 服务器刷新失败时继续使用缓存数据，不影响正常使用
+          });
+      }
     };
 
     initAuth();

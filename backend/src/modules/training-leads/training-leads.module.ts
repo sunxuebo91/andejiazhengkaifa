@@ -6,6 +6,7 @@ import { TrainingLeadsService } from './training-leads.service';
 import { TrainingLead, TrainingLeadSchema } from './models/training-lead.model';
 import { TrainingLeadFollowUp, TrainingLeadFollowUpSchema } from './models/training-lead-follow-up.model';
 import { User, UserSchema } from '../users/models/user.entity';
+import { AIModule } from '../ai/ai.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { User, UserSchema } from '../users/models/user.entity';
         return { secret, signOptions: { algorithm: 'HS256' } };
       },
     }),
+    AIModule,
   ],
   controllers: [TrainingLeadsController],
   providers: [TrainingLeadsService],

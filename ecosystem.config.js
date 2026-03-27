@@ -12,7 +12,7 @@ module.exports = {
       },
       instances: 1,
       exec_mode: 'fork',
-      max_memory_restart: '500M',
+      max_memory_restart: '1500M',
       error_file: '../logs/backend-prod-error.log',
       out_file: '../logs/backend-prod-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',

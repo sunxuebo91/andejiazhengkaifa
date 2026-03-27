@@ -326,6 +326,16 @@ export const contractService = {
     }
   },
 
+  // 同步爱签状态到数据库（并同步客户状态）
+  async syncEsignStatus(contractId: string): Promise<{
+    success: boolean;
+    message: string;
+    data?: { esignStatus: string; contractStatus: string };
+  }> {
+    const response = await apiService.post(`/api/contracts/${contractId}/sync-esign-status`);
+    return response.data || response;
+  },
+
   // 手动触发保险同步
   async syncInsurance(contractId: string): Promise<{
     success: boolean;

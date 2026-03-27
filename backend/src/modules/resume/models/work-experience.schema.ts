@@ -28,6 +28,9 @@ export class WorkExperienceSchema {
   @Prop({ type: String, required: false })
   customerReview?: string;
 
+  @Prop({ type: String, required: false })
+  jobType?: string;
+
   @Prop({ type: [FileInfoSchema], required: false, default: [] })
   photos?: FileInfoSchema[];
 }

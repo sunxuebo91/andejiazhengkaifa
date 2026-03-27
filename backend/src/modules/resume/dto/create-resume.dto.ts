@@ -162,19 +162,19 @@ export class CreateResumeV2Dto {
   })
   name: string;
 
-  @ApiProperty({ description: '手机号码', example: '13800138000' })
-  @IsNotEmpty({ message: '手机号码不能为空' })
+  @ApiProperty({ description: '手机号码', example: '13800138000', required: false })
+  @IsOptional()
   @IsString({ message: '手机号码必须是字符串' })
   @Transform(({ value }) => {
     if (typeof value === 'string') {
       // 提取所有数字，支持含空格/短横线的输入
       const digits = value.replace(/\D/g, '');
-      return digits;
+      return digits || undefined;
     }
-    return value;
+    return value || undefined;
   })
   @Matches(/^1[3-9]\d{9}$/, { message: '请输入正确的11位手机号码' })
-  phone: string;
+  phone?: string;
 
   @ApiProperty({ description: '性别', enum: ['female', 'male'] })
   @IsNotEmpty({ message: '性别不能为空' })
@@ -594,11 +594,11 @@ export class CreateResumeDto {
   @IsString({ message: '姓名必须是字符串' })
   name: string;
 
-  @ApiProperty({ description: '手机号码', example: '13800138000' })
-  @IsNotEmpty({ message: '手机号码不能为空' })
+  @ApiProperty({ description: '手机号码', example: '13800138000', required: false })
+  @IsOptional()
   @IsString({ message: '手机号码必须是字符串' })
   @Matches(/^1[3-9]\d{9}$/, { message: '请输入正确的手机号码' })
-  phone: string;
+  phone?: string;
 
   @ApiProperty({ description: '年龄', example: 35 })
   @IsNotEmpty({ message: '年龄不能为空' })
@@ -1070,4 +1070,24 @@ export class CreateResumeDto {
     size?: number;
     mimetype?: string;
   }>;
+
+  @ApiProperty({ description: '预上传的个人照片URL列表（JSON字符串），用于创建前已由AI端点上传的照片', required: false })
+  @IsOptional()
+  @IsString()
+  preUploadedPhotoUrls?: string;
+
+  @ApiProperty({ description: '预生成的工装照URL，跳过二次AI生成', required: false })
+  @IsOptional()
+  @IsString()
+  preGeneratedUniformPhotoUrl?: string;
+
+  @ApiProperty({ description: '工装照文件信息', required: false })
+  @IsOptional()
+  @Allow()
+  uniformPhoto?: {
+    url: string;
+    filename?: string;
+    size?: number;
+    mimetype?: string;
+  };
 }

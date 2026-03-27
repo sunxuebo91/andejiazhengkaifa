@@ -23,6 +23,28 @@ export class CreateTrainingLeadDto {
   @MaxLength(50, { message: '客户姓名不能超过50个字符' })
   name: string;
 
+  @ApiPropertyOptional({ description: '性别', enum: ['男', '女', '其他'], example: '女' })
+  @IsOptional()
+  @IsEnum(['男', '女', '其他'], { message: '性别必须是：男、女、其他之一' })
+  gender?: string;
+
+  @ApiPropertyOptional({ description: '年龄', example: 28 })
+  @IsOptional()
+  @IsNumber({}, { message: '年龄必须是数字' })
+  @Min(0, { message: '年龄不能为负数' })
+  age?: number;
+
+  @ApiPropertyOptional({
+    description: '咨询职位',
+    enum: ['育婴师', '母婴护理师', '养老护理员', '住家保姆', '其他'],
+    example: '育婴师'
+  })
+  @IsOptional()
+  @IsEnum(['育婴师', '母婴护理师', '养老护理员', '住家保姆', '其他'], {
+    message: '咨询职位必须是：育婴师、母婴护理师、养老护理员、住家保姆、其他之一'
+  })
+  consultPosition?: string;
+
   @ApiProperty({ description: '手机号', example: '13800138000' })
   @IsString()
   @IsNotEmpty({ message: '手机号不能为空' })
@@ -42,8 +64,8 @@ export class CreateTrainingLeadDto {
   })
   @IsOptional()
   @IsString()
-  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '幼亲舒', '其他'], {
-    message: '线索来源必须是：美团、抖音、快手、小红书、转介绍、幼亲舒、其他之一'
+  @IsEnum(['美团', '抖音', '快手', '小红书', '转介绍', '幼亲舒', 'BOSS', 'BOSS直聘', '其他'], {
+    message: '线索来源必须是：美团、抖音、快手、小红书、转介绍、幼亲舒、BOSS、BOSS直聘、其他之一'
   })
   leadSource?: string;
 
@@ -115,6 +137,11 @@ export class CreateTrainingLeadDto {
   @IsOptional()
   @IsEnum(IntentionLevel, { message: '意向程度必须是：高、中、低之一' })
   intentionLevel?: string;
+
+  @ApiPropertyOptional({ description: '线索等级', enum: ['A', 'B', 'C', 'D', 'O'], example: 'A' })
+  @IsOptional()
+  @IsEnum(['A', 'B', 'C', 'D', 'O'], { message: '线索等级必须是：A、B、C、D、O之一' })
+  leadGrade?: string;
 
   @ApiPropertyOptional({ description: '期望开课时间', example: '2026-02-01' })
   @IsOptional()

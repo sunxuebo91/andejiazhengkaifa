@@ -36,6 +36,7 @@ import {
   SafetyOutlined,
   CheckCircleOutlined,
   CloseOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { customerService } from '../../services/customerService';
@@ -85,6 +86,8 @@ const ContractDetail: React.FC = () => {
 
   // 🆕 新增：保险同步状态
   const [syncInsuranceLoading, setSyncInsuranceLoading] = useState(false);
+  // 爱签状态同步
+  const [syncEsignLoading, setSyncEsignLoading] = useState(false);
 
   // 🆕 新增：背调信息
   const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheck | null>(null);
@@ -815,6 +818,29 @@ const ContractDetail: React.FC = () => {
     });
   };
 
+  // 同步爱签状态到数据库
+  const handleSyncEsignStatus = async () => {
+    if (!contract?._id) return;
+    setSyncEsignLoading(true);
+    messageApi.loading({ content: '正在同步爱签状态...', key: 'syncEsign' });
+    try {
+      const response = await contractService.syncEsignStatus(contract._id);
+      messageApi.destroy('syncEsign');
+      if (response.success) {
+        messageApi.success(response.message || '爱签状态同步成功');
+        // 刷新页面数据
+        window.location.reload();
+      } else {
+        messageApi.error(response.message || '同步失败');
+      }
+    } catch (error: any) {
+      messageApi.destroy('syncEsign');
+      messageApi.error(error.message || '同步失败');
+    } finally {
+      setSyncEsignLoading(false);
+    }
+  };
+
   // 🆕 手动触发保险同步
   const handleSyncInsurance = async () => {
     if (!contract?._id) {
@@ -1255,6 +1281,16 @@ const ContractDetail: React.FC = () => {
               style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', color: '#fff' }}
             >
               为该客户换人
+            </Button>
+            <Button
+              icon={<SyncOutlined />}
+              onClick={handleSyncEsignStatus}
+              loading={syncEsignLoading}
+              disabled={!contract.esignContractNo}
+              type="default"
+              style={{ borderColor: '#1677ff', color: '#1677ff' }}
+            >
+              同步签约状态
             </Button>
             <Button
               icon={<SafetyOutlined />}

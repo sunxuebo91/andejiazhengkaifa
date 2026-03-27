@@ -83,7 +83,35 @@ export const trainingLeadService = {
   async submitPublicForm(token: string, data: CreateTrainingLeadDto): Promise<TrainingLead> {
     const response = await apiService.post('/api/training-leads/public/submit', { token, data });
     return response.data;
-  }
+  },
+
+  /**
+   * AI识别图片中的职培线索（返回预览数据，不写入数据库）
+   */
+  async aiParseImage(file: File): Promise<any[]> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiService.upload('/api/training-leads/ai-preview-image', formData, 'POST', { timeout: 180000 });
+    return response.data || [];
+  },
+
+  /**
+   * AI识别Excel中的职培线索（自动映射字段，返回预览，不写入数据库）
+   */
+  async aiParseExcel(file: File): Promise<any[]> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiService.upload('/api/training-leads/ai-preview-excel', formData, 'POST', { timeout: 180000 });
+    return response.data || [];
+  },
+
+  /**
+   * 批量创建职培线索（确认AI预览后调用）
+   */
+  async bulkCreateLeads(leads: any[]): Promise<{ success: number; fail: number; errors: string[] }> {
+    const response = await apiService.post('/api/training-leads/bulk-create', { leads });
+    return response.data;
+  },
 };
 
 export default trainingLeadService;

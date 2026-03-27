@@ -1993,33 +1993,47 @@ const ResumeDetail = () => {
 
           <Card title="个人照片" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              {/* 去重显示：优先新格式，排除旧格式重复 */}
+              {/* 去重显示：工装照排第一，然后新格式，最后旧格式去重 */}
               {(() => {
                 const displayedUrls = new Set<string>();
                 const photoElements: React.ReactNode[] = [];
-                
-                // 首先显示新格式个人照片
+
+                // 首先显示工装照（排在最前面）
+                if (resume?.uniformPhoto?.url) {
+                  displayedUrls.add(resume.uniformPhoto.url);
+                  photoElements.push(
+                    <div key={`photo-uniform-${resume.uniformPhoto.url}`}>
+                      {renderFilePreview(resume.uniformPhoto, 0, 'photo')}
+                    </div>
+                  );
+                }
+
+                // 然后显示新格式个人照片
                 if (resume?.personalPhoto) {
                   if (Array.isArray(resume.personalPhoto)) {
                     resume.personalPhoto.forEach((photo: FileInfo, index: number) => {
-                      displayedUrls.add(photo.url);
-                      photoElements.push(
-                        <div key={`photo-new-${photo.url}-${index}`}>
-                          {renderFilePreview(photo, index, 'photo')}
-                        </div>
-                      );
+                      if (!displayedUrls.has(photo.url)) {
+                        displayedUrls.add(photo.url);
+                        photoElements.push(
+                          <div key={`photo-new-${photo.url}-${index}`}>
+                            {renderFilePreview(photo, index, 'photo')}
+                          </div>
+                        );
+                      }
                     });
                   } else {
-                    displayedUrls.add(resume.personalPhoto.url);
-                    photoElements.push(
-                      <div key={`photo-new-${resume.personalPhoto.url}-0`}>
-                        {renderFilePreview(resume.personalPhoto, 0, 'photo')}
-                      </div>
-                    );
+                    if (!displayedUrls.has(resume.personalPhoto.url)) {
+                      displayedUrls.add(resume.personalPhoto.url);
+                      photoElements.push(
+                        <div key={`photo-new-${resume.personalPhoto.url}-0`}>
+                          {renderFilePreview(resume.personalPhoto, 0, 'photo')}
+                        </div>
+                      );
+                    }
                   }
                 }
-                
-                // 然后显示旧格式中未重复的个人照片
+
+                // 最后显示旧格式中未重复的个人照片
                 resume?.photoUrls?.filter(Boolean).forEach((url: FileUrl, index: number) => {
                   if (!displayedUrls.has(url)) {
                     displayedUrls.add(url);
@@ -2030,17 +2044,18 @@ const ResumeDetail = () => {
                     );
                   }
                 });
-                
+
                 return photoElements;
               })()}
-              
+
               {/* 如果没有任何照片，显示提示信息 */}
-              {(!resume?.personalPhoto || (Array.isArray(resume.personalPhoto) && resume.personalPhoto.length === 0)) && 
-               (!resume?.photoUrls || resume.photoUrls.length === 0) && (
-                <div style={{ 
-                  padding: '40px', 
-                  textAlign: 'center', 
-                  border: '1px dashed #d9d9d9', 
+              {(!resume?.personalPhoto || (Array.isArray(resume.personalPhoto) && resume.personalPhoto.length === 0)) &&
+               (!resume?.photoUrls || resume.photoUrls.length === 0) &&
+               !resume?.uniformPhoto && (
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  border: '1px dashed #d9d9d9',
                   borderRadius: '6px',
                   color: '#999',
                   width: '100%'

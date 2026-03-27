@@ -1,0 +1,178 @@
+# 安得家政小程序 API 接口文档
+
+> 域名：crm.andejiazheng.com/api
+> 认证方式：除标注【公开】外，均需 Bearer Token（CRM员工账号）
+> 与「安得褓贝」小程序的区分：本文档为家政业务侧（员工/管理端）使用的接口
+
+---
+
+## 一、认证服务（auth）
+
+| # | 方法 | URL | 认证 | 说明 |
+|---|------|-----|------|------|
+| 1 | POST | /auth/miniprogram-login | 公开 | CRM员工小程序登录（微信code换token） |
+| 2 | GET  | /auth/me | Token | 获取当前登录员工信息 |
+
+---
+
+## 二、线索 / 客户管理（customers）⭐
+
+| # | 方法 | URL | 认证 | 说明 |
+|---|------|-----|------|------|
+| 3 | GET | /customers/miniprogram/statistics | Token | 获取客户统计信息（基于角色权限） |
+| 4 | GET | /customers/miniprogram/today-todo-stats | Token | 获取今日待办统计 |
+| 5 | GET | /customers/miniprogram/performance-progress | Token | 获取业绩进度 |
+| 6 | GET | /customers/miniprogram/contract-stats | Token | 获取合同统计 |
+| 7 | GET | /customers/miniprogram/list | Token | 获取客户列表（权限控制+数据脱敏） |
+| 8 | GET | /customers/miniprogram/employees/list | Token | 获取员工列表（用于分配客户） |
+| 9 | POST | /customers/miniprogram/create | Token | 创建客户线索（支持幂等性） |
+| 10 | GET | /customers/miniprogram/:id | Token | 获取客户详情（权限控制） |
+| 11 | PATCH | /customers/miniprogram/:id | Token | 更新客户信息 |
+| 12 | PATCH | /customers/miniprogram/:id/assign | Token | 分配客户（仅管理员/经理） |
+| 13 | POST | /customers/miniprogram/:id/follow-ups | Token | 创建客户跟进记录 |
+| 14 | GET | /customers/miniprogram/:id/follow-ups | Token | 获取客户跟进记录列表 |
+| 15 | GET | /customers/miniprogram/:id/assignment-logs | Token | 获取客户分配历史 |
+| 16 | POST | /customers/miniprogram/:id/release-to-pool | Token | 释放客户到公海 |
+
+---
+
+## 三、合同管理（contracts/miniprogram）
+
+| # | 方法 | URL | 认证 | 说明 |
+|---|------|-----|------|------|
+| 17 | GET | /contracts/miniprogram/list | Token | 获取合同列表 |
+| 18 | GET | /contracts/miniprogram/statistics | Token | 获取合同统计信息 |
+| 19 | GET | /contracts/miniprogram/check-customer/:customerPhone | Token | 检查客户现有合同 |
+| 20 | GET | /contracts/miniprogram/history/:customerPhone | Token | 获取客户合同历史 |
+| 21 | GET | /contracts/miniprogram/search-worker | Token | 根据服务人员信息搜索合同 |
+| 22 | GET | /contracts/miniprogram/by-customer/:customerId | Token | 根据客户ID获取合同列表 |
+| 23 | GET | /contracts/miniprogram/by-worker-id/:workerId | Token | 根据服务人员ID获取合同列表 |
+| 24 | GET | /contracts/miniprogram/by-number/:contractNumber | Token | 根据合同编号获取合同 |
+| 25 | GET | /contracts/miniprogram/detail/:id | Token | 获取合同详情 |
+| 26 | GET | /contracts/miniprogram/esign-info/:id | Token | 获取合同爱签信息 |
+| 27 | GET | /contracts/miniprogram/signers-status/:id | Token | 获取签署方详细状态 |
+| 28 | POST | /contracts/miniprogram/validate | Token | 验证合同数据 |
+| 29 | POST | /contracts/miniprogram/create | Token | 创建合同 |
+| 30 | POST | /contracts/miniprogram/initiate-signing/:id | Token | 发起电子签署 |
+| 31 | PUT | /contracts/miniprogram/update/:id | Token | 更新合同 |
+| 32 | POST | /contracts/miniprogram/change-worker/:originalContractId | Token | 创建换人合同 |
+| 33 | POST | /contracts/miniprogram/resend-sign-urls/:id | Token | 重新获取签署链接 |
+| 34 | POST | /contracts/miniprogram/download-contract/:id | Token | 下载已签署合同 |
+| 35 | POST | /contracts/miniprogram/withdraw/:id | Token | 撤销合同 |
+| 36 | POST | /contracts/miniprogram/invalidate/:id | Token | 作废合同 |
+| 37 | POST | /contracts/miniprogram/cancel/:id | Token | 智能撤销/作废合同 |
+| 38 | POST | /contracts/miniprogram/sync-insurance/:id | Token | 手动触发保险同步 |
+| 39 | POST | /contracts/miniprogram/sync-esign-status/:id | Token | 同步爱签合同状态 |
+| 40 | POST | /contracts/miniprogram/sync-all-esign-status | Token | 批量同步所有合同爱签状态 |
+
+---
+
+## 四、简历管理（resumes/miniprogram）
+
+| # | 方法 | URL | 认证 | 说明 |
+|---|------|-----|------|------|
+| 41 | POST | /resumes/miniprogram/self-register | 公开 | 阿姨自助注册（无需JWT） |
+| 42 | POST | /resumes/miniprogram/create | Token | 创建简历（支持幂等性和去重） |
+| 43 | GET | /resumes/miniprogram/stats | Token | 简历统计信息 |
+| 44 | POST | /resumes/miniprogram/validate | Token | 简历数据验证 |
+| 45 | POST | /resumes/miniprogram/check-status-by-idcard | Token | 通过身份证号查询劳动者保险与背调状态 |
+| 46 | GET | /resumes/miniprogram/:id | Token | 获取简历详情（含 avatarUrl） |
+| 47 | PATCH | /resumes/miniprogram/:id | Token | 更新简历（JSON格式） |
+| 48 | POST | /resumes/miniprogram/:id/upload-file | Token | 上传单个文件 |
+| 49 | POST | /resumes/miniprogram/:id/upload-files | Token | 批量上传文件 |
+| 50 | DELETE | /resumes/miniprogram/:id/delete-file | Token | 删除文件 |
+| 51 | GET | /resumes/miniprogram/:id/check-status | Token | 查询劳动者保险与背调状态 |
+
+---
+
+## 五、保险管理——大树保（dashubao/miniprogram）
+
+| # | 方法 | URL | 认证 | 说明 |
+|---|------|-----|------|------|
+| 52 | GET | /dashubao/miniprogram/policies | Token | 获取保单列表 |
+| 53 | GET | /dashubao/miniprogram/policy/by-id-card/:idCard | Token | 根据身份证号查询保单 |
+| 54 | GET | /dashubao/miniprogram/policy/by-policy-no/:policyNo | Token | 根据保单号查询保单 |
+| 55 | GET | /dashubao/miniprogram/policy/by-policy-ref/:policyRef | Token | 根据商户单号查询保单 |
+| 56 | GET | /dashubao/miniprogram/policy/:id | Token | 根据ID获取保单详情 |
+| 57 | POST | /dashubao/miniprogram/policy | Token | 创建保单（投保确认） |
+| 58 | POST | /dashubao/miniprogram/policy/query | Token | 查询保单状态（从大树保实时查询） |
+| 59 | POST | /dashubao/miniprogram/policy/payment/:policyRef | Token | 创建支付订单（小程序支付） |
+| 60 | POST | /dashubao/miniprogram/policy/cancel | Token | 注销保单（未生效） |
+| 61 | POST | /dashubao/miniprogram/policy/surrender | Token | 退保（已生效保单） |
+| 62 | POST | /dashubao/miniprogram/policy/print | Token | 获取电子保单PDF |
+| 63 | POST | /dashubao/miniprogram/policy/amend | Token | 批改保单（替换被保险人） |
+| 64 | POST | /dashubao/miniprogram/policy/add-insured | Token | 批增被保险人 |
+| 65 | POST | /dashubao/miniprogram/policy/sync/:identifier | Token | 同步保单状态（从大树保拉最新状态） |
+
+---
+
+## 六、背调管理——芝麻背调（zmdb/miniprogram）
+
+| # | 方法 | URL | 认证 | 说明 |
+|---|------|-----|------|------|
+| 66 | GET | /zmdb/miniprogram/reports | Token | 获取背调列表（分页） |
+| 67 | GET | /zmdb/miniprogram/reports/by-idno/:idNo | Token | 根据身份证号查询背调记录 |
+| 68 | GET | /zmdb/miniprogram/reports/:id | Token | 获取背调详情 |
+| 69 | POST | /zmdb/miniprogram/reports | Token | 发起背调 |
+| 70 | POST | /zmdb/miniprogram/reports/:reportId/fetch-result | Token | 拉取报告风险数据 |
+| 71 | POST | /zmdb/miniprogram/prepare-auth | Token | 准备授权书（上传到芝麻背调） |
+| 72 | POST | /zmdb/miniprogram/reports/:id/cancel | Token | 取消背调 |
+| 73 | GET | /zmdb/miniprogram/reports/:reportId/download | 公开* | 下载/查看背调报告PDF（手动验证token） |
+
+---
+
+## 七、视频面试（interview）
+
+| # | 方法 | URL | 认证 | 说明 |
+|---|------|-----|------|------|
+| 74 | POST | /interview/rooms | Token | 创建面试房间 |
+| 75 | GET | /interview/active-room | Token | 获取当前活跃面试房间 |
+| 76 | GET | /interview/rooms | Token | 获取面试房间列表 |
+| 77 | GET | /interview/rooms/:roomId | Token | 获取面试房间详情 |
+| 78 | POST | /interview/rooms/:roomId/end | Token | 结束面试 |
+| 79 | GET | /interview/rooms/:roomId/status | Token | 获取房间状态 |
+| 80 | POST | /interview/create-room | Token | 创建面试房间（新版，来源标记miniprogram） |
+| 81 | GET | /interview/latest-room | Token | 获取最新面试房间 |
+
+---
+
+## 八、访问日志（miniprogram-access-log）
+
+| # | 方法 | URL | 认证 | 说明 |
+|---|------|-----|------|------|
+| 82 | POST | /miniprogram-access-log | 公开 | 记录小程序H5页面访问日志 |
+
+---
+
+## 九、汇总
+
+| 模块 | 接口数 |
+|------|--------|
+| 认证 | 2 |
+| 线索/客户管理 ⭐ | 14 |
+| 合同管理 | 24 |
+| 简历管理 | 11 |
+| 保险管理（大树保） | 14 |
+| 背调管理（芝麻背调） | 8 |
+| 视频面试 | 8 |
+| 访问日志 | 1 |
+| **合计** | **82** |
+
+---
+
+## 附：两个小程序接口对比
+
+| 维度 | 安得褓贝 | 安得家政 |
+|------|---------|---------|
+| 使用对象 | 雇主/家长（C端） | 家政员工/管理员（B端） |
+| 登录方式 | /miniprogram-users/register + login | /auth/miniprogram-login |
+| 简历接口 | /resumes/public/list、/resumes/public/:id（只读展示） | /resumes/miniprogram/* （增删改查、上传文件） |
+| 线索/客户 | 无 | /customers/miniprogram/*（核心业务） |
+| 合同 | 无 | /contracts/miniprogram/*（全流程） |
+| 保险 | 无 | /dashubao/miniprogram/* |
+| 背调 | 无 | /zmdb/miniprogram/* |
+| 视频面试 | 无 | /interview/* |
+| 内容/文章 | /articles/miniprogram/*（有） | 无 |
+| 育儿日记 | 云函数 babyDiaryService（有） | 无 |
+| 轮播图 | /banners/miniprogram/active（有） | 无 |
+

@@ -64,6 +64,9 @@ export interface ParsedResume {
 
   // 家庭情况
   familySituation?: string;
+
+  // 推荐理由（20-30字，用于内部推荐）
+  recommendationReason?: string;
 }
 
 // 职培线索解析结果接口
@@ -291,6 +294,8 @@ export class QwenAIService {
 
 13. familySituation: 家庭情况描述（如"老公在家开货车，儿子上班"、"五口人，儿子都成家了"）
 
+17. recommendationReason: 根据阿姨的整体情况，站在内部推荐人的角度，写20-30字的推荐理由，突出最核心的亮点，如"从事育儿嫂12年，专业扎实，双胎经验丰富，沟通耐心，值得信赖"
+
 13b. currentAddress（现居住地址）:
    - 只在文本明确出现"现住址/现居住地址/居住地/现居住在"时提取
    - 像"通州富力尚悦居"这类可能是上户地点/服务区域，若无明确现住标签，不要误填currentAddress
@@ -349,7 +354,8 @@ export class QwenAIService {
     {"startDate":"YYYY-MM","endDate":"YYYY-MM","description":"内容","district":"区域","customerName":"李先生","customerReview":"20-30字客户好评"}
   ],
   "selfIntroduction": "综合介绍",
-  "familySituation": "家庭情况"
+  "familySituation": "家庭情况",
+  "recommendationReason": "20-30字推荐理由"
 }`;
   }
 
@@ -1485,5 +1491,117 @@ export class QwenAIService {
       provider: '阿里云通义千问',
       model: this.model,
     };
+  }
+
+  /**
+   * 根据简历信息生成约50字推荐文案
+   * 格式：【推荐理由】XXX阿姨是（工种），具备（技能），有X年经验，擅长（特长描述）
+   */
+  async generateRecommendation(resume: {
+    name?: string;
+    jobType?: string;
+    skills?: string[];
+    experienceYears?: number;
+    workExperiences?: Array<{ description?: string; jobType?: string }>;
+  }): Promise<string> {
+    if (!this.isConfigured()) {
+      throw new Error('AI 服务未配置');
+    }
+
+    // 工种中文映射
+    const jobTypeMap: Record<string, string> = {
+      'yuesao': '月嫂',
+      'zhujia-yuer': '住家育儿嫂',
+      'baiban-yuer': '白班育儿嫂',
+      'baojie': '保洁',
+      'baiban-baomu': '白班保姆',
+      'zhujia-baomu': '住家保姆',
+      'yangchong': '养宠师',
+      'xiaoshi': '小时工',
+      'zhujia-hulao': '住家护老',
+    };
+
+    // 技能中文映射
+    const skillMap: Record<string, string> = {
+      'chanhou': '产后修复师',
+      'teshu-yinger': '特殊婴儿护理',
+      'yiliaobackground': '医疗背景',
+      'yuying': '高级育婴师',
+      'zaojiao': '早教师',
+      'fushi': '辅食营养师',
+      'ertui': '小儿推拿师',
+      'waiyu': '外语',
+      'zhongcan': '中餐',
+      'xican': '西餐',
+      'mianshi': '面食',
+      'jiashi': '驾驶',
+      'shouyi': '整理收纳',
+      'muying': '母婴护理师',
+      'cuiru': '高级催乳师',
+      'yuezican': '月子餐营养师',
+      'yingyang': '营养搭配',
+      'liliao-kangfu': '理疗康复',
+      'shuangtai-huli': '双胎护理',
+      'yanglao-huli': '养老护理',
+    };
+
+    const jobTypeLabel = jobTypeMap[resume.jobType || ''] || resume.jobType || '家政服务';
+    const skillLabels = (resume.skills || []).map(s => skillMap[s] || s).slice(0, 4);
+    const experienceYears = resume.experienceYears || 0;
+    const name = resume.name || '阿姨';
+    const workDescriptions = (resume.workExperiences || [])
+      .map(w => w.description || '')
+      .filter(Boolean)
+      .slice(0, 3)
+      .join('；');
+
+    const prompt = `你是家政公司的推荐文案撰写助手，请根据以下简历信息，生成一段约50字的推荐理由文案。
+
+格式要求：
+- 必须以"【推荐理由】"开头
+- 格式：【推荐理由】${name}阿姨是（工种），具备（技能/资质），有X年经验，擅长（具体特长描述）
+- 总长度约50字，不超过60字
+- 全程使用纯中文，严禁出现任何英文字母、英文单词
+- 严禁出现任何编号、ID、数字编码、字母组合（如8F493F、ABC123等）
+- 严禁出现"accepting"、"available"等任何英文状态词
+- 只输出推荐文案本身，不要任何额外说明、标注或解释
+
+简历信息：
+- 姓名：${name}
+- 工种：${jobTypeLabel}
+- 技能/资质：${skillLabels.length > 0 ? skillLabels.join('、') : '专业家政服务'}
+- 从业年限：${experienceYears}年
+- 工作经历摘要：${workDescriptions || '有丰富的家政服务经验'}
+
+请直接输出推荐文案，不要任何额外解释。`;
+
+    try {
+      const response = await axios.post<QwenResponse>(
+        `${this.baseUrl}/chat/completions`,
+        {
+          model: this.model,
+          messages: [
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: 200,
+          temperature: 0.7,
+          enable_thinking: false,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000,
+        },
+      );
+
+      const content = (response.data.choices[0]?.message?.content || '').trim();
+      this.logger.log(`[推荐文案生成] 成功，内容长度: ${content.length}`);
+      return content;
+    } catch (error) {
+      this.logger.error('[推荐文案生成] 失败:', error.message);
+      throw error;
+    }
   }
 }

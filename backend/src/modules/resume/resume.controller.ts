@@ -805,8 +805,23 @@ export class ResumeController {
 
       // 添加员工评价和推荐理由到响应数据
       const resumeData = resume.toObject ? resume.toObject() : resume;
+      // 与 CRM 详情接口保持一致：优先工装照，其次个人照片，最后兼容旧 photoUrls
+      const avatarUrl =
+        resumeData?.uniformPhoto?.url ||
+        (Array.isArray(resumeData?.personalPhoto) && resumeData.personalPhoto.length > 0 ? resumeData.personalPhoto[0]?.url : undefined) ||
+        (Array.isArray(resumeData?.photoUrls) && resumeData.photoUrls.length > 0 ? resumeData.photoUrls[0] : undefined) ||
+        '';
       const enhancedData = {
         ...resumeData,
+        // 头像字段（与列表接口 /resumes/public/list 保持一致）
+        avatarUrl,
+        // 相册 URL 数组（便捷字段，供相册页直接使用）
+        confinementMealPhotoUrls: (resumeData.confinementMealPhotos || []).map((p: any) => p.url).filter(Boolean),
+        cookingPhotoUrls: (resumeData.cookingPhotos || []).map((p: any) => p.url).filter(Boolean),
+        complementaryFoodPhotoUrls: (resumeData.complementaryFoodPhotos || []).map((p: any) => p.url).filter(Boolean),
+        positiveReviewPhotoUrls: (resumeData.positiveReviewPhotos || []).map((p: any) => p.url).filter(Boolean),
+        // 自我介绍视频便捷 URL
+        selfIntroductionVideoUrl: resumeData?.selfIntroductionVideo?.url || null,
         employeeEvaluations: employeeEvaluations || [],
         recommendationTags: recommendationTags || []
       };
@@ -2131,6 +2146,76 @@ export class ResumeController {
         success: false,
         data: null,
         message: `检查档期失败: ${error.message}`
+      };
+    }
+  }
+
+  // ==================== 小程序：AI推荐文案 ====================
+
+  /**
+   * 根据简历ID调用千问AI生成约50字推荐文案
+   * 无需Token，用员工手机号验证身份
+   * POST /resumes/miniprogram/:id/recommendation
+   * Body: { phone: "138xxxxxxxx" }
+   */
+  @Post('miniprogram/:id/recommendation')
+  @Public()
+  @ApiOperation({ summary: '🤖 AI生成简历推荐文案（手机号鉴权，无需Token）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['phone'],
+      properties: {
+        phone: { type: 'string', description: '员工手机号', example: '13800138000' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: '返回约50字推荐文案',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          properties: {
+            recommendation: { type: 'string', description: '推荐文案（约50字）' },
+          },
+        },
+        message: { type: 'string' },
+      },
+    },
+  })
+  async generateRecommendation(
+    @Param('id') id: string,
+    @Body('phone') phone: string,
+  ) {
+    // 验证员工手机号
+    if (!phone) {
+      return { success: false, data: null, message: '请提供员工手机号' };
+    }
+    const staffExists = await this.resumeService.checkStaffByPhone(phone);
+    if (!staffExists) {
+      return { success: false, data: null, message: '手机号未授权，请联系管理员' };
+    }
+
+    try {
+      this.logger.log(`🤖 小程序请求AI推荐文案，简历ID: ${id}，员工手机: ${phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')}`);
+      const recommendation = await this.resumeService.generateResumeRecommendation(id);
+      this.logger.log(`✅ AI推荐文案生成成功，简历ID: ${id}，内容长度: ${recommendation.length}`);
+      return {
+        success: true,
+        data: { recommendation },
+        message: '推荐文案生成成功',
+      };
+    } catch (error) {
+      this.logger.error(`❌ AI推荐文案生成失败，简历ID: ${id}，错误: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `推荐文案生成失败: ${error.message}`,
       };
     }
   }

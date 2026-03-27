@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { MiniProgramUser } from './models/miniprogram-user.entity';
 import { RegisterMiniProgramUserDto } from './dto/register-miniprogram-user.dto';
 import { UpdateMiniProgramUserDto } from './dto/update-miniprogram-user.dto';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class MiniProgramUserService {
@@ -13,7 +14,21 @@ export class MiniProgramUserService {
   constructor(
     @InjectModel(MiniProgramUser.name)
     private readonly miniProgramUserModel: Model<MiniProgramUser>,
+    private readonly usersService: UsersService,
   ) {}
+
+  /**
+   * 判断手机号是否属于 CRM 员工
+   */
+  private async checkIsStaff(phone?: string): Promise<boolean> {
+    if (!phone) return false;
+    try {
+      const staffUser = await this.usersService.findByPhone(phone);
+      return !!staffUser;
+    } catch {
+      return false;
+    }
+  }
 
   /**
    * 加密密码
@@ -82,8 +97,8 @@ export class MiniProgramUserService {
         user.loginCount = (user.loginCount || 0) + 1;
 
         await user.save();
-        // 移除密码字段后返回
-        return this.removeSensitiveFields(user) as any;
+        const isStaff = await this.checkIsStaff(user.phone);
+        return { ...this.removeSensitiveFields(user), isStaff } as any;
       } else {
         // 新用户，创建记录
         this.logger.log(`创建新用户: openid=${dto.openid}, phone=${dto.phone}, username=${dto.username}`);
@@ -97,8 +112,8 @@ export class MiniProgramUserService {
         });
 
         const savedUser = await newUser.save();
-        // 移除密码字段后返回
-        return this.removeSensitiveFields(savedUser) as any;
+        const isStaff = await this.checkIsStaff(savedUser.phone);
+        return { ...this.removeSensitiveFields(savedUser), isStaff } as any;
       }
     } catch (error) {
       this.logger.error(`注册或更新用户失败: ${error.message}`, error.stack);
@@ -187,11 +202,13 @@ export class MiniProgramUserService {
 
       await user.save();
 
+      const isStaff = await this.checkIsStaff(user.phone);
       const userObj = this.removeSensitiveFields(user);
       return {
         ...userObj,
         hasPhone: !!user.phone,
         isNewUser: false,
+        isStaff,
       };
     } else {
       // 4. 用户不存在，创建新用户（包含用户信息）
@@ -219,11 +236,13 @@ export class MiniProgramUserService {
 
       const savedUser = await newUser.save();
 
+      const isStaff = await this.checkIsStaff(savedUser.phone);
       const savedUserObj = this.removeSensitiveFields(savedUser);
       return {
         ...savedUserObj,
         hasPhone: !!savedUser.phone,
         isNewUser: true,
+        isStaff,
       };
     }
   }
@@ -317,11 +336,13 @@ export class MiniProgramUserService {
     await user.save();
 
     // 4. 返回用户信息（不包含密码）
+    const isStaff = await this.checkIsStaff(user.phone);
     const result = this.removeSensitiveFields(user);
     return {
       ...result,
       hasPhone: !!user.phone,
       isNewUser: false,
+      isStaff,
     };
   }
 

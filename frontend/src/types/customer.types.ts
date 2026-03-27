@@ -7,7 +7,7 @@ export interface Customer {
   phone: string;
   wechatId?: string;
   idCardNumber?: string;
-  leadSource: '美团' | '抖音' | '快手' | '小红书' | '转介绍' | '其他';
+  leadSource: '美团' | '抖音' | '快手' | '小红书' | '转介绍' | '99保姆网' | '其他';
   serviceCategory: '月嫂' | '住家育儿嫂' | '保洁' | '住家保姆' | '养宠' | '小时工' | '白班育儿' | '白班保姆' | '住家护老';
   contractStatus: '已签约' | '签约中' | '匹配中' | '已面试' | '流失客户' | '已退款' | '退款中' | '待定';
   leadLevel: 'A类' | 'B类' | 'C类' | 'D类' | 'O类' | '流失';
@@ -113,7 +113,7 @@ export interface CustomerStatistics {
 }
 
 // 选项常量
-export const LEAD_SOURCES = ['美团', '抖音', '快手', '小红书', '转介绍', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '妈妈网', '犀牛', '宝宝树', '幼亲舒', '其他'] as const;
+export const LEAD_SOURCES = ['美团', '抖音', '快手', '小红书', '转介绍', '99保姆网', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '妈妈网', '犀牛', '宝宝树', '幼亲舒', '其他'] as const;
 
 export const SERVICE_CATEGORIES = [
   '月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老'

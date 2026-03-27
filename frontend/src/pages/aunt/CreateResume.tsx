@@ -329,6 +329,7 @@ const CreateResume: React.FC = () => {
   // AI识别相关状态
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const [aiText, setAiText] = useState('');
+  const [aiRecommendation, setAiRecommendation] = useState<string>('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiImage, setAiImage] = useState<string | null>(null); // base64 图片数据（不含data:前缀）
   const [aiImageMimeType, setAiImageMimeType] = useState<string>('image/png');
@@ -960,6 +961,11 @@ const CreateResume: React.FC = () => {
       }
 
       form.setFieldsValue(formValues);
+
+      // 存储AI生成的推荐理由，稍后在保存简历后自动创建内部评价
+      if (p.recommendationReason) {
+        setAiRecommendation(p.recommendationReason);
+      }
 
       const filled = Object.keys(formValues).filter(k => k !== 'workExperiences').length
         + (formValues.workExperiences ? 1 : 0);
@@ -2486,10 +2492,29 @@ const CreateResume: React.FC = () => {
           const successMessage = '简历更新成功';
           console.log('✅ 显示成功消息:', successMessage);
           messageApi.success(successMessage);
-          
+
+          // 如果有AI生成的推荐理由（重新做了AI识别），自动创建内部评价记录
+          if (aiRecommendation && editingResume._id) {
+            try {
+              await apiService.post('/api/employee-evaluations', {
+                employeeId: editingResume._id,
+                employeeName: editingResume.name,
+                evaluationType: 'daily',
+                overallRating: 5,
+                comment: aiRecommendation,
+                isPublic: false,
+                status: 'published',
+              });
+              console.log('✅ AI推荐理由已自动添加为内部评价');
+            } catch (evalErr) {
+              console.warn('⚠️ AI推荐理由评价创建失败（不影响简历保存）:', evalErr);
+            }
+            setAiRecommendation('');
+          }
+
           // 设置刷新标记，让列表页面知道需要刷新
           localStorage.setItem('shouldRefreshResumeList', 'true');
-          
+
           // 等待一下让用户看到成功消息，然后跳转
           setTimeout(() => {
             navigate('/aunt/list');
@@ -2671,10 +2696,30 @@ const CreateResume: React.FC = () => {
           const successMessage = '简历创建成功';
           console.log('✅ 显示成功消息:', successMessage);
           messageApi.success(successMessage);
-          
+
+          // 如果有AI生成的推荐理由，自动创建内部评价记录
+          const createdResumeId = response.data?._id || response.data?.id;
+          if (aiRecommendation && createdResumeId) {
+            try {
+              await apiService.post('/api/employee-evaluations', {
+                employeeId: createdResumeId,
+                employeeName: formValues.name || '',
+                evaluationType: 'daily',
+                overallRating: 5,
+                comment: aiRecommendation,
+                isPublic: false,
+                status: 'published',
+              });
+              console.log('✅ AI推荐理由已自动添加为内部评价');
+            } catch (evalErr) {
+              console.warn('⚠️ AI推荐理由评价创建失败（不影响简历保存）:', evalErr);
+            }
+            setAiRecommendation('');
+          }
+
           // 设置刷新标记，让列表页面知道需要刷新
           localStorage.setItem('shouldRefreshResumeList', 'true');
-          
+
           // 等待一下让用户看到成功消息，然后跳转
           setTimeout(() => {
             navigate('/aunt/list');

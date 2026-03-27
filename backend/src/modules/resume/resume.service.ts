@@ -2746,4 +2746,33 @@ export class ResumeService {
     return { hasInsurance, hasBackgroundCheck, latestInsurance, latestBackgroundCheck: bgCheck ?? null };
   }
 
+  /**
+   * 校验手机号是否属于 CRM 员工（用于无Token接口鉴权）
+   */
+  async checkStaffByPhone(phone: string): Promise<boolean> {
+    try {
+      const user = await this.userModel.findOne({ phone, active: true }).select('_id').lean().exec();
+      return !!user;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 根据简历ID调用千问AI生成约50字推荐文案
+   */
+  async generateResumeRecommendation(resumeId: string): Promise<string> {
+    const resume = await this.resumeModel.findById(new Types.ObjectId(resumeId)).lean().exec();
+    if (!resume) {
+      throw new NotFoundException(`简历 ${resumeId} 不存在`);
+    }
+    return this.qwenAIService.generateRecommendation({
+      name: resume.name,
+      jobType: resume.jobType,
+      skills: resume.skills as string[],
+      experienceYears: resume.experienceYears,
+      workExperiences: (resume.workExperiences || []) as Array<{ description?: string; jobType?: string }>,
+    });
+  }
+
 }

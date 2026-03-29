@@ -1498,6 +1498,23 @@ const ContractDetail: React.FC = () => {
                   )}
                 </Descriptions.Item>
                 
+                {/* 上户状态：合同签约后才显示；not_started 时不展示 */}
+                {(contract.onboardStatus === 'pending' || contract.onboardStatus === 'confirmed') && (
+                  <Descriptions.Item label="上户状态" span={1}>
+                    {contract.onboardStatus === 'confirmed' ? (
+                      <Tooltip title={
+                        contract.onboardConfirmedAt
+                          ? `确认时间：${new Date(contract.onboardConfirmedAt).toLocaleString('zh-CN')}${contract.onboardConfirmedBy ? `  确认人：${contract.onboardConfirmedBy}` : ''}`
+                          : '客户已确认上户'
+                      }>
+                        <Tag color="success">已上户</Tag>
+                      </Tooltip>
+                    ) : (
+                      <Tag color="orange">待上户</Tag>
+                    )}
+                  </Descriptions.Item>
+                )}
+
                 <Descriptions.Item label="服务开始日期" span={1}>
                   <span style={{ fontWeight: 'bold' }}>
                     {/* 优先使用 templateParams 中的合同时间（支持合并格式和分拆年月日格式） */}

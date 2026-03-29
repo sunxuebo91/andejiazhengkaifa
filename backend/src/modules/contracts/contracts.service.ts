@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Contract, ContractDocument } from './models/contract.model';
+import { Contract, ContractDocument, OnboardStatus } from './models/contract.model';
 import { CustomerContractHistory, CustomerContractHistoryDocument } from './models/customer-contract-history.model';
 import { CustomerOperationLog } from '../customers/models/customer-operation-log.model';
 import { Customer, CustomerDocument } from '../customers/models/customer.model';
@@ -1758,12 +1758,11 @@ export class ContractsService {
       // 步骤2：如果需要，更新本地合同状态
       if (needUpdateStatus) {
         this.logger.log(`🔧 更新本地合同状态为 active...`);
-        await this.contractModel.findByIdAndUpdate(contractId, {
-          contractStatus: 'active',
-          esignStatus: '2',
-          esignSignedAt: new Date(),
-          updatedAt: new Date(),
-        });
+        // 签约完成 → 进入"待上户"流程（仅当未已确认上户时才推进）
+        await this.contractModel.updateOne(
+          { _id: contractId, onboardStatus: { $ne: OnboardStatus.CONFIRMED } },
+          { $set: { contractStatus: 'active', esignStatus: '2', esignSignedAt: new Date(), updatedAt: new Date(), onboardStatus: OnboardStatus.PENDING } },
+        );
         this.logger.log(`✅ 合同状态已更新`);
       }
 
@@ -2065,12 +2064,11 @@ export class ContractsService {
 
           if (esignStatus === '2' && contract.contractStatus !== 'active') {
             // 已签约：更新合同 → 同步保险 → 同步客户
-            await this.contractModel.findByIdAndUpdate(contractId, {
-              contractStatus: 'active',
-              esignStatus: '2',
-              esignSignedAt: new Date(),
-              updatedAt: new Date(),
-            });
+            // 签约完成 → 进入"待上户"流程（仅当未已确认上户时才推进）
+            await this.contractModel.updateOne(
+              { _id: contractId, onboardStatus: { $ne: OnboardStatus.CONFIRMED } },
+              { $set: { contractStatus: 'active', esignStatus: '2', esignSignedAt: new Date(), updatedAt: new Date(), onboardStatus: OnboardStatus.PENDING } },
+            );
             await this.syncInsuranceOnContractActive(contractId).catch(e =>
               this.logger.error(`自动同步保险失败 ${contractId}:`, e)
             );
@@ -2101,5 +2099,214 @@ export class ContractsService {
       errors++;
     }
     return { synced, errors };
+  }
+
+  // ==================== 客户订单中心（小程序云函数专用）====================
+
+  /**
+   * 按客户手机号查询合同列表（供小程序云函数调用）
+   */
+  async getContractsByPhone(phone: string): Promise<ContractDocument[]> {
+    return this.contractModel
+      .find({ customerPhone: phone })
+      .select('-templateParams -esignSignUrls -workerIdCard -customerIdCard')
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+  }
+
+  // ── 内部辅助 ──────────────────────────────────────────────────────────────
+
+  /**
+   * 从爱签 API 实时构建甲（客户）乙（阿姨）双方签署状态。
+   *
+   * 逻辑分支：
+   *   1. 尚未创建爱签流程 → 返回 null（字段不适用）
+   *   2. esignStatus === '2'（整体已签完）→ 免调爱签 API，直接返回双方 true
+   *   3. 签约进行中 → 实时查 getContractInfo，按 signOrder 分配甲乙方
+   *   4. 爱签 API 失败 → 降级返回双方 false，不阻断主流程
+   */
+  private async buildSignerStatuses(contract: any): Promise<{
+    customerSigned: boolean;
+    nannySigned: boolean;
+    customerSignedAt: string | null;
+    nannySignedAt: string | null;
+  } | null> {
+    // 1. 未进入爱签流程
+    if (!contract.esignContractNo) return null;
+
+    // 2. 整体已签完（esignStatus=2），免调远程接口
+    if (contract.esignStatus === '2') {
+      const signedAt: string | null = contract.esignSignedAt
+        ? new Date(contract.esignSignedAt).toISOString()
+        : null;
+      return { customerSigned: true, nannySigned: true, customerSignedAt: signedAt, nannySignedAt: signedAt };
+    }
+
+    // 3. 实时查询签署方状态
+    try {
+      const result = await this.esignService.getContractInfo(contract.esignContractNo);
+      if (!result.success || !result.data?.signUser?.length) {
+        return { customerSigned: false, nannySigned: false, customerSignedAt: null, nannySignedAt: null };
+      }
+
+      const rawSignUsers: any[] = result.data.signUser;
+
+      // 按 signOrder 升序排列，排除企业自动签（userType=1）
+      const personalSigners = [...rawSignUsers]
+        .filter(u => u.userType !== 1)
+        .sort((a, b) => (a.signOrder ?? 999) - (b.signOrder ?? 999));
+
+      const customerUser = personalSigners[0] ?? null; // signOrder=1 → 甲方（客户）
+      const nannyUser    = personalSigners[1] ?? null; // signOrder=2 → 乙方（阿姨）
+
+      /** 将爱签 signTime（可能是毫秒时间戳或 ISO 字符串）统一转为 ISO 字符串 */
+      const toIso = (t: any): string | null => {
+        if (!t) return null;
+        return typeof t === 'number' ? new Date(t).toISOString() : String(t);
+      };
+
+      return {
+        customerSigned:   customerUser?.signStatus === 2,
+        nannySigned:      nannyUser?.signStatus    === 2,
+        customerSignedAt: customerUser?.signStatus === 2 ? toIso(customerUser.signTime) : null,
+        nannySignedAt:    nannyUser?.signStatus    === 2 ? toIso(nannyUser.signTime)    : null,
+      };
+    } catch (err) {
+      this.logger.warn(`[buildSignerStatuses] 爱签查询失败，降级返回未签: ${err.message}`);
+      return { customerSigned: false, nannySigned: false, customerSignedAt: null, nannySignedAt: null };
+    }
+  }
+
+  /**
+   * 按合同 ID 查询单条合同详情，同时校验手机号归属（防越权）
+   */
+  async getContractByIdForCustomer(id: string, phone: string): Promise<any> {
+    let contract: ContractDocument | null;
+    try {
+      contract = await this.contractModel
+        .findById(id)
+        .select('-templateParams -esignSignUrls -workerIdCard -customerIdCard')
+        .lean()
+        .exec();
+    } catch {
+      throw new NotFoundException('合同不存在');
+    }
+    if (!contract) {
+      throw new NotFoundException('合同不存在');
+    }
+    if (contract.customerPhone !== phone) {
+      throw new ForbiddenException('无权访问该合同');
+    }
+
+    // 实时追加甲乙双方签署状态（失败时 signerStatuses 为 null，不影响主体数据）
+    const signerStatuses = await this.buildSignerStatuses(contract);
+    return { ...contract, signerStatuses };
+  }
+
+  /**
+   * 实时获取客户签约链接（专供小程序）
+   * - 校验合同归属，防越权
+   * - 向爱签 API 实时取最新 URL（避免存库短链过期）
+   * - 按手机号匹配客户自己的那条签署链接
+   */
+  async getCustomerSigningUrl(id: string, phone: string): Promise<{ signingUrl: string; alreadySigned: boolean }> {
+    // 1. 取合同（不排除 esignSignUrls，备用时需要）
+    let contract: ContractDocument | null;
+    try {
+      contract = await this.contractModel.findById(id).lean().exec();
+    } catch {
+      throw new NotFoundException('合同不存在');
+    }
+    if (!contract) throw new NotFoundException('合同不存在');
+    if (contract.customerPhone !== phone) throw new ForbiddenException('无权访问该合同');
+
+    // 2. 如果合同还没进入爱签流程，无签约链接
+    if (!contract.esignContractNo) {
+      throw new BadRequestException('该合同尚未发起签约，暂无签约链接');
+    }
+
+    // 3. 如果已全部签约完成，提示已签完
+    if (contract.esignStatus === '2') {
+      throw new BadRequestException('合同已签约完成，无需再次签署');
+    }
+
+    // 4. 实时向爱签查询最新签署方信息
+    let signingUrl: string | null = null;
+    let alreadySigned = false;
+    try {
+      const result = await this.esignService.getContractSignUrls(contract.esignContractNo);
+      const signUrls: Array<{ name: string; mobile: string; account: string; signUrl: string; status: number; signOrder: number }> =
+        result?.data?.signUrls || [];
+
+      // 按手机号匹配（mobile 或 account 字段，任一匹配）
+      const matched = signUrls.find(
+        u => u.mobile === phone || u.account === phone,
+      ) || signUrls.find(u => u.signOrder === 1); // 保底：取甲方（第一签署方）
+
+      if (matched) {
+        if (matched.status === 2) {
+          alreadySigned = true;
+        }
+        signingUrl = matched.signUrl || null;
+      }
+    } catch (err) {
+      this.logger.warn(`[客户签约链接] 实时查询失败，尝试用存库链接兜底: ${err.message}`);
+    }
+
+    // 5. 爱签 API 失败时，用 DB 中存库的链接兜底
+    if (!signingUrl && contract.esignSignUrls) {
+      try {
+        const stored: Array<{ mobile?: string; account?: string; signUrl?: string }> =
+          JSON.parse(contract.esignSignUrls as unknown as string);
+        const fallback = stored.find(u => u.mobile === phone || u.account === phone) || stored[0];
+        if (fallback?.signUrl) {
+          signingUrl = fallback.signUrl;
+          this.logger.warn('[客户签约链接] 使用存库链接兜底（可能已过期，建议客户稍后重试）');
+        }
+      } catch { /* JSON 解析失败则忽略 */ }
+    }
+
+    if (!signingUrl) {
+      throw new BadRequestException('暂时无法获取签约链接，请稍后重试');
+    }
+
+    return { signingUrl, alreadySigned };
+  }
+
+  /**
+   * 客户确认上户（幂等：已确认则直接返回成功）
+   */
+  async confirmOnboard(id: string, phone: string): Promise<ContractDocument> {
+    let contract: ContractDocument | null;
+    try {
+      contract = await this.contractModel.findById(id).exec();
+    } catch {
+      throw new NotFoundException('合同不存在');
+    }
+    if (!contract) {
+      throw new NotFoundException('合同不存在');
+    }
+    if (contract.customerPhone !== phone) {
+      throw new ForbiddenException('无权操作该合同');
+    }
+    // 幂等处理：已确认则直接返回
+    if ((contract as any).onboardStatus === 'confirmed') {
+      return contract.toObject ? contract.toObject() : contract;
+    }
+    const updated = await this.contractModel
+      .findByIdAndUpdate(
+        id,
+        {
+          onboardStatus: 'confirmed',
+          onboardConfirmedAt: new Date(),
+          onboardConfirmedBy: phone,
+        },
+        { new: true },
+      )
+      .select('-templateParams -esignSignUrls -workerIdCard -customerIdCard')
+      .lean()
+      .exec();
+    return updated as ContractDocument;
   }
 }

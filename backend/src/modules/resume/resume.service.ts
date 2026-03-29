@@ -1205,6 +1205,17 @@ export class ResumeService {
       delete resumeData.phone;
     }
 
+    // 将 selfIntroductionVideoUrl 转换为 FileInfo 对象
+    if (resumeData.selfIntroductionVideoUrl && !resumeData.selfIntroductionVideo) {
+      resumeData.selfIntroductionVideo = {
+        url: resumeData.selfIntroductionVideoUrl,
+        filename: 'selfIntroductionVideo.mp4',
+        mimetype: 'video/mp4',
+        size: 0,
+      };
+    }
+    delete resumeData.selfIntroductionVideoUrl;
+
     return resumeData;
   }
 
@@ -2766,13 +2777,27 @@ export class ResumeService {
     if (!resume) {
       throw new NotFoundException(`简历 ${resumeId} 不存在`);
     }
-    return this.qwenAIService.generateRecommendation({
+
+    // DB-first：有缓存直接返回
+    if (resume.recommendationReason) {
+      return resume.recommendationReason;
+    }
+
+    // 否则调 AI 生成，并写回 DB
+    const recommendation = await this.qwenAIService.generateRecommendation({
       name: resume.name,
       jobType: resume.jobType,
       skills: resume.skills as string[],
       experienceYears: resume.experienceYears,
       workExperiences: (resume.workExperiences || []) as Array<{ description?: string; jobType?: string }>,
     });
+
+    await this.resumeModel.updateOne(
+      { _id: new Types.ObjectId(resumeId) },
+      { $set: { recommendationReason: recommendation } },
+    ).exec();
+
+    return recommendation;
   }
 
 }

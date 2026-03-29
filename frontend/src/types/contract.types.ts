@@ -57,6 +57,11 @@ export interface Contract {
 
   // 保险信息
   insuranceInfo?: InsuranceInfo;
+
+  // 上户状态：合同签约后自动变 pending（待上户），客户小程序确认后变 confirmed（已上户）
+  onboardStatus?: 'not_started' | 'pending' | 'confirmed';
+  onboardConfirmedAt?: string;  // 客户确认上户时间
+  onboardConfirmedBy?: string;  // 确认人手机号
 }
 
 export enum ContractType {

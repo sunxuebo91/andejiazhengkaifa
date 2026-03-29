@@ -1,0 +1,430 @@
+# 安得家政小程序API接口一览表
+
+---
+
+## 概述
+
+### 项目API架构
+
+安得家政微信小程序采用**混合架构**，将CRM业务逻辑与微信特定功能分离：
+
+| 架构层 | 调用方式 | 用途 | 说明 |
+|--------|----------|------|------|
+| **CRM后端** | HTTP请求 (`wx.request`) | 核心业务逻辑 | 后端地址：`https://crm.andejiazheng.com/api` |
+| **云函数** | 云函数调用 (`wx.cloud.callFunction`) | 微信特定操作 | 支付、消息、Token生成、用户信息获取 |
+| **云数据库** | 数据库操作 (`db.collection`) | 低频数据存储 | 试题、订阅信息、日志 |
+| **微信OpenAPI** | 云函数内调用 (`cloud.openapi`) | 微信原生能力 | 获取手机号、生成二维码、发送模板消息 |
+| **微信客户端API** | 微信API (`wx.xxx`) | 客户端能力 | 支付、订阅授权、扫码、登录等 |
+
+### 调用方式汇总
+
+| 调用方式 | 说明 | 使用场景 |
+|----------|------|----------|
+| `wx.cloud.callFunction` | 微信云函数调用 | 云开发环境中的后端逻辑执行 |
+| `wx.request` | HTTP请求 | 调用CRM后端API |
+| `db.collection` | 云数据库直接操作 | 在云函数中直接操作数据库 |
+| `cloud.openapi` | 微信OpenAPI | 获取用户手机号、生成二维码、发送模板消息等 |
+
+---
+
+## 一、用户认证模块
+
+**调用位置**: `miniprogram/services/auth.js`, `miniprogram/services/resume.js`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 登录 | HTTP请求 | `POST /auth/miniprogram-login` | CRM系统登录 | `{code, phone}` | `{success, data: {access_token, user, openid}}` | 在用 |
+| 验证Token | HTTP请求 | `GET /auth/me` | 校验access_token有效性 | 无 | `{success: boolean}` | 在用 |
+| 获取OpenId | 云函数 | `quickstartFunctions:getOpenId` | 获取当前用户微信OpenId | 无 | `{openid, appid, unionid}` | 在用 |
+| 获取手机号 | 云函数 | `quickstartFunctions:getPhoneNumber` | 通过授权code获取用户绑定的手机号 | `{code}` | `{success, data: {phoneNumber, purePhoneNumber, countryCode}}` | 在用 |
+
+---
+
+## 二、简历管理模块
+
+**调用位置**: `miniprogram/services/resume.js`, 多个页面
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取简历列表 | HTTP请求 | `GET /resumes` | 查询用户简历列表（分页） | `{page, pageSize, keyword}` | `{success, data: Array, total}` | 在用 |
+| 获取简历详情 | HTTP请求 | `GET /resumes/{id}` | 获取单个简历的完整信息 | `{id}` | `{success, data: Object}` | 在用 |
+| 获取简历详情(公开) | HTTP请求 | `GET /resumes/{id}/public` | 不需认证，访问分享的简历 | `{id}` | `{success, data: Object}` | 在用 |
+| 创建简历(V2) | HTTP请求 | `POST /resumes/miniprogram/create` | 完整创建简历API（支持幂等性） | 完整简历对象 | `{success, data: {_id, phone, name, ...}}` | 在用 |
+| 快速创建简历 | HTTP请求 | `POST /resumes/miniprogram/self-register` | 自助注册路径，基础字段快速创建 | `{name, phone, age, gender, jobType, ...}` | `{success, data: Object}` | 在用 |
+| 更新简历 | HTTP请求 | `PATCH /resumes/miniprogram/{id}` | 修改简历信息 | `{id, data: {...}}` | `{success, data: Object}` | 在用 |
+| 上传头像 | 文件上传 | `POST /auth/avatar` | 上传简历头像 | 文件流 | `{success, data: {url}}` | 在用 |
+| 上传附件 | 文件上传 | `POST /resumes/miniprogram/{id}/upload-file` | 上传简历附件（证件、资格证等） | `{id, file, type}` | `{success, data: {url, type}}` | 在用 |
+| 删除文件 | HTTP请求 | `DELETE /resumes/miniprogram/{id}/delete-file` | 删除简历附件 | `{id, fileUrl, fileType}` | `{success}` | 在用 |
+| 生成分享链接 | HTTP请求 | `POST /resumes/{id}/share` | 创建简历分享链接（72小时有效期） | `{id, expiresInHours}` | `{success, data: {shareUrl}}` | 在用 |
+| 获取枚举字典 | HTTP请求 | `GET /resumes/enums` | 获取工种、城市等枚举值（缓存24h） | 无 | `{success, data: {...enums...}}` | 在用 |
+| 获取当前用户 | HTTP请求 | `GET /auth/me` | 获取登录用户信息 | 无 | `{success, data: {id, name, role, ...}}` | 在用 |
+| 获取小程序统计 | HTTP请求 | `GET /resumes/miniprogram/stats` | 获取用户数据统计（简历数、浏览量等） | 无 | `{success, data: {...}}` | 在用 |
+| 获取小程序简历详情 | HTTP请求 | `GET /resumes/miniprogram/{id}` | 获取小程序专用简历详情 | `{id}` | `{success, data: Object}` | 在用 |
+
+---
+
+## 三、评测模块
+
+**调用位置**: `miniprogram/services/assessment.js`, `miniprogram/pages/assessment/`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取评测题目 | HTTP请求 | `GET /assessment/questions` | 获取工资评测题目列表 | 无 | `{success, data: Array}` | 在用 |
+| 提交评测答案 | HTTP请求 | `POST /assessment/submit` | 提交评测答卷并计算分数 | `{answers, jobType, duration, startTime, endTime}` | `{success, data: {score, salary, level}}` | 在用 |
+| 获取评测统计 | 云函数 | `quickstartFunctions:getAssessmentStats` | 获取评测数据统计（管理员功能） | 无 | `{success, data: {total, statistics}}` | 在用 |
+| 标记评测完成 | 云函数 | `quickstartFunctions:markAssessmentCompleted` | 标记用户已完成评测（用于屏蔽再次评测） | 无 | `{success}` | 在用 |
+| 获取推荐排行 | HTTP请求 | `GET /assessment/ranking` | 获取评测推荐排行榜 | `{period, limit}` | `{success, data: Array}` | 在用 |
+
+---
+
+## 四、支付模块
+
+**调用位置**: `miniprogram/pages/payment/`, `miniprogram/services/insuranceService.js`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 创建支付订单 | 云函数 | `quickstartFunctions:createPaymentOrder` | 创建微信支付订单（使用wx.pay v3接口） | `{type: 'createPaymentOrder', amount, customerName, customerPhone, serviceType, remark}` | `{success, data: {prepayId, ...}}` | 在用 |
+| 获取支付信息 | 云函数 | `quickstartFunctions:getPaymentInfo` | 查询已创建的支付订单信息 | `{type: 'getPaymentInfo', paymentId}` | `{success, data: {paymentId, status, amount, ...}}` | 在用 |
+| 微信支付 | 微信API | `wx.requestPayment()` | 调用微信支付（客户端） | `{timeStamp, nonceStr, prepayid, signType, paySign}` | 支付结果回调 | 在用 |
+
+---
+
+## 五、保险模块
+
+**调用位置**: `miniprogram/services/insuranceService.js`, `miniprogram/pages/insurance/`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取保单列表 | HTTP请求 | `GET /dashubao/miniprogram/policies` | 查询用户保单列表（分页） | `{status, resumeId, page, limit}` | `{success, data: Array, total}` | 在用 |
+| 根据身份证查询 | HTTP请求 | `GET /dashubao/miniprogram/policy/by-id-card/{idCard}` | 查询特定身份证的保单 | `{idCard}` | `{success, data: Array}` | 在用 |
+| 获取保单详情 | HTTP请求 | `GET /dashubao/miniprogram/policy/{id}` | 获取单个保单完整信息 | `{id}` | `{success, data: Object}` | 在用 |
+| 根据保单号查询 | HTTP请求 | `GET /dashubao/miniprogram/policy/by-policy-no/{policyNo}` | 用保单号查询保单 | `{policyNo}` | `{success, data: Object}` | 在用 |
+| 根据商户单号查询 | HTTP请求 | `GET /dashubao/miniprogram/policy/by-policy-ref/{policyRef}` | 用渠道流水号查询保单 | `{policyRef}` | `{success, data: Object}` | 在用 |
+| 创建保单 | HTTP请求 | `POST /dashubao/miniprogram/policy` | 创建新保单（投保） | 见保险文档 | `{success, data: Object}` | 在用 |
+| 查询保单状态 | HTTP请求 | `POST /dashubao/miniprogram/policy/query` | 从大树保查询最新状态 | `{agencyPolicyRef 或 policyNo}` | `{success, data: Object}` | 在用 |
+| 创建支付订单(保险) | HTTP请求 | `GET /dashubao/miniprogram/policy/payment/{policyRef}` | 获取保单支付信息 | `{policyRef}` | `{success, data: {outTradeNo, timeStamp, ...}}` | 在用 |
+| 查询支付结果 | HTTP请求 | `GET /dashubao/miniprogram/policy/payment-status` | 查询保单支付是否成功 | `{policyRef, outTradeNo}` | `{success, data: {status}}` | 在用 |
+| 退保申请 | HTTP请求 | `POST /dashubao/miniprogram/policy/surrender` | 申请退保 | `{id, reason}` | `{success, data: Object}` | 在用 |
+
+---
+
+## 六、合同管理模块
+
+**调用位置**: `miniprogram/services/contractService.js`, `miniprogram/pages/contract-*/`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取模板列表 | HTTP请求 | `GET /esign/templates` | 获取爱签合同模板 | 无 | `{success, data: Array}` | 在用 |
+| 获取模板字段 | HTTP请求 | `POST /esign/template/data` | 获取模板的动态表单字段定义 | `{templateIdent}` | `{success, data: {fields, templateName}}` | 在用 |
+| 验证合同数据 | HTTP请求 | `POST /contracts/miniprogram/validate` | 提交前验证合同数据完整性 | 合同对象 | `{success, errors: [...]}` | 在用 |
+| 创建合同 | HTTP请求 | `POST /contracts/miniprogram/create` | 创建合同（不立即发起签署） | 合同完整数据 | `{success, data: {_id, contractNumber}}` | 在用 |
+| 发起签署 | HTTP请求 | `POST /contracts/miniprogram/initiate-signing/{id}` | 触发爱签流程，生成签署链接 | `{id}` | `{success, data: {esignContractId, signUrls: Array}}` | 在用 |
+| 获取合同列表 | HTTP请求 | `GET /contracts/miniprogram` | 查询合同列表（支持过滤） | `{status, page, limit}` | `{success, data: {contracts: Array, total}}` | 在用 |
+| 获取合同详情 | HTTP请求 | `GET /contracts/miniprogram/{id}` | 获取合同完整信息 | `{id}` | `{success, data: Object}` | 在用 |
+| 更新合同 | HTTP请求 | `PATCH /contracts/miniprogram/{id}` | 修改合同信息 | `{id, data: {...}}` | `{success, data: Object}` | 在用 |
+| 获取爱签信息 | HTTP请求 | `GET /contracts/miniprogram/{id}/esign-info` | 查询合同的爱签状态和预览URL | `{id}` | `{success, data: {status, preview}}` | 在用 |
+| 重新获取签署链接 | HTTP请求 | `POST /contracts/miniprogram/{id}/sign-urls` | 获取已创建合同的签署链接 | `{id}` | `{success, data: {signUrls: Array}}` | 在用 |
+| 下载合同 | HTTP请求 | `GET /contracts/miniprogram/{id}/download` | 下载已签署的合同PDF | `{id}` | 二进制PDF文件 | 在用 |
+| 作废合同 | HTTP请求 | `POST /contracts/miniprogram/{id}/cancel` | 标记合同作废 | `{id, reason}` | `{success}` | 在用 |
+| 同步保险 | HTTP请求 | `POST /contracts/miniprogram/{id}/sync-insurance` | 将合同信息同步到保险系统 | `{id}` | `{success, message}` | 在用 |
+
+---
+
+## 七、客户管理模块
+
+**调用位置**: `miniprogram/services/miniprogramCustomerService.js`（777行）
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取客户统计 | HTTP请求 | `GET /customers/miniprogram/statistics` | 获取客户统计数据（总数、匹配中、已签约等） | `{search, assignedTo, leadLevel, leadStatus}` | `{success, data: {total, matching, signed, completed}}` | 在用 |
+| 获取客户列表 | HTTP请求 | `GET /customers/miniprogram/list` | 分页获取客户列表，支持多维度筛选 | `{page, limit, sortBy, sortOrder, search, contractStatus, leadSource, serviceCategory, leadLevel, assignedTo, leadStatus, followUpStatus}` | `{success, data: {customers, total, page, limit}}` | 在用 |
+| 创建客户 | HTTP请求 | `POST /customers/miniprogram/create` | 创建新客户，支持幂等性 | 客户对象(name, phone, leadSource等) | `{success, data: {_id, name, ...}}` | 在用 |
+| 获取客户详情 | HTTP请求 | `GET /customers/miniprogram/{customerId}` | 获取单个客户完整信息 | `{customerId}` | `{success, data: {客户对象}}` | 在用 |
+| 更新客户 | HTTP请求 | `PATCH /customers/miniprogram/{customerId}` | 修改客户信息 | `{customerId, data}` | `{success, data: {...}}` | 在用 |
+| 分配客户 | HTTP请求 | `POST /customers/miniprogram/{customerId}/assign` | 将客户分配给员工 | `{customerId, assignedTo}` | `{success}` | 在用 |
+| 释放客户到公海 | HTTP请求 | `POST /customers/miniprogram/{customerId}/release-to-pool` | 释放客户到公海 | `{customerId, reason}` | `{success}` | 在用 |
+| 获取跟进记录 | HTTP请求 | `GET /customers/miniprogram/{customerId}/follow-up-logs` | 查询客户跟进历史 | `{customerId}` | `{success, data: Array}` | 在用 |
+| 获取分配历史 | HTTP请求 | `GET /customers/miniprogram/{customerId}/assignment-logs` | 查询客户分配历史 | `{customerId}` | `{success, data: Array}` | 在用 |
+| 获取客户跟进状态 | HTTP请求 | `GET /customers/{customerId}/follow-up-status` | 获取客户跟进进度 | `{customerId}` | `{success, data: Object}` | 在用 |
+| 获取业绩进度 | HTTP请求 | `GET /customers/miniprogram/performance-progress` | 获取销售业绩进度统计 | 无 | `{success, data: Object}` | 在用 |
+| 获取合同统计 | HTTP请求 | `GET /customers/miniprogram/contract-stats` | 获取合同统计信息 | 无 | `{success, data: Object}` | 在用 |
+
+---
+
+## 八、订阅消息模块
+
+**调用位置**: `miniprogram/utils/subscription.js`, `miniprogram/pages/`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 请求订阅授权 | 微信API | `wx.requestSubscribeMessage()` | 弹出订阅消息授权窗口 | `{tmplIds: [templateId]}` | `{templateId: 'accept'/'reject'}` | 在用 |
+| 检查订阅状态 | 微信API | `wx.getSetting()` | 查询用户对某模板的订阅状态 | `{withSubscriptions: true}` | `{subscriptionsSetting: {...}}` | 在用 |
+| 发送订阅消息 | 云函数 | `quickstartFunctions:sendSubscribeMessage` | 发送订阅模板消息给用户 | `{touser, templateId, page, data, miniprogram_state}` | `{success, result}` | 在用 |
+| 保存订阅信息 | 云函数 | `quickstartFunctions:saveSubscription` | 保存用户订阅记录（支持次数累加） | `{advisorId, openid, templateId, subscribed}` | `{success, _id, subscribeCount}` | 在用 |
+| 查询顾问订阅 | 云函数 | `quickstartFunctions:getAdvisorSubscription` | 根据顾问ID查询其订阅信息 | `{advisorId, templateId}` | `{success, data: Array}` | 在用 |
+| 查询管理员订阅 | 云函数 | `quickstartFunctions:getAdminSubscriptions` | 查询所有订阅了某模板的管理员 | `{templateId}` | `{success, data: Array}` | 在用 |
+| 发送客户分配通知 | 云函数 | `quickstartFunctions:sendCustomerAssignNotify` | 发送客户分配提醒给被分配人 | `{assignedToId, customerName, source, ...}` | `{success, message, results}` | 在用 |
+
+### 订阅消息模板ID常量
+
+| 模板名称 | 模板ID | 用途 |
+|----------|--------|------|
+| 预约结果通知 | `RNBIqmv_ErVAQakooVbajZS8LQZeJSeTFS6oRyUOeMM` | 预约状态变更通知 |
+| 新简历通知 | `JjBuJdx0FVH8AIZXYhy--cJy1hok9sdVEjT8PHwrwwY` | 新简历提交提醒 |
+| 简历被查看 | `o9lrOREy0Bfp7DgtEiiS6h28Mv4PYSbcAcvfHnCTtxI` | 简历浏览通知 |
+| 客户分配 | `z2trRZoMhnvydn711p5Vhr7HafwtCcOGTCv_nczXON8` | 客户分配提醒 |
+| 合同签署 | `65Od_zcUMxFzKehPczmBbo1Aa60ctTe6nz7Iz_tJK48` | 合同状态通知 |
+
+---
+
+## 九、背调模块
+
+**调用位置**: `miniprogram/services/backgroundCheckService.js`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取背调记录列表 | HTTP请求 | `GET /zmdb/miniprogram/reports` | 查询背调报告列表 | `{page, limit, status}` | `{data: Array, total}` | 在用 |
+| 根据身份证查询 | HTTP请求 | `GET /zmdb/miniprogram/reports/by-idno/{idNo}` | 查询特定身份证的背调记录 | `{idNo}` | `{data: Array}` | 在用 |
+| 发起背调 | HTTP请求 | `POST /zmdb/miniprogram/reports` | 创建新的背调申请 | `{name, mobile, idNo, authStuffUrl, esignContractNo, position, packageType}` | `{success, data: Object}` | 在用 |
+| 准备授权书 | HTTP请求 | `POST /zmdb/miniprogram/prepare-auth` | 生成授权书并上传到芝麻平台 | `{workerName}` | `{data: {authStuffUrl}}` | 在用 |
+| 取消背调 | HTTP请求 | `POST /zmdb/miniprogram/reports/{id}/cancel` | 取消已申请的背调 | `{id}` | `{success}` | 在用 |
+| 获取背调详情 | HTTP请求 | `GET /zmdb/miniprogram/reports/{id}` | 获取背调报告详细信息（含风险评估） | `{id}` | `{data: Object}` | 在用 |
+| 主动拉取风险数据 | HTTP请求 | `POST /zmdb/miniprogram/reports/{reportId}/fetch-result` | 从芝麻背调平台拉取最新风险数据 | `{reportId}` | `{data: Object}` | 在用 |
+| 获取PDF预览URL | 获取链接 | `getPdfViewUrl(reportId)` | 生成PDF在线预览链接（携带token） | `{reportId}` | URL字符串 | 在用 |
+| 下载背调报告 | 文件下载 | `GET /zmdb/miniprogram/reports/{reportId}/download` | 下载背调报告PDF文件 | `{reportId}` | 临时文件路径 | 在用 |
+
+---
+
+## 十、试题库模块
+
+**调用位置**: `miniprogram/config/grading/`, `miniprogram/pages/admin/`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取试题 | 云函数 | `getQuestions` | 从云数据库获取试题（分页） | `{jobType, dimension, difficulty, isRedLine}` | `{success, data: Array, count}` | 在用 |
+| 导入试题 | 云函数 | `quickstartFunctions:importTestQuestions` | 导入试题数据到云数据库 | `{type: 'importTestQuestions', role}` | `{success, data}` | 在用 |
+| 生成错题解析 | 云函数 | `quickstartFunctions:generateQuestionExplanation` | 生成错题解析（调用混元AI） | `{type: 'generateQuestionExplanation', questionId, userAnswer}` | `{success, explanation}` | 在用 |
+| 获取考试题目 | 云函数 | `quickstartFunctions:getExamQuestions` | 获取考试题目 | `{type: 'getExamQuestions', jobType, count}` | `{success, data: Array}` | 在用 |
+| 提交考试答卷 | 云函数 | `quickstartFunctions:submitExam` | 提交考试答卷 | `{type: 'submitExam', answers, examId}` | `{success, score, results}` | 在用 |
+| 获取考试结果 | 云函数 | `quickstartFunctions:getExamResult` | 获取考试结果 | `{type: 'getExamResult', examId}` | `{success, data: Object}` | 在用 |
+| 发送客户分配通知 | 云函数 | `quickstartFunctions:sendCustomerAssignNotify` | 发送客户分配通知 | `{type: 'sendCustomerAssignNotify', assignedToId, customerName}` | `{success, results}` | 在用 |
+| 发送合同签署通知 | 云函数 | `quickstartFunctions:sendContractSignedNotify` | 发送合同签署完成通知 | `{type: 'sendContractSignedNotify', contractId}` | `{success, results}` | 在用 |
+| 保存测评用户 | 云函数 | `quickstartFunctions:saveAssessmentUser` | 保存工资测评用户信息 | `{type: 'saveAssessmentUser', userData}` | `{success, _id}` | 在用 |
+| 批量导入题目 | 云函数 | `quickstartFunctions:batchImportQuestions` | 批量导入题目 | `{type: 'batchImportQuestions', questions}` | `{success, count}` | 在用 |
+| 云数据库直接查询 | 数据库 | `db.collection('ai_questions').where(...)` | 直接查询ai_questions集合 | 云数据库查询 | 试题数据 | 在用 |
+
+---
+
+## 十一、二维码与URL Scheme模块
+
+**调用位置**: 多个页面、云函数
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 生成小程序码 | 云函数 | `quickstartFunctions:getMiniProgramCode` | 生成小程序二维码（支持自定义场景值） | `{page, scene, useUnlimited, envVersion}` | `{fileID, cloudPath}` | 在用 |
+| 生成URL Scheme | 云函数 | `generateUrlScheme` | 生成URL Scheme链接（支持H5打开） | `{path, query, roomId, envVersion}` | `{success, data: {openlink}}` | 在用 |
+| 生成视频面试码 | 云函数 | `generateQRCode` | 为视频面试房间生成二维码 | `{roomId}` | `{success, buffer, contentType}` | 在用 |
+
+---
+
+## 十二、实时音视频模块
+
+**调用位置**: `miniprogram/services/`, `miniprogram/pages/video-interview/`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 生成ZEGO Token | 云函数 | `generateZegoToken` | 为ZEGO实时音视频生成认证Token | `{userId, effectiveTimeInSeconds}` | `{success, data: {token, appID, expireTime}}` | 在用 |
+| 生成TRTC签名 | 云函数 | `generateTrtcUserSig` | 为腾讯云TRTC生成UserSig（预留） | `{userId}` | `{userSig}` | 疑似废弃 |
+
+---
+
+## 十三、AI服务模块
+
+**调用位置**: `miniprogram/utils/aiService.js`, `miniprogram/services/qwenAI.js`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 生成AI点评 | 云函数 | `quickstartFunctions:generateAIFeedback` | 生成评测AI点评（调用通义千问） | `{type: 'generateAIFeedback', role, level, scores}` | `{success, feedback, usage}` | 在用 |
+| 查询AI使用统计 | 数据库 | `db.collection('ai_usage_logs')` | 查询最近30天的AI使用情况 | 无 | 统计数据 | 在用 |
+| 调用通义千问API | HTTP请求 | 阿里云API（内部调用） | 调用阿里云通义千问生成点评文本 | `{model, messages, temperature}` | AI生成的点评内容 | 在用 |
+
+---
+
+## 十四、钱包红包模块
+
+**调用位置**: `miniprogram/services/assessment.js`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取钱包信息 | HTTP请求 | `GET /wallet/{userId}` | 查询用户钱包余额 | `{userId}` | `{success, data: {balance, ...}}` | 在用 |
+| 获取红包明细 | HTTP请求 | `GET /wallet/{userId}/transactions` | 查询红包交易记录 | `{userId, page, pageSize, type}` | `{success, data: Array}` | 在用 |
+| 申请提现 | HTTP请求 | `POST /withdrawal/apply` | 提交提现申请 | `{userId, amount}` | `{success, data: Object}` | 在用 |
+| 获取提现记录 | HTTP请求 | `GET /withdrawal/{userId}/list` | 查询提现历史 | `{userId, page, pageSize}` | `{success, data: Array}` | 在用 |
+
+---
+
+## 十五、推荐模块
+
+**调用位置**: `miniprogram/services/assessment.js`
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 记录二维码扫描 | HTTP请求 | `POST /qrcode/scan` | 记录推荐二维码扫描事件 | `{scene}` | `{success, data: Object}` | 在用 |
+| 记录添加企微 | HTTP请求 | `POST /wechat/add` | 记录用户添加企微事件 | `{resumeId, wechatUserId}` | `{success}` | 在用 |
+| 生成推荐二维码 | HTTP请求 | `POST /qrcode/generate` | 为用户生成个人推荐二维码 | `{userId, userType}` | `{success, data: {qrcode}}` | 在用 |
+
+---
+
+## 十六、云数据库操作
+
+**调用位置**: `miniprogram/pages/`, `miniprogram/config/`
+
+| 数据库操作 | 调用方式 | 功能说明 | 使用状态 |
+|------------|----------|----------|----------|
+| 查询试题 | `db.collection('ai_questions').where(...).get()` | 获取评测试题 | 在用 |
+| 记录AI使用 | `db.collection('ai_usage_logs').add()` | 记录AI调用日志 | 在用 |
+| 查询订阅 | `db.collection('advisor_subscriptions').where(...).get()` | 查询用户订阅 | 在用 |
+| 更新订阅 | `db.collection('advisor_subscriptions').doc().update()` | 更新订阅次数 | 在用 |
+| 保存考试成绩 | `db.collection('exam_results').add()` | 保存考试成绩 | 在用 |
+| 保存测评用户 | `db.collection('assessment_users').add/update()` | 保存测评用户信息 | 在用 |
+| 查询测评用户 | `db.collection('assessment_users').where(...)` | 查询测评用户 | 在用 |
+| 操作sales表 | `db.collection('sales').add/update/delete()` | 示例云函数操作 | 示例代码 |
+
+---
+
+## 十七、云函数清单
+
+### 存在的云函数（10个）
+
+**位置**: `d:\安得家政\cloudfunctions\`
+
+| 云函数名 | 入口文件 | 主要功能 | 状态 |
+|----------|----------|----------|------|
+| **quickstartFunctions** | `index.js` (2295行) | 核心多功能云函数，处理30+种业务操作 | 在用 |
+| **generateQRCode** | `index.js` (50行) | 生成小程序二维码（用于视频面试房间） | 在用 |
+| **generateUrlScheme** | `index.js` (130行) | 生成URL Scheme（用于H5页面跳转小程序） | 在用 |
+| **generateZegoToken** | `index.js` + `zegoToken04.js` | 生成ZEGO实时音视频Token | 在用 |
+| **getQuestions** | `index.js` (82行) | 从云数据库批量获取试题（分页处理） | 在用 |
+| **generateTrtcUserSig** | - | TRTC用户签名生成（预留） | 疑似废弃 |
+| **recordView** | - | 记录用户查看行为（预留） | 疑似废弃 |
+| **sendNotification** | - | 发送通知（预留） | 疑似废弃 |
+| **shareManager** | - | 分享管理（预留） | 疑似废弃 |
+| **subscribeMessage** | - | 订阅消息发送（预留） | 疑似废弃 |
+
+---
+
+## 统计汇总
+
+### 按调用方式分类
+
+| 调用方式 | 数量 | 主要用途 |
+|----------|------|----------|
+| **HTTP请求** (`wx.request`) | ~72+ | CRM后端API调用（主要） |
+| **云函数** (`wx.cloud.callFunction`) | ~40+ | 核心业务逻辑、微信接口 |
+| **云数据库** (`db.collection`) | ~13+ | 数据持久化 |
+| **微信OpenAPI** (`cloud.openapi`) | ~5 | 获取用户信息、生成码 |
+| **微信API** (`wx.xxx`) | ~15+ | 支付、订阅、登录等 |
+
+### 按功能模块分类
+
+| 模块 | API数 | 关键性 | 状态 |
+|------|-------|--------|------|
+| 用户认证 | 4 | 高 | 正常 |
+| 简历管理 | 14 | 高 | 正常 |
+| 评测模块 | 5 | 中 | 正常 |
+| 支付模块 | 3 | 高 | 正常 |
+| 保险模块 | 10 | 中 | 正常 |
+| 合同管理 | 13 | 高 | 正常 |
+| 客户管理 | 12 | 高 | 正常 |
+| 订阅消息 | 7 | 中 | 正常 |
+| 背调模块 | 9 | 中 | 正常 |
+| 试题库 | 11 | 中 | 正常 |
+| 二维码 | 3 | 低 | 正常 |
+| 音视频 | 2 | 低 | 正常 |
+| AI服务 | 3 | 中 | 正常 |
+| 钱包红包 | 4 | 低 | 正常 |
+| 推荐模块 | 3 | 低 | 正常 |
+| **合计** | **~100+** | - | - |
+
+---
+
+## 云函数对比分析
+
+### 在用的云函数（5个）
+
+| 云函数名 | 功能说明 | 调用场景 |
+|----------|----------|----------|
+| `quickstartFunctions` | 核心多功能云函数 | 用户认证、支付、订阅消息、AI点评、评测统计等 |
+| `generateQRCode` | 生成小程序二维码 | 视频面试房间二维码生成 |
+| `generateUrlScheme` | 生成URL Scheme | H5页面跳转小程序 |
+| `generateZegoToken` | 生成ZEGO Token | 实时音视频认证 |
+| `getQuestions` | 获取试题数据 | 从云数据库批量获取试题 |
+
+### 疑似废弃的云函数（5个）
+
+| 云函数名 | 说明 | 建议 |
+|----------|------|------|
+| `generateTrtcUserSig` | TRTC签名生成，未实装，使用ZEGO代替 | 可删除 |
+| `recordView` | 记录浏览行为，空实现 | 可删除 |
+| `sendNotification` | 发送通知，空实现 | 可删除 |
+| `shareManager` | 分享管理，空实现 | 可删除 |
+| `subscribeMessage` | 订阅消息发送，功能已迁移到quickstartFunctions | 可删除 |
+
+### quickstartFunctions内部疑似废弃的方法
+
+| 方法名 | 说明 | 建议 |
+|--------|------|------|
+| `createCollection` | 创建demo用集合 | 示例代码，可清理 |
+| `selectRecord` | 查询demo数据 | 示例代码，可清理 |
+| `updateRecord` | 更新demo数据 | 示例代码，可清理 |
+| `insertRecord` | 插入demo数据 | 示例代码，可清理 |
+| `deleteRecord` | 删除demo数据 | 示例代码，可清理 |
+
+---
+
+## 关键文件清单
+
+| 文件类型 | 位置 | 说明 |
+|----------|------|------|
+| **云函数入口** | `d:\安得家政\cloudfunctions\quickstartFunctions\index.js` | 核心多功能云函数，2295行 |
+| **HTTP封装** | `d:\安得家政\miniprogram\utils\request.js` | 请求工具类（request/publicRequest/authenticatedRequest） |
+| **订阅管理** | `d:\安得家政\miniprogram\utils\subscription.js` | 订阅消息工具类，1469行 |
+| **简历服务** | `d:\安得家政\miniprogram\services\resume.js` | 简历相关所有API，481行 |
+| **合同服务** | `d:\安得家政\miniprogram\services\contractService.js` | 合同管理所有API |
+| **客户服务** | `d:\安得家政\miniprogram\services\miniprogramCustomerService.js` | 客户管理核心模块，777行 |
+| **保险服务** | `d:\安得家政\miniprogram\services\insuranceService.js` | 保险相关所有API，930行 |
+| **背调服务** | `d:\安得家政\miniprogram\services\backgroundCheckService.js` | 背调相关所有API，229行 |
+| **评测服务** | `d:\安得家政\miniprogram\services\assessment.js` | 评测相关所有API，392行 |
+| **认证服务** | `d:\安得家政\miniprogram\services\auth.js` | 登录认证相关API，245行 |
+| **AI服务** | `d:\安得家政\miniprogram\utils\aiService.js` | AI点评生成，183行 |
+| **二维码云函数** | `d:\安得家政\cloudfunctions\generateQRCode\index.js` | 生成二维码 |
+| **试题云函数** | `d:\安得家政\cloudfunctions\getQuestions\index.js` | 获取试题数据 |
+| **ZEGO令牌** | `d:\安得家政\cloudfunctions\generateZegoToken\index.js` | 生成实时音视频Token |
+| **URL Scheme** | `d:\安得家政\cloudfunctions\generateUrlScheme\index.js` | 生成URL Scheme链接 |
+
+---
+
+## 附录
+
+### CRM后端API基础信息
+
+- **基础URL**: `https://crm.andejiazheng.com/api`
+- **认证方式**: Bearer Token (`access_token`)
+- **数据格式**: JSON
+
+### 云开发环境
+
+- **云函数目录**: `d:\安得家政\cloudfunctions\`
+- **小程序目录**: `d:\安得家政\miniprogram\`
+- **云数据库集合**: `ai_questions`, `advisor_subscriptions`, `ai_usage_logs`, `exam_results`, `assessment_users`, `sales` 等
+
+### 关键依赖
+
+- `axios@^1.13.2`: HTTP请求
+- `zego-express-engine-webrtc@^3.11.0`: 实时音视频（备用能力）
+- `sharp@^0.34.5`: 图像处理（devOnly）
+
+---
+
+*文档生成时间: 2026年3月28日*
+*基于调研报告: 微信小程序项目API接口完整清单*

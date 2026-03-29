@@ -89,9 +89,14 @@ export interface IResume extends Document {
   learningIntention?: LearningIntention;
   currentStage?: CurrentStage;
   internalEvaluation?: string;
+  recommendationReason?: string;
   availabilityCalendar?: AvailabilityPeriod[];
   uniformPhoto?: FileInfo;
   faceTrainingResourceId?: string;
+  height?: number;
+  weight?: number;
+  certificatesText?: string;
+  familySituation?: string;
 }
 
 @Schema({ timestamps: true, collection: 'resumes' })
@@ -315,6 +320,12 @@ export class Resume extends Document implements IResume {
   @IsOptional()
   internalEvaluation?: string;
 
+  @ApiProperty({ description: 'AI生成推荐理由' })
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  recommendationReason?: string;
+
   @ApiProperty({ description: 'AI生成工装照片' })
   @Prop({ type: FileInfoSchema, nullable: true })
   @IsOptional()
@@ -325,6 +336,24 @@ export class Resume extends Document implements IResume {
   @IsString()
   @IsOptional()
   faceTrainingResourceId?: string;
+
+  @Prop({ nullable: true })
+  @IsOptional()
+  height?: number;
+
+  @Prop({ nullable: true })
+  @IsOptional()
+  weight?: number;
+
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  certificatesText?: string;
+
+  @Prop({ nullable: true })
+  @IsString()
+  @IsOptional()
+  familySituation?: string;
 }
 
 export const ResumeSchema = SchemaFactory.createForClass(Resume);

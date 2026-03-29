@@ -59,6 +59,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
         salaryPaymentDay: contract.salaryPaymentDay,
         monthlyWorkDays: contract.monthlyWorkDays,
         remarks: contract.remarks,
+        onboardStatus: contract.onboardStatus || 'pending',
       });
     }
   }, [visible, contract, form]);
@@ -297,6 +298,18 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
         {/* 其他信息 */}
         <Divider orientation="left">其他信息</Divider>
         <Row gutter={16}>
+          <Col span={8}>
+            <Form.Item
+              label="上户状态"
+              name="onboardStatus"
+            >
+              <Select placeholder="请选择上户状态">
+                <Option value="not_started">未开始（合同未签约）</Option>
+                <Option value="pending">待上户（合同已签约）</Option>
+                <Option value="confirmed">已上户（客户已确认）</Option>
+              </Select>
+            </Form.Item>
+          </Col>
           <Col span={8}>
             <Form.Item
               label="工资发放日（选填）"

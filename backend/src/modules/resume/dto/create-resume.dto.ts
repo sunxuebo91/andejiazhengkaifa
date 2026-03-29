@@ -315,7 +315,7 @@ export class CreateResumeV2Dto {
   })
   selfIntroduction?: string;
 
-  @ApiProperty({ description: '内部员工评价', maxLength: 2000, required: false })
+  @ApiProperty({ description: 'AI生成推荐理由', maxLength: 200, required: false })
   @IsOptional()
   @IsString()
   @Transform(({ value }) => {
@@ -324,7 +324,42 @@ export class CreateResumeV2Dto {
     }
     return value;
   })
-  internalEvaluation?: string;
+  recommendationReason?: string;
+
+  @ApiProperty({ description: '自我介绍视频URL', required: false })
+  @IsOptional()
+  @IsString()
+  selfIntroductionVideoUrl?: string;
+
+  @ApiProperty({ description: '身高(cm)', required: false })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : Math.floor(num);
+  })
+  height?: number;
+
+  @ApiProperty({ description: '体重(斤)', required: false })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : Math.floor(num);
+  })
+  weight?: number;
+
+  @ApiProperty({ description: '证书文字描述', required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  certificatesText?: string;
+
+  @ApiProperty({ description: '家庭情况', required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  familySituation?: string;
 
   // 文件上传相关字段（可选）
   @ApiProperty({ description: '身份证正面照片URL', required: false })
@@ -881,6 +916,17 @@ export class CreateResumeDto {
     return value;
   })
   internalEvaluation?: string;
+
+  @ApiProperty({ description: 'AI生成推荐理由', maxLength: 200, required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    return value;
+  })
+  recommendationReason?: string;
 
   @ApiProperty({
     description: '工作经历',

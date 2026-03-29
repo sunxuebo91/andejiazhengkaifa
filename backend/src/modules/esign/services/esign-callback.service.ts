@@ -2,7 +2,7 @@ import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as crypto from 'crypto';
-import { Contract, ContractDocument } from '../../contracts/models/contract.model';
+import { Contract, ContractDocument, OnboardStatus } from '../../contracts/models/contract.model';
 import { Customer, CustomerDocument } from '../../customers/models/customer.model';
 import { CustomersService } from '../../customers/customers.service';
 import { NotificationGateway } from '../../notification/notification.gateway';
@@ -90,10 +90,14 @@ export class ESignCallbackService {
         esignStatus: status.toString()
       };
 
-      // 如果爱签状态是"已签约"(2)，则更新本地合同状态为"active"
+      // 如果爱签状态是"已签约"(2)，则更新本地合同状态为"active"，并将上户状态推进为"待上户"
       if (status === 2 || status === '2') {
         updateData.contractStatus = 'active';
         updateData.esignSignedAt = new Date();
+        // 只在尚未确认上户时才设为 pending（防止误覆盖已上户状态）
+        if ((contract as any).onboardStatus !== OnboardStatus.CONFIRMED) {
+          updateData.onboardStatus = OnboardStatus.PENDING;
+        }
         this.logger.info('esign.callback.contract_signed', {
           contractId: contract._id.toString(),
           contractNo,

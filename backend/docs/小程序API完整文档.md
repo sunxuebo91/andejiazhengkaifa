@@ -50,6 +50,11 @@
   - [获取爱签信息](#获取爱签信息)
   - [重新获取签署链接](#重新获取签署链接)
   - [下载已签署合同](#下载已签署合同)
+- [📦 客户订单中心（小程序云函数专用）](#客户订单中心小程序云函数专用)
+  - [鉴权说明](#鉴权说明)
+  - [获取我的合同列表](#获取我的合同列表)
+  - [获取合同详情](#获取合同详情-客户端)
+  - [确认阿姨上户](#确认阿姨上户)
 - [🛡️ 保险保单管理](#保险保单管理)
   - [获取保单列表](#获取保单列表)
   - [根据身份证号查询保单](#根据身份证号查询保单)
@@ -6751,3 +6756,308 @@ export function getBackgroundCheckStatusText(status) {
 - ✅ 提供完整的小程序调用示例和页面代码
 - ✅ 支持文章搜索、分页和状态筛选
 - ✅ 支持富文本渲染和图片展示
+
+---
+
+## 📦 客户订单中心（小程序云函数专用）
+
+> **版本**：v1.9.0 | **上线日期**：2026-03-29
+
+允许客户在微信小程序「我的订单」页面查看自己的服务合同，并在线确认阿姨上户。
+
+### 鉴权说明
+
+> ⚠️ **本模块所有接口不使用 JWT Token，改用机器间共享密钥鉴权。**
+
+| 项目 | 说明 |
+|------|------|
+| **鉴权方式** | 请求头 `X-Service-Secret: <密钥>` |
+| **密钥来源** | 由后端管理员提供，存放在微信云开发「云函数环境变量」中 |
+| **调用方** | 只允许我方微信云函数调用，不对客户端直接暴露 |
+| **身份验证** | 每个接口额外校验 `phone`（客户手机号）与合同 `customerPhone` 一致 |
+
+**正确的调用链路：**
+```
+小程序页面 → 调用云函数（云函数持有密钥 + 用户手机号）→ 调用 CRM 接口
+```
+
+---
+
+### 获取我的合同列表
+
+按客户手机号返回所有关联合同，结果按创建时间倒序。
+
+- **方法**：`GET`
+- **路径**：`/api/miniprogram/contracts`
+- **鉴权**：`X-Service-Secret` 请求头
+
+#### 请求参数
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+|------|------|------|------|------|
+| `phone` | Query | string | ✅ | 客户手机号 |
+
+#### 请求示例
+
+```javascript
+// 云函数中调用示例
+const axios = require('axios');
+
+const res = await axios.get('https://crm.andejiazheng.com/api/miniprogram/contracts', {
+  params: { phone: userPhone },
+  headers: { 'X-Service-Secret': process.env.CRM_SERVICE_SECRET }
+});
+```
+
+#### 响应示例
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "64a1b2c3d4e5f6789abc0001",
+      "contractNumber": "CON2403150001",
+      "customerName": "张三",
+      "customerPhone": "13800138000",
+      "nannyName": "李阿姨",
+      "nannyPhone": "13900139000",
+      "serviceFee": 8800,
+      "nannySalary": 6000,
+      "startDate": "2024-04-01",
+      "contractStatus": "active",
+      "onboardStatus": "pending",
+      "signingUrl": "https://...",
+      "contractFileUrl": "https://..."
+    }
+  ],
+  "total": 1,
+  "message": "获取合同列表成功"
+}
+```
+
+---
+
+### 获取合同详情（客户端）
+
+获取单条合同的完整信息，自动进行归属校验，防止越权访问（IDOR）。
+
+- **方法**：`GET`
+- **路径**：`/api/miniprogram/contracts/:id`
+- **鉴权**：`X-Service-Secret` 请求头
+
+#### 请求参数
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+|------|------|------|------|------|
+| `id` | Path | string | ✅ | 合同 MongoDB ObjectId |
+| `phone` | Query | string | ✅ | 客户手机号（用于归属校验） |
+
+#### 请求示例
+
+```javascript
+const res = await axios.get(`https://crm.andejiazheng.com/api/miniprogram/contracts/${contractId}`, {
+  params: { phone: userPhone },
+  headers: { 'X-Service-Secret': process.env.CRM_SERVICE_SECRET }
+});
+```
+
+#### 响应示例
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "64a1b2c3d4e5f6789abc0001",
+    "contractNumber": "CON2403150001",
+    "customerName": "张三",
+    "customerPhone": "13800138000",
+    "workerName": "李阿姨",
+    "workerPhone": "13900139000",
+    "contractStatus": "signing",
+    "esignStatus": "1",
+    "onboardStatus": "not_started",
+    "signerStatuses": {
+      "customerSigned": true,
+      "nannySigned": false,
+      "customerSignedAt": "2026-03-29T08:00:00.000Z",
+      "nannySignedAt": null
+    }
+  },
+  "message": "获取合同详情成功"
+}
+```
+
+#### `signerStatuses` 字段说明
+
+> **注意**：若合同尚未创建爱签流程（`contractStatus = draft`），此字段为 `null`。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `customerSigned` | boolean | 甲方（客户）是否已完成签署 |
+| `nannySigned` | boolean | 乙方（阿姨）是否已完成签署 |
+| `customerSignedAt` | string \| null | 甲方签署时间（ISO 8601），未签则为 `null` |
+| `nannySignedAt` | string \| null | 乙方签署时间（ISO 8601），未签则为 `null` |
+
+**前端显示逻辑建议：**
+
+| customerSigned | nannySigned | 推荐显示 | 底部按钮 |
+|---|---|---|---|
+| `false` | `false` | ✍️ 待签约 | 「去签约」→ 调 `/signing-url` |
+| `true` | `false` | ⏳ 等待阿姨签约 | 灰色提示文字，无按钮 |
+| `true` | `true` | ✅ 双方已签约 | 「下载合同」|
+
+**性能说明**：
+- 合同已全部签完（`esignStatus = '2'`）时，直接读库返回，**不调爱签 API**
+- 合同签约进行中时，实时调爱签 `getContractInfo` 接口（约 200–500ms 额外延迟）
+
+#### 错误码
+
+| HTTP 状态码 | 说明 |
+|------------|------|
+| `401` | 缺少或密钥错误 |
+| `403` | phone 与合同 customerPhone 不匹配（越权） |
+| `404` | 合同不存在 |
+
+---
+
+### 实时获取合同签约链接
+
+为客户实时获取专属签约 H5 链接。每次调用均向爱签平台实时查询，避免链接过期问题。
+仅在合同进入签约流程（`contractStatus = signing`）且客户未完成签署时有效。
+
+- **方法**：`GET`
+- **路径**：`/api/miniprogram/contracts/:id/signing-url`
+- **鉴权**：`X-Service-Secret` 请求头
+
+#### 请求参数
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+|------|------|------|------|------|
+| `id` | Path | string | ✅ | 合同 MongoDB ObjectId |
+| `phone` | Query | string | ✅ | 客户手机号（用于归属校验） |
+
+#### 请求示例
+
+```javascript
+const res = await axios.get(
+  `https://crm.andejiazheng.com/api/miniprogram/contracts/${contractId}/signing-url`,
+  {
+    params: { phone: userPhone },
+    headers: { 'X-Service-Secret': process.env.CRM_SERVICE_SECRET }
+  }
+);
+
+if (res.data.success) {
+  const { signingUrl, alreadySigned } = res.data.data;
+  if (alreadySigned) {
+    wx.showToast({ title: '您已完成签署', icon: 'success' });
+  } else {
+    // 用 WebView 打开签约页面
+    wx.navigateTo({ url: `/pages/webview/index?url=${encodeURIComponent(signingUrl)}` });
+  }
+}
+```
+
+#### 响应示例（待签署）
+
+```json
+{
+  "success": true,
+  "data": {
+    "signingUrl": "https://hzuul.asign.cn/sign/xxxxx",
+    "alreadySigned": false
+  },
+  "message": "签约链接获取成功"
+}
+```
+
+#### 响应示例（已签署）
+
+```json
+{
+  "success": true,
+  "data": {
+    "signingUrl": "https://hzuul.asign.cn/sign/xxxxx",
+    "alreadySigned": true
+  },
+  "message": "您已完成签署，无需再次操作"
+}
+```
+
+#### 错误码
+
+| HTTP 状态码 | 说明 |
+|------------|------|
+| `400` | 合同尚未发起签约流程 / 合同已全部签署完成 / 暂时无法获取链接（爱签服务异常） |
+| `401` | 缺少或密钥错误 |
+| `403` | phone 与合同 customerPhone 不匹配（越权） |
+| `404` | 合同不存在 |
+
+> **注意**：爱签短链接有效期约 30 分钟，建议在客户点击「去签约」按钮时再调用此接口，不要提前缓存链接。
+
+---
+
+### 确认阿姨上户
+
+客户确认阿姨已开始提供服务，更新合同的上户状态。**接口幂等**，重复调用直接返回成功。
+
+- **方法**：`POST`
+- **路径**：`/api/miniprogram/contracts/:id/confirm-onboard`
+- **鉴权**：`X-Service-Secret` 请求头
+- **Content-Type**：`application/json`
+
+#### 请求参数
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+|------|------|------|------|------|
+| `id` | Path | string | ✅ | 合同 MongoDB ObjectId |
+| `phone` | Body | string | ✅ | 客户手机号（用于归属校验） |
+
+#### 请求示例
+
+```javascript
+const res = await axios.post(
+  `https://crm.andejiazheng.com/api/miniprogram/contracts/${contractId}/confirm-onboard`,
+  { phone: userPhone },
+  { headers: { 'X-Service-Secret': process.env.CRM_SERVICE_SECRET } }
+);
+```
+
+#### 响应示例
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "64a1b2c3d4e5f6789abc0001",
+    "onboardStatus": "confirmed",
+    "onboardConfirmedAt": "2026-03-29T08:00:00.000Z",
+    "onboardConfirmedBy": "13800138000"
+  },
+  "message": "确认上户成功"
+}
+```
+
+---
+
+**v1.9.2 更新内容**:
+- ✅ `GET /api/miniprogram/contracts/:id` 返回值新增 `signerStatuses` 对象
+- ✅ 包含 `customerSigned`、`nannySigned`、`customerSignedAt`、`nannySignedAt` 四个字段
+- ✅ 快速路径：合同已全部签完时免调爱签 API，直接返回双方 `true`
+- ✅ 实时路径：签约进行中时调 `getContractInfo` 接口获取甲乙方实时状态
+- ✅ 降级保护：爱签 API 异常时不阻断主流程，`signerStatuses` 降级为 `{ false, false }`
+
+**v1.9.1 更新内容**:
+- ✅ 新增 `GET /api/miniprogram/contracts/:id/signing-url` 实时签约链接接口
+- ✅ 每次调用均向爱签平台实时取最新短链，避免链接过期；DB 存量链接作为降级备用
+- ✅ 返回 `alreadySigned` 字段，前端可直接判断是否需要展示签约入口
+- ✅ 合同模型新增 `onboardStatus`（`not_started` / `pending` / `confirmed`）三态生命周期
+- ✅ 签约完成自动触发 `pending`，客户确认上户后变为 `confirmed`，不可逆回退
+
+**v1.9.0 更新内容**:
+- ✅ 新增客户订单中心API（3个接口）
+- ✅ 采用 `X-Service-Secret` 机器间鉴权，不暴露 JWT 给小程序端
+- ✅ 所有接口强制校验 `customerPhone` 归属，防止越权访问（IDOR）
+- ✅ 确认上户接口幂等，重复调用安全
+- ✅ 合同模型新增 `onboardStatus`、`onboardConfirmedAt`、`onboardConfirmedBy`、`signingUrl`、`contractFileUrl` 字段

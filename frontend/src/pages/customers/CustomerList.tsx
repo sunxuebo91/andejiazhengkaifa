@@ -741,7 +741,7 @@ const CustomerList: React.FC = () => {
             </Col>
             <Col span={3}>
               <Select
-                placeholder="线索状态"
+                placeholder="跟进状态"
                 allowClear
                 style={{ width: '100%' }}
                 value={searchFilters.leadStatus}

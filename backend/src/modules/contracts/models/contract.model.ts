@@ -25,6 +25,13 @@ export enum ContractStatus {
   CANCELLED = 'cancelled'    // 已作废
 }
 
+// 客户上户状态枚举
+export enum OnboardStatus {
+  NOT_STARTED = 'not_started', // 合同未签约，尚未进入上户流程
+  PENDING = 'pending',         // 合同已签约，等待客户确认上户（待上户）
+  CONFIRMED = 'confirmed',     // 客户已在小程序确认上户（已上户）
+}
+
 @Schema({ timestamps: true })
 export class Contract {
   @Prop({ required: true, unique: true })
@@ -145,6 +152,22 @@ export class Contract {
 
   @Prop()
   serviceDays?: number; // 实际服务天数（如果已结束）
+
+  // 客户订单中心字段
+  @Prop()
+  signingUrl?: string; // 电子签约链接
+
+  @Prop()
+  contractFileUrl?: string; // 合同PDF下载地址
+
+  @Prop({ enum: OnboardStatus, default: OnboardStatus.NOT_STARTED })
+  onboardStatus?: OnboardStatus; // 上户状态，默认 not_started；签约后自动变 pending；客户确认后变 confirmed
+
+  @Prop()
+  onboardConfirmedAt?: Date; // 客户确认上户时间
+
+  @Prop()
+  onboardConfirmedBy?: string; // 确认人手机号
 
   // 保险同步相关字段
   @Prop({ default: false })

@@ -1,0 +1,134 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ContractsService } from './contracts.service';
+import { ServiceSecretGuard } from '../auth/guards/service-secret.guard';
+import { Public } from '../auth/decorators/public.decorator';
+
+/**
+ * 客户订单中心控制器（专供微信小程序云函数调用）
+ *
+ * 鉴权方式：X-Service-Secret 共享密钥（机器间鉴权），不使用 JWT。
+ * 安全保障：每个接口均校验 customerPhone === 传入 phone，防止越权访问（IDOR）。
+ * 路由前缀：/api/miniprogram/contracts
+ */
+@ApiTags('客户订单中心')
+@Controller('miniprogram/contracts')
+@Public()             // 跳过全局 JwtAuthGuard
+@UseGuards(ServiceSecretGuard)  // 改用共享密钥守卫
+export class ContractsCustomerController {
+  private readonly logger = new Logger(ContractsCustomerController.name);
+
+  constructor(private readonly contractsService: ContractsService) {}
+
+  /**
+   * 接口 1：获取客户合同列表
+   * GET /api/miniprogram/contracts?phone=xxx
+   */
+  @Get()
+  @ApiOperation({ summary: '【客户】按手机号获取合同列表' })
+  @ApiQuery({ name: 'phone', required: true, description: '客户手机号' })
+  async getMyContracts(@Query('phone') phone: string) {
+    if (!phone) {
+      throw new BadRequestException('phone 参数不能为空');
+    }
+    this.logger.log(`[客户订单中心] 查询合同列表，phone=${phone}`);
+    const contracts = await this.contractsService.getContractsByPhone(phone);
+    return {
+      success: true,
+      data: contracts,
+      total: contracts.length,
+      message: '获取合同列表成功',
+    };
+  }
+
+  /**
+   * 接口 2：实时获取签约链接
+   * GET /api/miniprogram/contracts/:id/signing-url?phone=xxx
+   *
+   * 每次调用都向爱签 API 实时取最新短链接（避免存库链接过期）。
+   * 返回字段：
+   *   signingUrl   - H5 签约页面地址，用 WebView 打开
+   *   alreadySigned - true 表示该客户已完成签署（可提示无需再签）
+   */
+  @Get(':id/signing-url')
+  @ApiOperation({ summary: '【客户】实时获取合同签约链接' })
+  @ApiParam({ name: 'id', description: '合同 ID' })
+  @ApiQuery({ name: 'phone', required: true, description: '客户手机号（用于归属校验）' })
+  async getSigningUrl(
+    @Param('id') id: string,
+    @Query('phone') phone: string,
+  ) {
+    if (!phone) {
+      throw new BadRequestException('phone 参数不能为空');
+    }
+    this.logger.log(`[客户订单中心] 获取签约链接，id=${id}，phone=${phone}`);
+    const result = await this.contractsService.getCustomerSigningUrl(id, phone);
+    return {
+      success: true,
+      data: result,
+      message: result.alreadySigned ? '您已完成签署，无需再次操作' : '签约链接获取成功',
+    };
+  }
+
+  /**
+   * 接口 3：获取单个合同详情（含越权校验）
+   * GET /api/miniprogram/contracts/:id?phone=xxx
+   */
+  @Get(':id')
+  @ApiOperation({ summary: '【客户】获取合同详情' })
+  @ApiParam({ name: 'id', description: '合同 ID' })
+  @ApiQuery({ name: 'phone', required: true, description: '客户手机号（用于归属校验）' })
+  async getContractDetail(
+    @Param('id') id: string,
+    @Query('phone') phone: string,
+  ) {
+    if (!phone) {
+      throw new BadRequestException('phone 参数不能为空');
+    }
+    this.logger.log(`[客户订单中心] 查询合同详情，id=${id}，phone=${phone}`);
+    const contract = await this.contractsService.getContractByIdForCustomer(id, phone);
+    return {
+      success: true,
+      data: contract,
+      message: '获取合同详情成功',
+    };
+  }
+
+  /**
+   * 接口 3：客户确认上户（幂等）
+   * POST /api/miniprogram/contracts/:id/confirm-onboard
+   * Body: { "phone": "13800138000" }
+   */
+  @Post(':id/confirm-onboard')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '【客户】确认阿姨上户' })
+  @ApiParam({ name: 'id', description: '合同 ID' })
+  async confirmOnboard(
+    @Param('id') id: string,
+    @Body('phone') phone: string,
+  ) {
+    if (!phone) {
+      throw new BadRequestException('phone 不能为空');
+    }
+    this.logger.log(`[客户订单中心] 确认上户，id=${id}，phone=${phone}`);
+    const contract = await this.contractsService.confirmOnboard(id, phone);
+    return {
+      success: true,
+      data: contract,
+      message: '确认上户成功',
+    };
+  }
+}
+

@@ -445,7 +445,7 @@ const CreateResume: React.FC = () => {
   }, []);
 
   // 将AI弹窗中粘贴的图片直接分配到指定照片分类（含身份证正反面+OCR）
-  type AssignCategory = 'photo' | 'cooking' | 'complementaryFood' | 'positiveReview' | 'idCardFront' | 'idCardBack';
+  type AssignCategory = 'photo' | 'certificate' | 'medical' | 'cooking' | 'complementaryFood' | 'positiveReview' | 'confinementMeal' | 'idCardFront' | 'idCardBack';
 
   const handleAssignImageToCategory = useCallback(async (dataUrl: string, imgIndex: number, category: AssignCategory) => {
     try {
@@ -507,9 +507,12 @@ const CreateResume: React.FC = () => {
 
       const fileTypeMapping: Record<string, string> = {
         'photo': 'personalPhoto',
+        'certificate': 'certificate',
+        'medical': 'medicalReport',
         'cooking': 'cookingPhoto',
         'complementaryFood': 'complementaryFoodPhoto',
         'positiveReview': 'positiveReviewPhoto',
+        'confinementMeal': 'confinementMealPhoto',
       };
 
       if (editingResume?._id) {
@@ -534,6 +537,8 @@ const CreateResume: React.FC = () => {
             [category]: { ...prev[category], files: [...prev[category].files, newFile] },
           }));
           if (category === 'photo') setPhotoFiles(prev => [...prev, newFile]);
+          if (category === 'certificate') setCertificateFiles(prev => [...prev, newFile]);
+          if (category === 'medical') setMedicalReportFiles(prev => [...prev, newFile]);
           messageApi.success(`已添加到${categoryLabels[category]}`);
         } else {
           messageApi.error(response.message || '上传失败');
@@ -555,6 +560,8 @@ const CreateResume: React.FC = () => {
           [category]: { ...prev[category], files: [...prev[category].files, newFile] },
         }));
         if (category === 'photo') setPhotoFiles(prev => [...prev, newFile]);
+        if (category === 'certificate') setCertificateFiles(prev => [...prev, newFile]);
+        if (category === 'medical') setMedicalReportFiles(prev => [...prev, newFile]);
         messageApi.success(`已添加到${categoryLabels[category]}`);
       }
 
@@ -568,8 +575,11 @@ const CreateResume: React.FC = () => {
 
   const categoryLabels: Record<string, string> = {
     photo: '个人照片',
+    certificate: '技能证书',
+    medical: '体检报告',
     cooking: '烹饪照片',
     complementaryFood: '辅食照片',
+    confinementMeal: '月子餐照片',
     positiveReview: '好评截图',
     idCardFront: '身份证正面',
     idCardBack: '身份证背面',
@@ -4315,6 +4325,9 @@ const CreateResume: React.FC = () => {
                           { key: 'idCardBack', label: '移到身份证背面' },
                           { type: 'divider' as const },
                           { key: 'photo', label: '移到个人照片' },
+                          { key: 'certificate', label: '移到技能证书' },
+                          { key: 'medical', label: '移到体检报告' },
+                          { key: 'confinementMeal', label: '移到月子餐照片' },
                           { key: 'cooking', label: '移到烹饪照片' },
                           { key: 'complementaryFood', label: '移到辅食照片' },
                           { key: 'positiveReview', label: '移到好评截图' },

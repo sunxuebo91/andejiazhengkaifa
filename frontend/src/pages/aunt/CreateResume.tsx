@@ -157,6 +157,8 @@ interface ExtendedResume extends Omit<Resume, 'gender' | 'jobType' | 'education'
   cookingPhotos?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   complementaryFoodPhotos?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
   positiveReviewPhotos?: Array<{ url: string; filename?: string; size?: number; mimetype?: string }>;
+  // AI生成的工装照
+  uniformPhoto?: { url: string; filename?: string; size?: number; mimetype?: string };
 }
 
 // 添加类型转换辅助函数
@@ -1673,8 +1675,24 @@ const CreateResume: React.FC = () => {
         const addedPhotoUrls = new Set<string>(); // 用于去重
 
         console.log('🖼️ 编辑模式：加载个人照片');
+        console.log('  - 工装照:', extendedResume.uniformPhoto);
         console.log('  - 新格式个人照片:', extendedResume.personalPhoto);
         console.log('  - 旧格式个人照片:', extendedResume.photoUrls);
+
+        // 🔥 首先加载工装照（排在最前面）
+        if (extendedResume.uniformPhoto?.url && !addedPhotoUrls.has(extendedResume.uniformPhoto.url)) {
+          console.log('  👔 添加工装照:', extendedResume.uniformPhoto.url);
+          allPhotoFiles.push({
+            uid: 'existing-uniform-photo',
+            name: extendedResume.uniformPhoto.filename || '工装照',
+            status: 'done' as const,
+            url: extendedResume.uniformPhoto.url,
+            uniformPhotoUrl: extendedResume.uniformPhoto.url, // 标记为工装照
+            isExisting: true,
+            size: extendedResume.uniformPhoto.size || 0
+          });
+          addedPhotoUrls.add(extendedResume.uniformPhoto.url);
+        }
 
         // 处理新格式的个人照片（数组或单对象）
         const personalPhotoArr = extendedResume.personalPhoto

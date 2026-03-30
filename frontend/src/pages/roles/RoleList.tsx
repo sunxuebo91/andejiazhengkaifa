@@ -62,6 +62,10 @@ const permissionMap: Record<string, { text: string; color: string }> = {
   'user:create': { text: '创建用户', color: 'green' },
   'user:edit': { text: '编辑用户', color: 'cyan' },
   'user:delete': { text: '删除用户', color: 'red' },
+  // 褓贝后台
+  'baobei:all': { text: '褓贝后台(全部)', color: 'pink' },
+  'baobei:view': { text: '查看褓贝后台', color: 'blue' },
+  'baobei:edit': { text: '编辑褓贝后台', color: 'cyan' },
 };
 
 // 获取权限的颜色和文本

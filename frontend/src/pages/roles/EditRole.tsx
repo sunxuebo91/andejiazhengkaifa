@@ -79,6 +79,11 @@ const permissionsData: Permission[] = [
   { key: 'admin:roles', label: '角色管理', description: '允许管理角色和权限' },
   { key: 'admin:settings', label: '系统设置', description: '允许修改系统设置' },
   { key: 'admin:all', label: '系统管理(全部)', description: '系统管理全部权限，包含角色管理和系统设置' },
+
+  // 褓贝后台权限（小程序内容管理）
+  { key: 'baobei:view', label: '查看褓贝后台', description: '允许查看Banner、文章、爬虫源等内容' },
+  { key: 'baobei:edit', label: '编辑褓贝后台', description: '允许创建、编辑、删除Banner和文章' },
+  { key: 'baobei:all', label: '褓贝后台(全部)', description: '褓贝后台全部权限，包含Banner管理、文章管理、爬虫源管理、小程序用户管理' },
 ];
 
 // 按类别分组权限
@@ -114,6 +119,10 @@ const permissionGroups = [
   {
     title: '系统管理',
     permissions: permissionsData.filter(p => p.key.startsWith('admin:'))
+  },
+  {
+    title: '褓贝后台',
+    permissions: permissionsData.filter(p => p.key.startsWith('baobei:'))
   },
 ];
 

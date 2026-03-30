@@ -1,7 +1,7 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber, Upload } from 'antd';
+import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber, Upload, Popconfirm } from 'antd';
 import type { TablePaginationConfig, UploadProps } from 'antd';
-import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined, UserSwitchOutlined } from '@ant-design/icons';
+import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined, UserSwitchOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -68,6 +68,7 @@ const ResumeList = () => {
   const { message: messageApi } = App.useApp();
   const { hasPermission } = useAuth();
   const canAssign = hasPermission('resume:assign');
+  const canDelete = hasPermission('resume:delete');
 
   // 分配阿姨弹窗状态
   const [assignModalVisible, setAssignModalVisible] = useState(false);
@@ -432,6 +433,27 @@ const ResumeList = () => {
     followUpForm.resetFields();
   };
 
+  // 删除简历
+  const handleDeleteResume = async (record: ResumeData) => {
+    try {
+      const response = await apiService.delete(`/api/resumes/${record._id || record.id}`);
+      if (response.success) {
+        messageApi.success('简历删除成功');
+        // 刷新列表
+        fetchResumeList({
+          ...searchParams,
+          page: currentPage,
+          pageSize
+        });
+      } else {
+        messageApi.error(response.message || '删除失败');
+      }
+    } catch (error: any) {
+      console.error('删除简历失败:', error);
+      messageApi.error(error.response?.data?.message || error.message || '删除失败，请重试');
+    }
+  };
+
   // 提交跟进记录 - 使用API代替localStorage
   const handleFollowUpSubmit = async () => {
     try {
@@ -685,6 +707,24 @@ const ResumeList = () => {
                 onClick={() => handleOpenAssign(record)}
               />
             </Tooltip>
+          )}
+          {canDelete && (
+            <Popconfirm
+              title="确定要删除这条简历吗？"
+              description={`将删除 ${record.name} 的简历，此操作不可恢复`}
+              onConfirm={() => handleDeleteResume(record)}
+              okText="确定删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+            >
+              <Tooltip title="删除简历">
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  size="small"
+                />
+              </Tooltip>
+            </Popconfirm>
           )}
         </Space>
       ),

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException, 
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Resume, IResume } from './models/resume.entity';
+import { ResumeOperationLog } from './models/resume-operation-log.model';
 import { CreateResumeDto, CreateResumeV2Dto, OrderStatus } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Logger } from '@nestjs/common';
@@ -32,6 +33,8 @@ export class ResumeService {
     private readonly resumeModel: Model<IResume>,
     @InjectModel(Contract.name)
     private readonly contractModel: Model<ContractDocument>,
+    @InjectModel(ResumeOperationLog.name)
+    private readonly resumeOperationLogModel: Model<ResumeOperationLog>,
     private uploadService: UploadService,
     private readonly jwtService: JwtService,
     @InjectModel(EmployeeEvaluation.name)
@@ -44,6 +47,52 @@ export class ResumeService {
     private readonly backgroundCheckModel: Model<BackgroundCheckDocument>,
     private readonly qwenAIService: QwenAIService,
   ) {}
+
+  // 🆕 系统操作人ID（用于系统自动操作）
+  private readonly systemOperatorId = new Types.ObjectId('000000000000000000000000');
+
+  /**
+   * 🆕 记录简历操作日志
+   * @param resumeId 简历ID
+   * @param operatorId 操作人ID
+   * @param operationType 操作类型
+   * @param operationName 操作名称（中文）
+   * @param details 操作详情
+   */
+  async logOperation(
+    resumeId: string | Types.ObjectId,
+    operatorId: string,
+    operationType: string,
+    operationName: string,
+    details?: {
+      before?: Record<string, any>;
+      after?: Record<string, any>;
+      description?: string;
+      relatedId?: string;
+      relatedType?: string;
+    }
+  ): Promise<void> {
+    try {
+      const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
+      const operatorObjectId = isValidObjectId(operatorId) ? new Types.ObjectId(operatorId) : this.systemOperatorId;
+
+      await this.resumeOperationLogModel.create({
+        resumeId: new Types.ObjectId(resumeId.toString()),
+        operatorId: operatorObjectId,
+        entityType: 'resume',
+        entityId: resumeId.toString(),
+        operationType,
+        operationName,
+        details,
+        operatedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.error('audit.resume.write_failed', error, {
+        resumeId: resumeId.toString(),
+        operationType,
+      });
+    }
+  }
 
   /**
    * 带文件创建简历
@@ -135,15 +184,22 @@ export class ResumeService {
 
       this.logger.log(`✅ createWithFiles 成功: ${savedResume._id}`);
 
-      // 异步触发AI换装（仅在没有预生成工装照时）
-      if (!createResumeDto.preGeneratedUniformPhotoUrl && categorizedFiles.photoUrls && categorizedFiles.photoUrls.length > 0) {
-        const resumeId = (savedResume._id as any).toString();
-        for (const photoUrl of categorizedFiles.photoUrls) {
-          this.triggerUniformPhotoGeneration(resumeId, photoUrl).catch(err =>
-            this.logger.error(`AI换装失败 (resumeId=${resumeId}): ${err.message}`)
-          );
+      // 📝 记录操作日志 - 创建简历
+      await this.logOperation(
+        savedResume._id.toString(),
+        createResumeDto.userId,
+        'create',
+        '创建简历',
+        {
+          description: `创建简历：${savedResume.name || '未命名'}`,
+          after: {
+            name: savedResume.name,
+            phone: savedResume.phone ? `${savedResume.phone.slice(0, 3)}****${savedResume.phone.slice(-4)}` : undefined,
+            jobType: savedResume.jobType,
+            leadSource: savedResume.leadSource,
+          }
         }
-      }
+      );
 
       return {
         success: true,
@@ -273,10 +329,29 @@ export class ResumeService {
     return this.coreUpdate(id, updateResumeDto, { userId });
   }
 
-  async remove(id: string) {
+  async remove(id: string, userId?: string) {
     const resume = await this.resumeModel.findById(new Types.ObjectId(id));
     if (!resume) {
       throw new NotFoundException('简历不存在');
+    }
+
+    // 📝 记录操作日志 - 删除简历（在删除前记录）
+    if (userId) {
+      await this.logOperation(
+        id,
+        userId,
+        'delete',
+        '删除简历',
+        {
+          description: `删除简历：${resume.name || '未命名'}`,
+          before: {
+            name: resume.name,
+            phone: resume.phone ? `${resume.phone.slice(0, 3)}****${resume.phone.slice(-4)}` : undefined,
+            jobType: resume.jobType,
+            status: resume.status,
+          }
+        }
+      );
     }
 
     // 注意：不再删除关联的 COS 文件，因为文件可能被其他地方引用
@@ -317,6 +392,10 @@ export class ResumeService {
       throw new NotFoundException('简历不存在');
     }
 
+    // 获取原负责人信息
+    const oldAssignedTo = (resume as any).assignedTo;
+    const oldUser = oldAssignedTo ? await this.userModel.findById(oldAssignedTo).select('name username').lean() : null;
+
     const targetUser = await this.userModel.findById(assignedToId).select('name username active').lean();
     if (!targetUser) {
       throw new NotFoundException('指定的员工不存在');
@@ -330,6 +409,23 @@ export class ResumeService {
       { assignedTo: new Types.ObjectId(assignedToId), assignedAt: new Date() },
       { new: true },
     ).exec();
+
+    // 📝 记录操作日志 - 分配简历
+    await this.logOperation(
+      resumeId,
+      operatorId,
+      'assign',
+      '分配阿姨',
+      {
+        description: `负责人由${(oldUser as any)?.name || '未分配'}变更为${(targetUser as any).name}`,
+        before: {
+          assignedTo: (oldUser as any)?.name || '未分配',
+        },
+        after: {
+          assignedTo: (targetUser as any).name,
+        },
+      }
+    );
 
     this.logger.log(`✅ 分配简历 ${resumeId}（${resume.name}）给员工 ${(targetUser as any).name}`);
     return updated;
@@ -462,12 +558,6 @@ export class ResumeService {
       const savedResume = await resumeDoc.save();
       this.logger.debug(`简历更新成功，当前文件统计: photoUrls=${savedResume.photoUrls?.length || 0}, certificates=${savedResume.certificates?.length || 0}, reports=${savedResume.reports?.length || 0}`);
 
-      // 上传个人照片后异步触发AI换装（不阻塞当前请求）
-      if (fileType === 'personalPhoto') {
-        this.triggerUniformPhotoGeneration(id, fileUrl).catch(err =>
-          this.logger.error(`AI换装失败 (resumeId=${id}): ${err.message}`)
-        );
-      }
 
       // 返回包含文件URL的结果
       return {
@@ -1304,6 +1394,12 @@ export class ResumeService {
       userId?: string;
     } = {}
   ): Promise<IResume> {
+    // 0. 获取当前简历信息（用于操作日志对比）
+    const currentResume = await this.resumeModel.findById(new Types.ObjectId(id)).lean();
+    if (!currentResume) {
+      throw new NotFoundException('简历不存在');
+    }
+
     // 1. 数据规范化
     const normalizedData = this.normalizeData(data);
 
@@ -1312,6 +1408,12 @@ export class ResumeService {
 
     // 3. 构建更新数据
     const updateData: any = { ...normalizedData };
+
+    // 🔥 自动更新草稿状态：如果添加了手机号，自动取消草稿状态
+    if (normalizedData.phone) {
+      updateData.isDraft = false;
+      this.logger.debug(`📋 检测到手机号，自动取消草稿状态`);
+    }
 
     // 设置最后更新人
     if (options.userId) {
@@ -1339,6 +1441,44 @@ export class ResumeService {
 
     if (!resume) {
       throw new NotFoundException('简历不存在');
+    }
+
+    // 📝 记录操作日志 - 编辑简历
+    if (options.userId) {
+      // 构建变更字段对比
+      const fieldsToTrack = ['name', 'phone', 'jobType', 'status', 'expectedSalary', 'education', 'skills', 'serviceArea', 'selfIntroduction', 'leadSource'];
+      const fieldNameMap: Record<string, string> = {
+        name: '姓名', phone: '手机号', jobType: '工作类型', status: '状态', expectedSalary: '期望薪资',
+        education: '学历', skills: '技能', serviceArea: '服务区域', selfIntroduction: '自我介绍', leadSource: '来源'
+      };
+      const changedFields: string[] = [];
+      const beforeData: Record<string, any> = {};
+      const afterData: Record<string, any> = {};
+
+      for (const field of fieldsToTrack) {
+        const currentValue = currentResume[field];
+        const newValue = normalizedData[field];
+        if (newValue !== undefined && JSON.stringify(currentValue) !== JSON.stringify(newValue)) {
+          changedFields.push(field);
+          beforeData[field] = currentValue;
+          afterData[field] = newValue;
+        }
+      }
+
+      if (changedFields.length > 0) {
+        const changedFieldsInChinese = changedFields.map(field => fieldNameMap[field] || field);
+        await this.logOperation(
+          id,
+          options.userId,
+          'update',
+          '编辑简历',
+          {
+            before: beforeData,
+            after: afterData,
+            description: `修改了: ${changedFieldsInChinese.join('、')}`,
+          }
+        );
+      }
     }
 
     this.logger.log(`✅ 核心更新成功: ${id}`);
@@ -1431,11 +1571,13 @@ export class ResumeService {
     // 2. 统一去重检查（手机号 + 身份证号，排除自身）
     await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber, id);
 
-    // 3. 检查简历是否存在
+    // 3. 检查简历是否存在，并保存原始数据用于日志对比
     const resume = await this.resumeModel.findById(new Types.ObjectId(id));
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
+    // 保存原始简历数据用于操作日志对比（必须在修改前保存）
+    const originalResumeData = resume.toObject();
 
     // 4. 处理文件上传
     const filesArray = Array.isArray(files) ? files : [];
@@ -1454,6 +1596,12 @@ export class ResumeService {
     // 允许更新 leadSource 字段
     if ((updateFields as any).leadSource !== undefined) {
       this.logger.debug(`📋 更新 leadSource: ${(updateFields as any).leadSource}`);
+    }
+
+    // 🔥 自动更新草稿状态：如果添加了手机号，自动取消草稿状态
+    if (normalizedData.phone) {
+      (updateFields as any).isDraft = false;
+      this.logger.debug(`📋 检测到手机号，自动取消草稿状态`);
     }
 
     // 同步文件字段
@@ -1475,12 +1623,47 @@ export class ResumeService {
 
     this.logger.log(`✅ updateWithFiles 成功: ${id}`);
 
-    // 异步触发AI换装（针对更新时上传的新个人照片）
-    if (uploadedFiles['personalPhoto'] && uploadedFiles['personalPhoto'].length > 0) {
-      for (const fileInfo of uploadedFiles['personalPhoto']) {
-        this.triggerUniformPhotoGeneration(id, fileInfo.url).catch(err =>
-          this.logger.error(`AI换装失败 (resumeId=${id}): ${err.message}`)
+    // 📝 记录操作日志 - 编辑简历（updateWithFiles入口）
+    if (userId) {
+      // 构建变更字段对比（使用之前保存的 originalResumeData）
+      const fieldsToTrack = ['name', 'phone', 'jobType', 'status', 'expectedSalary', 'education', 'skills', 'serviceArea', 'selfIntroduction', 'leadSource'];
+      const fieldNameMap: Record<string, string> = {
+        name: '姓名', phone: '手机号', jobType: '工作类型', status: '状态', expectedSalary: '期望薪资',
+        education: '学历', skills: '技能', serviceArea: '服务区域', selfIntroduction: '自我介绍', leadSource: '来源'
+      };
+      const changedFields: string[] = [];
+      const beforeData: Record<string, any> = {};
+      const afterData: Record<string, any> = {};
+
+      for (const field of fieldsToTrack) {
+        const newValue = normalizedData[field];
+        if (newValue !== undefined && JSON.stringify(originalResumeData[field]) !== JSON.stringify(newValue)) {
+          changedFields.push(field);
+          beforeData[field] = originalResumeData[field];
+          afterData[field] = newValue;
+        }
+      }
+
+      // 检查文件更新
+      const uploadedFileTypes = Object.keys(uploadedFiles);
+      if (uploadedFileTypes.length > 0) {
+        changedFields.push(...uploadedFileTypes.map(t => `文件(${t})`));
+      }
+
+      if (changedFields.length > 0) {
+        const changedFieldsInChinese = changedFields.map(field => fieldNameMap[field] || field);
+        await this.logOperation(
+          id,
+          userId,
+          'update',
+          '编辑简历',
+          {
+            before: beforeData,
+            after: afterData,
+            description: `修改了: ${changedFieldsInChinese.join('、')}`,
+          }
         );
+        this.logger.log(`📝 操作日志已记录: 修改了 ${changedFieldsInChinese.join('、')}`);
       }
     }
 
@@ -2798,6 +2981,25 @@ export class ResumeService {
     ).exec();
 
     return recommendation;
+  }
+
+  /**
+   * 获取简历操作日志（仅管理员可用）
+   */
+  async getOperationLogs(resumeId: string): Promise<any[]> {
+    this.logger.log(`获取简历操作日志: resumeId=${resumeId}`);
+
+    const logs = await this.resumeOperationLogModel
+      .find({ resumeId: new Types.ObjectId(resumeId) })
+      .populate('operatorId', 'name username')
+      .sort({ operatedAt: -1 })
+      .lean()
+      .exec();
+
+    return logs.map(log => ({
+      ...log,
+      operator: log.operatorId,
+    }));
   }
 
 }

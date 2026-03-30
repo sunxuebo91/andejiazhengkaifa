@@ -28,11 +28,11 @@ import { Public } from '../auth/decorators/public.decorator';
 export class BannerController {
   constructor(private readonly bannerService: BannerService) {}
 
-  // ==================== CRM端管理接口（需要管理员权限） ====================
+  // ==================== CRM端管理接口（需要褓贝后台权限） ====================
 
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @ApiOperation({ summary: '创建Banner' })
   @ApiResponse({ status: 201, description: 'Banner创建成功' })
@@ -47,7 +47,7 @@ export class BannerController {
 
   @Get()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取Banner列表（分页）' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -77,7 +77,7 @@ export class BannerController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取单个Banner详情' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -93,7 +93,7 @@ export class BannerController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新Banner' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -113,7 +113,7 @@ export class BannerController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @ApiOperation({ summary: '删除Banner' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -128,7 +128,7 @@ export class BannerController {
 
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新Banner状态' })
   @ApiParam({ name: 'id', description: 'Banner ID' })
@@ -148,7 +148,7 @@ export class BannerController {
 
   @Post('reorder')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '批量调整Banner排序' })

@@ -1710,6 +1710,40 @@ export class ResumeController {
     // 严禁返回：phone、idNumber、身份证照片、报告、内部备注等敏感信息
   }
 
+  // 获取简历操作日志（仅管理员可访问）
+  @Get(':id/operation-logs')
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('admin')
+  @Permissions('resume:view')
+  @ApiOperation({ summary: '获取简历操作日志（仅管理员）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  @ApiResponse({ status: 200, description: '操作日志获取成功' })
+  async getOperationLogs(@Param('id') id: string, @Request() req): Promise<any> {
+    try {
+      // 验证用户是否为管理员
+      if (req.user.role !== 'admin') {
+        return {
+          success: false,
+          data: null,
+          message: '权限不足，仅管理员可查看操作日志'
+        };
+      }
+      const logs = await this.resumeService.getOperationLogs(id);
+      return {
+        success: true,
+        data: logs,
+        message: '操作日志获取成功'
+      };
+    } catch (error) {
+      this.logger.error(`获取简历操作日志失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: `操作日志获取失败: ${error.message}`
+      };
+    }
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '获取简历详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -1931,8 +1965,9 @@ export class ResumeController {
   @ApiResponse({ status: 403, description: '无权限' })
   async remove(@Param('id') id: string, @Req() req) {
     try {
+      const userId = req.user?.sub || req.user?.userId || req.user?.id;
       this.logger.log(`管理员 ${req.user?.username} 删除简历: id=${id}`);
-      await this.resumeService.remove(id);
+      await this.resumeService.remove(id, userId);
       return {
         success: true,
         message: '删除简历成功'

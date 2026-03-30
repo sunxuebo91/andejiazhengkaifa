@@ -18,7 +18,9 @@ import {
   Rate,
   List,
   Space,
-  Divider
+  Divider,
+  Timeline,
+  Empty
 } from 'antd';
 import {
   EditOutlined,
@@ -30,7 +32,10 @@ import {
   DownloadOutlined,
   SafetyOutlined,
   DeleteOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  AuditOutlined,
+  UpOutlined,
+  DownOutlined
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
@@ -43,6 +48,7 @@ import { BackgroundCheck, BG_STATUS_MAP } from '../../types/background-check.typ
 import { isPdfFile } from '../../utils/uploadHelper';
 import AvailabilityCalendar from '@/components/AvailabilityCalendar';
 import { getDistrictLabel } from '../../constants/beijingDistricts';
+import Authorized from '../../components/Authorized';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
@@ -504,6 +510,11 @@ const ResumeDetail = () => {
   const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheck | null>(null);
   const [bgCheckLoading, setBgCheckLoading] = useState(false);
 
+  // 🆕 操作日志状态（仅管理员可见）
+  const [operationLogs, setOperationLogs] = useState<any[]>([]);
+  const [operationLogsLoading, setOperationLogsLoading] = useState(false);
+  const [showAllOperationLogs, setShowAllOperationLogs] = useState(false);
+
   // 更新日期格式化函数
   const formatDateToChinese = (dateStr: string): string => {
     if (!dateStr || dateStr === '-') return '-';
@@ -613,6 +624,25 @@ const ResumeDetail = () => {
       fetchBackgroundCheck();
     }
   }, [resume?.idNumber]);
+
+  // 🆕 获取操作日志（仅管理员）
+  useEffect(() => {
+    const fetchOperationLogs = async () => {
+      const user = getCurrentUser();
+      if (!resume?._id || user?.role !== 'admin') return;
+      try {
+        setOperationLogsLoading(true);
+        const logs = await resumeService.getOperationLogs(resume._id);
+        setOperationLogs(Array.isArray(logs) ? logs : []);
+      } catch (e) {
+        console.error('获取操作日志失败', e);
+        setOperationLogs([]);
+      } finally {
+        setOperationLogsLoading(false);
+      }
+    };
+    fetchOperationLogs();
+  }, [resume?._id]);
 
   // 获取背调信息
   const fetchBackgroundCheck = async () => {
@@ -2506,6 +2536,93 @@ const ResumeDetail = () => {
               />
             </Card>
           )}
+
+          {/* 🆕 操作日志 - 仅管理员可见 */}
+          <Authorized role={["admin"]} noMatch={null}>
+            <Card
+              title={
+                <Space>
+                  <AuditOutlined />
+                  <span>操作日志</span>
+                  {operationLogs && operationLogs.length > 1 && (
+                    <Tag color="purple">{operationLogs.length} 条记录</Tag>
+                  )}
+                </Space>
+              }
+              style={{ marginBottom: 24 }}
+              loading={operationLogsLoading}
+            >
+              {operationLogs && operationLogs.length > 0 ? (
+                <>
+                  <Timeline
+                    mode="left"
+                    items={(showAllOperationLogs ? operationLogs : operationLogs.slice(0, 1)).map((log: any, idx: number) => {
+                      const operatedAt = log.operatedAt || log.createdAt;
+                      const operatorName = log.operator?.name || log.operator?.username || '系统';
+                      // 根据操作类型设置颜色
+                      const colorMap: Record<string, string> = {
+                        'create': 'green',
+                        'update': 'blue',
+                        'delete': 'red',
+                        'assign': 'orange',
+                        'upload_file': 'cyan',
+                        'delete_file': 'magenta',
+                        'generate_uniform': 'purple',
+                        'change_status': 'gold',
+                        'import': 'lime',
+                      };
+                      const dotColor = colorMap[log.operationType] || 'gray';
+
+                      return {
+                        key: log._id || idx,
+                        color: dotColor,
+                        label: operatedAt ? dayjs(operatedAt).format('YYYY-MM-DD HH:mm:ss') : '-',
+                        children: (
+                          <Card size="small" bordered={false} style={{ background: '#fafafa' }}>
+                            <div>
+                              <Tag color={dotColor}>{log.operationName || log.operationType}</Tag>
+                              <span style={{ color: '#666', marginLeft: 8 }}>
+                                操作人: <strong>{operatorName}</strong>
+                              </span>
+                            </div>
+                            {log.details?.description && (
+                              <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
+                                {log.details.description}
+                              </div>
+                            )}
+                            {log.details?.before && log.details?.after && (
+                              <div style={{ marginTop: 8, fontSize: 12 }}>
+                                <div style={{ color: '#999' }}>变更详情:</div>
+                                <div style={{ color: '#f5222d' }}>
+                                  - {JSON.stringify(log.details.before)}
+                                </div>
+                                <div style={{ color: '#52c41a' }}>
+                                  + {JSON.stringify(log.details.after)}
+                                </div>
+                              </div>
+                            )}
+                          </Card>
+                        ),
+                      };
+                    })}
+                  />
+                  {operationLogs.length > 1 && (
+                    <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                      <Button
+                        type="link"
+                        onClick={() => setShowAllOperationLogs(!showAllOperationLogs)}
+                        icon={showAllOperationLogs ? <UpOutlined /> : <DownOutlined />}
+                      >
+                        {showAllOperationLogs ? '收起日志' : `查看全部 ${operationLogs.length} 条日志`}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Empty description="暂无操作日志" style={{ padding: '40px 0' }} />
+              )}
+            </Card>
+          </Authorized>
 
           {/* 创建信息卡片 */}
           <Card title="创建信息" style={{ marginBottom: 24 }}>

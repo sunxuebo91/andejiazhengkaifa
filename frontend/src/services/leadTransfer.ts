@@ -199,13 +199,21 @@ class LeadTransferService {
     startDate?: string;
     endDate?: string;
   }): Promise<{ records: LeadTransferRecord[]; total: number; page: number; totalPages: number }> {
-    const response = await apiService.get('/api/lead-transfer/records', params);
+    const response: any = await apiService.get('/api/lead-transfer/records', params);
     console.log('getRecords API响应:', response);
+    console.log('response.data:', response.data);
+    console.log('response.records:', response.records);
 
-    // 处理响应格式：api.ts的拦截器已经返回了response.data
-    // 所以这里response就是{ success: true, data: {...} }
-    if (response.data) {
+    // 处理响应格式：api.ts的拦截器已经返回了 { success: true, data: {...} }
+    // 所以我们需要检查两种情况：
+    // 1. response.data 存在（标准格式）
+    // 2. response.records 存在（已经是数据对象）
+    if (response.data && response.data.records) {
+      console.log('使用 response.data 格式');
       return response.data;
+    } else if (response.records) {
+      console.log('使用 response 直接格式');
+      return response;
     } else {
       console.error('未知的响应格式:', response);
       throw new Error('获取流转记录失败：响应格式错误');
@@ -214,12 +222,15 @@ class LeadTransferService {
 
   // 获取统计信息
   async getStatistics(): Promise<LeadTransferStatistics> {
-    const response = await apiService.get('/api/lead-transfer/statistics');
+    const response: any = await apiService.get('/api/lead-transfer/statistics');
     console.log('getStatistics API响应:', response);
 
-    // 处理响应格式
-    if (response.data) {
+    // 处理响应格式：api.ts的拦截器返回 { success: true, data: {...} }
+    // 或者直接返回统计数据对象
+    if (response.data && response.data.totalCount !== undefined) {
       return response.data;
+    } else if (response.totalCount !== undefined) {
+      return response;
     } else {
       console.error('未知的响应格式:', response);
       throw new Error('获取统计信息失败：响应格式错误');

@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { Resume, ResumeSchema } from './models/resume.entity';
 import { WorkExperienceSchema, WorkExperienceSchemaFactory } from './models/work-experience.schema';
 import { FileInfoSchema, FileInfoSchemaFactory } from './models/file-info.schema';
+import { ResumeOperationLog, ResumeOperationLogSchema } from './models/resume-operation-log.model';
 import { ResumeController } from './resume.controller';
 import { ResumeQueryService } from './resume-query.service';
 import { ResumeService } from './resume.service';
@@ -26,6 +27,7 @@ import { AIModule } from '../ai/ai.module';
       { name: Contract.name, schema: ContractSchema },
       { name: User.name, schema: UserSchema },
       { name: BackgroundCheck.name, schema: BackgroundCheckSchema },
+      { name: ResumeOperationLog.name, schema: ResumeOperationLogSchema },
     ]),
     UploadModule,
     DashubaoModule,

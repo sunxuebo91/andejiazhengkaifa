@@ -206,7 +206,7 @@ export const resumeService = {
   delete: async (id: string) => {
     return apiService.delete(`/api/resumes/${id}`);
   },
-  
+
   // 检查简历是否重复
   checkDuplicate: async (phone: string, idNumber?: string) => {
     const params: any = { phone };
@@ -214,7 +214,13 @@ export const resumeService = {
       params.idNumber = idNumber;
     }
     return apiService.get('/api/resumes/check-duplicate', params);
+  },
+
+  // 获取简历操作日志（仅管理员可用）
+  getOperationLogs: async (resumeId: string): Promise<any[]> => {
+    const response = await apiService.get(`/api/resumes/${resumeId}/operation-logs`);
+    return response.data;
   }
 };
 
-export default resumeService; 
+export default resumeService;

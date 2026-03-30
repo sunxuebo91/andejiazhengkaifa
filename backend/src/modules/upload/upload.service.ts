@@ -18,10 +18,21 @@ export class UploadService {
     try {
       // 生成文件存储路径
       const key = this.cosService.generateFileKey(file.originalname, metadata.type || 'other');
-      
+
       // 上传到 COS
       const fileUrl = await this.cosService.uploadFile(file, key);
-      
+
+      // 验证文件确实可访问，最多重试一次（防止COS偶发性上传成功但文件未持久化）
+      const exists = await this.cosService.doesFileExist(key);
+      if (!exists) {
+        this.logger.warn(`文件上传后校验失败，重试一次: ${key}`);
+        await this.cosService.uploadFile(file, key);
+        const existsRetry = await this.cosService.doesFileExist(key);
+        if (!existsRetry) {
+          throw new Error(`文件上传后校验仍失败，COS存储可能存在问题: ${key}`);
+        }
+      }
+
       this.logger.log(`文件上传成功: ${fileUrl}`);
       return fileUrl;
     } catch (error) {

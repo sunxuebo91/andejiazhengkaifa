@@ -60,7 +60,7 @@ export class ArticleController {
 
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @ApiOperation({ summary: '创建文章' })
   @ApiResponse({ status: 201, description: '创建成功' })
@@ -71,7 +71,7 @@ export class ArticleController {
 
   @Get()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取文章列表（分页）' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -82,7 +82,7 @@ export class ArticleController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:view')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取文章详情' })
   @ApiParam({ name: 'id', description: '文章ID' })
@@ -94,7 +94,7 @@ export class ArticleController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新文章' })
   @ApiParam({ name: 'id', description: '文章ID' })
@@ -106,7 +106,7 @@ export class ArticleController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @ApiOperation({ summary: '删除文章' })
   @ApiParam({ name: 'id', description: '文章ID' })
@@ -118,7 +118,7 @@ export class ArticleController {
 
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('admin:settings')
+  @Permissions('baobei:edit')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '更新文章发布状态' })

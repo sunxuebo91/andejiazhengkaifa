@@ -228,8 +228,8 @@ export class CreateResumeV2Dto {
   @Min(0, { message: '工作经验年限必须大于等于0' })
   experienceYears?: number;
 
-  @ApiProperty({ description: '期望薪资(元)', example: 8000, minimum: 0, required: false })
-  @IsOptional()
+  @ApiProperty({ description: '期望薪资(元)', example: 8000, minimum: 0 })
+  @IsNotEmpty({ message: '期望薪资不能为空' })
   @Transform(({ value }) => {
     if (value === undefined || value === null || value === '') return undefined;
     if (typeof value === 'string') {
@@ -240,7 +240,7 @@ export class CreateResumeV2Dto {
   })
   @IsNumber({}, { message: '期望薪资必须是数字' })
   @Min(0, { message: '期望薪资必须大于等于0' })
-  expectedSalary?: number;
+  expectedSalary: number;
 
   @ApiProperty({
     description: '月嫂档位',

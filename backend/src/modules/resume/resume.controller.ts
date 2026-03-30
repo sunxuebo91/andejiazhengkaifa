@@ -1,11 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger, UploadedFile, BadRequestException, Req, Headers, ConflictException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, UploadedFiles, ParseIntPipe, DefaultValuePipe, Logger, UploadedFile, BadRequestException, Req, Headers, ConflictException, HttpException, HttpStatus } from '@nestjs/common';
 import { FilesInterceptor, FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody, ApiParam } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { memoryStorage } from 'multer';
 import { ResumeService } from './resume.service';
 import { CreateResumeDto, CreateResumeV2Dto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import { Resume } from './models/resume.entity';
 import { UploadService } from '../upload/upload.service';
+import { QwenAIService } from '../ai/qwen-ai.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -26,6 +29,12 @@ const multerConfig: MulterOptions = {
   },
 };
 
+// 小程序工装生成专用的内存存储配置
+const memoryUploadConfig = {
+  storage: memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+};
+
 @ApiTags('简历管理')
 @Controller('resumes')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -35,6 +44,8 @@ export class ResumeController {
   constructor(
     private readonly resumeService: ResumeService,
     private readonly uploadService: UploadService,
+    private readonly qwenAIService: QwenAIService,
+    private readonly configService: ConfigService,
   ) {}
 
   @Post()
@@ -1434,6 +1445,179 @@ export class ResumeController {
         message: `获取统计信息失败: ${error.message}`
       };
     }
+  }
+
+  /**
+   * 小程序生成AI工装照
+   * 上传个人照片 → AI生成工装照 → 返回原图URL和工装照URL
+   */
+  @Post('miniprogram/generate-uniform')
+  @Permissions('resume:edit')
+  @UseInterceptors(FileInterceptor('file', memoryUploadConfig))
+  @ApiOperation({ summary: '【小程序】AI生成工装照' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary', description: '个人照片文件（支持jpg/png，建议正面免冠照）' },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 200, description: '生成成功', schema: { example: { success: true, data: { personalPhotoUrl: 'https://...', uniformPhotoUrl: 'https://...' }, message: 'AI工装照生成成功' } } })
+  async generateUniformForMiniprogram(@UploadedFile() file: Express.Multer.File, @Req() req) {
+    try {
+      if (!file) {
+        throw new BadRequestException('请上传照片文件');
+      }
+
+      this.logger.log(`📸 小程序工装生成: 文件大小=${file.size}, 类型=${file.mimetype}`);
+
+      // 检查AI服务是否可用
+      if (!this.qwenAIService.isUniformSwapConfigured()) {
+        throw new HttpException({ success: false, message: 'AI换装服务未配置，请联系管理员' }, HttpStatus.SERVICE_UNAVAILABLE);
+      }
+
+      // 获取工装模板URL列表
+      const templateUrls = this.getUniformTemplateUrls();
+      if (templateUrls.length === 0) {
+        throw new HttpException({ success: false, message: '未配置工装模板图片，请联系管理员' }, HttpStatus.SERVICE_UNAVAILABLE);
+      }
+
+      // 1. 上传个人照片到COS
+      const personalPhotoUrl = await this.uploadService.uploadFile(file, { type: 'personalPhoto' });
+      this.logger.log(`✅ 个人照片已上传: ${personalPhotoUrl.substring(0, 60)}...`);
+
+      // 2. 随机选取模板，调用AI换装
+      const templateUrl = templateUrls[Math.floor(Math.random() * templateUrls.length)];
+      this.logger.log(`🎨 使用模板生成工装照，共${templateUrls.length}个模板可用`);
+
+      const imageBuffer = await this.generateUniformWithFallback(personalPhotoUrl, templateUrl);
+
+      // 3. 上传生成的工装照到COS
+      const fakeFile = {
+        buffer: imageBuffer,
+        originalname: `uniform-photo-${Date.now()}.jpg`,
+        mimetype: 'image/jpeg',
+        size: imageBuffer.length,
+        fieldname: 'uniformPhoto',
+        encoding: '7bit',
+      } as Express.Multer.File;
+
+      const uniformPhotoUrl = await this.uploadService.uploadFile(fakeFile, { type: 'personalPhoto' });
+      this.logger.log(`✅ 工装照已生成: ${uniformPhotoUrl.substring(0, 60)}...`);
+
+      return {
+        success: true,
+        data: { personalPhotoUrl, uniformPhotoUrl },
+        message: 'AI工装照生成成功',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ 小程序工装生成失败: ${message}`);
+
+      if (message.includes('繁忙') || message.includes('rate') || message.includes('limit')) {
+        throw new HttpException({ success: false, message: 'AI服务繁忙，请稍后几秒再重试' }, HttpStatus.TOO_MANY_REQUESTS);
+      }
+
+      throw new HttpException({ success: false, message: `生成失败: ${message}` }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * 小程序通过已有照片URL重新生成工装照
+   */
+  @Post('miniprogram/regenerate-uniform')
+  @Permissions('resume:edit')
+  @ApiOperation({ summary: '【小程序】重新生成AI工装照（使用已上传的照片URL）' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        photoUrl: { type: 'string', description: '已上传到COS的个人照片URL' },
+      },
+      required: ['photoUrl'],
+    },
+  })
+  @ApiResponse({ status: 200, description: '生成成功', schema: { example: { success: true, data: { personalPhotoUrl: 'https://...', uniformPhotoUrl: 'https://...' }, message: 'AI工装照重新生成成功' } } })
+  async regenerateUniformForMiniprogram(@Body() body: { photoUrl: string }, @Req() req) {
+    try {
+      const { photoUrl } = body;
+      if (!photoUrl) {
+        throw new BadRequestException('请提供照片URL');
+      }
+
+      this.logger.log(`🔄 小程序重新生成工装照: ${photoUrl.substring(0, 60)}...`);
+
+      if (!this.qwenAIService.isUniformSwapConfigured()) {
+        throw new HttpException({ success: false, message: 'AI换装服务未配置，请联系管理员' }, HttpStatus.SERVICE_UNAVAILABLE);
+      }
+
+      const templateUrls = this.getUniformTemplateUrls();
+      if (templateUrls.length === 0) {
+        throw new HttpException({ success: false, message: '未配置工装模板图片，请联系管理员' }, HttpStatus.SERVICE_UNAVAILABLE);
+      }
+
+      const templateUrl = templateUrls[Math.floor(Math.random() * templateUrls.length)];
+      this.logger.log(`🎨 使用模板重新生成，共${templateUrls.length}个模板可用`);
+
+      const imageBuffer = await this.generateUniformWithFallback(photoUrl, templateUrl);
+
+      const fakeFile = {
+        buffer: imageBuffer,
+        originalname: `uniform-photo-${Date.now()}.jpg`,
+        mimetype: 'image/jpeg',
+        size: imageBuffer.length,
+        fieldname: 'uniformPhoto',
+        encoding: '7bit',
+      } as Express.Multer.File;
+
+      const uniformPhotoUrl = await this.uploadService.uploadFile(fakeFile, { type: 'personalPhoto' });
+      this.logger.log(`✅ 工装照重新生成成功: ${uniformPhotoUrl.substring(0, 60)}...`);
+
+      return {
+        success: true,
+        data: { personalPhotoUrl: photoUrl, uniformPhotoUrl },
+        message: 'AI工装照重新生成成功',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ 小程序重新生成工装失败: ${message}`);
+
+      if (message.includes('繁忙') || message.includes('rate') || message.includes('limit')) {
+        throw new HttpException({ success: false, message: 'AI服务繁忙，请稍后几秒再重试' }, HttpStatus.TOO_MANY_REQUESTS);
+      }
+
+      throw new HttpException({ success: false, message: `生成失败: ${message}` }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /** 获取工装模板URL列表（从环境变量读取） */
+  private getUniformTemplateUrls(): string[] {
+    const multi = this.configService.get<string>('UNIFORM_TEMPLATE_URLS') || '';
+    const single = this.configService.get<string>('UNIFORM_TEMPLATE_URL') || '';
+    return multi
+      ? multi.split(',').map(u => u.trim()).filter(Boolean)
+      : single ? [single.trim()] : [];
+  }
+
+  /** 统一生成逻辑：优先Seedream，失败回退FaceChain */
+  private async generateUniformWithFallback(personalPhotoUrl: string, templateUrl: string): Promise<Buffer> {
+    if (this.qwenAIService.isSeedreamConfigured()) {
+      try {
+        this.logger.log('[AI换装] 使用豆包Seedream生成...');
+        return await this.qwenAIService.swapHeadWithSeedream(personalPhotoUrl, templateUrl);
+      } catch (seedreamErr) {
+        this.logger.warn(`[AI换装] Seedream失败(${seedreamErr.message})，尝试FaceChain...`);
+        if (this.qwenAIService.isTextAiConfigured()) {
+          return await this.qwenAIService.swapHeadToUniform(personalPhotoUrl, templateUrl);
+        }
+        throw seedreamErr;
+      }
+    }
+    this.logger.log('[AI换装] Seedream未配置，使用FaceChain生成...');
+    return await this.qwenAIService.swapHeadToUniform(personalPhotoUrl, templateUrl);
   }
 
   @Get(':id/public')

@@ -50,7 +50,7 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
   {
     code: 'operator',
     name: '运营',
-    description: '可查看全部内容并操作，但不能删除任何数据',
+    description: '可查看全部内容并操作，可申请删除（需审批）',
     permissions: [
       'resume:view',
       'resume:create',
@@ -62,6 +62,7 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
       'contract:view',
       'contract:create',
       'contract:edit',
+      'contract:delete',  // 🔧 新增：允许申请删除合同（需要审批，不是直接删除）
       'insurance:view',
       'insurance:create',
       'insurance:edit',

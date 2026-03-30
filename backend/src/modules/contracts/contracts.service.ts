@@ -373,6 +373,32 @@ export class ContractsService {
         });
       }
 
+      // 🔥 修复：自动从中文字段"服务类型及方式"映射到 contractType
+      const validContractTypes = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班育儿嫂', '白班保姆', '住家护老'];
+      const dtoAny = createContractDto as any;
+
+      // 如果 contractType 为空或不在有效枚举中，尝试从中文字段映射
+      if (!createContractDto.contractType || !validContractTypes.includes(createContractDto.contractType)) {
+        // 优先从 "服务类型及方式" 字段获取
+        const serviceType = dtoAny['服务类型及方式'] || dtoAny['服务类型'] || dtoAny['serviceType'];
+        if (serviceType && validContractTypes.includes(serviceType)) {
+          createContractDto.contractType = serviceType;
+          this.logger.info('contract.create.contract_type_mapped_from_chinese', {
+            originalValue: dtoAny.contractType,
+            mappedFrom: '服务类型及方式',
+            newValue: serviceType,
+          });
+        } else {
+          // 如果仍然无效，设置默认值
+          this.logger.warn('contract.create.contract_type_invalid', {
+            originalValue: createContractDto.contractType,
+            serviceType: serviceType,
+            defaultValue: '住家保姆',
+          });
+          createContractDto.contractType = '住家保姆' as any; // 设置默认值
+        }
+      }
+
       // 🆕 提取中文字段并保存到 templateParams（用于后续发起爱签签署）
       if (!createContractDto.templateParams || Object.keys(createContractDto.templateParams).length === 0) {
         const extractedTemplateParams = this.extractTemplateParams(createContractDto);
@@ -1501,6 +1527,38 @@ export class ContractsService {
       if ((createContractDto as any).templateNo && !mergedContractData.esignTemplateNo) {
         (mergedContractData as any).esignTemplateNo = (createContractDto as any).templateNo;
         this.logger.debug('📋 [换人合同] 将 templateNo 映射到 esignTemplateNo:', { data: (mergedContractData as any).esignTemplateNo });
+      }
+
+      // 🔥 修复：自动从中文字段"服务类型及方式"映射到 contractType（换人合同也需要）
+      const validContractTypes = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班育儿嫂', '白班保姆', '住家护老'];
+      const dtoAny = createContractDto as any;
+
+      // 如果 contractType 为空或不在有效枚举中，尝试从中文字段映射或继承原合同
+      if (!mergedContractData.contractType || !validContractTypes.includes(mergedContractData.contractType as string)) {
+        // 优先从新合同的 "服务类型及方式" 字段获取
+        const serviceType = dtoAny['服务类型及方式'] || dtoAny['服务类型'] || dtoAny['serviceType'];
+        if (serviceType && validContractTypes.includes(serviceType)) {
+          (mergedContractData as any).contractType = serviceType;
+          this.logger.info('📋 [换人合同] contractType 从中文字段映射:', {
+            originalValue: mergedContractData.contractType,
+            mappedFrom: '服务类型及方式',
+            newValue: serviceType,
+          });
+        } else if (originalContract.contractType && validContractTypes.includes(originalContract.contractType)) {
+          // 如果新合同没有提供，继承原合同的 contractType
+          (mergedContractData as any).contractType = originalContract.contractType;
+          this.logger.info('📋 [换人合同] contractType 继承自原合同:', {
+            newValue: originalContract.contractType,
+          });
+        } else {
+          // 如果仍然无效，设置默认值
+          this.logger.warn('⚠️ [换人合同] contractType 无效，使用默认值:', {
+            originalValue: mergedContractData.contractType,
+            inheritedValue: originalContract.contractType,
+            defaultValue: '住家保姆',
+          });
+          (mergedContractData as any).contractType = '住家保姆';
+        }
       }
 
       // 🆕 提取中文字段并保存到 templateParams（用于后续发起爱签签署）

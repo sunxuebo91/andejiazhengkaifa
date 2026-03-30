@@ -60,6 +60,8 @@
 | 获取当前用户 | HTTP请求 | `GET /auth/me` | 获取登录用户信息 | 无 | `{success, data: {id, name, role, ...}}` | 在用 |
 | 获取小程序统计 | HTTP请求 | `GET /resumes/miniprogram/stats` | 获取用户数据统计（简历数、浏览量等） | 无 | `{success, data: {...}}` | 在用 |
 | 获取小程序简历详情 | HTTP请求 | `GET /resumes/miniprogram/{id}` | 获取小程序专用简历详情 | `{id}` | `{success, data: Object}` | 在用 |
+| AI生成工装照 | 文件上传 | `POST /resumes/miniprogram/generate-uniform` | 上传个人照片，AI生成工装照 | `file: 图片文件(multipart/form-data)` | `{success, data: {personalPhotoUrl, uniformPhotoUrl}}` | 在用 |
+| AI重新生成工装照 | HTTP请求 | `POST /resumes/miniprogram/regenerate-uniform` | 使用已上传照片URL重新生成工装照 | `{photoUrl: "已上传的照片URL"}` | `{success, data: {personalPhotoUrl, uniformPhotoUrl}}` | 在用 |
 
 ---
 

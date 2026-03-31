@@ -2,6 +2,29 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import sharp from 'sharp';
+
+// TensorFlow / face-api 延迟加载（仅方案2开启时才加载，避免浪费内存）
+let tf: any = null;
+let faceapi: any = null;
+function ensureFaceDeps() {
+  if (faceapi) return;
+  // Node.js v24+ 兼容: util.isNullOrUndefined 已被移除，face-api 内部依赖它
+  const _nodeUtil = require('util');
+  if (!_nodeUtil.isNullOrUndefined) {
+    _nodeUtil.isNullOrUndefined = (v: any) => v === null || v === undefined;
+  }
+  tf = require('@tensorflow/tfjs-node');
+  faceapi = require('@vladmandic/face-api');
+}
+
+// 人脸验证结果
+export interface FaceValidationResult {
+  valid: boolean;       // 是否通过验证
+  message?: string;     // 中文错误提示（不通过时）
+  confidence?: number;  // 人脸检测置信度
+  yawAngle?: number;    // 偏转角度（估算）
+  blurScore?: number;   // 模糊度分数（越高越清晰）
+}
 // 简历解析结果接口 - 与系统 Resume 实体字段对齐
 export interface ParsedResume {
   // 基本信息
@@ -32,7 +55,7 @@ export interface ParsedResume {
   religion?: 'none' | 'buddhism' | 'taoism' | 'christianity' | 'islam';
 
   // 工作类型 - 对应系统枚举
-  jobType?: 'yuesao' | 'zhujia-yuer' | 'baiban-yuer' | 'baojie' | 'baiban-baomu' | 'zhujia-baomu' | 'yangchong' | 'xiaoshi' | 'zhujia-hulao';
+  jobType?: 'yuesao' | 'zhujia-yuer' | 'baiban-yuer' | 'baojie' | 'baiban-baomu' | 'zhujia-baomu' | 'yangchong' | 'xiaoshi' | 'zhujia-hulao' | 'jiajiao' | 'peiban';
 
   // 技能证书 - 对应系统枚举
   skills?: Array<'muying' | 'cuiru' | 'yuezican' | 'chanhou' | 'yuying' | 'zaojiao' | 'fushi' | 'ertui' | 'zhongcan' | 'xican' | 'mianshi' | 'jiashi' | 'shouyi' | 'waiyu' | 'yingyang' | 'teshu-yinger' | 'yiliaobackground' | 'shuangtai-huli' | 'yanglao-huli' | 'liliao-kangfu'>;
@@ -129,12 +152,37 @@ export class QwenAIService {
   private readonly arkModelId: string;
   private readonly arkBaseUrl = 'https://ark.cn-beijing.volces.com/api/v3';
 
+  // 图片预处理（方案2）配置
+  private readonly useImagePreprocess: boolean;
+
+  // 并发限制：同时最多1个预处理任务（保护4核8G服务器）
+  private preprocessSlots = 0;
+  private readonly MAX_PREPROCESS_CONCURRENT = 1;
+
+  // 人脸检测模型加载状态
+  private faceModelsLoaded = false;
+  private faceModelsLoading: Promise<void> | null = null;
+
+  // 人脸验证阈值配置
+  private readonly FACE_CONFIDENCE_THRESHOLD = 0.5;  // 人脸检测最低置信度
+  private readonly YAW_ANGLE_THRESHOLD = 50;          // 偏转角度上限（度），35→45→50，只拦真正的大侧脸
+  private readonly BLUR_SCORE_THRESHOLD = 15;          // 模糊度下限（Laplacian方差）
+
   constructor(
     private readonly configService: ConfigService,
   ) {
     this.apiKey = this.configService.get<string>('QWEN_API_KEY', '');
     this.arkApiKey = this.configService.get<string>('ARK_API_KEY', '');
     this.arkModelId = this.configService.get<string>('ARK_MODEL_ID', 'doubao-seedream-5-0-260128');
+    // USE_IMAGE_PREPROCESS=true 开启方案2（预处理），默认 false（保持方案1原有逻辑）
+    this.useImagePreprocess = this.configService.get<string>('USE_IMAGE_PREPROCESS', 'false') === 'true';
+    this.logger.log(`[预处理] 图片预处理开关: ${this.useImagePreprocess ? '已开启（方案2）' : '已关闭（方案1）'}`);
+
+    // 预处理开启时，加载 TensorFlow/face-api 并预热模型（避免第一个用户等太久）
+    if (this.useImagePreprocess) {
+      ensureFaceDeps();
+      this.loadFaceModels().catch(err => this.logger.warn(`[人脸检测] 预热模型失败: ${err.message}`));
+    }
   }
 
   /**
@@ -224,6 +272,8 @@ export class QwenAIService {
    - "baiban-baomu"=白班保姆（白班做饭家务）
    - "zhujia-hulao"=住家护老（照顾老人）
    - "baojie"=保洁, "xiaoshi"=小时工, "yangchong"=养宠
+   - "jiajiao"=家教（辅导功课、学科辅导、作业辅导、补习）
+   - "peiban"=陪伴师（陪伴老人、陪伴孩子、陪诊、陪聊、情感陪伴）
    - "高端家务"、"高端家政"、"生活助理"、"私人助理"、"做饭家务"、"家务做饭辅带大宝"：
      若明确"白班/上午/下午/钟点"→"baiban-baomu"或"xiaoshi"；若明确"住家"→"zhujia-baomu"；未写则按家务做饭主导判断为"zhujia-baomu"
    - "护老"、"养老院"、"半自理"、"卧床"、"照顾老人"、"护理老人"→优先判断为"zhujia-hulao"
@@ -1226,6 +1276,19 @@ export class QwenAIService {
    * 传入用户个人照片 + 工装模板，让AI生成穿工装的写真
    * 返回合成后图片的 Buffer
    */
+  /**
+   * ===== 备份：当前版本 prompt（2026-03-31 之前） =====
+   * prompt: '图片1是目标人物，图片2是模特穿工装的照片。请将图片1目标人物的面部精确替换到图片2模特的头部位置。
+   *          严格要求：1）必须完全保留目标人物的五官特征、脸型轮廓、肤色、发型，面部相似度要极高，确保看起来是同一个人；
+   *          2）只替换头部和面部，工装衣服、背景、身体姿态必须与图片2完全一致；
+   *          3）衣服上的logo和文字保持原样不变形；
+   *          4）面部光影要与工装照的光线环境自然融合'
+   * image: [personalPhotoUrl, templateUrl]
+   * use_pre_llm: false
+   * size: '2K'
+   * watermark: false
+   * ===== 备份结束 =====
+   */
   async swapHeadWithSeedream(personalPhotoUrl: string, templateUrl: string): Promise<Buffer> {
     if (!this.isSeedreamConfigured()) {
       throw new Error('豆包Seedream AI 服务未配置（缺少 ARK_API_KEY 或 ARK_MODEL_ID）');
@@ -1236,16 +1299,20 @@ export class QwenAIService {
     this.logger.log(`[AI换装-Seedream] 开始: personalPhoto=${personalPhotoUrl.substring(0, 60)}..., template=${templateUrl.substring(0, 60)}...`);
 
     try {
-      // image[0]=用户照片(目标人物), image[1]=工装模板(模特)
+      // image[0]=用户照片(目标人物/Figure 1), image[1]=工装模板(模特/Figure 2)
       const requestBody = {
         model: this.arkModelId,
-        prompt: '图片2这是模特，图片1这是目标人物，把目标人物的头换到模特身上，要自然，衣服、背景都不能改，不要让logo变形，保持logo的原样，不要改变目标人物容颜',
+        prompt: '图片1是目标人物，图片2是模特穿工装的照片。请将图片1目标人物的面部精确替换到图片2模特的头部位置。' +
+          '严格要求：1）必须完全保留目标人物的五官特征、脸型轮廓、肤色、发型，面部相似度要极高，确保看起来是同一个人；' +
+          '2）只替换头部和面部，工装衣服、背景、身体姿态必须与图片2完全一致；' +
+          '3）衣服上的logo和文字保持原样不变形；' +
+          '4）面部光影要与工装照的光线环境自然融合',
         image: [personalPhotoUrl, templateUrl],
         response_format: 'url',
         size: '2K',
         stream: false,
         watermark: false,
-        use_pre_llm: true,
+        use_pre_llm: false,
       };
 
       this.logger.debug(`[AI换装-Seedream] 请求参数: ${JSON.stringify({ ...requestBody, image: ['[用户照片]', '[工装模板]'] })}`);
@@ -1521,6 +1588,8 @@ export class QwenAIService {
       'yangchong': '养宠师',
       'xiaoshi': '小时工',
       'zhujia-hulao': '住家护老',
+      'jiajiao': '家教',
+      'peiban': '陪伴师',
     };
 
     // 技能中文映射
@@ -1604,6 +1673,301 @@ export class QwenAIService {
     } catch (error) {
       this.logger.error('[推荐文案生成] 失败:', error.message);
       throw error;
+    }
+  }
+
+  /**
+   * 是否开启图片预处理（方案2）
+   * 通过环境变量 USE_IMAGE_PREPROCESS=true 控制
+   */
+  isPreprocessEnabled(): boolean {
+    return this.useImagePreprocess;
+  }
+
+  // =============================================
+  // 人脸检测与验证（方案2增强）
+  // =============================================
+
+  /**
+   * 加载人脸检测模型（单例，只加载一次）
+   */
+  private async loadFaceModels(): Promise<void> {
+    if (this.faceModelsLoaded) return;
+    if (this.faceModelsLoading) return this.faceModelsLoading;
+
+    this.faceModelsLoading = (async () => {
+      const startMs = Date.now();
+      ensureFaceDeps();
+      const modelPath = require('path').join(process.cwd(), 'models', 'face-api');
+      this.logger.log(`[人脸检测] 加载模型中... (${modelPath})`);
+
+      await faceapi.nets.tinyFaceDetector.loadFromDisk(modelPath);
+      await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
+
+      this.faceModelsLoaded = true;
+      this.logger.log(`[人脸检测] 模型加载完成，耗时 ${Date.now() - startMs}ms`);
+    })();
+
+    return this.faceModelsLoading;
+  }
+
+  /**
+   * 计算图片模糊度（Laplacian方差法）
+   * 返回值越高越清晰，越低越模糊
+   */
+  private async computeBlurScore(inputBuffer: Buffer): Promise<number> {
+    // 应用Laplacian卷积核（缩小到统一尺寸加速计算）
+    const laplacianBuffer = await sharp(inputBuffer)
+      .resize(320, 320, { fit: 'inside' })
+      .grayscale()
+      .convolve({
+        width: 3,
+        height: 3,
+        kernel: [0, 1, 0, 1, -4, 1, 0, 1, 0],
+        scale: 1,
+        offset: 128,
+      })
+      .raw()
+      .toBuffer();
+
+    // 计算方差
+    let sum = 0;
+    let sumSq = 0;
+    for (let i = 0; i < laplacianBuffer.length; i++) {
+      const val = laplacianBuffer[i] - 128; // 去掉offset
+      sum += val;
+      sumSq += val * val;
+    }
+    const mean = sum / laplacianBuffer.length;
+    const variance = (sumSq / laplacianBuffer.length) - (mean * mean);
+    return variance;
+  }
+
+  /**
+   * 从68个人脸关键点估算偏转角(yaw)
+   * 原理：比较鼻尖到左右眼外角的距离比例
+   * 正脸时比例接近1:1，侧脸时严重偏移
+   */
+  private estimateYawFromLandmarks(landmarks: any): number {
+    const nose = landmarks.getNose();
+    const leftEye = landmarks.getLeftEye();
+    const rightEye = landmarks.getRightEye();
+
+    // 鼻尖（第4个点，即nose[3]）
+    const noseTip = nose[3] || nose[Math.floor(nose.length / 2)];
+    // 左眼外角（第1个点）
+    const leftEyeOuter = leftEye[0];
+    // 右眼外角（最后1个点）
+    const rightEyeOuter = rightEye[rightEye.length - 1];
+
+    // 计算鼻尖到左右眼外角的水平距离
+    const distLeft = Math.abs(noseTip.x - leftEyeOuter.x);
+    const distRight = Math.abs(noseTip.x - rightEyeOuter.x);
+
+    // 比率：正脸≈1.0，侧脸偏离1.0
+    const ratio = distLeft / (distRight + 0.001); // 避免除零
+    // 将比率转换为近似角度 (ratio=1→0°, ratio=2→~27°, ratio=3→~45°)
+    // 注意：不再乘以1.5放大系数，避免戴眼镜/轻微不对称的正脸被误判为侧脸
+    const yawAngle = Math.abs(Math.atan2(ratio - 1, 1) * (180 / Math.PI));
+
+    return Math.min(yawAngle, 90);
+  }
+
+  /**
+   * 从68个关键点估算头部倾斜角(roll)
+   * 用于角度矫正
+   */
+  private estimateRollFromLandmarks(landmarks: any): number {
+    const leftEye = landmarks.getLeftEye();
+    const rightEye = landmarks.getRightEye();
+
+    // 左右眼中心
+    const leftCenter = {
+      x: leftEye.reduce((s, p) => s + p.x, 0) / leftEye.length,
+      y: leftEye.reduce((s, p) => s + p.y, 0) / leftEye.length,
+    };
+    const rightCenter = {
+      x: rightEye.reduce((s, p) => s + p.x, 0) / rightEye.length,
+      y: rightEye.reduce((s, p) => s + p.y, 0) / rightEye.length,
+    };
+
+    // 双眼连线的倾斜角度
+    const dx = rightCenter.x - leftCenter.x;
+    const dy = rightCenter.y - leftCenter.y;
+    const rollAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    return rollAngle;
+  }
+
+  /**
+   * 完整人脸验证：检测人脸 + 侧脸判断 + 模糊度检测
+   * 返回验证结果（含中文错误提示）
+   */
+  async validateFaceImage(inputBuffer: Buffer): Promise<FaceValidationResult> {
+    const startMs = Date.now();
+    try {
+      await this.loadFaceModels();
+
+      // ① 模糊度检测（不需要人脸检测模型，用sharp即可）
+      const blurScore = await this.computeBlurScore(inputBuffer);
+      this.logger.log(`[人脸验证] 模糊度分数: ${blurScore.toFixed(1)} (阈值: ${this.BLUR_SCORE_THRESHOLD})`);
+
+      if (blurScore < this.BLUR_SCORE_THRESHOLD) {
+        return {
+          valid: false,
+          message: '照片太模糊，请上传更清晰的照片',
+          blurScore,
+        };
+      }
+
+      // ② 人脸检测 + 关键点
+      const decoded = tf.node.decodeImage(inputBuffer, 3);
+      try {
+        const detection = await faceapi
+          .detectSingleFace(decoded as any, new faceapi.TinyFaceDetectorOptions({
+            scoreThreshold: this.FACE_CONFIDENCE_THRESHOLD,
+          }))
+          .withFaceLandmarks();
+
+        if (!detection) {
+          return {
+            valid: false,
+            message: '未检测到人脸，请上传包含清晰人脸的照片',
+            blurScore,
+          };
+        }
+
+        const confidence = detection.detection.score;
+        this.logger.log(`[人脸验证] 人脸置信度: ${(confidence * 100).toFixed(1)}%`);
+
+        // ③ 侧脸检测（从关键点估算yaw角度）
+        const yawAngle = this.estimateYawFromLandmarks(detection.landmarks);
+        this.logger.log(`[人脸验证] 偏转角度: ${yawAngle.toFixed(1)}° (阈值: ${this.YAW_ANGLE_THRESHOLD}°)`);
+
+        if (yawAngle > this.YAW_ANGLE_THRESHOLD) {
+          return {
+            valid: false,
+            message: '请上传正脸照片，侧脸会影响工装照生成效果',
+            confidence,
+            yawAngle,
+            blurScore,
+          };
+        }
+
+        const elapsed = Date.now() - startMs;
+        this.logger.log(`[人脸验证] 通过，耗时 ${elapsed}ms`);
+
+        return {
+          valid: true,
+          confidence,
+          yawAngle,
+          blurScore,
+        };
+      } finally {
+        decoded.dispose();
+      }
+    } catch (error) {
+      this.logger.warn(`[人脸验证] 异常，跳过验证: ${error.message}`);
+      // 验证失败时不阻塞主流程，返回通过
+      return { valid: true, message: '验证跳过（内部异常）' };
+    }
+  }
+
+  /**
+   * 等待预处理并发槽位（并发限制，最多 MAX_PREPROCESS_CONCURRENT 个同时处理）
+   */
+  private async acquirePreprocessSlot(): Promise<void> {
+    while (this.preprocessSlots >= this.MAX_PREPROCESS_CONCURRENT) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    this.preprocessSlots++;
+  }
+
+  private releasePreprocessSlot(): void {
+    if (this.preprocessSlots > 0) this.preprocessSlots--;
+  }
+
+  /**
+   * 方案2：图片预处理 — 人脸验证 + 角度矫正 + 白底合成 + 固定像素(768×1024) + 清晰化
+   *
+   * 处理流程：
+   *   原图 Buffer
+   *     → 人脸验证（模糊度、人脸检测、侧脸检测）
+   *     → 角度矫正（头部倾斜 > 3° 自动旋正）
+   *     → sharp：缩放至768×1024内 + 叠白色背景 + 锐化 + normalize
+   *     → JPEG输出
+   *
+   * 失败时降级：自动跳过预处理，返回原图Buffer，不影响主流程
+   */
+  async preprocessImageForUniform(inputBuffer: Buffer): Promise<Buffer> {
+    await this.acquirePreprocessSlot();
+    const startMs = Date.now();
+    try {
+      this.logger.log(`[预处理] 开始完整流程，输入 ${inputBuffer.length} bytes`);
+
+      // ① 人脸验证（检测人脸、侧脸、模糊度）
+      const validation = await this.validateFaceImage(inputBuffer);
+      if (!validation.valid) {
+        // 验证不通过：抛出错误，由 controller 返回中文提示给前端
+        throw new Error(validation.message || '照片不符合要求');
+      }
+
+      // ② 角度矫正（如果检测到头部倾斜）
+      let correctedBuffer = inputBuffer;
+      try {
+        await this.loadFaceModels();
+        const decoded = tf.node.decodeImage(inputBuffer, 3);
+        try {
+          const detection = await faceapi
+            .detectSingleFace(decoded as any, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.3 }))
+            .withFaceLandmarks();
+          if (detection) {
+            const rollAngle = this.estimateRollFromLandmarks(detection.landmarks);
+            if (Math.abs(rollAngle) > 3) { // 超过3度才矫正
+              this.logger.log(`[预处理] 检测到头部倾斜 ${rollAngle.toFixed(1)}°，自动矫正`);
+              correctedBuffer = await sharp(inputBuffer)
+                .rotate(-rollAngle, { background: { r: 255, g: 255, b: 255, alpha: 1 } })
+                .toBuffer();
+            }
+          }
+        } finally {
+          decoded.dispose();
+        }
+      } catch (rotateErr) {
+        this.logger.warn(`[预处理] 角度矫正失败，跳过: ${rotateErr.message}`);
+      }
+
+      // ③ 缩放到 768×1024 内（保持比例），再合成到纯白画布上
+      // 注意：不再使用 @imgly/background-removal-node 抠图，因为它自带 sharp 0.32.6
+      // 与系统 libvips 不兼容会导致进程崩溃。AI 生成工装照时会自己换背景，无需完美抠图。
+      const resized = await sharp(correctedBuffer)
+        .resize(768, 1024, { fit: 'inside', withoutEnlargement: false })
+        .toBuffer();
+
+      // ④ 创建 768×1024 纯白画布，将缩放后的图片居中叠上
+      const processedBuffer = await sharp({
+        create: { width: 768, height: 1024, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
+      })
+        .composite([{ input: resized, gravity: 'center' }])
+        .sharpen({ sigma: 1.2, m1: 1.0, m2: 2.0 })  // ⑤ 轻锐化
+        .normalize()                                    // ⑥ 对比度自动拉伸
+        .jpeg({ quality: 92 })
+        .toBuffer();
+
+      const elapsed = Date.now() - startMs;
+      this.logger.log(`[预处理] 完成，耗时 ${elapsed}ms，输出 ${processedBuffer.length} bytes`);
+      return processedBuffer;
+    } catch (error) {
+      const elapsed = Date.now() - startMs;
+      // 人脸验证失败的错误需要向上抛出（不降级）
+      if (error.message?.includes('请上传') || error.message?.includes('照片太模糊') || error.message?.includes('侧脸')) {
+        this.logger.warn(`[预处理] 人脸验证不通过（${elapsed}ms）: ${error.message}`);
+        throw error; // 向上抛给 controller
+      }
+      this.logger.warn(`[预处理] 处理失败（${elapsed}ms），降级使用原图: ${error.message}`);
+      return inputBuffer; // 其他错误降级：不影响主流程
+    } finally {
+      this.releasePreprocessSlot();
     }
   }
 }

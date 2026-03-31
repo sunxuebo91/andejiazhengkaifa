@@ -395,7 +395,9 @@ export class ResumeController {
           { value: 'zhujia-baomu', label: '住家保姆' },
           { value: 'yangchong', label: '养宠' },
           { value: 'xiaoshi', label: '小时工' },
-          { value: 'zhujia-hulao', label: '住家护老' }
+          { value: 'zhujia-hulao', label: '住家护老' },
+          { value: 'jiajiao', label: '家教' },
+          { value: 'peiban', label: '陪伴师' }
         ],
         education: [
           { value: 'no', label: '无学历' },
@@ -1485,8 +1487,16 @@ export class ResumeController {
         throw new HttpException({ success: false, message: '未配置工装模板图片，请联系管理员' }, HttpStatus.SERVICE_UNAVAILABLE);
       }
 
-      // 1. 上传个人照片到COS
-      const personalPhotoUrl = await this.uploadService.uploadFile(file, { type: 'personalPhoto' });
+      // 方案2：如已开启预处理，先做人脸验证+白底合成+锐化
+      let fileToUpload = file;
+      if (this.qwenAIService.isPreprocessEnabled()) {
+        this.logger.log('[小程序工装] 方案2已开启，开始预处理...');
+        const processedBuffer = await this.qwenAIService.preprocessImageForUniform(file.buffer);
+        fileToUpload = { ...file, buffer: processedBuffer, size: processedBuffer.length };
+      }
+
+      // 1. 上传个人照片到COS（方案1：原图；方案2：预处理后图）
+      const personalPhotoUrl = await this.uploadService.uploadFile(fileToUpload, { type: 'personalPhoto' });
       this.logger.log(`✅ 个人照片已上传: ${personalPhotoUrl.substring(0, 60)}...`);
 
       // 2. 随机选取模板，调用AI换装
@@ -1516,6 +1526,11 @@ export class ResumeController {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ 小程序工装生成失败: ${message}`);
+
+      // 人脸验证不通过 → 400，前端直接展示中文提示
+      if (message.includes('请上传') || message.includes('照片太模糊') || message.includes('侧脸') || message.includes('照片不符合要求')) {
+        throw new HttpException({ success: false, message }, HttpStatus.BAD_REQUEST);
+      }
 
       if (message.includes('繁忙') || message.includes('rate') || message.includes('limit')) {
         throw new HttpException({ success: false, message: 'AI服务繁忙，请稍后几秒再重试' }, HttpStatus.TOO_MANY_REQUESTS);
@@ -1559,10 +1574,39 @@ export class ResumeController {
         throw new HttpException({ success: false, message: '未配置工装模板图片，请联系管理员' }, HttpStatus.SERVICE_UNAVAILABLE);
       }
 
+      // 方案2：如已开启预处理，下载图片后做人脸验证+白底合成+锐化，上传为新URL
+      let photoUrlForAI = photoUrl;
+      if (this.qwenAIService.isPreprocessEnabled()) {
+        this.logger.log(`[小程序重新生成] 方案2已开启，下载并预处理照片...`);
+        try {
+          const axios = require('axios');
+          const dlResp = await axios.get(photoUrl, { responseType: 'arraybuffer', timeout: 30000 });
+          const originalBuffer = Buffer.from(dlResp.data);
+          const processedBuffer = await this.qwenAIService.preprocessImageForUniform(originalBuffer);
+          const preprocessedFile = {
+            buffer: processedBuffer,
+            originalname: `preprocessed-${Date.now()}.jpg`,
+            mimetype: 'image/jpeg',
+            size: processedBuffer.length,
+            fieldname: 'personalPhoto',
+            encoding: '7bit',
+          } as Express.Multer.File;
+          photoUrlForAI = await this.uploadService.uploadFile(preprocessedFile, { type: 'personalPhoto' });
+          this.logger.log(`[小程序重新生成] 预处理完成，使用预处理URL: ${photoUrlForAI.substring(0, 60)}...`);
+        } catch (preprocessErr) {
+          // 人脸验证不通过的错误需要向上抛出，不降级
+          if (preprocessErr.message?.includes('请上传') || preprocessErr.message?.includes('照片太模糊') || preprocessErr.message?.includes('侧脸') || preprocessErr.message?.includes('照片不符合要求')) {
+            throw preprocessErr;
+          }
+          this.logger.warn(`[小程序重新生成] 预处理失败，降级使用原URL: ${preprocessErr.message}`);
+          photoUrlForAI = photoUrl;
+        }
+      }
+
       const templateUrl = templateUrls[Math.floor(Math.random() * templateUrls.length)];
       this.logger.log(`🎨 使用模板重新生成，共${templateUrls.length}个模板可用`);
 
-      const imageBuffer = await this.generateUniformWithFallback(photoUrl, templateUrl);
+      const imageBuffer = await this.generateUniformWithFallback(photoUrlForAI, templateUrl);
 
       const fakeFile = {
         buffer: imageBuffer,
@@ -1585,6 +1629,11 @@ export class ResumeController {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ 小程序重新生成工装失败: ${message}`);
 
+      // 人脸验证不通过 → 400，前端直接展示中文提示
+      if (message.includes('请上传') || message.includes('照片太模糊') || message.includes('侧脸') || message.includes('照片不符合要求')) {
+        throw new HttpException({ success: false, message }, HttpStatus.BAD_REQUEST);
+      }
+
       if (message.includes('繁忙') || message.includes('rate') || message.includes('limit')) {
         throw new HttpException({ success: false, message: 'AI服务繁忙，请稍后几秒再重试' }, HttpStatus.TOO_MANY_REQUESTS);
       }
@@ -1602,14 +1651,20 @@ export class ResumeController {
       : single ? [single.trim()] : [];
   }
 
-  /** 统一生成逻辑：优先Seedream，失败回退FaceChain */
+  /** 统一生成逻辑：优先Seedream，失败回退FaceChain（带内存保护） */
   private async generateUniformWithFallback(personalPhotoUrl: string, templateUrl: string): Promise<Buffer> {
     if (this.qwenAIService.isSeedreamConfigured()) {
       try {
         this.logger.log('[AI换装] 使用豆包Seedream生成...');
         return await this.qwenAIService.swapHeadWithSeedream(personalPhotoUrl, templateUrl);
       } catch (seedreamErr) {
-        this.logger.warn(`[AI换装] Seedream失败(${seedreamErr.message})，尝试FaceChain...`);
+        // 内存保护：FaceChain需要加载TensorFlow，内存不足时跳过回退
+        const freeMB = Math.round(require('os').freemem() / 1024 / 1024);
+        if (freeMB < 200) {
+          this.logger.error(`[AI换装] Seedream失败且系统可用内存仅${freeMB}MB，跳过FaceChain回退防止OOM`);
+          throw new Error(`AI生成失败，请稍后重试（Seedream: ${seedreamErr.message}）`);
+        }
+        this.logger.warn(`[AI换装] Seedream失败(${seedreamErr.message})，可用内存${freeMB}MB，尝试FaceChain...`);
         if (this.qwenAIService.isTextAiConfigured()) {
           return await this.qwenAIService.swapHeadToUniform(personalPhotoUrl, templateUrl);
         }

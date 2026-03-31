@@ -19,6 +19,7 @@ import { IsString, IsNotEmpty, IsOptional, MaxLength, MinLength } from 'class-va
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import axios from 'axios';
 import { QwenAIService, ParsedResume, ParsedCustomer } from './qwen-ai.service';
 import { UploadService } from '../upload/upload.service';
 import { Public } from '../auth/decorators/public.decorator';
@@ -124,6 +125,16 @@ export class AIController implements OnModuleInit {
   private handleSwapUniformError(scene: 'swap-uniform' | 'swap-uniform-by-url', error: unknown): never {
     const message = error instanceof Error ? error.message : String(error);
     this.logger.error(`[${scene}] 生成失败: ${message}`);
+
+    // 人脸验证不通过 → 返回400，前端直接展示中文提示
+    if (
+      message.includes('请上传') ||
+      message.includes('照片太模糊') ||
+      message.includes('侧脸') ||
+      message.includes('照片不符合要求')
+    ) {
+      throw new HttpException({ success: false, message }, HttpStatus.BAD_REQUEST);
+    }
 
     if (message.includes('繁忙') || message.includes('rate') || message.includes('limit') || message.includes('(429)')) {
       throw new HttpException({ success: false, message: 'AI服务繁忙，请稍后几秒再重试' }, HttpStatus.TOO_MANY_REQUESTS);
@@ -433,16 +444,24 @@ export class AIController implements OnModuleInit {
       throw new HttpException({ success: false, message: '未配置工装模板图片，请联系管理员' }, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
-    // 2. 上传个人照片到COS
-    const personalPhotoUrl = await this.uploadService.uploadFile(file, { type: 'personalPhoto' });
+    // 2. 方案2：如已开启预处理，在上传前对图片做抠图+清晰化+固定像素
+    let fileToUpload = file;
+    try {
+    if (this.qwenAIService.isPreprocessEnabled()) {
+      this.logger.log('[swap-uniform] 方案2已开启，开始预处理...');
+      const processedBuffer = await this.qwenAIService.preprocessImageForUniform(file.buffer);
+      fileToUpload = { ...file, buffer: processedBuffer, size: processedBuffer.length };
+    }
+
+    // 3. 上传个人照片到COS（方案1：原图；方案2：预处理后图）
+    const personalPhotoUrl = await this.uploadService.uploadFile(fileToUpload, { type: 'personalPhoto' });
     this.logger.log(`[swap-uniform] 个人照片已上传: ${personalPhotoUrl.substring(0, 60)}...`);
 
-    // 3. 随机选取模板，调用AI换装（同步等待）
+    // 4. 随机选取模板，调用AI换装（同步等待）
     const templateUrl = templateUrls[Math.floor(Math.random() * templateUrls.length)];
     const templateIndex = templateUrls.indexOf(templateUrl) + 1;
     this.logger.log(`[swap-uniform] 共${templateUrls.length}个模板，本次随机使用模板${templateIndex}，开始AI生成...`);
 
-    try {
       const imageBuffer = await this.generateWithFallback(personalPhotoUrl, templateUrl);
       const fakeFile = {
         buffer: imageBuffer,
@@ -497,16 +516,43 @@ export class AIController implements OnModuleInit {
       throw new HttpException({ success: false, message: '未配置工装模板图片，请联系管理员' }, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
-    // 2. 直接使用传入的COS URL（后端服务端下载，无CORS问题）
-    this.logger.log(`[swap-uniform-by-url] 使用已有照片URL: ${photoUrl.substring(0, 60)}...`);
+    // 2. 方案2：如已开启预处理，下载图片后做抠图+清晰化+固定像素，上传为新URL
+    let photoUrlForAI = photoUrl;
+    try {
+    if (this.qwenAIService.isPreprocessEnabled()) {
+      this.logger.log(`[swap-uniform-by-url] 方案2已开启，下载并预处理照片...`);
+      try {
+        const dlResp = await axios.get(photoUrl, { responseType: 'arraybuffer', timeout: 30000 });
+        const originalBuffer = Buffer.from(dlResp.data);
+        const processedBuffer = await this.qwenAIService.preprocessImageForUniform(originalBuffer);
+        // 上传预处理后图片，AI使用该URL
+        const preprocessedFile = {
+          buffer: processedBuffer,
+          originalname: `preprocessed-${Date.now()}.jpg`,
+          mimetype: 'image/jpeg',
+          size: processedBuffer.length,
+          fieldname: 'personalPhoto',
+          encoding: '7bit',
+        } as Express.Multer.File;
+        photoUrlForAI = await this.uploadService.uploadFile(preprocessedFile, { type: 'personalPhoto' });
+        this.logger.log(`[swap-uniform-by-url] 预处理完成，使用预处理URL: ${photoUrlForAI.substring(0, 60)}...`);
+      } catch (preprocessErr) {
+        // 人脸验证不通过的错误需要向上抛出，不降级
+        if (preprocessErr.message?.includes('请上传') || preprocessErr.message?.includes('照片太模糊') || preprocessErr.message?.includes('侧脸') || preprocessErr.message?.includes('照片不符合要求')) {
+          throw preprocessErr;
+        }
+        this.logger.warn(`[swap-uniform-by-url] 预处理失败，降级使用原URL: ${preprocessErr.message}`);
+        photoUrlForAI = photoUrl; // 降级
+      }
+    } else {
+      this.logger.log(`[swap-uniform-by-url] 使用原有照片URL（方案1）: ${photoUrl.substring(0, 60)}...`);
+    }
 
     // 3. 随机选取模板，调用AI换装
     const templateUrl = templateUrls[Math.floor(Math.random() * templateUrls.length)];
     const templateIndex = templateUrls.indexOf(templateUrl) + 1;
     this.logger.log(`[swap-uniform-by-url] 共${templateUrls.length}个模板，本次随机使用模板${templateIndex}`);
-
-    try {
-      const imageBuffer = await this.generateWithFallback(photoUrl, templateUrl);
+      const imageBuffer = await this.generateWithFallback(photoUrlForAI, templateUrl);
       const fakeFile = {
         buffer: imageBuffer,
         originalname: `uniform-photo-${Date.now()}.jpg`,
@@ -548,7 +594,7 @@ export class AIController implements OnModuleInit {
   }
 
   /**
-   * 统一生成逻辑：优先Seedream，失败回退FaceChain
+   * 统一生成逻辑：优先Seedream，失败回退FaceChain（带内存保护）
    */
   private async generateWithFallback(personalPhotoUrl: string, templateUrl: string): Promise<Buffer> {
     if (this.qwenAIService.isSeedreamConfigured()) {
@@ -556,7 +602,13 @@ export class AIController implements OnModuleInit {
         this.logger.log('[AI换装] 使用豆包Seedream生成...');
         return await this.qwenAIService.swapHeadWithSeedream(personalPhotoUrl, templateUrl);
       } catch (seedreamErr) {
-        this.logger.warn(`[AI换装] Seedream失败(${seedreamErr.message})，尝试FaceChain...`);
+        // 内存保护：FaceChain需要加载TensorFlow，内存不足时跳过回退
+        const freeMB = Math.round(require('os').freemem() / 1024 / 1024);
+        if (freeMB < 200) {
+          this.logger.error(`[AI换装] Seedream失败且系统可用内存仅${freeMB}MB，跳过FaceChain回退防止OOM`);
+          throw new Error(`AI生成失败，请稍后重试（Seedream: ${seedreamErr.message}）`);
+        }
+        this.logger.warn(`[AI换装] Seedream失败(${seedreamErr.message})，可用内存${freeMB}MB，尝试FaceChain...`);
         if (this.qwenAIService.isTextAiConfigured()) {
           return await this.qwenAIService.swapHeadToUniform(personalPhotoUrl, templateUrl);
         }

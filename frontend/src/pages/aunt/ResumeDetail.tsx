@@ -292,7 +292,9 @@ const jobTypeMap: JobTypeMapType = {
   'zhujia-baomu': '住家保姆',
   yangchong: '养宠',
   xiaoshi: '小时工',
-  'zhujia-hulao': '住家护老'
+  'zhujia-hulao': '住家护老',
+  jiajiao: '家教',
+  peiban: '陪伴师'
 };
 
 // 接单状态映射

@@ -870,6 +870,8 @@ const CreateResume: React.FC = () => {
     if (/(白班).*(做饭|家务|保姆|高端家务|生活助理|私人助理)|(?:做饭|家务|保姆|高端家务|生活助理|私人助理).*(白班)/.test(normalized)) return JobType.BAIBAN_BAOMU;
     if (/(保洁)/.test(normalized)) return JobType.BAOJIE;
     if (/(养宠|宠物)/.test(normalized)) return JobType.YANGCHONG;
+    if (/(家教|辅导功课|学科辅导|作业辅导|补习|辅导老师)/.test(normalized)) return JobType.JIAJIAO;
+    if (/(陪伴师|陪伴|陪诊|陪聊|情感陪伴)/.test(normalized)) return JobType.PEIBAN;
     if (/(做饭|家务|保姆|高端家务|生活助理|私人助理|收纳整理)/.test(normalized)) return JobType.ZHUJIA_BAOMU;
     return undefined;
   };
@@ -944,7 +946,25 @@ const CreateResume: React.FC = () => {
 
       // 工作信息
       if (p.jobType)             formValues.jobType         = p.jobType;
-      if (p.experienceYears)     formValues.experienceYears = p.experienceYears;
+      if (p.experienceYears != null) {
+        formValues.experienceYears = p.experienceYears;
+      } else if (p.workExperiences?.length) {
+        // AI 未返回 experienceYears 时，从 workExperiences 日期区间自动估算总年限
+        let totalMonths = 0;
+        const now = new Date();
+        for (const exp of p.workExperiences) {
+          const start = exp.startDate ? new Date(exp.startDate + '-01') : null;
+          const endRaw = exp.endDate && exp.endDate !== '至今' ? new Date(exp.endDate + '-01') : now;
+          if (start && !isNaN(start.getTime())) {
+            const months = (endRaw.getFullYear() - start.getFullYear()) * 12
+              + (endRaw.getMonth() - start.getMonth());
+            if (months > 0) totalMonths += months;
+          }
+        }
+        if (totalMonths > 0) {
+          formValues.experienceYears = Math.round(totalMonths / 12 * 10) / 10;
+        }
+      }
       if (p.expectedSalary)      formValues.expectedSalary  = p.expectedSalary;
       if (p.skills?.length)      formValues.skills          = p.skills;
       // 自我介绍：将 selfIntroduction 和 familySituation 合并写入
@@ -2495,7 +2515,7 @@ const CreateResume: React.FC = () => {
               await apiService.patch(`/api/resumes/${editingResume._id}`, {
                 uniformPhoto: {
                   url: uniformFile.uniformPhotoUrl,
-                  filename: `uniform-${uniformFile.name || 'photo'}.jpg`,
+                  filename: `uniform-photo.jpg`,
                   mimetype: 'image/jpeg',
                   size: 0,
                 },

@@ -54,7 +54,6 @@ const BannerList = React.lazy(() => import('./pages/baobei/BannerList'));
 const BannerForm = React.lazy(() => import('./pages/baobei/BannerForm'));
 const ArticleList = React.lazy(() => import('./pages/baobei/ArticleList'));
 const ArticleForm = React.lazy(() => import('./pages/baobei/ArticleForm'));
-const CrawlerSourceList = React.lazy(() => import('./pages/baobei/CrawlerSourceList'));
 const MiniProgramUserList = React.lazy(() => import('./pages/miniprogram-users/MiniProgramUserList'));
 // 培训线索相关组件
 const TrainingLeadList = React.lazy(() => import('./pages/training-leads/TrainingLeadList'));
@@ -402,10 +401,6 @@ export default function App({ children }: AppProps) {
                     <Route
                       path="articles/edit/:id"
                       element={<AuthorizedRoute element={<ArticleForm />} role={["admin", "manager"]} />}
-                    />
-                    <Route
-                      path="crawler-sources"
-                      element={<AuthorizedRoute element={<CrawlerSourceList />} role={["admin", "manager"]} />}
                     />
                     <Route
                       path="miniprogram-users"

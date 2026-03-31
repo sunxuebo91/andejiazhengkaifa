@@ -610,13 +610,19 @@ export class ResumeService {
 
     let imageBuffer: Buffer;
 
-    // 优先使用豆包Seedream（效果更自然），失败则回退到FaceChain
+    // 优先使用豆包Seedream（效果更自然），失败则回退到FaceChain（带内存保护）
     if (this.qwenAIService.isSeedreamConfigured()) {
       try {
         this.logger.log(`[AI换装] 使用豆包Seedream模式`);
         imageBuffer = await this.qwenAIService.swapHeadWithSeedream(personalPhotoUrl, templateUrl);
       } catch (seedreamErr) {
-        this.logger.warn(`[AI换装] Seedream失败(${seedreamErr.message})，回退到FaceChain模式`);
+        // 内存保护：FaceChain需要加载TensorFlow，内存不足时跳过回退
+        const freeMB = Math.round(require('os').freemem() / 1024 / 1024);
+        if (freeMB < 200) {
+          this.logger.error(`[AI换装] Seedream失败且系统可用内存仅${freeMB}MB，跳过FaceChain回退防止OOM`);
+          throw new Error(`AI生成失败，请稍后重试（Seedream: ${seedreamErr.message}）`);
+        }
+        this.logger.warn(`[AI换装] Seedream失败(${seedreamErr.message})，可用内存${freeMB}MB，回退到FaceChain模式`);
         imageBuffer = await this.fallbackToFaceChain(resumeId, personalPhotoUrl, templateUrl);
       }
     } else {
@@ -827,6 +833,13 @@ export class ResumeService {
       resume.idCardBack = undefined;
       fileRemoved = true;
       this.logger.debug(`移除了idCardBack: ${fileUrl}`);
+    }
+
+    // 检查AI工装照
+    if (resume.uniformPhoto?.url === fileUrl) {
+      resume.uniformPhoto = undefined;
+      fileRemoved = true;
+      this.logger.debug(`移除了uniformPhoto: ${fileUrl}`);
     }
 
     // 保存更新后的简历
@@ -1932,7 +1945,9 @@ export class ResumeService {
       '住家保姆': 'zhujia-baomu',
       '养宠': 'yangchong',
       '小时工': 'xiaoshi',
-      '住家护老': 'zhujia-hulao'
+      '住家护老': 'zhujia-hulao',
+      '家教': 'jiajiao',
+      '陪伴师': 'peiban'
     };
 
     // 性别映射

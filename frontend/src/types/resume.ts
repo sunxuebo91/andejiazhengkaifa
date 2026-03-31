@@ -16,7 +16,9 @@ export enum JobType {
   YANGCHONG = 'yangchong',     // 养宠
   XIAOSHI = 'xiaoshi',         // 小时工
   YUESAO = 'yuesao',           // 月嫂（修正拼音）
-  ZHUJIA_HULAO = 'zhujia-hulao' // 住家护老
+  ZHUJIA_HULAO = 'zhujia-hulao', // 住家护老
+  JIAJIAO = 'jiajiao',         // 家教
+  PEIBAN = 'peiban'             // 陪伴师
 }
 
 // 工种映射
@@ -29,7 +31,9 @@ export const JOB_TYPE_MAP = {
   [JobType.YANGCHONG]: '养宠',
   [JobType.XIAOSHI]: '小时工',
   [JobType.YUESAO]: '月嫂',
-  [JobType.ZHUJIA_HULAO]: '住家护老'
+  [JobType.ZHUJIA_HULAO]: '住家护老',
+  [JobType.JIAJIAO]: '家教',
+  [JobType.PEIBAN]: '陪伴师'
 } as const;
 
 // 学历枚举

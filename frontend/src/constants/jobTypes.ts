@@ -7,5 +7,7 @@ export const JOB_TYPE_MAP = {
   'yangchong': '养宠',
   'xiaoshi': '小时工',
   'yuesao': '月嫂',
-  'zhujia-hulao': '住家护老'
+  'zhujia-hulao': '住家护老',
+  'jiajiao': '家教',
+  'peiban': '陪伴师'
 } as const;

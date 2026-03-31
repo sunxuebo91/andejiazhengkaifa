@@ -27,7 +27,6 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { DashubaoModule } from './modules/dashubao/dashubao.module';
 import { BannerModule } from './modules/banner/banner.module';
 import { ArticleModule } from './modules/article/article.module';
-import { ArticleCrawlerModule } from './modules/article-crawler/article-crawler.module';
 import { EmployeeEvaluationModule } from './modules/employee-evaluation/employee-evaluation.module';
 import { MiniProgramUserModule } from './modules/miniprogram-user/miniprogram-user.module';
 import { TrainingLeadsModule } from './modules/training-leads/training-leads.module';
@@ -82,7 +81,6 @@ import { MiniprogramLoggerMiddleware } from './common/middleware/miniprogram-log
     DashubaoModule,
     BannerModule,
     ArticleModule,
-    ArticleCrawlerModule,
     EmployeeEvaluationModule,
     MiniProgramUserModule,
     TrainingLeadsModule,

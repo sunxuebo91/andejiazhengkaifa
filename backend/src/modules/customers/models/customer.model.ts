@@ -25,7 +25,7 @@ export class Customer {
   leadSource: string;
 
   @Prop({
-    enum: ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老']
+    enum: ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老', '家教', '陪伴师']
   })
   serviceCategory: string;
 

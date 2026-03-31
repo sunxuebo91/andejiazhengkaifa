@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsNumber, IsArray, IsOptional, IsDateString, IsEnum, Matches, Min, Max, Allow } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsArray, IsOptional, IsDateString, IsEnum, Matches, Min, Max, Allow, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import dayjs from 'dayjs';
@@ -77,7 +77,9 @@ export enum JobType {
   ZHUJIA_BAOMU = 'zhujia-baomu', // 住家保姆
   YANGCHONG = 'yangchong',     // 养宠
   XIAOSHI = 'xiaoshi',         // 小时工
-  ZHUJIA_HULAO = 'zhujia-hulao' // 住家护老
+  ZHUJIA_HULAO = 'zhujia-hulao', // 住家护老
+  JIAJIAO = 'jiajiao',         // 家教
+  PEIBAN = 'peiban'             // 陪伴师
 }
 
 export enum OrderStatus {
@@ -164,7 +166,6 @@ export class CreateResumeV2Dto {
 
   @ApiProperty({ description: '手机号码', example: '13800138000', required: false })
   @IsOptional()
-  @IsString({ message: '手机号码必须是字符串' })
   @Transform(({ value }) => {
     if (typeof value === 'string') {
       // 提取所有数字，支持含空格/短横线的输入
@@ -173,6 +174,8 @@ export class CreateResumeV2Dto {
     }
     return value || undefined;
   })
+  @ValidateIf((o) => o.phone !== undefined && o.phone !== null && o.phone !== '')
+  @IsString({ message: '手机号码必须是字符串' })
   @Matches(/^1[3-9]\d{9}$/, { message: '请输入正确的11位手机号码' })
   phone?: string;
 
@@ -197,10 +200,10 @@ export class CreateResumeV2Dto {
 
   @ApiProperty({
     description: '工作类型',
-    enum: ['yuesao', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao']
+    enum: ['yuesao', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao', 'jiajiao', 'peiban']
   })
   @IsNotEmpty({ message: '工种不能为空' })
-  @IsEnum(['yuesao', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao'],
+  @IsEnum(['yuesao', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu', 'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao', 'jiajiao', 'peiban'],
     { message: '请选择正确的工种' })
   jobType: string;
 
@@ -631,6 +634,14 @@ export class CreateResumeDto {
 
   @ApiProperty({ description: '手机号码', example: '13800138000', required: false })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const digits = value.replace(/\D/g, '');
+      return digits || undefined;
+    }
+    return value || undefined;
+  })
+  @ValidateIf((o) => o.phone !== undefined && o.phone !== null && o.phone !== '')
   @IsString({ message: '手机号码必须是字符串' })
   @Matches(/^1[3-9]\d{9}$/, { message: '请输入正确的手机号码' })
   phone?: string;

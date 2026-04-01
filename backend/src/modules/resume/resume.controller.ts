@@ -899,6 +899,34 @@ export class ResumeController {
     }
   }
 
+  // ==================== 员工信息查询接口（供安得褓贝小程序使用）====================
+
+  @Get('staff/info')
+  @Public()
+  @ApiOperation({ summary: '根据手机号获取CRM员工姓名、头像、手机号（公开接口，供安得褓贝小程序调用）' })
+  @ApiResponse({ status: 200, description: '查询成功' })
+  async getStaffInfo(@Query('phone') phone: string) {
+    if (!phone) {
+      return { success: false, data: null, message: '请提供手机号' };
+    }
+
+    try {
+      const staffInfo = await this.resumeService.getStaffInfoByPhone(phone);
+      if (!staffInfo) {
+        return { success: false, data: null, message: '未找到该手机号对应的员工' };
+      }
+
+      return {
+        success: true,
+        data: staffInfo,
+        message: '查询成功',
+      };
+    } catch (error) {
+      this.logger.error(`获取员工信息失败: ${error.message}`, error.stack);
+      return { success: false, data: null, message: `查询失败: ${error.message}` };
+    }
+  }
+
   // ==================== 小程序专用接口 ====================
 
   @Post('miniprogram/self-register')

@@ -1619,7 +1619,9 @@ export class QwenAIService {
     const jobTypeLabel = jobTypeMap[resume.jobType || ''] || resume.jobType || '家政服务';
     const skillLabels = (resume.skills || []).map(s => skillMap[s] || s).slice(0, 4);
     const experienceYears = resume.experienceYears || 0;
-    const name = resume.name || '阿姨';
+    // 只取姓氏，不显示全名（如"张三" → "张"）
+    const fullName = resume.name || '';
+    const name = fullName ? fullName.charAt(0) : '阿姨';
     const workDescriptions = (resume.workExperiences || [])
       .map(w => w.description || '')
       .filter(Boolean)

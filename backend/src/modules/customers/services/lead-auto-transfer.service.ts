@@ -2,6 +2,8 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, SchedulerRegistry } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { randomUUID } from 'crypto';
+import { hostname } from 'os';
 import { Customer, CustomerDocument } from '../models/customer.model';
 import { LeadTransferRule, LeadTransferRuleDocument } from '../models/lead-transfer-rule.model';
 import { LeadTransferRecord, LeadTransferRecordDocument } from '../models/lead-transfer-record.model';
@@ -16,6 +18,10 @@ import { RequestContextStore } from '../../../common/logging/request-context';
 @Injectable()
 export class LeadAutoTransferService implements OnModuleInit {
   private readonly logger = new Logger(LeadAutoTransferService.name);
+  private isAutoTransferRunning = false;
+  private readonly runningRuleIds = new Set<string>();
+  private readonly executionLockOwner = `${hostname()}:${process.pid}`;
+  private readonly ruleExecutionLockTtlMs = 55 * 60 * 1000;
 
   constructor(
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
@@ -74,6 +80,12 @@ export class LeadAutoTransferService implements OnModuleInit {
    * 定时任务：每小时执行一次自动流转
    */
   async executeAutoTransfer() {
+    if (this.isAutoTransferRunning) {
+      this.logger.warn('⚠️ 自动流转任务正在执行中，跳过本次重复触发');
+      return;
+    }
+
+    this.isAutoTransferRunning = true;
     this.logger.log('🔄 开始执行线索自动流转任务...');
 
     try {
@@ -97,6 +109,8 @@ export class LeadAutoTransferService implements OnModuleInit {
       this.logger.log('✅ 线索自动流转任务执行完成');
     } catch (error) {
       this.logger.error('❌ 自动流转任务执行失败:', error);
+    } finally {
+      this.isAutoTransferRunning = false;
     }
   }
 
@@ -119,194 +133,242 @@ export class LeadAutoTransferService implements OnModuleInit {
     }>;
   }> {
     this.logger.log(`📋 执行规则: ${rule.ruleName}`);
+    const ruleId = rule._id.toString();
 
-    // 检查规则的执行时间窗口（手动执行时忽略）
-    if (!ignoreTimeWindow && rule.executionWindow?.enabled) {
-      const isWithinWindow = this.isWithinRuleExecutionWindow(rule);
-      this.logger.log(`⏰ 时间窗口检查: ${rule.executionWindow.startTime} - ${rule.executionWindow.endTime}, 当前时间: ${new Date().toLocaleTimeString('zh-CN')}, 在窗口内: ${isWithinWindow}`);
-      if (!isWithinWindow) {
-        this.logger.log(`⏰ 规则 ${rule.ruleName} 不在执行时间窗口内，跳过`);
-        return { transferredCount: 0, userStats: [] };
-      }
-    }
-
-    const { triggerConditions } = rule;
-
-    // 计算时间阈值
-    const thresholdTime = new Date();
-    thresholdTime.setHours(thresholdTime.getHours() - triggerConditions.inactiveHours);
-
-    // 构建查询条件
-    const query: any = {
-      // 负责人在流出名单中（转换为 ObjectId）
-      assignedTo: {
-        $in: rule.userQuotas
-          .filter(u => u.role === 'source' || u.role === 'both')
-          .map(u => new Types.ObjectId(u.userId))
-      },
-
-      // 客户状态在指定范围内
-      contractStatus: { $in: triggerConditions.contractStatuses },
-
-      // 最后活动时间早于阈值（如果没有 lastActivityAt，则使用 updatedAt）
-      $or: [
-        { lastActivityAt: { $lt: thresholdTime } },
-        {
-          lastActivityAt: { $exists: false },
-          updatedAt: { $lt: thresholdTime }
-        },
-        {
-          lastActivityAt: null,
-          updatedAt: { $lt: thresholdTime }
-        }
-      ],
-
-      // 不在公海中
-      inPublicPool: false,
-
-      // 允许自动流转
-      autoTransferEnabled: { $ne: false },
-
-      // 未被冻结
-      isFrozen: { $ne: true },
-
-      // 排除转介绍线索（不参与自动流转）
-      leadSource: { $ne: '转介绍' },
-    };
-
-    // 添加线索来源过滤（字段名是 leadSource 而不是 source）
-    if (triggerConditions.leadSources && triggerConditions.leadSources.length > 0) {
-      query.leadSource = { $in: triggerConditions.leadSources };
-    }
-
-    // 添加创建日期范围过滤
-    if (triggerConditions.createdDateRange) {
-      const { startDate, endDate } = triggerConditions.createdDateRange;
-      if (startDate || endDate) {
-        query.createdAt = {};
-        if (startDate) query.createdAt.$gte = new Date(startDate);
-        if (endDate) query.createdAt.$lte = new Date(endDate);
-      }
-    }
-
-    this.logger.log(`📝 查询条件: 阈值时间=${thresholdTime.toLocaleString('zh-CN')}, 状态=${triggerConditions.contractStatuses.join(',')}`);
-
-    // 查询符合条件的线索（限制每次最多处理100条）
-    const customers = await this.customerModel.find(query).limit(100).exec();
-
-    if (customers.length === 0) {
-      this.logger.log(`规则 ${rule.ruleName}: 没有符合条件的线索`);
+    if (this.runningRuleIds.has(ruleId)) {
+      this.logger.warn(`⚠️ 规则 ${rule.ruleName} 正在执行中，跳过重复执行`);
       return { transferredCount: 0, userStats: [] };
     }
 
-    this.logger.log(`规则 ${rule.ruleName}: 找到 ${customers.length} 条符合条件的线索`);
+    this.runningRuleIds.add(ruleId);
+    const lockToken = await this.acquireRuleExecutionLock(ruleId, rule.ruleName);
 
-    // 按流出用户分组
-    const customersBySource = this.groupBySourceUser(customers);
-
-    // 使用新的轮流分配算法
-    const allocationPlan = this.calculateRoundRobinAllocation(rule, customersBySource);
-
-    this.logger.log(`📊 分配计划: ${JSON.stringify(allocationPlan, null, 2)}`);
-
-    // 执行流转
-    let successCount = 0;
-    let failedCount = 0;
-
-    // 统计每个用户本次的流出和流入
-    const userStatsMap = new Map<string, { userId: string; userName: string; transferredOut: number; transferredIn: number }>();
-
-    // 初始化所有用户的统计
-    for (const user of rule.userQuotas) {
-      userStatsMap.set(user.userId.toString(), {
-        userId: user.userId.toString(),
-        userName: user.userName,
-        transferredOut: 0,
-        transferredIn: 0,
-      });
+    if (!lockToken) {
+      this.runningRuleIds.delete(ruleId);
+      return { transferredCount: 0, userStats: [] };
     }
 
-    // 🔥 [FIX] 记录已经流转的客户ID，防止重复
-    const transferredCustomerIds = new Set<string>();
-
-    // 🔥 [FIX] 创建客户ID到客户对象的映射，方便快速查找
-    const customerMap = new Map<string, any>();
-    for (const [, customerList] of customersBySource) {
-      for (const customer of customerList) {
-        customerMap.set(customer._id.toString(), customer);
-      }
-    }
-
-    for (const allocation of allocationPlan) {
-      // 🔥 [FIX] 使用分配计划中的具体客户ID
-      if (!allocation.customerId) {
-        this.logger.warn(`分配计划缺少客户ID，跳过`);
-        continue;
+    try {
+      // 检查规则的执行时间窗口（手动执行时忽略）
+      if (!ignoreTimeWindow && rule.executionWindow?.enabled) {
+        const isWithinWindow = this.isWithinRuleExecutionWindow(rule);
+        this.logger.log(`⏰ 时间窗口检查: ${rule.executionWindow.startTime} - ${rule.executionWindow.endTime}, 当前时间: ${new Date().toLocaleTimeString('zh-CN')}, 在窗口内: ${isWithinWindow}`);
+        if (!isWithinWindow) {
+          this.logger.log(`⏰ 规则 ${rule.ruleName} 不在执行时间窗口内，跳过`);
+          return { transferredCount: 0, userStats: [] };
+        }
       }
 
-      // 🔥 [FIX] 检查是否已经流转过（防止重复）
-      if (transferredCustomerIds.has(allocation.customerId)) {
-        this.logger.warn(`客户 ${allocation.customerId} 已被流转，跳过重复分配`);
-        continue;
+      const { triggerConditions } = rule;
+
+      // 计算时间阈值
+      const thresholdTime = new Date();
+      thresholdTime.setHours(thresholdTime.getHours() - triggerConditions.inactiveHours);
+
+      // 构建查询条件
+      const query: any = {
+        // 负责人在流出名单中（转换为 ObjectId）
+        assignedTo: {
+          $in: rule.userQuotas
+            .filter(u => u.role === 'source' || u.role === 'both')
+            .map(u => new Types.ObjectId(u.userId))
+        },
+
+        // 客户状态在指定范围内
+        contractStatus: { $in: triggerConditions.contractStatuses },
+
+        // 最后活动时间早于阈值（如果没有 lastActivityAt，则使用 updatedAt）
+        $or: [
+          { lastActivityAt: { $lt: thresholdTime } },
+          {
+            lastActivityAt: { $exists: false },
+            updatedAt: { $lt: thresholdTime }
+          },
+          {
+            lastActivityAt: null,
+            updatedAt: { $lt: thresholdTime }
+          }
+        ],
+
+        // 不在公海中
+        inPublicPool: false,
+
+        // 允许自动流转
+        autoTransferEnabled: { $ne: false },
+
+        // 未被冻结
+        isFrozen: { $ne: true },
+
+        // 排除转介绍线索（不参与自动流转）
+        leadSource: { $ne: '转介绍' },
+      };
+
+      // 添加线索来源过滤（字段名是 leadSource 而不是 source）
+      if (triggerConditions.leadSources && triggerConditions.leadSources.length > 0) {
+        query.leadSource = { $in: triggerConditions.leadSources };
       }
 
-      const customer = customerMap.get(allocation.customerId);
-      if (!customer) {
-        this.logger.warn(`找不到客户 ${allocation.customerId}，跳过`);
-        continue;
+      if ((triggerConditions.maxTransferCount ?? 0) > 0) {
+        query.$and = [
+          ...(query.$and || []),
+          {
+            $or: [
+              { transferCount: { $exists: false } },
+              { transferCount: { $lt: triggerConditions.maxTransferCount } },
+            ],
+          },
+        ];
       }
 
-      try {
-        // 执行流转
-        await this.transferCustomer(customer, allocation.targetUserId, rule);
+      if ((triggerConditions.transferCooldownHours ?? 0) > 0) {
+        const cooldownThreshold = new Date();
+        cooldownThreshold.setHours(cooldownThreshold.getHours() - triggerConditions.transferCooldownHours);
+        query.$and = [
+          ...(query.$and || []),
+          {
+            $or: [
+              { lastTransferredAt: { $exists: false } },
+              { lastTransferredAt: null },
+              { lastTransferredAt: { $lt: cooldownThreshold } },
+            ],
+          },
+        ];
+      }
 
-        // 🔥 [FIX] 标记该客户已被流转
-        transferredCustomerIds.add(allocation.customerId);
+      // 添加创建日期范围过滤
+      if (triggerConditions.createdDateRange) {
+        const { startDate, endDate } = triggerConditions.createdDateRange;
+        if (startDate || endDate) {
+          query.createdAt = {};
+          if (startDate) query.createdAt.$gte = new Date(startDate);
+          if (endDate) query.createdAt.$lte = new Date(endDate);
+        }
+      }
 
-        // 更新配额统计
-        await this.ruleService.updateUserQuota(
-          rule._id.toString(),
-          allocation.sourceUserId,
-          allocation.targetUserId
-        );
+      this.logger.log(`📝 查询条件: 阈值时间=${thresholdTime.toLocaleString('zh-CN')}, 状态=${triggerConditions.contractStatuses.join(',')}`);
 
-        // 更新本次统计
-        const sourceStats = userStatsMap.get(allocation.sourceUserId);
-        if (sourceStats) {
-          sourceStats.transferredOut++;
+      // 查询符合条件的线索（限制每次最多处理100条）
+      const customers = await this.customerModel
+        .find(query)
+        .sort({ lastActivityAt: 1, updatedAt: 1, _id: 1 })
+        .limit(100)
+        .exec();
+
+      if (customers.length === 0) {
+        this.logger.log(`规则 ${rule.ruleName}: 没有符合条件的线索`);
+        return { transferredCount: 0, userStats: [] };
+      }
+
+      this.logger.log(`规则 ${rule.ruleName}: 找到 ${customers.length} 条符合条件的线索`);
+
+      // 按流出用户分组
+      const customersBySource = this.groupBySourceUser(customers);
+
+      // 使用新的轮流分配算法
+      const allocationPlan = this.calculateRoundRobinAllocation(rule, customersBySource);
+
+      this.logger.log(`📊 分配计划: ${JSON.stringify(allocationPlan, null, 2)}`);
+
+      // 执行流转
+      let successCount = 0;
+      let failedCount = 0;
+
+      // 统计每个用户本次的流出和流入
+      const userStatsMap = new Map<string, { userId: string; userName: string; transferredOut: number; transferredIn: number }>();
+
+      // 初始化所有用户的统计
+      for (const user of rule.userQuotas) {
+        userStatsMap.set(user.userId.toString(), {
+          userId: user.userId.toString(),
+          userName: user.userName,
+          transferredOut: 0,
+          transferredIn: 0,
+        });
+      }
+
+      // 🔥 [FIX] 记录已经流转的客户ID，防止重复
+      const transferredCustomerIds = new Set<string>();
+
+      // 🔥 [FIX] 创建客户ID到客户对象的映射，方便快速查找
+      const customerMap = new Map<string, any>();
+      for (const [, customerList] of customersBySource) {
+        for (const customer of customerList) {
+          customerMap.set(customer._id.toString(), customer);
+        }
+      }
+
+      for (const allocation of allocationPlan) {
+        // 🔥 [FIX] 使用分配计划中的具体客户ID
+        if (!allocation.customerId) {
+          this.logger.warn(`分配计划缺少客户ID，跳过`);
+          continue;
         }
 
-        const targetStats = userStatsMap.get(allocation.targetUserId);
-        if (targetStats) {
-          targetStats.transferredIn++;
+        // 🔥 [FIX] 检查是否已经流转过（防止重复）
+        if (transferredCustomerIds.has(allocation.customerId)) {
+          this.logger.warn(`客户 ${allocation.customerId} 已被流转，跳过重复分配`);
+          continue;
         }
 
-        successCount++;
-      } catch (error) {
-        this.logger.error(`流转客户 ${customer._id} 失败:`, error);
-        failedCount++;
+        const customer = customerMap.get(allocation.customerId);
+        if (!customer) {
+          this.logger.warn(`找不到客户 ${allocation.customerId}，跳过`);
+          continue;
+        }
+
+        try {
+          // 执行流转
+          const transferred = await this.transferCustomer(customer, allocation.targetUserId, rule);
+          if (!transferred) {
+            this.logger.warn(`客户 ${customer._id} 在执行时状态已变化，跳过本次流转`);
+            continue;
+          }
+
+          // 🔥 [FIX] 标记该客户已被流转
+          transferredCustomerIds.add(allocation.customerId);
+
+          // 更新本次统计
+          const sourceStats = userStatsMap.get(allocation.sourceUserId);
+          if (sourceStats) {
+            sourceStats.transferredOut++;
+          }
+
+          const targetStats = userStatsMap.get(allocation.targetUserId);
+          if (targetStats) {
+            targetStats.transferredIn++;
+          }
+
+          successCount++;
+        } catch (error) {
+          this.logger.error(`流转客户 ${customer._id} 失败:`, error);
+          await this.recordFailedTransfer(customer, allocation.targetUserId, rule, error);
+          failedCount++;
+        }
       }
+
+      // 更新规则统计
+      await this.ruleService.updateStatistics(rule._id.toString(), successCount);
+
+      this.logger.log(`规则 ${rule.ruleName}: 成功 ${successCount}, 失败 ${failedCount}`);
+
+      // 输出平衡报告
+      await this.logBalanceReport(rule);
+
+      // 返回详细统计
+      const userStats = Array.from(userStatsMap.values()).filter(
+        stat => stat.transferredOut > 0 || stat.transferredIn > 0
+      );
+
+      // 🔔 发送流转通知
+      if (successCount > 0) {
+        await this.sendTransferNotifications(userStats, rule.ruleName);
+      }
+
+      return { transferredCount: successCount, userStats };
+    } finally {
+      await this.releaseRuleExecutionLock(ruleId, lockToken);
+      this.runningRuleIds.delete(ruleId);
     }
-
-    // 更新规则统计
-    await this.ruleService.updateStatistics(rule._id.toString(), successCount);
-
-    this.logger.log(`规则 ${rule.ruleName}: 成功 ${successCount}, 失败 ${failedCount}`);
-
-    // 输出平衡报告
-    await this.logBalanceReport(rule);
-
-    // 返回详细统计
-    const userStats = Array.from(userStatsMap.values()).filter(
-      stat => stat.transferredOut > 0 || stat.transferredIn > 0
-    );
-
-    // 🔔 发送流转通知
-    if (successCount > 0) {
-      await this.sendTransferNotifications(userStats, rule.ruleName);
-    }
-
-    return { transferredCount: successCount, userStats };
   }
 
   /**
@@ -344,6 +406,94 @@ export class LeadAutoTransferService implements OnModuleInit {
         this.logger.error(`发送通知给 ${stat.userName} 失败:`, error);
         // 不影响主流程，继续处理其他用户
       }
+    }
+  }
+
+  private async acquireRuleExecutionLock(ruleId: string, ruleName: string): Promise<string | null> {
+    const now = new Date();
+    const lockToken = randomUUID();
+    const lockExpiresAt = new Date(now.getTime() + this.ruleExecutionLockTtlMs);
+
+    const lockedRule = await this.ruleModel.findOneAndUpdate(
+      {
+        _id: ruleId,
+        $or: [
+          { executionState: { $exists: false } },
+          { 'executionState.lockExpiresAt': { $exists: false } },
+          { 'executionState.lockExpiresAt': null },
+          { 'executionState.lockExpiresAt': { $lte: now } },
+        ],
+      },
+      {
+        $set: {
+          executionState: {
+            lockToken,
+            lockOwner: this.executionLockOwner,
+            lockedAt: now,
+            lockExpiresAt,
+          },
+        },
+      },
+      { new: true }
+    );
+
+    if (!lockedRule) {
+      this.logger.warn(`⚠️ 规则 ${ruleName} 已被其他实例锁定，跳过本次执行`);
+      return null;
+    }
+
+    return lockToken;
+  }
+
+  private async releaseRuleExecutionLock(ruleId: string, lockToken: string): Promise<void> {
+    try {
+      await this.ruleModel.updateOne(
+        {
+          _id: ruleId,
+          'executionState.lockToken': lockToken,
+        },
+        {
+          $unset: {
+            executionState: 1,
+          },
+        }
+      );
+    } catch (error) {
+      this.logger.error(`释放规则执行锁失败: ${ruleId}`, error);
+    }
+  }
+
+  private async recordFailedTransfer(
+    customer: CustomerDocument,
+    targetUserId: string,
+    rule: LeadTransferRule,
+    error: any,
+  ): Promise<void> {
+    try {
+      const lastActivity = customer.lastActivityAt || customer.updatedAt;
+      const inactiveHours = Math.floor(
+        (Date.now() - lastActivity.getTime()) / (1000 * 60 * 60)
+      );
+
+      await this.recordModel.create({
+        ruleId: rule._id,
+        customerId: customer._id,
+        fromUserId: customer.assignedTo,
+        toUserId: new Types.ObjectId(targetUserId),
+        snapshot: {
+          customerNumber: customer.customerId,
+          customerName: customer.name,
+          contractStatus: customer.contractStatus,
+          inactiveHours,
+          lastActivityAt: lastActivity,
+          createdAt: customer.createdAt,
+        },
+        status: 'failed',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        transferredAt: new Date(),
+      });
+    } catch (recordError) {
+      this.logger.error(`记录失败流转日志失败: ${customer._id}`, recordError);
     }
   }
 
@@ -535,85 +685,147 @@ export class LeadAutoTransferService implements OnModuleInit {
     customer: CustomerDocument,
     targetUserId: string,
     rule: LeadTransferRule
-  ): Promise<void> {
+  ): Promise<boolean> {
     const now = new Date();
     const oldAssignedTo = customer.assignedTo;
+    const session = await this.customerModel.db.startSession();
 
-    // 获取用户信息
-    const [oldUser, newUser] = await Promise.all([
-      this.userModel.findById(oldAssignedTo).select('name username').lean(),
-      this.userModel.findById(targetUserId).select('name username').lean(),
-    ]);
+    try {
+      let transferred = false;
 
-    // 计算无活动时长（如果没有 lastActivityAt，使用 updatedAt）
-    const lastActivity = customer.lastActivityAt || customer.updatedAt;
-    const inactiveHours = Math.floor(
-      (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60)
-    );
+      await session.withTransaction(async () => {
+        // 获取用户信息
+        const [oldUser, newUser] = await Promise.all([
+          this.userModel.findById(oldAssignedTo).select('name username').lean().session(session),
+          this.userModel.findById(targetUserId).select('name username').lean().session(session),
+        ]);
 
-    // 1. 更新客户信息
-    await this.customerModel.findByIdAndUpdate(customer._id, {
-      assignedTo: new Types.ObjectId(targetUserId),
-      assignedBy: new Types.ObjectId(targetUserId), // 系统自动分配
-      assignedAt: now,
-      assignmentReason: `自动流转-规则: ${rule.ruleName}`,
-      lastActivityAt: now, // 重置活动时间
-      $inc: { transferCount: 1 },
-      lastTransferredAt: now,
-    });
+        // 计算无活动时长（如果没有 lastActivityAt，使用 updatedAt）
+        const lastActivity = customer.lastActivityAt || customer.updatedAt;
+        const inactiveHours = Math.floor(
+          (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60)
+        );
 
-    // 2. 记录分配日志
-    await this.assignmentLogModel.create({
-      customerId: customer._id,
-      oldAssignedTo: oldAssignedTo,
-      newAssignedTo: new Types.ObjectId(targetUserId),
-      assignedBy: new Types.ObjectId(targetUserId),
-      assignedAt: now,
-      reason: `自动流转-规则: ${rule.ruleName}`,
-    });
+        const transferCooldownHours = rule.triggerConditions.transferCooldownHours ?? 24;
+        const maxTransferCount = rule.triggerConditions.maxTransferCount ?? 0;
+        const cooldownThreshold = new Date(now);
+        cooldownThreshold.setHours(cooldownThreshold.getHours() - transferCooldownHours);
 
-    // 3. 记录流转日志
-    await this.recordModel.create({
-      ruleId: rule._id,
-      customerId: customer._id,
-      fromUserId: oldAssignedTo,
-      toUserId: new Types.ObjectId(targetUserId),
-      snapshot: {
-        customerNumber: customer.customerId, // 保存客户编号快照
-        customerName: customer.name, // 保存客户名称快照
-        contractStatus: customer.contractStatus,
-        inactiveHours,
-        lastActivityAt: lastActivity, // 使用计算后的值（有后备逻辑）
-        createdAt: customer.createdAt,
-      },
-      status: 'success',
-      transferredAt: now,
-    });
+        const updateConditions: any = {
+          _id: customer._id,
+          assignedTo: oldAssignedTo,
+          inPublicPool: false,
+          autoTransferEnabled: { $ne: false },
+          isFrozen: { $ne: true },
+        };
 
-    // 4. 创建客户操作日志（不是跟进记录）
-    await this.operationLogModel.create({
-      customerId: customer._id,
-      operatorId: new Types.ObjectId(targetUserId),
-      entityType: 'customer',
-      entityId: customer._id.toString(),
-      operationType: 'assign',
-      operationName: '系统自动流转',
-      details: {
-        description: `系统自动流转：因${inactiveHours}小时无跟进，从${(oldUser as any)?.name || '未知'}流转至${(newUser as any)?.name || '未知'}`,
-        before: {
-          assignedTo: (oldUser as any)?.name || '未知',
-        },
-        after: {
-          assignedTo: (newUser as any)?.name || '未知',
-        },
-      },
-      operatedAt: now,
-      requestId: RequestContextStore.getValue('requestId'),
-    });
+        if (maxTransferCount > 0) {
+          updateConditions.$or = [
+            { transferCount: { $exists: false } },
+            { transferCount: { $lt: maxTransferCount } },
+          ];
+        }
 
-    this.logger.log(
-      `✅ 客户 ${customer.name} 从 ${(oldUser as any)?.name} 流转至 ${(newUser as any)?.name}`
-    );
+        if (transferCooldownHours > 0) {
+          updateConditions.$and = [
+            ...(updateConditions.$and || []),
+            {
+              $or: [
+                { lastTransferredAt: { $exists: false } },
+                { lastTransferredAt: null },
+                { lastTransferredAt: { $lt: cooldownThreshold } },
+              ],
+            },
+          ];
+        }
+
+        // 1. 更新客户信息
+        const updateResult = await this.customerModel.updateOne(
+          updateConditions,
+          {
+            $set: {
+              assignedTo: new Types.ObjectId(targetUserId),
+              assignedBy: new Types.ObjectId(targetUserId),
+              assignedAt: now,
+              assignmentReason: `自动流转-规则: ${rule.ruleName}`,
+              lastTransferredAt: now,
+            },
+            $inc: { transferCount: 1 },
+          },
+          { session }
+        );
+
+        if (!updateResult.modifiedCount) {
+          transferred = false;
+          return;
+        }
+
+        // 2. 记录分配日志
+        await this.assignmentLogModel.create([{
+          customerId: customer._id,
+          oldAssignedTo: oldAssignedTo,
+          newAssignedTo: new Types.ObjectId(targetUserId),
+          assignedBy: new Types.ObjectId(targetUserId),
+          assignedAt: now,
+          reason: `自动流转-规则: ${rule.ruleName}`,
+        }], { session });
+
+        // 3. 记录流转日志
+        await this.recordModel.create([{
+          ruleId: rule._id,
+          customerId: customer._id,
+          fromUserId: oldAssignedTo,
+          toUserId: new Types.ObjectId(targetUserId),
+          snapshot: {
+            customerNumber: customer.customerId,
+            customerName: customer.name,
+            contractStatus: customer.contractStatus,
+            inactiveHours,
+            lastActivityAt: lastActivity,
+            createdAt: customer.createdAt,
+          },
+          status: 'success',
+          transferredAt: now,
+        }], { session });
+
+        // 4. 创建客户操作日志
+        await this.operationLogModel.create([{
+          customerId: customer._id,
+          operatorId: new Types.ObjectId(targetUserId),
+          entityType: 'customer',
+          entityId: customer._id.toString(),
+          operationType: 'assign',
+          operationName: '系统自动流转',
+          details: {
+            description: `系统自动流转：因${inactiveHours}小时无跟进，从${(oldUser as any)?.name || '未知'}流转至${(newUser as any)?.name || '未知'}`,
+            before: {
+              assignedTo: (oldUser as any)?.name || '未知',
+            },
+            after: {
+              assignedTo: (newUser as any)?.name || '未知',
+            },
+          },
+          operatedAt: now,
+          requestId: RequestContextStore.getValue('requestId'),
+        }], { session });
+
+        await this.ruleService.updateUserQuota(
+          rule._id.toString(),
+          oldAssignedTo.toString(),
+          targetUserId,
+          session
+        );
+
+        this.logger.log(
+          `✅ 客户 ${customer.name} 从 ${(oldUser as any)?.name} 流转至 ${(newUser as any)?.name}`
+        );
+        transferred = true;
+      });
+
+      return transferred;
+    } finally {
+      await session.endSession();
+    }
   }
 
   /**
@@ -778,6 +990,33 @@ export class LeadAutoTransferService implements OnModuleInit {
 
       if (triggerConditions.leadSources && triggerConditions.leadSources.length > 0) {
         query.leadSource = { $in: triggerConditions.leadSources };
+      }
+
+      if ((triggerConditions.maxTransferCount ?? 0) > 0) {
+        query.$and = [
+          ...(query.$and || []),
+          {
+            $or: [
+              { transferCount: { $exists: false } },
+              { transferCount: { $lt: triggerConditions.maxTransferCount } },
+            ],
+          },
+        ];
+      }
+
+      if ((triggerConditions.transferCooldownHours ?? 0) > 0) {
+        const cooldownThreshold = new Date();
+        cooldownThreshold.setHours(cooldownThreshold.getHours() - triggerConditions.transferCooldownHours);
+        query.$and = [
+          ...(query.$and || []),
+          {
+            $or: [
+              { lastTransferredAt: { $exists: false } },
+              { lastTransferredAt: null },
+              { lastTransferredAt: { $lt: cooldownThreshold } },
+            ],
+          },
+        ];
       }
 
       if (triggerConditions.createdDateRange) {

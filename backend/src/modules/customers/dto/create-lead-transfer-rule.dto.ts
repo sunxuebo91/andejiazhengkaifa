@@ -22,6 +22,18 @@ export class TriggerConditionsDto {
   @Min(1)
   inactiveHours: number;
 
+  @ApiProperty({ description: '流转冷却期（小时）', required: false, example: 24 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  transferCooldownHours?: number;
+
+  @ApiProperty({ description: '最大流转次数（0表示不限制）', required: false, example: 3 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxTransferCount?: number;
+
   @ApiProperty({ description: '客户状态', example: ['待定', '匹配中'] })
   @IsArray()
   @IsEnum(['已签约', '匹配中', '已面试', '流失客户', '已退款', '退款中', '待定'], { each: true })
@@ -116,4 +128,3 @@ export class CreateLeadTransferRuleDto {
   @Type(() => DistributionConfigDto)
   distributionConfig?: DistributionConfigDto;
 }
-

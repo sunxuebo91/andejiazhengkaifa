@@ -3,7 +3,7 @@ import apiService from './api';
 export interface UserQuota {
   userId: string;
   userName: string;
-  role: 'source' | 'target';
+  role: 'source' | 'target' | 'both';
   transferredOut: number;
   transferredIn: number;
   balance: number;
@@ -17,6 +17,8 @@ export interface LeadTransferRule {
   enabled: boolean;
   triggerConditions: {
     inactiveHours: number;
+    transferCooldownHours?: number;
+    maxTransferCount?: number;
     contractStatuses: string[];
     leadSources?: string[];
     createdDateRange?: {
@@ -74,6 +76,8 @@ export interface CreateLeadTransferRuleDto {
   enabled: boolean;
   triggerConditions: {
     inactiveHours: number;
+    transferCooldownHours?: number;
+    maxTransferCount?: number;
     contractStatuses: string[];
     leadSources?: string[];
     createdDateRange?: {
@@ -105,59 +109,44 @@ export interface LeadTransferStatistics {
 class LeadTransferService {
   // 获取所有规则
   async getRules(): Promise<LeadTransferRule[]> {
-    const response = await apiService.get('/api/lead-transfer/rules');
-    console.log('API原始响应:', response);
-    console.log('response.data:', response.data);
-
-    // 处理两种可能的响应格式
-    // 1. { success: true, data: [...] } - 标准格式
-    // 2. [...] - 直接返回数组
-    if (Array.isArray(response.data)) {
-      console.log('返回的是数组格式，直接使用');
+    const response: any = await apiService.get('/api/lead-transfer/rules');
+    if (Array.isArray(response?.data)) {
       return response.data;
-    } else if (response.data.data) {
-      console.log('返回的是标准格式，使用 data 字段');
-      return response.data.data;
-    } else {
-      console.error('未知的响应格式:', response.data);
-      return [];
     }
+    if (Array.isArray(response)) {
+      return response;
+    }
+    return [];
   }
 
   // 获取单个规则详情
   async getRule(id: string): Promise<LeadTransferRule> {
-    const response = await apiService.get(`/api/lead-transfer/rules/${id}`);
-    console.log('getRule API响应:', response);
-    console.log('response.data:', response.data);
-
-    // 处理两种可能的响应格式
-    if (response.data.data) {
-      return response.data.data;
-    } else if (response.data._id) {
-      // 直接返回的是规则对象
+    const response: any = await apiService.get(`/api/lead-transfer/rules/${id}`);
+    if (response?.data?._id) {
       return response.data;
-    } else {
-      console.error('未知的响应格式:', response.data);
-      throw new Error('获取规则详情失败：响应格式错误');
     }
+    if (response?._id) {
+      return response;
+    }
+    throw new Error('获取规则详情失败：响应格式错误');
   }
 
   // 创建规则
   async createRule(data: CreateLeadTransferRuleDto): Promise<LeadTransferRule> {
-    const response = await apiService.post('/api/lead-transfer/rules', data);
-    return response.data.data;
+    const response: any = await apiService.post('/api/lead-transfer/rules', data);
+    return response.data;
   }
 
   // 更新规则
   async updateRule(id: string, data: Partial<CreateLeadTransferRuleDto>): Promise<LeadTransferRule> {
-    const response = await apiService.patch(`/api/lead-transfer/rules/${id}`, data);
-    return response.data.data;
+    const response: any = await apiService.patch(`/api/lead-transfer/rules/${id}`, data);
+    return response.data;
   }
 
   // 切换规则启用状态
-  async toggleRule(id: string): Promise<LeadTransferRule> {
-    const response = await apiService.patch(`/api/lead-transfer/rules/${id}/toggle`);
-    return response.data.data;
+  async toggleRule(id: string, enabled: boolean): Promise<LeadTransferRule> {
+    const response: any = await apiService.patch(`/api/lead-transfer/rules/${id}/toggle`, { enabled });
+    return response.data;
   }
 
   // 删除规则
@@ -176,15 +165,14 @@ class LeadTransferService {
       transferredIn: number;
     }>;
   }> {
-    const response = await apiService.post('/api/lead-transfer/execute-now', { ruleId });
-    // 处理两种可能的响应格式
-    if (response.data.data) {
-      return response.data.data;
-    } else if (response.data.transferredCount !== undefined) {
+    const response: any = await apiService.post('/api/lead-transfer/execute-now', { ruleId });
+    if (response?.data?.transferredCount !== undefined) {
       return response.data;
-    } else {
-      return { transferredCount: 0, message: '执行完成' };
     }
+    if (response?.transferredCount !== undefined) {
+      return response;
+    }
+    return { transferredCount: 0, message: '执行完成' };
   }
 
   // 获取流转记录
@@ -239,10 +227,9 @@ class LeadTransferService {
 
   // 获取用户统计
   async getUserStatistics(userId: string): Promise<any> {
-    const response = await apiService.get(`/api/lead-transfer/user-statistics/${userId}`);
-    return response.data.data;
+    const response: any = await apiService.get(`/api/lead-transfer/user-statistics/${userId}`);
+    return response.data || response;
   }
 }
 
 export default new LeadTransferService();
-

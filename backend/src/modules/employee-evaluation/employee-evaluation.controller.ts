@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Query, Param, Logger, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Query, Param, Logger, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { EmployeeEvaluationService } from './employee-evaluation.service';
 import { QueryEvaluationDto } from './dto/query-evaluation.dto';
 import { CreateEvaluationDto } from './dto/create-evaluation.dto';
+import { UpdateEvaluationDto } from './dto/update-evaluation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
@@ -177,6 +178,62 @@ export class EmployeeEvaluationController {
         success: false,
         data: null,
         message: `获取员工评价统计失败: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * 修改员工评价（需要 evaluation:edit 权限）
+   */
+  @Patch(':id')
+  @Permissions('evaluation:edit')
+  @ApiOperation({ summary: '修改员工评价' })
+  @ApiResponse({ status: 200, description: '修改成功' })
+  async update(@Param('id') id: string, @Body() updateDto: UpdateEvaluationDto, @Req() req: any) {
+    try {
+      const user = req.user;
+      this.logger.log(`修改员工评价: id=${id}, operator=${user?.username || user?.name}`);
+
+      const evaluation = await this.evaluationService.update(id, updateDto);
+
+      return {
+        success: true,
+        data: evaluation,
+        message: '修改员工评价成功',
+      };
+    } catch (error) {
+      this.logger.error(`修改员工评价失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        data: null,
+        message: `修改员工评价失败: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * 删除员工评价（需要 evaluation:delete 权限）
+   */
+  @Delete(':id')
+  @Permissions('evaluation:delete')
+  @ApiOperation({ summary: '删除员工评价' })
+  @ApiResponse({ status: 200, description: '删除成功' })
+  async remove(@Param('id') id: string, @Req() req: any) {
+    try {
+      const user = req.user;
+      this.logger.log(`删除员工评价: id=${id}, operator=${user?.username || user?.name}`);
+
+      await this.evaluationService.remove(id);
+
+      return {
+        success: true,
+        message: '删除员工评价成功',
+      };
+    } catch (error) {
+      this.logger.error(`删除员工评价失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        message: `删除员工评价失败: ${error.message}`,
       };
     }
   }

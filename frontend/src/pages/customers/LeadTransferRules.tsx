@@ -39,6 +39,16 @@ const { Option } = Select;
 const { RangePicker } = DatePicker;
 const { TextArea } = Input;
 
+const getSourceUserIds = (rule: LeadTransferRule) =>
+  rule.sourceUserIds?.length
+    ? rule.sourceUserIds
+    : rule.userQuotas?.filter((u: any) => u.role === 'source' || u.role === 'both').map((u: any) => u.userId) || [];
+
+const getTargetUserIds = (rule: LeadTransferRule) =>
+  rule.targetUserIds?.length
+    ? rule.targetUserIds
+    : rule.userQuotas?.filter((u: any) => u.role === 'target' || u.role === 'both').map((u: any) => u.userId) || [];
+
 const LeadTransferRules: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState<LeadTransferRule[]>([]);
@@ -84,7 +94,7 @@ const LeadTransferRules: React.FC = () => {
   // 切换规则启用状态
   const handleToggle = async (rule: LeadTransferRule) => {
     try {
-      await leadTransferService.toggleRule(rule._id);
+      await leadTransferService.toggleRule(rule._id, !rule.enabled);
       message.success(`规则已${rule.enabled ? '禁用' : '启用'}`);
       loadRules();
     } catch (error: any) {
@@ -112,6 +122,8 @@ const LeadTransferRules: React.FC = () => {
         description: rule.description,
         enabled: rule.enabled,
         inactiveHours: rule.triggerConditions.inactiveHours,
+        transferCooldownHours: rule.triggerConditions.transferCooldownHours ?? 24,
+        maxTransferCount: rule.triggerConditions.maxTransferCount ?? 0,
         contractStatuses: rule.triggerConditions.contractStatuses,
         leadSources: rule.triggerConditions.leadSources,
         dateRange: rule.triggerConditions.createdDateRange?.startDate
@@ -125,8 +137,8 @@ const LeadTransferRules: React.FC = () => {
           dayjs(rule.executionWindow.startTime, 'HH:mm'),
           dayjs(rule.executionWindow.endTime, 'HH:mm'),
         ],
-        sourceUserIds: rule.sourceUserIds,
-        targetUserIds: rule.targetUserIds,
+        sourceUserIds: getSourceUserIds(rule),
+        targetUserIds: getTargetUserIds(rule),
         strategy: rule.distributionConfig.strategy,
         enableCompensation: rule.distributionConfig.enableCompensation,
         compensationPriority: rule.distributionConfig.compensationPriority,
@@ -136,6 +148,8 @@ const LeadTransferRules: React.FC = () => {
       form.setFieldsValue({
         enabled: true,
         inactiveHours: 48,
+        transferCooldownHours: 24,
+        maxTransferCount: 0,
         contractStatuses: ['待定', '匹配中'],
         executionWindowEnabled: true,
         executionTime: [dayjs('09:30', 'HH:mm'), dayjs('18:30', 'HH:mm')],
@@ -157,6 +171,8 @@ const LeadTransferRules: React.FC = () => {
         enabled: values.enabled,
         triggerConditions: {
           inactiveHours: values.inactiveHours,
+          transferCooldownHours: values.transferCooldownHours,
+          maxTransferCount: values.maxTransferCount,
           contractStatuses: values.contractStatuses,
           leadSources: values.leadSources,
           createdDateRange: values.dateRange
@@ -441,7 +457,31 @@ const LeadTransferRules: React.FC = () => {
                 <InputNumber min={1} max={720} style={{ width: '100%' }} placeholder="48" />
               </Form.Item>
             </Col>
-            <Col span={16}>
+            <Col span={8}>
+              <Form.Item
+                label="流转冷却期（小时）"
+                name="transferCooldownHours"
+                rules={[{ required: true, message: '请输入' }]}
+                style={{ marginBottom: 12 }}
+              >
+                <InputNumber min={0} max={720} style={{ width: '100%' }} placeholder="24" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                label="最大流转次数"
+                name="maxTransferCount"
+                rules={[{ required: true, message: '请输入' }]}
+                extra="0 表示不限制"
+                style={{ marginBottom: 12 }}
+              >
+                <InputNumber min={0} max={99} style={{ width: '100%' }} placeholder="0" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={12}>
+            <Col span={24}>
               <Form.Item
                 label="客户状态"
                 name="contractStatuses"
@@ -688,6 +728,13 @@ const LeadTransferRules: React.FC = () => {
                 <div>
                   <strong>触发条件：</strong>
                   <div>无活动时长：≥{selectedRule.triggerConditions.inactiveHours}小时</div>
+                  <div>流转冷却期：≥{selectedRule.triggerConditions.transferCooldownHours ?? 24}小时</div>
+                  <div>
+                    最大流转次数：
+                    {(selectedRule.triggerConditions.maxTransferCount ?? 0) > 0
+                      ? selectedRule.triggerConditions.maxTransferCount
+                      : '不限制'}
+                  </div>
                   <div>
                     客户状态：
                     {selectedRule.triggerConditions.contractStatuses.map((status) => (
@@ -751,4 +798,3 @@ const LeadTransferRules: React.FC = () => {
 };
 
 export default LeadTransferRules;
-

@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { LeadTransferRecord, LeadTransferRecordDocument } from '../models/lead-transfer-record.model';
 import { LeadTransferQueryDto } from '../dto/lead-transfer-query.dto';
 
@@ -15,7 +15,11 @@ export class LeadTransferRecordService {
   /**
    * 查询流转记录
    */
-  async findAll(query: LeadTransferQueryDto): Promise<{
+  async findAll(
+    query: LeadTransferQueryDto,
+    currentUserId?: string,
+    currentUserRole?: string,
+  ): Promise<{
     records: any[];
     total: number;
     page: number;
@@ -54,15 +58,19 @@ export class LeadTransferRecordService {
         conditions.transferredAt.$gte = new Date(filters.startDate);
       }
       if (filters.endDate) {
-        conditions.transferredAt.$lte = new Date(filters.endDate);
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        conditions.transferredAt.$lte = endDate;
       }
     }
+
+    const scopedConditions = this.applyAccessScope(conditions, currentUserId, currentUserRole);
 
     const skip = (page - 1) * limit;
 
     const [records, total] = await Promise.all([
       this.recordModel
-        .find(conditions)
+        .find(scopedConditions)
         .populate('ruleId', 'ruleName')
         .populate('customerId', 'customerId name phone contractStatus')
         .populate('fromUserId', 'name username')
@@ -72,7 +80,7 @@ export class LeadTransferRecordService {
         .limit(limit)
         .lean()
         .exec(),
-      this.recordModel.countDocuments(conditions).exec(),
+      this.recordModel.countDocuments(scopedConditions).exec(),
     ]);
 
     // 转换数据格式，将 populate 的对象展平为前端期望的字段
@@ -106,19 +114,30 @@ export class LeadTransferRecordService {
   /**
    * 获取流转统计
    */
-  async getStatistics(startDate?: string, endDate?: string): Promise<any> {
+  async getStatistics(
+    startDate?: string,
+    endDate?: string,
+    currentUserId?: string,
+    currentUserRole?: string,
+  ): Promise<any> {
     const conditions: any = {};
 
     if (startDate || endDate) {
       conditions.transferredAt = {};
       if (startDate) conditions.transferredAt.$gte = new Date(startDate);
-      if (endDate) conditions.transferredAt.$lte = new Date(endDate);
+      if (endDate) {
+        const normalizedEndDate = new Date(endDate);
+        normalizedEndDate.setHours(23, 59, 59, 999);
+        conditions.transferredAt.$lte = normalizedEndDate;
+      }
     }
 
+    const scopedConditions = this.applyAccessScope(conditions, currentUserId, currentUserRole);
+
     const [totalCount, successCount, failedCount] = await Promise.all([
-      this.recordModel.countDocuments(conditions).exec(),
-      this.recordModel.countDocuments({ ...conditions, status: 'success' }).exec(),
-      this.recordModel.countDocuments({ ...conditions, status: 'failed' }).exec(),
+      this.recordModel.countDocuments(scopedConditions).exec(),
+      this.recordModel.countDocuments({ ...scopedConditions, status: 'success' }).exec(),
+      this.recordModel.countDocuments({ ...scopedConditions, status: 'failed' }).exec(),
     ]);
 
     return {
@@ -132,26 +151,81 @@ export class LeadTransferRecordService {
   /**
    * 获取用户流转统计
    */
-  async getUserStatistics(userId: string, startDate?: string, endDate?: string): Promise<any> {
+  async getUserStatistics(
+    userId: string,
+    startDate?: string,
+    endDate?: string,
+    currentUserId?: string,
+    currentUserRole?: string,
+  ): Promise<any> {
+    const normalizedUserId = this.normalizeRequestedUserId(userId, currentUserId, currentUserRole);
     const conditions: any = {};
 
     if (startDate || endDate) {
       conditions.transferredAt = {};
       if (startDate) conditions.transferredAt.$gte = new Date(startDate);
-      if (endDate) conditions.transferredAt.$lte = new Date(endDate);
+      if (endDate) {
+        const normalizedEndDate = new Date(endDate);
+        normalizedEndDate.setHours(23, 59, 59, 999);
+        conditions.transferredAt.$lte = normalizedEndDate;
+      }
     }
 
     const [transferredOut, transferredIn] = await Promise.all([
-      this.recordModel.countDocuments({ ...conditions, fromUserId: userId }).exec(),
-      this.recordModel.countDocuments({ ...conditions, toUserId: userId }).exec(),
+      this.recordModel.countDocuments({ ...conditions, fromUserId: normalizedUserId }).exec(),
+      this.recordModel.countDocuments({ ...conditions, toUserId: normalizedUserId }).exec(),
     ]);
 
     return {
-      userId,
+      userId: normalizedUserId,
       transferredOut,
       transferredIn,
       balance: transferredOut - transferredIn,
     };
   }
-}
 
+  applyAccessScope(baseConditions: any, currentUserId?: string, currentUserRole?: string): any {
+    if (!currentUserId || !this.isRestrictedRole(currentUserRole)) {
+      return baseConditions;
+    }
+
+    const currentUserObjectId = Types.ObjectId.isValid(currentUserId)
+      ? new Types.ObjectId(currentUserId)
+      : currentUserId;
+
+    return {
+      ...baseConditions,
+      $and: [
+        ...(baseConditions.$and || []),
+        {
+          $or: [
+            { fromUserId: currentUserObjectId },
+            { fromUserId: currentUserId },
+            { toUserId: currentUserObjectId },
+            { toUserId: currentUserId },
+          ],
+        },
+      ],
+    };
+  }
+
+  private normalizeRequestedUserId(userId: string, currentUserId?: string, currentUserRole?: string): string {
+    if (!this.isRestrictedRole(currentUserRole)) {
+      return userId;
+    }
+
+    if (!currentUserId) {
+      throw new ForbiddenException('当前用户信息缺失');
+    }
+
+    if (userId && userId !== currentUserId) {
+      throw new ForbiddenException('只能查看自己的流转统计');
+    }
+
+    return currentUserId;
+  }
+
+  private isRestrictedRole(role?: string): boolean {
+    return ['employee', '普通员工', 'dispatch', 'admissions'].includes(role || '');
+  }
+}

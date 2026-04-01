@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { EmployeeEvaluation } from './models/employee-evaluation.entity';
 import { CreateEvaluationDto } from './dto/create-evaluation.dto';
+import { UpdateEvaluationDto } from './dto/update-evaluation.dto';
 import { QueryEvaluationDto } from './dto/query-evaluation.dto';
 
 @Injectable()
@@ -101,6 +102,52 @@ export class EmployeeEvaluationService {
       return evaluation;
     } catch (error) {
       this.logger.error(`获取员工评价详情失败: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * 更新员工评价
+   */
+  async update(id: string, dto: UpdateEvaluationDto) {
+    try {
+      this.logger.log(`更新员工评价: id=${id}`);
+
+      const evaluation = await this.evaluationModel
+        .findByIdAndUpdate(id, { $set: dto }, { new: true })
+        .populate('employeeId', 'name phone jobType')
+        .populate('evaluatorId', 'username name')
+        .exec();
+
+      if (!evaluation) {
+        throw new NotFoundException('评价不存在');
+      }
+
+      this.logger.log(`员工评价更新成功: ${id}`);
+      return evaluation;
+    } catch (error) {
+      this.logger.error(`更新员工评价失败: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * 删除员工评价
+   */
+  async remove(id: string) {
+    try {
+      this.logger.log(`删除员工评价: id=${id}`);
+
+      const evaluation = await this.evaluationModel.findByIdAndDelete(id).exec();
+
+      if (!evaluation) {
+        throw new NotFoundException('评价不存在');
+      }
+
+      this.logger.log(`员工评价删除成功: ${id}`);
+      return evaluation;
+    } catch (error) {
+      this.logger.error(`删除员工评价失败: ${error.message}`, error.stack);
       throw error;
     }
   }

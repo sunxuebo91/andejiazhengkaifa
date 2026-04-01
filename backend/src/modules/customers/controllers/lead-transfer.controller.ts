@@ -142,9 +142,9 @@ export class LeadTransferController {
   @Roles('admin', 'manager', 'employee', 'operator', 'dispatch')
   @Permissions('customer:view')
   @ApiOperation({ summary: '获取流转记录' })
-  async getRecords(@Query() query: LeadTransferQueryDto): Promise<ApiResponse> {
+  async getRecords(@Query() query: LeadTransferQueryDto, @Request() req: any): Promise<ApiResponse> {
     try {
-      const result = await this.recordService.findAll(query);
+      const result = await this.recordService.findAll(query, req.user.userId, req.user.role);
       return this.createResponse(true, '获取成功', result);
     } catch (error) {
       return this.createResponse(false, '获取失败', null, error.message);
@@ -157,10 +157,11 @@ export class LeadTransferController {
   @ApiOperation({ summary: '获取流转统计' })
   async getStatistics(
     @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string
+    @Query('endDate') endDate?: string,
+    @Request() req?: any,
   ): Promise<ApiResponse> {
     try {
-      const stats = await this.recordService.getStatistics(startDate, endDate);
+      const stats = await this.recordService.getStatistics(startDate, endDate, req?.user?.userId, req?.user?.role);
       return this.createResponse(true, '获取成功', stats);
     } catch (error) {
       return this.createResponse(false, '获取失败', null, error.message);
@@ -174,10 +175,17 @@ export class LeadTransferController {
   async getUserStatistics(
     @Param('userId') userId: string,
     @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string
+    @Query('endDate') endDate?: string,
+    @Request() req?: any,
   ): Promise<ApiResponse> {
     try {
-      const stats = await this.recordService.getUserStatistics(userId, startDate, endDate);
+      const stats = await this.recordService.getUserStatistics(
+        userId,
+        startDate,
+        endDate,
+        req?.user?.userId,
+        req?.user?.role,
+      );
       return this.createResponse(true, '获取成功', stats);
     } catch (error) {
       return this.createResponse(false, '获取失败', null, error.message);

@@ -2239,6 +2239,26 @@ export class ResumeService {
   }
 
   /**
+   * 根据手机号获取CRM员工的姓名、头像、手机号（供安得褓贝小程序使用）
+   * 只查询CRM员工（User表），不查阿姨简历
+   */
+  async getStaffInfoByPhone(phone: string): Promise<{ name: string; avatar: string; phone: string } | null> {
+    const user = await this.userModel
+      .findOne({ phone, active: true })
+      .select('name avatar phone')
+      .lean()
+      .exec();
+
+    if (!user) return null;
+
+    return {
+      name: (user as any).name || '',
+      avatar: (user as any).avatar || '',
+      phone: (user as any).phone || '',
+    };
+  }
+
+  /**
    * 统计简历总数
    */
   async count(): Promise<number> {

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { LeadTransferRule, LeadTransferRuleDocument } from '../models/lead-transfer-rule.model';
 import { CreateLeadTransferRuleDto } from '../dto/create-lead-transfer-rule.dto';
 import { UpdateLeadTransferRuleDto } from '../dto/update-lead-transfer-rule.dto';
@@ -37,6 +37,8 @@ export class LeadTransferRuleService {
       enabled: dto.enabled,
       triggerConditions: {
         inactiveHours: dto.triggerConditions.inactiveHours,
+        transferCooldownHours: dto.triggerConditions.transferCooldownHours ?? 24,
+        maxTransferCount: dto.triggerConditions.maxTransferCount ?? 0,
         contractStatuses: dto.triggerConditions.contractStatuses,
         leadSources: dto.triggerConditions.leadSources || [],
         createdDateRange: dto.triggerConditions.createdDateRange || { startDate: null, endDate: null },
@@ -92,7 +94,14 @@ export class LeadTransferRuleService {
     if (dto.ruleName) rule.ruleName = dto.ruleName;
     if (dto.description !== undefined) rule.description = dto.description;
     if (dto.enabled !== undefined) rule.enabled = dto.enabled;
-    if (dto.triggerConditions) rule.triggerConditions = dto.triggerConditions as any;
+    if (dto.triggerConditions) {
+      rule.triggerConditions = {
+        ...rule.triggerConditions,
+        ...dto.triggerConditions,
+        transferCooldownHours: dto.triggerConditions.transferCooldownHours ?? rule.triggerConditions.transferCooldownHours ?? 24,
+        maxTransferCount: dto.triggerConditions.maxTransferCount ?? rule.triggerConditions.maxTransferCount ?? 0,
+      } as any;
+    }
     if (dto.executionWindow) rule.executionWindow = dto.executionWindow as any;
     if (dto.distributionConfig) rule.distributionConfig = dto.distributionConfig as any;
 
@@ -137,11 +146,12 @@ export class LeadTransferRuleService {
    * 获取规则列表
    */
   async findAll(): Promise<LeadTransferRule[]> {
-    return await this.ruleModel
+    const rules = await this.ruleModel
       .find()
       .populate('createdBy', 'name username')
       .sort({ createdAt: -1 })
       .exec();
+    return rules.map(rule => this.attachRuleUserLists(rule));
   }
 
   /**
@@ -157,7 +167,7 @@ export class LeadTransferRuleService {
       throw new NotFoundException('规则不存在');
     }
 
-    return rule;
+    return this.attachRuleUserLists(rule);
   }
 
   /**
@@ -183,8 +193,17 @@ export class LeadTransferRuleService {
   /**
    * 更新用户配额
    */
-  async updateUserQuota(ruleId: string, sourceUserId: string, targetUserId: string): Promise<void> {
-    const rule = await this.ruleModel.findById(ruleId);
+  async updateUserQuota(
+    ruleId: string,
+    sourceUserId: string,
+    targetUserId: string,
+    session?: ClientSession,
+  ): Promise<void> {
+    const query = this.ruleModel.findById(ruleId);
+    if (session) {
+      query.session(session);
+    }
+    const rule = await query;
     if (!rule) return;
 
     // 更新流出用户统计
@@ -202,7 +221,23 @@ export class LeadTransferRuleService {
       targetUser.lastCompensatedAt = new Date();
     }
 
-    await rule.save();
+    await rule.save(session ? { session } : undefined);
+  }
+
+  private attachRuleUserLists(rule: LeadTransferRule): LeadTransferRule {
+    const sourceUserIds = rule.userQuotas
+      .filter(u => u.role === 'source' || u.role === 'both')
+      .map(u => u.userId.toString());
+    const targetUserIds = rule.userQuotas
+      .filter(u => u.role === 'target' || u.role === 'both')
+      .map(u => u.userId.toString());
+
+    const ruleObject = rule.toObject ? rule.toObject() : rule;
+    return {
+      ...ruleObject,
+      sourceUserIds,
+      targetUserIds,
+    } as LeadTransferRule;
   }
 
   /**
@@ -275,4 +310,3 @@ export class LeadTransferRuleService {
     return quotas;
   }
 }
-

@@ -39,6 +39,12 @@ export class TriggerConditions {
   @Prop({ required: true, default: 48 })
   inactiveHours: number; // 无活动小时数
 
+  @Prop({ default: 24, min: 0 })
+  transferCooldownHours: number; // 流转冷却期（小时）
+
+  @Prop({ default: 0, min: 0 })
+  maxTransferCount: number; // 最大流转次数（0表示不限制）
+
   @Prop({ type: [String], required: true })
   contractStatuses: string[]; // 客户状态：['待定', '匹配中']
 
@@ -84,6 +90,23 @@ export class DistributionConfig {
 
 export const DistributionConfigSchema = SchemaFactory.createForClass(DistributionConfig);
 
+@Schema({ _id: false })
+export class ExecutionState {
+  @Prop()
+  lockToken: string;
+
+  @Prop()
+  lockOwner: string;
+
+  @Prop()
+  lockedAt: Date;
+
+  @Prop()
+  lockExpiresAt: Date;
+}
+
+export const ExecutionStateSchema = SchemaFactory.createForClass(ExecutionState);
+
 // 执行统计
 @Schema({ _id: false })
 export class Statistics {
@@ -123,6 +146,9 @@ export class LeadTransferRule extends Document {
   @Prop({ type: DistributionConfigSchema })
   distributionConfig: DistributionConfig; // 分配策略配置
 
+  @Prop({ type: ExecutionStateSchema })
+  executionState?: ExecutionState; // 运行时锁状态
+
   @Prop({ type: StatisticsSchema })
   statistics: Statistics; // 执行统计
 
@@ -141,4 +167,3 @@ export const LeadTransferRuleSchema = SchemaFactory.createForClass(LeadTransferR
 // 索引
 LeadTransferRuleSchema.index({ enabled: 1, 'executionWindow.enabled': 1 });
 LeadTransferRuleSchema.index({ createdBy: 1, createdAt: -1 });
-

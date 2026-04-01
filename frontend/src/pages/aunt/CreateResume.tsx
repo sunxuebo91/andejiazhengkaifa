@@ -1,7 +1,7 @@
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Button, Form, Input, Select, Upload, Divider, Row, Col, Typography, Modal, DatePicker, InputNumber, App, message, Rate, List, Space, Dropdown } from 'antd';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined, FolderOpenOutlined } from '@ant-design/icons';
+import { PlusOutlined, CloseOutlined, EyeOutlined, UploadOutlined, InfoCircleOutlined, ReloadOutlined, FolderOpenOutlined, EditOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { UploadFile, RcFile } from 'antd/es/upload/interface';
 import type { UploadChangeParam } from 'antd/es/upload';
@@ -16,7 +16,7 @@ import type { ApiResponse } from '../../services/api';
 import { ImageService } from '../../services/imageService';
 import { Gender, GenderType, JobType, Education, FormValues, WorkExperience } from '../../types/resume';
 import type { Resume } from '../../services/resume.service';
-import { isLoggedIn } from '../../services/auth';
+import { isLoggedIn, getCurrentUser } from '../../services/auth';
 import { JOB_TYPE_MAP } from '../../constants/jobTypes'; // 引入共享的工种映射
 import SortableImageUpload from '../../components/SortableImageUpload';
 import AIPhotoClassifyModal from '../../components/AIPhotoClassifyModal';
@@ -327,6 +327,7 @@ const CreateResume: React.FC = () => {
   const [isAddEvaluationVisible, setIsAddEvaluationVisible] = useState(false);
   const [evaluationForm] = Form.useForm();
   const [evaluationLoading, setEvaluationLoading] = useState(false);
+  const [editingEvaluationId, setEditingEvaluationId] = useState<string | null>(null);
 
   // AI识别相关状态
   const [aiModalVisible, setAiModalVisible] = useState(false);
@@ -2020,54 +2021,96 @@ const CreateResume: React.FC = () => {
     }
   };
 
-  // 添加员工评价
+  // 添加/编辑员工评价
   const handleAddEvaluation = async (values: any) => {
     try {
       setEvaluationLoading(true);
 
-      if (!editingResume?._id) {
-        messageApi.error('简历ID不存在');
-        return;
+      if (editingEvaluationId) {
+        // 编辑模式
+        await apiService.patch(`/api/employee-evaluations/${editingEvaluationId}`, {
+          evaluationType: values.evaluationType,
+          overallRating: values.overallRating,
+          serviceAttitudeRating: values.overallRating,
+          professionalSkillRating: values.overallRating,
+          workEfficiencyRating: values.overallRating,
+          communicationRating: values.overallRating,
+          comment: values.comment,
+        });
+        messageApi.success('修改评价成功');
+      } else {
+        // 新增模式
+        if (!editingResume?._id) {
+          messageApi.error('简历ID不存在');
+          return;
+        }
+
+        await apiService.post('/api/employee-evaluations', {
+          employeeId: editingResume._id,
+          employeeName: editingResume.name,
+          evaluationType: values.evaluationType,
+          overallRating: values.overallRating,
+          serviceAttitudeRating: values.overallRating,
+          professionalSkillRating: values.overallRating,
+          workEfficiencyRating: values.overallRating,
+          communicationRating: values.overallRating,
+          comment: values.comment,
+          isPublic: false,
+          status: 'published'
+        });
+        messageApi.success('添加评价成功');
       }
 
-      console.log('准备创建员工评价:', {
-        employeeId: editingResume._id,
-        employeeName: editingResume.name,
-        ...values
-      });
-
-      // 调用API创建员工评价
-      const response = await apiService.post('/api/employee-evaluations', {
-        employeeId: editingResume._id,
-        employeeName: editingResume.name,
-        evaluationType: values.evaluationType,
-        overallRating: values.overallRating,
-        serviceAttitudeRating: values.overallRating,
-        professionalSkillRating: values.overallRating,
-        workEfficiencyRating: values.overallRating,
-        communicationRating: values.overallRating,
-        comment: values.comment,
-        isPublic: false,
-        status: 'published'
-      });
-
-      console.log('员工评价创建成功:', response);
-
-      messageApi.success('添加评价成功');
       setIsAddEvaluationVisible(false);
+      setEditingEvaluationId(null);
       evaluationForm.resetFields();
 
       // 重新加载简历数据以获取最新的评价列表
-      if (editingResume._id) {
+      if (editingResume?._id) {
         await loadResumeData(editingResume._id);
       }
 
     } catch (error) {
-      console.error('添加员工评价失败:', error);
-      messageApi.error(error instanceof Error ? error.message : '添加评价失败');
+      console.error('保存员工评价失败:', error);
+      messageApi.error(error instanceof Error ? error.message : '保存评价失败');
     } finally {
       setEvaluationLoading(false);
     }
+  };
+
+  // 编辑员工评价
+  const handleEditEvaluation = (evaluation: EmployeeEvaluation) => {
+    setEditingEvaluationId(evaluation.id);
+    evaluationForm.setFieldsValue({
+      evaluationType: evaluation.evaluationType || 'daily',
+      overallRating: evaluation.overallRating,
+      comment: evaluation.comment,
+    });
+    setIsAddEvaluationVisible(true);
+  };
+
+  // 删除员工评价
+  const handleDeleteEvaluation = (evaluationId: string) => {
+    Modal.confirm({
+      title: '确认删除',
+      icon: <ExclamationCircleOutlined />,
+      content: '确定要删除这条评价吗？删除后不可恢复。',
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await apiService.delete(`/api/employee-evaluations/${evaluationId}`);
+          messageApi.success('删除评价成功');
+          if (editingResume?._id) {
+            await loadResumeData(editingResume._id);
+          }
+        } catch (error) {
+          console.error('删除员工评价失败:', error);
+          messageApi.error(error instanceof Error ? error.message : '删除评价失败');
+        }
+      },
+    });
   };
 
   // 页面标题
@@ -3503,11 +3546,32 @@ const CreateResume: React.FC = () => {
                                   注意：不显示评价标签 (evaluation.tags)
                                 */}
 
-                                {/* 评价时间 */}
-                                <div style={{ textAlign: 'right' }}>
+                                {/* 评价时间和操作按钮 */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                                     {dayjs(evaluation.evaluationDate).format('YYYY-MM-DD HH:mm')}
                                   </Typography.Text>
+                                  {getCurrentUser()?.role === 'admin' && (
+                                    <Space size="small">
+                                      <Button
+                                        type="link"
+                                        size="small"
+                                        icon={<EditOutlined />}
+                                        onClick={() => handleEditEvaluation(evaluation)}
+                                      >
+                                        修改
+                                      </Button>
+                                      <Button
+                                        type="link"
+                                        size="small"
+                                        danger
+                                        icon={<DeleteOutlined />}
+                                        onClick={() => handleDeleteEvaluation(evaluation.id)}
+                                      >
+                                        删除
+                                      </Button>
+                                    </Space>
+                                  )}
                                 </div>
                               </Space>
                             </Card>
@@ -4460,14 +4524,14 @@ const CreateResume: React.FC = () => {
         />
       </Modal>
 
-      {/* 添加员工评价弹窗 */}
+      {/* 添加/编辑员工评价弹窗 */}
       <Modal
-        title="添加员工评价"
+        title={editingEvaluationId ? "修改员工评价" : "添加员工评价"}
         open={isAddEvaluationVisible}
-        onCancel={() => setIsAddEvaluationVisible(false)}
+        onCancel={() => { setIsAddEvaluationVisible(false); setEditingEvaluationId(null); evaluationForm.resetFields(); }}
         width={600}
         footer={[
-          <Button key="cancel" onClick={() => setIsAddEvaluationVisible(false)}>
+          <Button key="cancel" onClick={() => { setIsAddEvaluationVisible(false); setEditingEvaluationId(null); evaluationForm.resetFields(); }}>
             取消
           </Button>,
           <Button

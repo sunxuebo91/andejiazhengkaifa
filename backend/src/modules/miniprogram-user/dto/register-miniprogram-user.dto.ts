@@ -6,10 +6,10 @@ export class RegisterMiniProgramUserDto {
   @IsString()
   openid: string;
 
-  @ApiProperty({ description: '手机号', example: '13800138000' })
+  @ApiPropertyOptional({ description: '手机号（可选，授权手机号后传入）', example: '13800138000' })
+  @IsOptional()
   @IsString()
-  @IsPhoneNumber('CN', { message: '请输入有效的中国大陆手机号' })
-  phone: string;
+  phone?: string;
 
   @ApiPropertyOptional({ description: '账号（用户自定义账号）', example: 'user123' })
   @IsOptional()

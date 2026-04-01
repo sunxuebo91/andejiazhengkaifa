@@ -168,6 +168,75 @@ export class MiniProgramUserController {
   }
 
   /**
+   * 根据openid获取用户完整信息（公开接口，供小程序个人中心使用）
+   */
+  @Public()
+  @Get('info')
+  @ApiOperation({ summary: '根据openid获取用户完整信息（公开接口）' })
+  @ApiQuery({ name: 'openid', required: true, description: '微信openid' })
+  async getInfo(@Query('openid') openid: string) {
+    if (!openid) {
+      return { success: false, data: null, message: '请提供openid' };
+    }
+
+    try {
+      const user = await this.miniProgramUserService.getInfoByOpenid(openid);
+      if (!user) {
+        return { success: false, data: null, message: '用户不存在' };
+      }
+
+      return {
+        success: true,
+        data: user,
+        message: '查询成功',
+      };
+    } catch (error) {
+      return { success: false, data: null, message: error.message || '查询失败' };
+    }
+  }
+
+  /**
+   * 根据openid更新用户昵称/头像等信息（公开接口，供小程序设置页使用）
+   */
+  @Public()
+  @Patch('update-profile')
+  @ApiOperation({ summary: '根据openid更新用户昵称/头像（公开接口）' })
+  async updateProfile(
+    @Body('openid') openid: string,
+    @Body('nickname') nickname?: string,
+    @Body('avatar') avatar?: string,
+    @Body('avatarFile') avatarFile?: string,
+    @Body('phone') phone?: string,
+  ) {
+    if (!openid) {
+      throw new HttpException(
+        { success: false, message: '请提供openid' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    try {
+      const user = await this.miniProgramUserService.updateByOpenid(openid, {
+        nickname,
+        avatar,
+        avatarFile,
+        phone,
+      });
+
+      return {
+        success: true,
+        data: user,
+        message: '更新成功',
+      };
+    } catch (error) {
+      throw new HttpException(
+        { success: false, message: error.message || '更新失败' },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
    * 获取用户列表（需要认证）
    */
   @UseGuards(JwtAuthGuard)

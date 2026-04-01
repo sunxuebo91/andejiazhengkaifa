@@ -308,6 +308,56 @@ export class MiniProgramUserService {
   }
 
   /**
+   * 根据openid获取用户完整信息（含isStaff判断，供小程序个人中心使用）
+   */
+  async getInfoByOpenid(openid: string): Promise<any> {
+    const user = await this.miniProgramUserModel.findOne({ openid }).lean().exec();
+    if (!user) return null;
+
+    const isStaff = await this.checkIsStaff((user as any).phone);
+    const userObj = { ...user };
+    delete (userObj as any).password;
+
+    return {
+      ...userObj,
+      hasPhone: !!(user as any).phone,
+      isStaff,
+    };
+  }
+
+  /**
+   * 根据openid更新用户信息（公开接口，供小程序设置页使用）
+   * 只允许更新 nickname、avatar、avatarFile 等非敏感字段
+   */
+  async updateByOpenid(openid: string, data: { nickname?: string; avatar?: string; avatarFile?: string; phone?: string }): Promise<any> {
+    // 只允许更新安全字段
+    const allowedFields: any = {};
+    if (data.nickname !== undefined) allowedFields.nickname = data.nickname;
+    if (data.avatar !== undefined) allowedFields.avatar = data.avatar;
+    if (data.avatarFile !== undefined) allowedFields.avatarFile = data.avatarFile;
+    if (data.phone !== undefined) allowedFields.phone = data.phone;
+
+    const user = await this.miniProgramUserModel
+      .findOneAndUpdate({ openid }, { $set: allowedFields }, { new: true })
+      .lean()
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    const isStaff = await this.checkIsStaff((user as any).phone);
+    const userObj = { ...user };
+    delete (userObj as any).password;
+
+    return {
+      ...userObj,
+      hasPhone: !!(user as any).phone,
+      isStaff,
+    };
+  }
+
+  /**
    * 使用账号密码登录
    */
   async loginWithPassword(username: string, password: string, ip?: string): Promise<any> {

@@ -688,144 +688,143 @@ export class LeadAutoTransferService implements OnModuleInit {
   ): Promise<boolean> {
     const now = new Date();
     const oldAssignedTo = customer.assignedTo;
-    const session = await this.customerModel.db.startSession();
 
-    try {
-      let transferred = false;
+    // 获取用户信息
+    const [oldUser, newUser] = await Promise.all([
+      this.userModel.findById(oldAssignedTo).select('name username').lean(),
+      this.userModel.findById(targetUserId).select('name username').lean(),
+    ]);
 
-      await session.withTransaction(async () => {
-        // 获取用户信息
-        const [oldUser, newUser] = await Promise.all([
-          this.userModel.findById(oldAssignedTo).select('name username').lean().session(session),
-          this.userModel.findById(targetUserId).select('name username').lean().session(session),
-        ]);
+    // 计算无活动时长（如果没有 lastActivityAt，使用 updatedAt）
+    const lastActivity = customer.lastActivityAt || customer.updatedAt;
+    const inactiveHours = Math.floor(
+      (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60)
+    );
 
-        // 计算无活动时长（如果没有 lastActivityAt，使用 updatedAt）
-        const lastActivity = customer.lastActivityAt || customer.updatedAt;
-        const inactiveHours = Math.floor(
-          (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60)
-        );
+    const transferCooldownHours = rule.triggerConditions.transferCooldownHours ?? 24;
+    const maxTransferCount = rule.triggerConditions.maxTransferCount ?? 0;
+    const cooldownThreshold = new Date(now);
+    cooldownThreshold.setHours(cooldownThreshold.getHours() - transferCooldownHours);
 
-        const transferCooldownHours = rule.triggerConditions.transferCooldownHours ?? 24;
-        const maxTransferCount = rule.triggerConditions.maxTransferCount ?? 0;
-        const cooldownThreshold = new Date(now);
-        cooldownThreshold.setHours(cooldownThreshold.getHours() - transferCooldownHours);
+    const updateConditions: any = {
+      _id: customer._id,
+      assignedTo: oldAssignedTo,
+      inPublicPool: false,
+      autoTransferEnabled: { $ne: false },
+      isFrozen: { $ne: true },
+    };
 
-        const updateConditions: any = {
-          _id: customer._id,
-          assignedTo: oldAssignedTo,
-          inPublicPool: false,
-          autoTransferEnabled: { $ne: false },
-          isFrozen: { $ne: true },
-        };
+    if (maxTransferCount > 0) {
+      updateConditions.$or = [
+        { transferCount: { $exists: false } },
+        { transferCount: { $lt: maxTransferCount } },
+      ];
+    }
 
-        if (maxTransferCount > 0) {
-          updateConditions.$or = [
-            { transferCount: { $exists: false } },
-            { transferCount: { $lt: maxTransferCount } },
-          ];
-        }
+    if (transferCooldownHours > 0) {
+      updateConditions.$and = [
+        ...(updateConditions.$and || []),
+        {
+          $or: [
+            { lastTransferredAt: { $exists: false } },
+            { lastTransferredAt: null },
+            { lastTransferredAt: { $lt: cooldownThreshold } },
+          ],
+        },
+      ];
+    }
 
-        if (transferCooldownHours > 0) {
-          updateConditions.$and = [
-            ...(updateConditions.$and || []),
-            {
-              $or: [
-                { lastTransferredAt: { $exists: false } },
-                { lastTransferredAt: null },
-                { lastTransferredAt: { $lt: cooldownThreshold } },
-              ],
-            },
-          ];
-        }
-
-        // 1. 更新客户信息
-        const updateResult = await this.customerModel.updateOne(
-          updateConditions,
-          {
-            $set: {
-              assignedTo: new Types.ObjectId(targetUserId),
-              assignedBy: new Types.ObjectId(targetUserId),
-              assignedAt: now,
-              assignmentReason: `自动流转-规则: ${rule.ruleName}`,
-              lastTransferredAt: now,
-            },
-            $inc: { transferCount: 1 },
-          },
-          { session }
-        );
-
-        if (!updateResult.modifiedCount) {
-          transferred = false;
-          return;
-        }
-
-        // 2. 记录分配日志
-        await this.assignmentLogModel.create([{
-          customerId: customer._id,
-          oldAssignedTo: oldAssignedTo,
-          newAssignedTo: new Types.ObjectId(targetUserId),
+    // 1. 更新客户信息（原子操作）
+    const updateResult = await this.customerModel.updateOne(
+      updateConditions,
+      {
+        $set: {
+          assignedTo: new Types.ObjectId(targetUserId),
           assignedBy: new Types.ObjectId(targetUserId),
           assignedAt: now,
-          reason: `自动流转-规则: ${rule.ruleName}`,
-        }], { session });
+          assignmentReason: `自动流转-规则: ${rule.ruleName}`,
+          lastTransferredAt: now,
+        },
+        $inc: { transferCount: 1 },
+      }
+    );
 
-        // 3. 记录流转日志
-        await this.recordModel.create([{
-          ruleId: rule._id,
-          customerId: customer._id,
-          fromUserId: oldAssignedTo,
-          toUserId: new Types.ObjectId(targetUserId),
-          snapshot: {
-            customerNumber: customer.customerId,
-            customerName: customer.name,
-            contractStatus: customer.contractStatus,
-            inactiveHours,
-            lastActivityAt: lastActivity,
-            createdAt: customer.createdAt,
-          },
-          status: 'success',
-          transferredAt: now,
-        }], { session });
-
-        // 4. 创建客户操作日志
-        await this.operationLogModel.create([{
-          customerId: customer._id,
-          operatorId: new Types.ObjectId(targetUserId),
-          entityType: 'customer',
-          entityId: customer._id.toString(),
-          operationType: 'assign',
-          operationName: '系统自动流转',
-          details: {
-            description: `系统自动流转：因${inactiveHours}小时无跟进，从${(oldUser as any)?.name || '未知'}流转至${(newUser as any)?.name || '未知'}`,
-            before: {
-              assignedTo: (oldUser as any)?.name || '未知',
-            },
-            after: {
-              assignedTo: (newUser as any)?.name || '未知',
-            },
-          },
-          operatedAt: now,
-          requestId: RequestContextStore.getValue('requestId'),
-        }], { session });
-
-        await this.ruleService.updateUserQuota(
-          rule._id.toString(),
-          oldAssignedTo.toString(),
-          targetUserId,
-          session
-        );
-
-        this.logger.log(
-          `✅ 客户 ${customer.name} 从 ${(oldUser as any)?.name} 流转至 ${(newUser as any)?.name}`
-        );
-        transferred = true;
-      });
-
-      return transferred;
-    } finally {
-      await session.endSession();
+    if (!updateResult.modifiedCount) {
+      return false;
     }
+
+    // 2. 记录分配日志（非关键，失败不影响流转结果）
+    try {
+      await this.assignmentLogModel.create([{
+        customerId: customer._id,
+        oldAssignedTo: oldAssignedTo,
+        newAssignedTo: new Types.ObjectId(targetUserId),
+        assignedBy: new Types.ObjectId(targetUserId),
+        assignedAt: now,
+        reason: `自动流转-规则: ${rule.ruleName}`,
+      }]);
+    } catch (e) {
+      this.logger.warn(`记录分配日志失败（不影响流转）: ${e instanceof Error ? e.message : e}`);
+    }
+
+    // 3. 记录流转日志
+    await this.recordModel.create([{
+      ruleId: rule._id,
+      customerId: customer._id,
+      fromUserId: oldAssignedTo,
+      toUserId: new Types.ObjectId(targetUserId),
+      snapshot: {
+        customerNumber: customer.customerId,
+        customerName: customer.name,
+        contractStatus: customer.contractStatus,
+        inactiveHours,
+        lastActivityAt: lastActivity,
+        createdAt: customer.createdAt,
+      },
+      status: 'success',
+      transferredAt: now,
+    }]);
+
+    // 4. 创建客户操作日志（非关键，失败不影响流转结果）
+    try {
+      await this.operationLogModel.create([{
+        customerId: customer._id,
+        operatorId: new Types.ObjectId(targetUserId),
+        entityType: 'customer',
+        entityId: customer._id.toString(),
+        operationType: 'assign',
+        operationName: '系统自动流转',
+        details: {
+          description: `系统自动流转：因${inactiveHours}小时无跟进，从${(oldUser as any)?.name || '未知'}流转至${(newUser as any)?.name || '未知'}`,
+          before: {
+            assignedTo: (oldUser as any)?.name || '未知',
+          },
+          after: {
+            assignedTo: (newUser as any)?.name || '未知',
+          },
+        },
+        operatedAt: now,
+        requestId: RequestContextStore.getValue('requestId'),
+      }]);
+    } catch (e) {
+      this.logger.warn(`记录操作日志失败（不影响流转）: ${e instanceof Error ? e.message : e}`);
+    }
+
+    // 5. 更新配额统计（非关键，失败不影响流转结果）
+    try {
+      await this.ruleService.updateUserQuota(
+        rule._id.toString(),
+        oldAssignedTo.toString(),
+        targetUserId,
+      );
+    } catch (e) {
+      this.logger.warn(`更新配额统计失败（不影响流转）: ${e instanceof Error ? e.message : e}`);
+    }
+
+    this.logger.log(
+      `✅ 客户 ${customer.name} 从 ${(oldUser as any)?.name} 流转至 ${(newUser as any)?.name}`
+    );
+    return true;
   }
 
   /**

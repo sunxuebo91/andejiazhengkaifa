@@ -1,17 +1,18 @@
-import { 
-  IsString, 
-  IsNotEmpty, 
-  IsEnum, 
-  IsNumber, 
-  IsDateString, 
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsNumber,
+  IsDateString,
   IsOptional,
   IsPhoneNumber,
+  IsBoolean,
   Min,
   Max,
   IsMongoId
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ContractType } from '../models/contract.model';
+import { ContractType, OnboardStatus } from '../models/contract.model';
 
 export class CreateContractDto {
   @IsString()
@@ -217,4 +218,13 @@ export class CreateContractDto {
   @IsOptional()
   @IsString()
   esignSignUrls?: string;
+
+  @IsOptional()
+  @IsEnum(OnboardStatus, { message: '上户状态必须是：not_started、pending、confirmed之一' })
+  onboardStatus?: OnboardStatus;
+
+  // 支付开关（运营在 CRM 后台设置）
+  @IsOptional()
+  @IsBoolean()
+  paymentEnabled?: boolean;
 }

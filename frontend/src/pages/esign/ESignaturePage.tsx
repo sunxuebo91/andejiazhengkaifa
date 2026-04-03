@@ -17,7 +17,8 @@ import {
   AutoComplete,
   Tag,
   App,
-  Checkbox
+  Checkbox,
+  Switch
 } from 'antd';
 import { 
   ArrowLeftOutlined,
@@ -171,7 +172,8 @@ const ESignatureStepPage: React.FC = () => {
     downloadUrl: '',
     selectedPartyA: undefined as UserSearchResult | undefined,
     selectedPartyB: undefined as UserSearchResult | undefined,
-    localContractId: undefined as string | undefined
+    localContractId: undefined as string | undefined,
+    paymentEnabled: false,
   });
 
   // 步骤2相关状态
@@ -1215,7 +1217,7 @@ const ESignatureStepPage: React.FC = () => {
       
       const contractRequest = {
         contractNo: contractNo,
-        contractName: '安得家政服务合同', // 固定合同名称
+        contractName: selectedTemplate?.templateName || '安得家政服务合同',
         templateNo: values.templateNo,
         templateParams: filteredTemplateParams,
         validityTime: 365, // 固定365天
@@ -1293,7 +1295,13 @@ const ESignatureStepPage: React.FC = () => {
             customerName: stepData.users?.batchRequest?.partyAName || values.templateParams?.['客户姓名'],
             customerPhone: stepData.users?.batchRequest?.partyAMobile || values.templateParams?.['客户电话'],
             customerIdCard: stepData.users?.batchRequest?.partyAIdCard || values.templateParams?.['客户身份证号'],
-            contractType: values.templateParams?.['合同类型'] || '住家育儿嫂',
+            contractType: (() => {
+              // 优先从模板名称中提取合同类型（顺序：长词优先避免误匹配）
+              const types = ['住家育儿嫂', '住家保姆', '住家护老', '白班育儿嫂', '白班育儿', '白班保姆', '月嫂', '保洁', '养宠', '小时工'];
+              const tplName = selectedTemplate?.templateName || '';
+              const detected = types.find(t => tplName.includes(t));
+              return detected || values.templateParams?.['合同类型'] || '住家保姆';
+            })(),
             // 🔥 日期提取：优先从完整日期字段解析，否则从分开的年月日构建
             startDate: (() => {
               // 辅助函数：从中文日期格式解析为 YYYY-MM-DD
@@ -1374,6 +1382,9 @@ const ESignatureStepPage: React.FC = () => {
             // 🔥 保存模板参数，用于换人时复制
             templateParams: enhancedTemplateParams,
 
+            // 收款开关（从步骤1带过来）
+            paymentEnabled: !!stepData.paymentEnabled,
+
             // 临时字段（会被后端处理）
             customerId: 'temp', // 会被后端处理
             workerId: 'temp', // 会被后端处理
@@ -1395,7 +1406,7 @@ const ESignatureStepPage: React.FC = () => {
             localContractId: localContract._id,
             contract: {
               contractNo: contractNo,
-              contractName: '安得家政服务合同',
+              contractName: selectedTemplate?.templateName || '安得家政服务合同',
               templateNo: values.templateNo,
               templateParams: enhancedTemplateParams,
               success: true,
@@ -1416,7 +1427,7 @@ const ESignatureStepPage: React.FC = () => {
             ...prev, 
             contract: {
               contractNo: contractNo,
-              contractName: '安得家政服务合同',
+              contractName: selectedTemplate?.templateName || '安得家政服务合同',
               templateNo: values.templateNo,
               templateParams: enhancedTemplateParams,
               success: true,
@@ -1503,6 +1514,7 @@ const ESignatureStepPage: React.FC = () => {
         // 保存步骤数据
         setStepData(prev => ({
           ...prev,
+          paymentEnabled: !!values.paymentEnabled,
           users: {
             partyA: response.partyA,
             partyB: response.partyB,
@@ -1699,7 +1711,7 @@ const ESignatureStepPage: React.FC = () => {
         </Row>
 
         <Row gutter={16}>
-          <Col span={24}>
+          <Col span={20}>
             <Form.Item
               label="服务地址"
               name="partyAAddress"
@@ -1708,6 +1720,15 @@ const ESignatureStepPage: React.FC = () => {
                 placeholder={isChangeMode ? "换人模式：客户服务地址已锁定" : "客户服务地址（从客户库自动带入）"}
                 disabled={isChangeMode}
               />
+            </Form.Item>
+          </Col>
+          <Col span={4}>
+            <Form.Item
+              label="需要收款"
+              name="paymentEnabled"
+              valuePropName="checked"
+            >
+              <Switch checkedChildren="是" unCheckedChildren="否" />
             </Form.Item>
           </Col>
         </Row>
@@ -1855,7 +1876,7 @@ const ESignatureStepPage: React.FC = () => {
           
           <div style={{ marginBottom: 16, padding: '12px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '6px' }}>
             <Text type="success">
-              📋 合同名称将自动设置为：<strong>安得家政服务合同</strong><br/>
+              📋 合同名称将自动设置为：<strong>{selectedTemplate?.templateName || '安得家政服务合同'}</strong><br/>
               📅 合同有效期自动设置为：<strong>365天</strong>
             </Text>
           </div>

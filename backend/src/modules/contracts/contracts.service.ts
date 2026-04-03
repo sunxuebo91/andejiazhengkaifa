@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Contract, ContractDocument, OnboardStatus } from './models/contract.model';
+import { Contract, ContractDocument, OnboardStatus, PaymentStatus } from './models/contract.model';
 import { CustomerContractHistory, CustomerContractHistoryDocument } from './models/customer-contract-history.model';
 import { CustomerOperationLog } from '../customers/models/customer-operation-log.model';
 import { Customer, CustomerDocument } from '../customers/models/customer.model';
@@ -2359,6 +2359,51 @@ export class ContractsService {
           onboardStatus: 'confirmed',
           onboardConfirmedAt: new Date(),
           onboardConfirmedBy: phone,
+        },
+        { new: true },
+      )
+      .select('-templateParams -esignSignUrls -workerIdCard -customerIdCard')
+      .lean()
+      .exec();
+    return updated as ContractDocument;
+  }
+
+  /**
+   * 支付确认（由云函数调用，幂等：已支付则直接返回成功）
+   */
+  async confirmPayment(
+    id: string,
+    phone: string,
+    amount: number,
+    sqbSn: string,
+    paidAt: Date,
+  ): Promise<ContractDocument> {
+    let contract: ContractDocument | null;
+    try {
+      contract = await this.contractModel.findById(id).exec();
+    } catch {
+      throw new NotFoundException('合同不存在');
+    }
+    if (!contract) {
+      throw new NotFoundException('合同不存在');
+    }
+    // 归属校验：客户手机号必须匹配
+    if (contract.customerPhone !== phone) {
+      throw new ForbiddenException('无权操作该合同');
+    }
+    // 幂等处理：已支付则直接返回
+    if ((contract as any).paymentStatus === PaymentStatus.PAID) {
+      return contract.toObject ? contract.toObject() : contract;
+    }
+    const updated = await this.contractModel
+      .findByIdAndUpdate(
+        id,
+        {
+          paymentStatus: PaymentStatus.PAID,
+          paymentAmount: amount,
+          paidAt: paidAt,
+          sqbSn: sqbSn,
+          updatedAt: new Date(),
         },
         { new: true },
       )

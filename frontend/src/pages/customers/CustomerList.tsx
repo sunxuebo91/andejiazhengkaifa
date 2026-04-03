@@ -14,9 +14,10 @@ import {
   Upload,
   Modal,
   UploadProps,
-  DatePicker
+  DatePicker,
+  Popconfirm
 } from 'antd';
-import { SearchOutlined, PlusOutlined, MessageOutlined, UploadOutlined, InboxOutlined, ExportOutlined } from '@ant-design/icons';
+import { SearchOutlined, PlusOutlined, MessageOutlined, UploadOutlined, InboxOutlined, ExportOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { customerService } from '../../services/customerService';
 import { apiService } from '../../services/api';
@@ -381,6 +382,17 @@ const CustomerList: React.FC = () => {
     });
   };
 
+  // 删除客户（仅管理员）
+  const handleDeleteCustomer = async (id: string, name: string) => {
+    try {
+      await customerService.deleteCustomer(id);
+      message.success(`客户「${name}」已删除`);
+      loadCustomers(currentPage, pageSize);
+    } catch (error) {
+      message.error('删除失败，请重试');
+    }
+  };
+
   // 处理Excel导入
   const handleExcelImport: UploadProps['customRequest'] = async (options) => {
     setImportLoading(true);
@@ -624,7 +636,7 @@ const CustomerList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 320,
+      width: 360,
       fixed: 'right' as const,
       render: (_: any, record: Customer) => (
         <Space size="small">
@@ -664,6 +676,21 @@ const CustomerList: React.FC = () => {
               释放
             </Button>
           )}
+          {/* 删除按钮（仅管理员可见） */}
+          <Authorized role="admin" noMatch={null}>
+            <Popconfirm
+              title="确认删除"
+              description={`确定要删除客户「${record.name}」吗？此操作不可恢复。`}
+              onConfirm={() => handleDeleteCustomer(record._id, record.name)}
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+            >
+              <Button size="small" icon={<DeleteOutlined />} danger>
+                删除
+              </Button>
+            </Popconfirm>
+          </Authorized>
         </Space>
       ),
     },

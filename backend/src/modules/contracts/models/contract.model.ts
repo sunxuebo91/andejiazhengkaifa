@@ -25,6 +25,13 @@ export enum ContractStatus {
   CANCELLED = 'cancelled'    // 已作废
 }
 
+// 支付状态枚举
+export enum PaymentStatus {
+  UNPAID = 'unpaid',       // 未支付
+  PAID = 'paid',           // 已支付
+  REFUNDED = 'refunded',   // 已退款
+}
+
 // 客户上户状态枚举
 export enum OnboardStatus {
   NOT_STARTED = 'not_started', // 合同未签约，尚未进入上户流程
@@ -168,6 +175,22 @@ export class Contract {
 
   @Prop()
   onboardConfirmedBy?: string; // 确认人手机号
+
+  // 支付相关字段
+  @Prop({ default: false })
+  paymentEnabled?: boolean; // 是否需要付费（运营在 CRM 后台开启）
+
+  @Prop({ enum: PaymentStatus, default: PaymentStatus.UNPAID })
+  paymentStatus?: PaymentStatus; // 支付状态
+
+  @Prop()
+  paymentAmount?: number; // 实付金额（单位：分）
+
+  @Prop()
+  paidAt?: Date; // 支付时间
+
+  @Prop()
+  sqbSn?: string; // 收钱吧订单号
 
   // 保险同步相关字段
   @Prop({ default: false })

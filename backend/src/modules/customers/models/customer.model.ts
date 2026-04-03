@@ -62,6 +62,9 @@ export class Customer {
   address: string;
 
   @Prop()
+  area: string; // 地区
+
+  @Prop()
   ageRequirement: string;
 
   @Prop()

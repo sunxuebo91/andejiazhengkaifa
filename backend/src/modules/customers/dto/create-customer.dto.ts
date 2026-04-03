@@ -118,6 +118,10 @@ export class CreateCustomerDto {
 
   @IsOptional()
   @IsString()
+  area?: string; // 地区（小程序传入）
+
+  @IsOptional()
+  @IsString()
   ageRequirement?: string;
 
   @IsOptional()

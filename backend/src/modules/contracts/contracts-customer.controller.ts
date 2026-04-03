@@ -130,5 +130,49 @@ export class ContractsCustomerController {
       message: '确认上户成功',
     };
   }
+
+  /**
+   * 接口 4：支付确认（幂等）
+   * POST /api/miniprogram/contracts/:id/payment-confirm
+   * Body: { "phone": "13800138000", "amount": 29900, "sqb_sn": "xxx", "paidAt": "2026-04-02T10:00:00Z" }
+   *
+   * 由云函数在支付成功后自动调用，Header 带 X-Service-Secret 做服务间鉴权。
+   * CRM 收到后将合同标记为已支付。
+   */
+  @Post(':id/payment-confirm')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '【云函数】支付确认，标记合同为已支付' })
+  @ApiParam({ name: 'id', description: '合同 ID' })
+  async confirmPayment(
+    @Param('id') id: string,
+    @Body() body: { phone: string; amount: number; sqb_sn: string; paidAt: string },
+  ) {
+    const { phone, amount, sqb_sn, paidAt } = body;
+    if (!phone) {
+      throw new BadRequestException('phone 不能为空');
+    }
+    if (!amount && amount !== 0) {
+      throw new BadRequestException('amount 不能为空');
+    }
+    if (!sqb_sn) {
+      throw new BadRequestException('sqb_sn 不能为空');
+    }
+    if (!paidAt) {
+      throw new BadRequestException('paidAt 不能为空');
+    }
+    this.logger.log(`[客户订单中心] 支付确认，id=${id}，phone=${phone}，amount=${amount}，sqb_sn=${sqb_sn}`);
+    const contract = await this.contractsService.confirmPayment(
+      id,
+      phone,
+      amount,
+      sqb_sn,
+      new Date(paidAt),
+    );
+    return {
+      success: true,
+      data: contract,
+      message: '支付确认成功',
+    };
+  }
 }
 

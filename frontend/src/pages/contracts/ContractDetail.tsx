@@ -19,6 +19,7 @@ import {
   Tooltip,
   Empty,
   Collapse,
+  Switch,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -37,6 +38,7 @@ import {
   CheckCircleOutlined,
   CloseOutlined,
   SyncOutlined,
+  DollarOutlined,
 } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
 import { customerService } from '../../services/customerService';
@@ -92,6 +94,9 @@ const ContractDetail: React.FC = () => {
   // 🆕 新增：背调信息
   const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheck | null>(null);
   const [bgCheckLoading, setBgCheckLoading] = useState(false);
+
+  // 收款开关切换状态
+  const [paymentToggleLoading, setPaymentToggleLoading] = useState(false);
 
   // 最后更新人信息已在fetchContractDetail中直接处理
 
@@ -775,6 +780,21 @@ const ContractDetail: React.FC = () => {
     fetchContractDetail(); // 重新获取合同详情
   };
 
+  // 切换收款开关
+  const handleTogglePayment = async (checked: boolean) => {
+    if (!contract?._id) return;
+    setPaymentToggleLoading(true);
+    try {
+      await contractService.updateContract(contract._id, { paymentEnabled: checked } as any);
+      messageApi.success(checked ? '已开启收款，客户可在小程序支付' : '已关闭收款');
+      fetchContractDetail();
+    } catch (error: any) {
+      messageApi.error(error?.response?.data?.message || '操作失败');
+    } finally {
+      setPaymentToggleLoading(false);
+    }
+  };
+
   const handleWithdrawContract = async () => {
     if (!contract?.esignContractNo) {
       messageApi.warning('该合同暂无爱签合同编号，无法撤销');
@@ -1241,14 +1261,34 @@ const ContractDetail: React.FC = () => {
       <Card
         title={
           <Space>
-            <Button 
-              type="text" 
-              icon={<ArrowLeftOutlined />} 
+            <Button
+              type="text"
+              icon={<ArrowLeftOutlined />}
               onClick={handleBack}
             >
               返回
             </Button>
             <span>合同详情 - {contract.contractNumber}</span>
+            <span style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
+              收款：
+              <Switch
+                checked={!!contract.paymentEnabled}
+                onChange={handleTogglePayment}
+                loading={paymentToggleLoading}
+                checkedChildren="开"
+                unCheckedChildren="关"
+                size="small"
+              />
+            </span>
+            {contract.paymentEnabled && (
+              contract.paymentStatus === 'paid' ? (
+                <Tag color="success">已收款</Tag>
+              ) : contract.paymentStatus === 'refunded' ? (
+                <Tag color="orange">已退款</Tag>
+              ) : (
+                <Tag color="warning">待收款</Tag>
+              )
+            )}
           </Space>
         }
         extra={
@@ -1678,6 +1718,60 @@ const ContractDetail: React.FC = () => {
                     ).toLocaleString()}
                   </span>
                 </Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </Col>
+
+          {/* 收款信息 */}
+          <Col span={24}>
+            <Card
+              type="inner"
+              title={
+                <Space>
+                  <DollarOutlined />
+                  <span>收款信息</span>
+                </Space>
+              }
+              style={{ marginBottom: '16px' }}
+            >
+              <Descriptions column={3} bordered>
+                <Descriptions.Item label="需要客户付费" span={1}>
+                  <Switch
+                    checked={!!contract.paymentEnabled}
+                    onChange={handleTogglePayment}
+                    loading={paymentToggleLoading}
+                    checkedChildren="是"
+                    unCheckedChildren="否"
+                  />
+                </Descriptions.Item>
+
+                {contract.paymentEnabled && (
+                  <Descriptions.Item label="支付状态" span={1}>
+                    {contract.paymentStatus === 'paid' ? (
+                      <Tag color="success">已支付</Tag>
+                    ) : contract.paymentStatus === 'refunded' ? (
+                      <Tag color="orange">已退款</Tag>
+                    ) : (
+                      <Tag color="default">未支付</Tag>
+                    )}
+                  </Descriptions.Item>
+                )}
+
+                {contract.paymentEnabled && contract.paymentStatus === 'paid' && (
+                  <>
+                    <Descriptions.Item label="实付金额" span={1}>
+                      <span style={{ fontWeight: 'bold', color: '#52c41a', fontSize: '16px' }}>
+                        ¥{((contract.paymentAmount || 0) / 100).toFixed(2)}
+                      </span>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="支付时间" span={1}>
+                      {contract.paidAt ? new Date(contract.paidAt).toLocaleString('zh-CN') : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="收钱吧订单号" span={1}>
+                      {contract.sqbSn || '-'}
+                    </Descriptions.Item>
+                  </>
+                )}
               </Descriptions>
             </Card>
           </Col>

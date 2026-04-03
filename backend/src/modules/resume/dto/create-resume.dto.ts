@@ -220,7 +220,7 @@ export class CreateResumeV2Dto {
   @ApiProperty({ description: '工作经验年限', example: 5, minimum: 0, required: false })
   @IsOptional()
   @Transform(({ value }) => {
-    if (value === undefined || value === null || value === '') return 0;
+    if (value === undefined || value === null || value === '') return undefined;
     if (typeof value === 'string') {
       const num = Number(value.trim());
       return isNaN(num) ? 0 : Math.max(0, Math.floor(num));
@@ -558,7 +558,7 @@ export class CreateResumeV2Dto {
   @IsOptional()
   @IsArray()
   @Transform(({ value }) => {
-    if (!value) return [];
+    if (value === undefined || value === null) return undefined;
     if (typeof value === 'string') {
       try {
         const parsed = JSON.parse(value);

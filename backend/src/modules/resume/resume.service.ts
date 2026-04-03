@@ -1262,11 +1262,6 @@ export class ResumeService {
       normalized.skills = normalized.skills.filter(skill => validSkills.includes(skill));
     }
 
-    // 设置默认值
-    if (normalized.experienceYears === undefined) {
-      normalized.experienceYears = 0;
-    }
-
     return normalized;
   }
 

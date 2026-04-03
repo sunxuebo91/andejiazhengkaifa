@@ -62,6 +62,13 @@ export interface Contract {
   onboardStatus?: 'not_started' | 'pending' | 'confirmed';
   onboardConfirmedAt?: string;  // 客户确认上户时间
   onboardConfirmedBy?: string;  // 确认人手机号
+
+  // 支付相关字段
+  paymentEnabled?: boolean;  // 是否需要付费（运营在 CRM 后台开启）
+  paymentStatus?: 'unpaid' | 'paid' | 'refunded';  // 支付状态
+  paymentAmount?: number;  // 实付金额（单位：分）
+  paidAt?: string;  // 支付时间
+  sqbSn?: string;  // 收钱吧订单号
 }
 
 export enum ContractType {

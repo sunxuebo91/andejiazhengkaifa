@@ -132,6 +132,7 @@ interface QwenResponse {
       content: string;
       reasoning_content?: string;
     };
+    finish_reason?: string;
   }>;
   usage?: {
     prompt_tokens: number;
@@ -818,7 +819,7 @@ export class QwenAIService {
               ],
             },
           ],
-          max_tokens: 8000,
+          max_tokens: 16000,
           temperature: 0.1,
           enable_thinking: false,
         },
@@ -881,7 +882,7 @@ export class QwenAIService {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `请提取以下表格中的职培线索数据：\n\n${tableText}` },
           ],
-          max_tokens: 8000,
+          max_tokens: 16000,
           temperature: 0.1,
           enable_thinking: false,
         },
@@ -892,7 +893,8 @@ export class QwenAIService {
       );
 
       const content = response.data.choices[0]?.message?.content || '';
-      this.logger.log(`Excel AI字段映射响应长度: ${content.length}, 预览: ${content.substring(0, 200)}`);
+      const finishReason = response.data.choices[0]?.finish_reason || '';
+      this.logger.log(`Excel AI字段映射响应长度: ${content.length}, finish_reason: ${finishReason}, 预览: ${content.substring(0, 200)}`);
       const leads = this.extractLeadsFromContent(content, 'Excel');
       return leads;
     } catch (error) {
@@ -959,9 +961,60 @@ export class QwenAIService {
       } catch (_) {}
     }
 
-    // 3. 无法解析，记录原始内容并返回空数组
+    // 3. 尝试修复被截断的 JSON 数组（AI输出因 max_tokens 被截断时常见）
+    const repaired = this.repairTruncatedJsonArray(content);
+    if (repaired && repaired.length > 0) {
+      this.logger.log(`${source}从截断JSON中修复提取到 ${repaired.length} 条线索`);
+      return repaired as ParsedTrainingLead[];
+    }
+
+    // 4. 无法解析，记录原始内容并返回空数组
     this.logger.warn(`${source} AI响应未包含有效JSON，原始内容: ${content.substring(0, 500)}`);
     return [];
+  }
+
+  /**
+   * 修复被截断的 JSON 数组：找到最后一个完整的对象，截断并闭合数组
+   * 当 AI 因 max_tokens 限制输出被截断时，JSON 末尾缺少 ] 或 } 导致无法解析
+   */
+  private repairTruncatedJsonArray(content: string): any[] | null {
+    const start = content.indexOf('[');
+    if (start === -1) return null;
+
+    // 找到最后一个完整对象的结尾位置（即最后一个 '},\n{' 或 '},' 之前的 '}'）
+    // 策略：从后往前找最后一个 '}' 后面跟着 ',' 或直接是最后的 '}'
+    const substring = content.substring(start);
+
+    // 尝试逐步从末尾截断，找到最后一个可以闭合的位置
+    let lastValidEnd = -1;
+    for (let i = substring.length - 1; i >= 0; i--) {
+      if (substring[i] === '}') {
+        // 尝试在此处闭合数组
+        const candidate = substring.substring(0, i + 1) + ']';
+        try {
+          const parsed = JSON.parse(candidate);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            lastValidEnd = i;
+            break;
+          }
+        } catch (_) {
+          // 继续往前找
+        }
+      }
+    }
+
+    if (lastValidEnd === -1) return null;
+
+    try {
+      const repaired = substring.substring(0, lastValidEnd + 1) + ']';
+      const parsed = JSON.parse(repaired);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        this.logger.warn(`JSON被截断，成功修复：原始长度${content.length}，恢复${parsed.length}条记录`);
+        return parsed;
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   /**

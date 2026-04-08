@@ -17,10 +17,12 @@ class NotificationSocketService {
       return;
     }
 
-    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-    const wsURL = baseURL.replace(/^http/, 'ws');
+    // 生产环境使用当前域名，开发环境使用 localhost:3000
+    const socketURL = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? `${window.location.protocol}//${window.location.host}`
+      : 'http://localhost:3000';
 
-    this.socket = io(`${wsURL}/notifications`, {
+    this.socket = io(`${socketURL}/notifications`, {
       auth: {
         token,
       },

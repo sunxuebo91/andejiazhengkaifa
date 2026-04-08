@@ -336,6 +336,16 @@ export const contractService = {
     return response.data || response;
   },
 
+  // 重新发起签约（用于撤销/过期/拒签/作废后重新创建爱签合同）
+  async reinitiateEsign(contractId: string): Promise<{
+    success: boolean;
+    message: string;
+    data?: { esignContractNo: string; contractStatus: string };
+  }> {
+    const response = await apiService.post(`/api/contracts/${contractId}/reinitiate-esign`);
+    return response.data || response;
+  },
+
   // 手动触发保险同步
   async syncInsurance(contractId: string): Promise<{
     success: boolean;

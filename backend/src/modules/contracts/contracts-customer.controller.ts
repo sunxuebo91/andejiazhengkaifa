@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { ContractsService } from './contracts.service';
 import { ServiceSecretGuard } from '../auth/guards/service-secret.guard';
 import { Public } from '../auth/decorators/public.decorator';
+import { MiniProgramNotificationService } from '../miniprogram-notification/miniprogram-notification.service';
 
 /**
  * 客户订单中心控制器（专供微信小程序云函数调用）
@@ -30,7 +31,10 @@ import { Public } from '../auth/decorators/public.decorator';
 export class ContractsCustomerController {
   private readonly logger = new Logger(ContractsCustomerController.name);
 
-  constructor(private readonly contractsService: ContractsService) {}
+  constructor(
+    private readonly contractsService: ContractsService,
+    private readonly mpNotificationService: MiniProgramNotificationService,
+  ) {}
 
   /**
    * 接口 1：获取客户合同列表
@@ -124,6 +128,15 @@ export class ContractsCustomerController {
     }
     this.logger.log(`[客户订单中心] 确认上户，id=${id}，phone=${phone}`);
     const contract = await this.contractsService.confirmOnboard(id, phone);
+
+    // 📬 触发小程序通知：阿姨确认上户
+    const nannyName = (contract as any).workerName || '阿姨';
+    this.mpNotificationService.notifyNannyConfirmed(
+      phone,
+      id,
+      nannyName,
+    ).catch(err => this.logger.error(`发送阿姨上户通知失败: ${err.message}`));
+
     return {
       success: true,
       data: contract,
@@ -168,6 +181,14 @@ export class ContractsCustomerController {
       sqb_sn,
       new Date(paidAt),
     );
+
+    // 📬 触发小程序通知：付款完成
+    this.mpNotificationService.notifyPaymentDone(
+      phone,
+      id,
+      amount,
+    ).catch(err => this.logger.error(`发送付款完成通知失败: ${err.message}`));
+
     return {
       success: true,
       data: contract,

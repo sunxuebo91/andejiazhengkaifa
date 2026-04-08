@@ -122,6 +122,12 @@ export class CustomerReadService {
       return null;
     }
 
+    // createdBy 可能是 "系统-官网" 等非 ObjectId 字符串，findById 会抛异常
+    const isValidObjectId = Types.ObjectId.isValid(userId) && String(new Types.ObjectId(userId)) === String(userId);
+    if (!isValidObjectId) {
+      return null;
+    }
+
     const user = await this.userModel
       .findById(userId)
       .select('name username')

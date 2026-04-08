@@ -14,9 +14,9 @@ class NotificationService {
    */
   async getNotifications(params: NotificationQueryDto = {}): Promise<NotificationListResponse> {
     try {
-      const response = await api.get('/api/notifications', { params });
+      const response = await api.get('/api/notifications', params);
       console.log('API响应 (getNotifications):', response);
-      // api拦截器已经返回了response.data，所以这里直接访问data
+      // apiService.get 返回的是 { success, data, message }
       if (response && response.data) {
         return response.data;
       }

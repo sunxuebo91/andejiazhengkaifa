@@ -82,7 +82,7 @@ const CustomerList: React.FC = () => {
     serviceCategory: string | undefined;
     contractStatus: string | undefined;
     leadLevel: string | undefined;
-    leadStatus: string | undefined;
+    followUpStatus: string | undefined;
     assignedTo: string | undefined;
     startDate: string;
     endDate: string;
@@ -96,7 +96,7 @@ const CustomerList: React.FC = () => {
     serviceCategory: undefined,
     contractStatus: undefined,
     leadLevel: undefined,
-    leadStatus: undefined,
+    followUpStatus: undefined,
     assignedTo: undefined,
     startDate: '',
     endDate: '',
@@ -256,7 +256,7 @@ const CustomerList: React.FC = () => {
       serviceCategory: undefined,
       contractStatus: undefined,
       leadLevel: undefined,
-      leadStatus: undefined,
+      followUpStatus: undefined,
       assignedTo: undefined,
       startDate: '',
       endDate: '',
@@ -771,11 +771,12 @@ const CustomerList: React.FC = () => {
                 placeholder="跟进状态"
                 allowClear
                 style={{ width: '100%' }}
-                value={searchFilters.leadStatus}
-                onChange={(value) => setSearchFilters({ ...searchFilters, leadStatus: value })}
+                value={searchFilters.followUpStatus}
+                onChange={(value) => setSearchFilters({ ...searchFilters, followUpStatus: value })}
               >
-                <Option value="已流转">已流转</Option>
-                <Option value="未流转">未流转</Option>
+                <Option value="新客未跟进">新客未跟进</Option>
+                <Option value="流转未跟进">流转未跟进</Option>
+                <Option value="已跟进">已跟进</Option>
               </Select>
             </Col>
             {canViewAssignableUsers && (

@@ -11,6 +11,7 @@ import { ContractsModule } from '../contracts/contracts.module';
 import { CustomersModule } from '../customers/customers.module';
 import { WeixinModule } from '../weixin/weixin.module';
 import { NotificationModule } from '../notification/notification.module';
+import { MiniProgramNotificationModule } from '../miniprogram-notification/miniprogram-notification.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { NotificationModule } from '../notification/notification.module';
     CustomersModule,
     WeixinModule, // 用于发送合同签署通知
     NotificationModule, // 用于发送实时刷新通知
+    MiniProgramNotificationModule, // 用于发送小程序客户端通知
   ],
   controllers: [ESignController],
   providers: [ESignApiService, ESignUserSealService, ESignCallbackService, ESignService],

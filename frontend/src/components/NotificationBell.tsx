@@ -26,7 +26,6 @@ const NotificationBell: React.FC = () => {
       const response = await notificationService.getNotifications({
         page: 1,
         pageSize: 10,
-        status: NotificationStatus.SENT,
       });
       console.log('通知列表响应:', response);
       if (response && response.items) {

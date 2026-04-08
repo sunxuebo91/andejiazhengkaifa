@@ -193,6 +193,22 @@ export class CustomersController {
     return phone; // 其他长度不处理
   }
 
+  // 官网公开表单提交接口（无需登录）
+  @Post('website-lead')
+  @Public()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: '官网留资表单提交（公开接口，无需认证）' })
+  async createFromWebsite(
+    @Body() body: { name: string; phone: string; serviceCategory?: string; remarks?: string },
+  ): Promise<ApiResponse> {
+    try {
+      const result = await this.customersService.createFromWebsite(body);
+      return this.createResponse(true, result.message, { customerId: result.customerId });
+    } catch (error) {
+      return this.createResponse(false, error.message || '提交失败', null, error.message);
+    }
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Permissions('customer:create')
@@ -491,7 +507,8 @@ export class CustomersController {
       const customer = await this.customersService.update(id, updateCustomerDto, req.user.userId);
       return this.createResponse(true, '客户信息更新成功', customer);
     } catch (error) {
-      return this.createResponse(false, '客户信息更新失败', null, error.message);
+      this.logger.error(`❌ 客户更新失败 [${id}]: ${error.message}`, error.stack);
+      return this.createResponse(false, error.message || '客户信息更新失败', null, error.message);
     }
   }
 
@@ -765,6 +782,12 @@ export class CustomersController {
       this.logger.debug(`🆕 小程序创建客户:`);
       this.logger.debug(`📝 创建数据: ${JSON.stringify(createCustomerDto, null, 2)}`);
       this.logger.debug(`🔑 请求头: idempotencyKey=${idempotencyKey}, apiVersion=${apiVersion}, requestId=${requestId}`);
+
+      // 兼容小程序端传入的 notes 字段，映射到 remarks
+      if ((createCustomerDto as any).notes && !createCustomerDto.remarks) {
+        createCustomerDto.remarks = (createCustomerDto as any).notes;
+      }
+      delete (createCustomerDto as any).notes;
 
       // 幂等性处理：如果提供了幂等性键，检查是否已存在相同的请求
       if (idempotencyKey) {

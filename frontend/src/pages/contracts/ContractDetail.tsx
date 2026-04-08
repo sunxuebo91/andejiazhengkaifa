@@ -90,6 +90,7 @@ const ContractDetail: React.FC = () => {
   const [syncInsuranceLoading, setSyncInsuranceLoading] = useState(false);
   // 爱签状态同步
   const [syncEsignLoading, setSyncEsignLoading] = useState(false);
+  const [reinitiateLoading, setReinitiateLoading] = useState(false);
 
   // 🆕 新增：背调信息
   const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheck | null>(null);
@@ -861,6 +862,45 @@ const ContractDetail: React.FC = () => {
     }
   };
 
+  // 重新发起签约（用于撤销/过期/拒签/作废后）
+  const handleReinitiateEsign = async () => {
+    if (!contract?._id) return;
+
+    modal.confirm({
+      title: '重新发起签约',
+      content: (
+        <div>
+          <p>将为此合同重新创建电子签约流程，原签署链接将失效。</p>
+          <p><strong>合同编号:</strong> {contract.contractNumber}</p>
+          <p><strong>客户:</strong> {contract.customerName}</p>
+          <p><strong>服务人员:</strong> {contract.workerName}</p>
+          <p style={{ color: '#1677ff', marginTop: 8 }}>确认重新发起签约吗？</p>
+        </div>
+      ),
+      okText: '确认发起',
+      cancelText: '取消',
+      onOk: async () => {
+        setReinitiateLoading(true);
+        messageApi.loading({ content: '正在重新发起签约...', key: 'reinitiate' });
+        try {
+          const response = await contractService.reinitiateEsign(contract._id!);
+          messageApi.destroy('reinitiate');
+          if (response.success) {
+            messageApi.success(response.message || '重新发起签约成功');
+            window.location.reload();
+          } else {
+            messageApi.error(response.message || '重新发起签约失败');
+          }
+        } catch (error: any) {
+          messageApi.destroy('reinitiate');
+          messageApi.error(error.message || '重新发起签约失败');
+        } finally {
+          setReinitiateLoading(false);
+        }
+      },
+    });
+  };
+
   // 🆕 手动触发保险同步
   const handleSyncInsurance = async () => {
     if (!contract?._id) {
@@ -1362,6 +1402,15 @@ const ContractDetail: React.FC = () => {
                 作废合同
               </Button>
             )}
+            <Button
+              icon={<SyncOutlined />}
+              onClick={handleReinitiateEsign}
+              loading={reinitiateLoading}
+              disabled={!contract.esignContractNo}
+              type="primary"
+            >
+              重新发起签约
+            </Button>
           </Space>
         }
       >

@@ -9,6 +9,7 @@ import { NotificationGateway } from '../../notification/notification.gateway';
 import { AppLogger } from '../../../common/logging/app-logger';
 import { RequestContextStore } from '../../../common/logging/request-context';
 import { ESignApiService } from './esign-api.service';
+import { MiniProgramNotificationService } from '../../miniprogram-notification/miniprogram-notification.service';
 
 @Injectable()
 export class ESignCallbackService {
@@ -21,6 +22,7 @@ export class ESignCallbackService {
     private readonly customersService: CustomersService,
     @Inject(forwardRef(() => NotificationGateway))
     private notificationGateway: NotificationGateway,
+    private readonly mpNotificationService: MiniProgramNotificationService,
   ) {}
 
   /**
@@ -113,8 +115,16 @@ export class ESignCallbackService {
         nextStatus: updateData.contractStatus || contract.contractStatus,
       });
 
-      // 签约完成后，同步客户姓名为合同中的真实姓名（合同发起姓名）
+      // 签约完成后：推送小程序通知 + 同步客户姓名
       if (status === 2 || status === '2') {
+        // 📬 触发小程序通知：合同签署完成
+        if (contract.customerPhone) {
+          this.mpNotificationService.notifyContractSigned(
+            contract.customerPhone,
+            contract._id.toString(),
+            contract.contractNumber || contractNo,
+          ).catch(err => this.logger.error('esign.callback.mp_notification_failed', err));
+        }
         const profileSyncResult = await this.customersService.syncCustomerSignedStateFromContract(contract);
 
         // 🆕 更新客户状态为"已签约"和线索等级为"O类"

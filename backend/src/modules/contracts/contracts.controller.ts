@@ -731,6 +731,115 @@ export class ContractsController {
   }
 
   /**
+   * 重新发起爱签签约
+   * 用于合同被撤销/过期/拒签后重新创建爱签电子合同
+   */
+  @Post(':id/reinitiate-esign')
+  @Permissions('contract:edit')
+  async reinitiateEsign(@Param('id') contractId: string) {
+    try {
+      this.logger.log(`🔄 重新发起签约: ${contractId}`);
+
+      const contract = await this.contractsService.findOne(contractId);
+
+      // 如果有旧的 esignContractNo，先检查其状态是否确实为终态
+      if (contract.esignContractNo) {
+        try {
+          const statusResp = await this.esignService.getContractStatus(contract.esignContractNo);
+          const currentStatus = statusResp?.data?.status?.toString();
+          // 只允许终态（撤销7/作废6/过期3/拒签4）的合同重新发起
+          if (!['3', '4', '6', '7'].includes(currentStatus)) {
+            return {
+              success: false,
+              message: `当前爱签状态为「${this.getEsignStatusText(currentStatus)}」，不允许重新发起签约。仅撤销/过期/拒签/作废状态的合同可重新发起。`,
+            };
+          }
+        } catch (e: any) {
+          this.logger.warn(`查询旧爱签合同状态失败，继续重新发起: ${e?.message}`);
+        }
+      }
+
+      // 校验合同必要字段
+      if (!contract.customerName || !contract.customerPhone || !contract.customerIdCard) {
+        return { success: false, message: '合同缺少客户信息（姓名/手机/身份证），无法发起签约' };
+      }
+      if (!contract.workerName || !contract.workerPhone || !contract.workerIdCard) {
+        return { success: false, message: '合同缺少服务人员信息（姓名/手机/身份证），无法发起签约' };
+      }
+
+      const templateParams = (contract as any).templateParams || {};
+      const templateNo = (contract as any).esignTemplateNo || (templateParams as any)?.templateNo;
+      if (!templateNo && Object.keys(templateParams).length === 0) {
+        return { success: false, message: '合同缺少模板参数，无法发起签约。请删除此合同并重新创建。' };
+      }
+
+      // 调用爱签创建新合同
+      const esignResult = await this.esignService.createCompleteContractFlow({
+        contractNo: contract.contractNumber,
+        contractName: `${contract.contractType || '服务'}合同`,
+        templateNo: templateNo || 'default_template',
+        templateParams: templateParams,
+        signers: [
+          {
+            name: contract.customerName,
+            mobile: contract.customerPhone,
+            idCard: contract.customerIdCard,
+            signType: 'auto',
+            validateType: 'sms',
+          },
+          {
+            name: contract.workerName,
+            mobile: contract.workerPhone,
+            idCard: contract.workerIdCard,
+            signType: 'auto',
+            validateType: 'sms',
+          },
+        ],
+        validityTime: 30,
+        signOrder: 2,
+      });
+
+      if (esignResult.success) {
+        // 更新合同的爱签信息
+        await this.contractsService.updateContractStatusDirectly(contractId, {
+          esignContractNo: esignResult.contractNo,
+          esignSignUrls: JSON.stringify(esignResult.signUrls || []),
+          esignCreatedAt: new Date(),
+          esignStatus: '0',
+          contractStatus: 'signing' as any,
+          updatedAt: new Date(),
+        } as any);
+
+        this.logger.log(`✅ 重新发起签约成功: ${esignResult.contractNo}`);
+        return {
+          success: true,
+          message: '重新发起签约成功',
+          data: {
+            esignContractNo: esignResult.contractNo,
+            contractStatus: 'signing',
+          },
+        };
+      } else {
+        return {
+          success: false,
+          message: esignResult.message || '重新发起签约失败',
+        };
+      }
+    } catch (error: any) {
+      this.logger.error(`重新发起签约失败:`, error);
+      return {
+        success: false,
+        message: error?.message || '重新发起签约失败',
+      };
+    }
+  }
+
+  private getEsignStatusText(status: string): string {
+    const map = { '0': '等待签约', '1': '签约中', '2': '已签约', '3': '过期', '4': '拒签', '6': '作废', '7': '撤销' };
+    return map[status] || '未知状态';
+  }
+
+  /**
    * 手动触发保险同步（用于重试失败的同步）
    * 增强功能：先查询爱签API确认合同状态，再触发保险同步
    */

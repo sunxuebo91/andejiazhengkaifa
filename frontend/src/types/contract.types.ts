@@ -44,6 +44,9 @@ export interface Contract {
   createdAt: string;
   updatedAt: string;
 
+  // 合同状态
+  contractStatus?: 'draft' | 'signing' | 'active' | 'replaced' | 'cancelled';
+
   // 爱签相关字段
   esignContractNo?: string;
   esignStatus?: string;

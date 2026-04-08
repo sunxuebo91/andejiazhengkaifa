@@ -215,14 +215,63 @@ const ContractList: React.FC = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  // 合同本地状态颜色映射
+  const getContractStatusColor = (status?: string) => {
     const colors: Record<string, string> = {
-      '进行中': 'green',
-      '已完成': 'blue',
-      '已取消': 'red',
-      '暂停': 'orange',
+      'draft': 'default',
+      'signing': 'blue',
+      'active': 'green',
+      'replaced': 'orange',
+      'cancelled': 'red',
     };
-    return colors[status] || 'default';
+    return colors[status || ''] || 'default';
+  };
+
+  // 合同本地状态文本映射
+  const getContractStatusText = (status?: string) => {
+    const texts: Record<string, string> = {
+      'draft': '草稿',
+      'signing': '签约中',
+      'active': '生效中',
+      'replaced': '已替换',
+      'cancelled': '已作废',
+    };
+    return texts[status || ''] || '未知状态';
+  };
+
+  // 爱签状态颜色映射（数字码 → 颜色）
+  const getEsignStatusColor = (status?: string) => {
+    const colors: Record<string, string> = {
+      '0': 'orange',
+      '1': 'blue',
+      '2': 'green',
+      '3': 'red',
+      '4': 'red',
+      '6': 'default',
+      '7': 'default',
+      '等待签约': 'orange',
+      '签约中': 'blue',
+      '已签约': 'green',
+      '过期': 'red',
+      '拒签': 'red',
+      '作废': 'default',
+      '撤销': 'default',
+    };
+    return colors[status || ''] || 'default';
+  };
+
+  // 爱签状态文本映射（数字码 → 中文）
+  const getEsignStatusText = (status?: string) => {
+    const texts: Record<string, string> = {
+      '0': '等待签约',
+      '1': '签约中',
+      '2': '已签约',
+      '3': '过期',
+      '4': '拒签',
+      '6': '作废',
+      '7': '撤销',
+    };
+    return texts[status || ''] || status || '未知状态';
   };
 
   const getContractTypeColor = (type: ContractType) => {
@@ -358,17 +407,24 @@ const ContractList: React.FC = () => {
             <ContractStatusMini
               contractNo={record.esignContractNo}
               onStatusChange={(status) => {
-                // 可以在这里更新列表中的状态信息
                 console.log(`合同 ${record.contractNumber} 状态更新:`, status);
               }}
             />
           );
         }
-        
-        // 否则显示本地状态（如果有esignStatus则显示，否则显示默认状态）
-        const statusText = record.esignStatus || '未知状态';
+
+        // 没有爱签合同编号时：优先使用 contractStatus（本地状态），其次使用 esignStatus
+        if (record.esignStatus) {
+          const esignText = getEsignStatusText(record.esignStatus);
+          return (
+            <Tag color={getEsignStatusColor(record.esignStatus)}>{esignText}</Tag>
+          );
+        }
+
+        // 最终回退到 contractStatus（本地合同状态）
+        const localStatus = record.contractStatus || 'draft';
         return (
-          <Tag color={getStatusColor(statusText)}>{statusText}</Tag>
+          <Tag color={getContractStatusColor(localStatus)}>{getContractStatusText(localStatus)}</Tag>
         );
       },
     },

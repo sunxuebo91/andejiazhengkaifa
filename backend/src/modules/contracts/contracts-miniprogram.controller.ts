@@ -18,6 +18,7 @@ import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { ESignService } from '../esign/esign.service';
 import { ContractStatus } from './models/contract.model';
+import { MiniProgramNotificationService } from '../miniprogram-notification/miniprogram-notification.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
@@ -31,6 +32,7 @@ export class ContractsMiniProgramController {
   constructor(
     private readonly contractsService: ContractsService,
     private readonly esignService: ESignService,
+    private readonly mpNotificationService: MiniProgramNotificationService,
   ) {}
 
   // 辅助方法：角色映射
@@ -649,6 +651,14 @@ export class ContractsMiniProgramController {
         );
 
         this.logger.log(`✅ 爱签电子合同创建成功: ${esignResult.contractNo}`);
+
+        // 📬 触发小程序通知：合同签约邀请
+        if (contract.customerPhone) {
+          this.mpNotificationService.notifyContractInvite(
+            contract.customerPhone,
+            contract._id.toString(),
+          ).catch(err => this.logger.error(`发送签约邀请通知失败: ${err.message}`));
+        }
 
         return {
           success: true,

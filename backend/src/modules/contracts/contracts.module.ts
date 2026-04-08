@@ -17,6 +17,7 @@ import { ContractApprovalsModule } from '../contract-approvals/contract-approval
 import { DashubaoModule } from '../dashubao/dashubao.module';
 import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/background-check.model';
 import { InsurancePolicy, InsurancePolicySchema } from '../dashubao/models/insurance-policy.model';
+import { MiniProgramNotificationModule } from '../miniprogram-notification/miniprogram-notification.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { InsurancePolicy, InsurancePolicySchema } from '../dashubao/models/insur
     forwardRef(() => ResumeModule),
     ContractApprovalsModule,
     DashubaoModule,
+    MiniProgramNotificationModule,
   ],
   controllers: [ContractsController, ContractsMiniProgramController, ContractsCustomerController],
   providers: [ContractsService, ContractsQueryService],

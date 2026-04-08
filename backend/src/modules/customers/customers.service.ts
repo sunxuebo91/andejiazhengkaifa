@@ -162,7 +162,7 @@ export class CustomersService {
     const assignedToUserId = hasAssignedTo ? dtoAny.assignedTo : userId;
 
     // 🛡️ 防护：确保 leadSource 不为空字符串
-    const validLeadSources = ['美团', '抖音', '快手', '小红书', '转介绍', '99保姆网', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '妈妈网', '犀牛', '宝宝树', '幼亲舒', '其他'];
+    const validLeadSources = ['美团', '抖音', '快手', '小红书', '转介绍', '99保姆网', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '妈妈网', '犀牛', '宝宝树', '幼亲舒', '官网', '其他'];
     const leadSource = createCustomerDto.leadSource?.trim();
     const finalLeadSource = (leadSource && validLeadSources.includes(leadSource)) ? leadSource : '其他';
 
@@ -228,6 +228,43 @@ export class CustomersService {
     }
 
     return savedCustomer;
+  }
+
+  // 官网公开表单建客（无需登录，进入客户列表，不分配负责人）
+  async createFromWebsite(dto: {
+    name: string;
+    phone: string;
+    serviceCategory?: string;
+    remarks?: string;
+  }): Promise<{ customerId: string; message: string }> {
+    const { name, phone, serviceCategory, remarks } = dto;
+
+    const existing = await this.customerModel.findOne({ phone }).lean();
+    if (existing) {
+      return { customerId: existing.customerId, message: '已存在该手机号的客户记录' };
+    }
+
+    const customerId = this.generateCustomerId();
+    const validServiceCategories = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老', '家教', '陪伴师'];
+    const finalServiceCategory = (serviceCategory && validServiceCategories.includes(serviceCategory)) ? serviceCategory : undefined;
+
+    const customer = new this.customerModel({
+      name,
+      phone,
+      serviceCategory: finalServiceCategory,
+      remarks,
+      customerId,
+      leadSource: '官网',
+      contractStatus: '待定',
+      leadLevel: 'O类',
+      createdBy: '系统-官网',
+      inPublicPool: false,
+      lastActivityAt: new Date(),
+    });
+
+    const saved = await customer.save();
+    this.logger.info('官网表单新增客户', { customerId: saved.customerId, phone: this.maskPhoneNumber(phone) });
+    return { customerId: saved.customerId, message: '提交成功' };
   }
 
   // 获取客户列表（支持搜索和分页 + 角色可见性 + 指定负责人过滤）

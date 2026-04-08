@@ -18,6 +18,7 @@ import { InsurancePolicy } from '../dashubao/models/insurance-policy.model';
 import { AppLogger } from '../../common/logging/app-logger';
 import { RequestContextStore } from '../../common/logging/request-context';
 import { ContractsQueryService } from './contracts-query.service';
+import { MiniProgramNotificationService } from '../miniprogram-notification/miniprogram-notification.service';
 
 @Injectable()
 export class ContractsService {
@@ -37,6 +38,7 @@ export class ContractsService {
     private dashubaoService: DashubaoService,
     private esignService: ESignService,
     private contractsQueryService: ContractsQueryService,
+    private mpNotificationService: MiniProgramNotificationService,
   ) {}
 
   /**
@@ -546,6 +548,14 @@ export class ContractsService {
             );
 
             this.logger.log(`✅ 爱签电子合同创建成功: ${esignResult.contractNo}`);
+
+            // 📬 触发小程序通知：合同签约邀请
+            if (createContractDto.customerPhone) {
+              this.mpNotificationService.notifyContractInvite(
+                createContractDto.customerPhone,
+                (updatedContract || savedContract)._id.toString(),
+              ).catch(err => this.logger.error(`发送签约邀请通知失败: ${err.message}`));
+            }
 
             // 同步客户状态为签约中
             const contractIdStr = (updatedContract || savedContract)._id.toString();
@@ -1732,6 +1742,14 @@ export class ContractsService {
             // 返回更新后的合同（包含爱签信息）
             const updatedContract = await this.contractModel.findById(newContract._id).exec();
             this.logger.log(`✅ 换人合同爱签电子合同创建成功: ${esignResult.contractNo}`);
+
+            // 📬 触发小程序通知：合同签约邀请（换人合同）
+            if (createContractDto.customerPhone) {
+              this.mpNotificationService.notifyContractInvite(
+                createContractDto.customerPhone,
+                newContract._id.toString(),
+              ).catch(err => this.logger.error(`发送签约邀请通知失败（换人）: ${err.message}`));
+            }
 
             // 同步客户状态为签约中
             this.syncCustomerOnContractSigning(newContract._id.toString()).catch(err => {

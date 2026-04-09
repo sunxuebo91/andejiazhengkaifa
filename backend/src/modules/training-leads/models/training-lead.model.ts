@@ -6,9 +6,11 @@ export type TrainingLeadDocument = TrainingLead & Document;
 
 // 线索状态枚举
 export enum LeadStatus {
-  NEW = '新线索',
   FOLLOWING = '跟进中',
-  CLOSED = '已成交',
+  ENROLLED = '已报名',
+  GRADUATED = '已结业',
+  ABANDONED = '已放弃',
+  INVALID = '无效线索',
   LOST = '已流失'
 }
 
@@ -55,10 +57,8 @@ export class TrainingLead {
   })
   leadSource: string;
 
-  @ApiProperty({ description: '培训类型' })
-  @Prop({
-    enum: ['月嫂', '育儿嫂', '保姆', '护老', '师资']
-  })
+  @ApiProperty({ description: '培训类型（已废弃，请用consultPosition）' })
+  @Prop()
   trainingType: string;
 
   @ApiProperty({ description: '意向课程（多选）', type: [String] })
@@ -143,7 +143,7 @@ export class TrainingLead {
   @Prop({
     required: true,
     enum: Object.values(LeadStatus),
-    default: LeadStatus.NEW
+    default: LeadStatus.FOLLOWING
   })
   status: string;
 

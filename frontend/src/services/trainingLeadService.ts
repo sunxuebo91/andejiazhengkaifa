@@ -112,6 +112,14 @@ export const trainingLeadService = {
     const response = await apiService.post('/api/training-leads/bulk-create', { leads });
     return response.data;
   },
+
+  /**
+   * 批量查重手机号
+   */
+  async checkDuplicates(phones: string[]): Promise<{ duplicatePhones: string[] }> {
+    const response = await apiService.post('/api/training-leads/check-duplicates', { phones });
+    return response.data;
+  },
 };
 
 export default trainingLeadService;

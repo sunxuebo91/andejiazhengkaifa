@@ -65,7 +65,7 @@ export class TrainingLeadsService {
       ...createDto,
       studentId,
       createdBy: new Types.ObjectId(userId),
-      status: LeadStatus.NEW
+      status: LeadStatus.FOLLOWING
     };
 
     // 如果提供了归属用户ID，设置referredBy字段
@@ -133,12 +133,17 @@ export class TrainingLeadsService {
     const filter: any = {};
     const andConditions: any[] = [];
 
-    // 按创建人过滤（用于普通员工只看自己的线索）
+    // 按归属人过滤（普通员工只看自己创建的 + 分配给自己的 + 归属自己的）
     if (createdBy) {
+      const uid = new Types.ObjectId(createdBy);
       andConditions.push({
         $or: [
-          { createdBy: new Types.ObjectId(createdBy) },
-          { createdBy: createdBy }
+          { createdBy: uid },
+          { createdBy: createdBy },
+          { assignedTo: uid },
+          { assignedTo: createdBy },
+          { studentOwner: uid },
+          { studentOwner: createdBy },
         ]
       });
     }
@@ -346,8 +351,8 @@ export class TrainingLeadsService {
     // 更新线索的最后跟进时间
     lead.lastFollowUpAt = new Date();
 
-    // 如果线索状态是"新线索"，自动改为"跟进中"
-    if (lead.status === LeadStatus.NEW) {
+    // 确保跟进时线索状态为"跟进中"
+    if (lead.status !== LeadStatus.ENROLLED && lead.status !== LeadStatus.GRADUATED) {
       lead.status = LeadStatus.FOLLOWING;
     }
 
@@ -381,6 +386,72 @@ export class TrainingLeadsService {
       .exec();
 
     return followUps as any;
+  }
+
+  /**
+   * 获取线索统计数据（小程序用）
+   * @param userId 如果提供，只统计该用户的线索；否则统计全部
+   */
+  async getStatisticsForMiniprogram(userId?: string) {
+    const match: any = {};
+    if (userId) {
+      const { Types } = await import('mongoose');
+      match.$or = [
+        { createdBy: new Types.ObjectId(userId) },
+        { assignedTo: new Types.ObjectId(userId) },
+        { studentOwner: new Types.ObjectId(userId) },
+      ];
+    }
+
+    const [total, byStatus, bySource, byTrainingType, recentFollowUps] = await Promise.all([
+      this.trainingLeadModel.countDocuments(match),
+      this.trainingLeadModel.aggregate([
+        { $match: match },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      this.trainingLeadModel.aggregate([
+        { $match: match },
+        { $group: { _id: '$leadSource', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+      ]),
+      this.trainingLeadModel.aggregate([
+        { $match: match },
+        { $group: { _id: '$trainingType', count: { $sum: 1 } } },
+      ]),
+      this.followUpModel.countDocuments(
+        userId ? { createdBy: new (require('mongoose').Types.ObjectId)(userId) } : {},
+      ),
+    ]);
+
+    const statusMap: Record<string, number> = {};
+    byStatus.forEach((s: any) => { if (s._id) statusMap[s._id] = s.count; });
+
+    return {
+      total,
+      byStatus: statusMap,
+      followingUp: statusMap['跟进中'] || 0,
+      enrolled: statusMap['已报名'] || 0,
+      graduated: statusMap['已结业'] || 0,
+      abandoned: statusMap['已放弃'] || 0,
+      invalid: statusMap['无效线索'] || 0,
+      lost: statusMap['已流失'] || 0,
+      bySource: bySource.map((s: any) => ({ source: s._id || '未知', count: s.count })),
+      byTrainingType: byTrainingType.map((t: any) => ({ type: t._id || '未知', count: t.count })),
+      totalFollowUps: recentFollowUps,
+    };
+  }
+
+  /**
+   * 根据手机号批量查询已存在的线索（用于导入去重）
+   */
+  async findByPhones(phones: string[]): Promise<TrainingLead[]> {
+    if (!phones || phones.length === 0) return [];
+    return this.trainingLeadModel
+      .find({ phone: { $in: phones } })
+      .select('phone name studentId')
+      .lean()
+      .exec() as any;
   }
 
   /**
@@ -628,54 +699,81 @@ export class TrainingLeadsService {
         if (!lead.phone) lead.phone = undefined;
         if (!lead.wechatId) lead.wechatId = undefined;
 
-        // 提取跟进字段，不传给 create
-        const followUpPerson: string | undefined = (lead as any).followUpPerson || undefined;
+        // 提取跟进字段和人员字段，不传给 create
+        const creatorName: string | undefined = (lead as any).creatorName || (lead as any).followUpPerson || undefined;
+        const assignedToName: string | undefined = (lead as any).assignedToName || undefined;
         let followUpContent: string | undefined = (lead as any).followUpContent || undefined;
         const followUpType: string | undefined = (lead as any).followUpType || undefined;
         const followUpTime: string | undefined = (lead as any).followUpTime || undefined;
 
-        // AI 常见 mapping 错误：把"跟进记录"列放进了 remarks 而非 followUpContent
-        // 修正策略：有跟进人 + 跟进内容为空 + 备注有内容 → 把备注内容作为跟进内容
-        if (followUpPerson && !followUpContent && (lead as any).remarks) {
-          followUpContent = (lead as any).remarks;
-          delete (lead as any).remarks; // 避免同时写入备注和跟进记录
-          this.logger.log(`第 ${i + 1} 条 [${lead.name}]：检测到AI将跟进记录放入remarks，已自动修正到followUpContent`);
-        }
+        delete (lead as any).creatorName;
+        delete (lead as any).assignedToName;
         delete (lead as any).followUpPerson;
         delete (lead as any).followUpContent;
         delete (lead as any).followUpType;
         delete (lead as any).followUpTime;
 
-        // 按姓名匹配系统账号：跟进人/创建人/发起人/录入人 → 若匹配成功，用该用户作为线索创建人和归属人
+        // 按姓名匹配系统账号
         let resolvedCreatorId = userId;
         let resolvedFollowUpUserId = new Types.ObjectId(userId);
-        if (followUpPerson) {
-          const trimmedName = followUpPerson.trim();
-          const matchedUser = await this.userModel.findOne({ name: trimmedName, suspended: { $ne: true } }).select('_id').lean();
-          if (matchedUser) {
-            const matchedId = (matchedUser as any)._id;
-            resolvedCreatorId = matchedId.toString();
-            resolvedFollowUpUserId = matchedId;
-            // 同时设为学员归属（归属人）
-            (lead as any).studentOwner = matchedId.toString();
-            this.logger.log(`第 ${i + 1} 条 [${lead.name}]：识别到人员 "${trimmedName}"，创建人和归属人设为该用户`);
-          } else {
-            this.logger.warn(`第 ${i + 1} 条 [${lead.name}]：人员 "${trimmedName}" 未找到对应系统账号，使用导入人`);
+
+        // 录入人 → createdBy（谁录入的这条线索）
+        if (creatorName) {
+          const matched = await this.userModel.findOne({ name: creatorName.trim(), suspended: { $ne: true } }).select('_id').lean();
+          if (matched) {
+            resolvedCreatorId = (matched as any)._id.toString();
+            this.logger.log(`第 ${i + 1} 条 [${lead.name}]：录入人 "${creatorName}" → createdBy`);
           }
+        }
+
+        // 跟进人 → assignedTo + studentOwner（线索归属谁跟进）
+        if (assignedToName) {
+          const matched = await this.userModel.findOne({ name: assignedToName.trim(), suspended: { $ne: true } }).select('_id').lean();
+          if (matched) {
+            const matchedId = (matched as any)._id;
+            resolvedFollowUpUserId = matchedId;
+            (lead as any).assignedTo = matchedId;
+            (lead as any).studentOwner = matchedId;
+            this.logger.log(`第 ${i + 1} 条 [${lead.name}]：跟进人 "${assignedToName}" → assignedTo + studentOwner`);
+          } else {
+            this.logger.warn(`第 ${i + 1} 条 [${lead.name}]：跟进人 "${assignedToName}" 未找到系统账号`);
+          }
+        } else if (creatorName && !assignedToName) {
+          // 如果只有录入人没有跟进人，则录入人同时作为跟进人
+          resolvedFollowUpUserId = new Types.ObjectId(resolvedCreatorId);
+          (lead as any).assignedTo = new Types.ObjectId(resolvedCreatorId);
+          (lead as any).studentOwner = new Types.ObjectId(resolvedCreatorId);
         }
 
         const created = await this.create(lead as CreateTrainingLeadDto, resolvedCreatorId);
         result.success++;
         result.created.push(created);
 
-        this.logger.log(`第 ${i + 1} 条 [${lead.name}]：followUpPerson=${followUpPerson || '无'} followUpContent长度=${followUpContent?.length || 0}`);
+        this.logger.log(`第 ${i + 1} 条 [${lead.name}]：录入人=${creatorName || '无'} 跟进人=${assignedToName || '无'} 跟进内容长度=${followUpContent?.length || 0}`);
 
         // 有跟进内容则创建跟进记录
         if (followUpContent && followUpContent.length >= 1) {
           try {
             const VALID_FOLLOW_TYPE = ['电话', '微信', '到店', '其他'];
             const resolvedType = (followUpType && VALID_FOLLOW_TYPE.includes(followUpType)) ? followUpType : '电话';
-            const followUpDate = followUpTime ? new Date(followUpTime) : new Date();
+            let followUpDate = new Date();
+            if (followUpTime) {
+              // 尝试多种格式解析日期
+              let parsed = new Date(followUpTime);
+              if (isNaN(parsed.getTime())) {
+                // 处理中文日期格式："3月23日" / "2026年3月23日"
+                const cnMatch = followUpTime.match(/(\d{4})?年?(\d{1,2})月(\d{1,2})日?/);
+                if (cnMatch) {
+                  const y = cnMatch[1] ? parseInt(cnMatch[1]) : new Date().getFullYear();
+                  const m = parseInt(cnMatch[2]) - 1;
+                  const d = parseInt(cnMatch[3]);
+                  parsed = new Date(y, m, d);
+                }
+              }
+              if (!isNaN(parsed.getTime())) {
+                followUpDate = parsed;
+              }
+            }
             const followUp = new this.followUpModel({
               leadId: (created as any)._id,
               type: resolvedType,

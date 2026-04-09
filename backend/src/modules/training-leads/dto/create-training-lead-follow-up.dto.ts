@@ -26,7 +26,7 @@ export class CreateTrainingLeadFollowUpDto {
   })
   @IsString()
   @IsNotEmpty({ message: '跟进内容不能为空' })
-  @MinLength(5, { message: '跟进内容至少5个字符' })
+  @MinLength(1, { message: '跟进内容不能为空' })
   @MaxLength(1000, { message: '跟进内容不能超过1000个字符' })
   content: string;
 

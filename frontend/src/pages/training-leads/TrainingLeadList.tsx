@@ -17,7 +17,7 @@ import {
   Upload
 } from 'antd';
 import type { UploadProps } from 'antd';
-import { SearchOutlined, PlusOutlined, MessageOutlined, EditOutlined, DeleteOutlined, UploadOutlined, InboxOutlined, ShareAltOutlined, QrcodeOutlined, CopyOutlined } from '@ant-design/icons';
+import { SearchOutlined, PlusOutlined, MessageOutlined, EditOutlined, DeleteOutlined, UploadOutlined, InboxOutlined, ShareAltOutlined, QrcodeOutlined, CopyOutlined, UserSwitchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { trainingLeadService } from '../../services/trainingLeadService';
 import apiService from '../../services/api';
@@ -54,6 +54,12 @@ const TrainingLeadList: React.FC = () => {
 
   // AI批量导入状态
   const [aiImportModalVisible, setAiImportModalVisible] = useState(false);
+
+  // 分配功能状态
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [assignModalVisible, setAssignModalVisible] = useState(false);
+  const [assignTargetUser, setAssignTargetUser] = useState<string | undefined>(undefined);
+  const [assignLoading, setAssignLoading] = useState(false);
 
   // 旧版批量导入状态（保留兼容）
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -161,6 +167,32 @@ const TrainingLeadList: React.FC = () => {
       fetchLeads();
     } catch (error: any) {
       message.error(error?.response?.data?.message || '删除失败');
+    }
+  };
+
+  // 批量分配
+  const handleBatchAssign = async () => {
+    if (!assignTargetUser) { message.warning('请选择跟进人'); return; }
+    if (selectedRowKeys.length === 0) { message.warning('请先选择线索'); return; }
+    setAssignLoading(true);
+    try {
+      let success = 0;
+      for (const id of selectedRowKeys) {
+        await trainingLeadService.updateTrainingLead(String(id), {
+          assignedTo: assignTargetUser,
+          studentOwner: assignTargetUser,
+        } as any);
+        success++;
+      }
+      message.success(`成功分配 ${success} 条线索`);
+      setAssignModalVisible(false);
+      setAssignTargetUser(undefined);
+      setSelectedRowKeys([]);
+      fetchLeads();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '分配失败');
+    } finally {
+      setAssignLoading(false);
     }
   };
 
@@ -399,13 +431,13 @@ const TrainingLeadList: React.FC = () => {
       )
     },
     {
-      title: '学员归属',
-      dataIndex: 'studentOwner',
-      key: 'studentOwner',
+      title: '跟进人',
+      dataIndex: 'assignedTo',
+      key: 'assignedTo',
       width: 100,
-      render: (studentOwner: any) => {
-        if (!studentOwner) return <span style={{ color: '#bfbfbf' }}>未分配</span>;
-        return typeof studentOwner === 'object' ? studentOwner.name : <span style={{ color: '#bfbfbf' }}>未分配</span>;
+      render: (assignedTo: any) => {
+        if (!assignedTo) return <span style={{ color: '#bfbfbf' }}>未分配</span>;
+        return typeof assignedTo === 'object' ? assignedTo.name : <span style={{ color: '#bfbfbf' }}>未分配</span>;
       }
     },
     {
@@ -433,6 +465,14 @@ const TrainingLeadList: React.FC = () => {
             onClick={() => handleOpenFollowUp(record)}
           >
             添加跟进
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<UserSwitchOutlined />}
+            onClick={() => { setSelectedRowKeys([record._id]); setAssignModalVisible(true); }}
+          >
+            分配
           </Button>
           <Button
             type="link"
@@ -536,7 +576,7 @@ const TrainingLeadList: React.FC = () => {
             {canViewUsers && (
               <Col span={4}>
                 <Select
-                  placeholder="学员归属"
+                  placeholder="跟进人"
                   value={searchFilters.studentOwner}
                   onChange={(value) => setSearchFilters({ ...searchFilters, studentOwner: value })}
                   allowClear
@@ -575,6 +615,16 @@ const TrainingLeadList: React.FC = () => {
                 >
                   生成分享链接
                 </Button>
+                {selectedRowKeys.length > 0 && (
+                  <Button
+                    icon={<UserSwitchOutlined />}
+                    onClick={() => setAssignModalVisible(true)}
+                    type="primary"
+                    ghost
+                  >
+                    批量分配 ({selectedRowKeys.length})
+                  </Button>
+                )}
                 <Button
                   icon={<UploadOutlined />}
                   onClick={() => setAiImportModalVisible(true)}
@@ -599,6 +649,10 @@ const TrainingLeadList: React.FC = () => {
             rowKey="_id"
             loading={loading}
             scroll={{ x: 1500 }}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: (keys) => setSelectedRowKeys(keys),
+            }}
             pagination={{
               current: currentPage,
               pageSize: pageSize,
@@ -630,6 +684,35 @@ const TrainingLeadList: React.FC = () => {
         onCancel={() => setAiImportModalVisible(false)}
         onSuccess={() => { fetchLeads(); }}
       />
+
+      {/* 分配跟进人弹窗 */}
+      <Modal
+        title={`分配跟进人（${selectedRowKeys.length} 条线索）`}
+        open={assignModalVisible}
+        onCancel={() => { setAssignModalVisible(false); setAssignTargetUser(undefined); }}
+        onOk={handleBatchAssign}
+        confirmLoading={assignLoading}
+        okText="确认分配"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 16 }}>
+          <span>选择跟进人：</span>
+        </div>
+        <Select
+          placeholder="请选择跟进人"
+          value={assignTargetUser}
+          onChange={setAssignTargetUser}
+          style={{ width: '100%' }}
+          showSearch
+          filterOption={(input, option) =>
+            String(option?.children || '').toLowerCase().includes(input.toLowerCase())
+          }
+        >
+          {users.map(user => (
+            <Option key={user._id} value={user._id}>{user.name}</Option>
+          ))}
+        </Select>
+      </Modal>
 
       {/* 旧版Excel导入弹窗（保留兼容） */}
       <Modal

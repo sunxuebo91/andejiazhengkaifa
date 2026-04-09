@@ -26,7 +26,7 @@ export class TrainingLeadFollowUp {
   type: string;
 
   @ApiProperty({ description: '跟进内容' })
-  @Prop({ required: true, minlength: 5, maxlength: 1000 })
+  @Prop({ required: true, minlength: 1, maxlength: 1000 })
   content: string;
 
   @ApiProperty({ description: '下次跟进时间' })

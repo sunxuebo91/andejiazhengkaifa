@@ -157,7 +157,6 @@ const TrainingLeadDetail: React.FC = () => {
             <Descriptions.Item label="电话号码">{lead.phone || '-'}</Descriptions.Item>
             <Descriptions.Item label="微信">{lead.wechatId || '-'}</Descriptions.Item>
             <Descriptions.Item label="渠道来源">{lead.leadSource || '-'}</Descriptions.Item>
-            <Descriptions.Item label="培训类型">{lead.trainingType || '-'}</Descriptions.Item>
             <Descriptions.Item label="咨询职位">{lead.consultPosition || '-'}</Descriptions.Item>
             <Descriptions.Item label="意向程度">{lead.intentionLevel || '-'}</Descriptions.Item>
             <Descriptions.Item label="线索等级">
@@ -213,9 +212,9 @@ const TrainingLeadDetail: React.FC = () => {
                 {lead.isReported ? '是' : '否'}
               </Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="学员归属">{formatUser(lead.studentOwner)}</Descriptions.Item>
             <Descriptions.Item label="录入人">{formatUser(lead.createdBy)}</Descriptions.Item>
-            <Descriptions.Item label="分配给">{formatUser(lead.assignedTo)}</Descriptions.Item>
+            <Descriptions.Item label="跟进人">{formatUser(lead.assignedTo) !== '-' ? formatUser(lead.assignedTo) : formatUser(lead.studentOwner)}</Descriptions.Item>
+            <Descriptions.Item label="学员归属">{formatUser(lead.studentOwner)}</Descriptions.Item>
             <Descriptions.Item label="创建时间">
               {dayjs(lead.createdAt).format('YYYY-MM-DD HH:mm:ss')}
             </Descriptions.Item>

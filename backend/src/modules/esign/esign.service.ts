@@ -2456,15 +2456,27 @@ export class ESignService {
                 resolvedSignStatus = 0;
               }
 
+              // 🔥 合同终态时，未签约方应显示终止原因
+              const isContractTerminal = [3, 4, 6, 7].includes(Number(overallContractStatus));
+              const termTextMap: Record<number, string> = { 3: '已过期', 4: '已拒签', 6: '已作废', 7: '已撤销' };
+              let signStatusText: string;
+              if (resolvedSignStatus === 2) {
+                signStatusText = '已签约';
+              } else if (isContractTerminal) {
+                signStatusText = termTextMap[Number(overallContractStatus)] || '已终止';
+              } else if (resolvedSignStatus === 0 && isWaitingInQueue) {
+                signStatusText = '等待前方签署';
+              } else {
+                signStatusText = this.getSignStatusText(resolvedSignStatus);
+              }
+
               return {
                 account: user.account,
                 name: user.name || `签署方${index + 1}`,
                 role: role,
                 phone: user.mobile || user.phone,
                 signStatus: resolvedSignStatus,
-                signStatusText: resolvedSignStatus === 0 && isWaitingInQueue
-                  ? '等待前方签署'
-                  : this.getSignStatusText(resolvedSignStatus),
+                signStatusText: signStatusText,
                 signTime: user.signTime,
                 signOrder: userSignOrder,
                 userType: user.userType // 0=个人, 1=企业

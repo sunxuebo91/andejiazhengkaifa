@@ -422,59 +422,50 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
           </p>
           
           {/* 🎯 精准签署方状态显示 */}
-          {contractStatus.detailedStatus?.detailed && contractStatus.detailedStatus.customer && contractStatus.detailedStatus.worker && (
-            <div style={{ marginTop: 16 }}>
-              <p><strong>详细签署状态：</strong></p>
-              <Row gutter={[12, 8]}>
+          {contractStatus.detailedStatus?.detailed && contractStatus.detailedStatus.customer && contractStatus.detailedStatus.worker && (() => {
+            const overallSt = Number(contractStatus.data?.status);
+            const isTerminated = [3, 4, 5, 6, 7].includes(overallSt);
+            const termTextMap: Record<number, string> = { 3: '已过期', 4: '已拒签', 5: '已过期', 6: '已作废', 7: '已撤销' };
+            const termText = termTextMap[overallSt] || '已终止';
+
+            const renderSigner = (label: string, name: string, signed: boolean) => {
+              let tagColor: string;
+              let tagText: string;
+              let bg: string;
+              let border: string;
+              if (signed) {
+                tagColor = 'green'; tagText = '已签约'; bg = '#f6ffed'; border = '#b7eb8f';
+              } else if (isTerminated) {
+                tagColor = 'default'; tagText = termText; bg = '#f5f5f5'; border = '#d9d9d9';
+              } else {
+                tagColor = 'orange'; tagText = '未签约'; bg = '#fff7e6'; border = '#ffd591';
+              }
+              return (
                 <Col span={12}>
-                  <div style={{ 
-                    padding: '12px', 
-                    background: contractStatus.detailedStatus.customerSigned ? '#f6ffed' : '#fff7e6', 
-                    borderRadius: '6px',
-                    border: `1px solid ${contractStatus.detailedStatus.customerSigned ? '#b7eb8f' : '#ffd591'}`
-                  }}>
+                  <div style={{ padding: '12px', background: bg, borderRadius: '6px', border: `1px solid ${border}` }}>
                     <div style={{ marginBottom: '8px' }}>
                       <UserOutlined style={{ marginRight: '6px' }} />
-                      <strong>甲方（客户）</strong>
+                      <strong>{label}</strong>
                     </div>
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      {contractStatus.detailedStatus.customer.name || '客户'}
-                    </div>
+                    <div style={{ fontSize: '12px', color: '#666' }}>{name}</div>
                     <div style={{ marginTop: '4px' }}>
-                      <Tag 
-                        color={contractStatus.detailedStatus.customerSigned ? 'green' : 'orange'}
-                      >
-                        {contractStatus.detailedStatus.customerSigned ? '已签约' : '未签约'}
-                      </Tag>
+                      <Tag color={tagColor}>{tagText}</Tag>
                     </div>
                   </div>
                 </Col>
-                <Col span={12}>
-                  <div style={{ 
-                    padding: '12px', 
-                    background: contractStatus.detailedStatus.workerSigned ? '#f6ffed' : '#fff7e6', 
-                    borderRadius: '6px',
-                    border: `1px solid ${contractStatus.detailedStatus.workerSigned ? '#b7eb8f' : '#ffd591'}`
-                  }}>
-                    <div style={{ marginBottom: '8px' }}>
-                      <UserOutlined style={{ marginRight: '6px' }} />
-                      <strong>乙方（阿姨）</strong>
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      {contractStatus.detailedStatus.worker.name || '阿姨'}
-                    </div>
-                    <div style={{ marginTop: '4px' }}>
-                      <Tag 
-                        color={contractStatus.detailedStatus.workerSigned ? 'green' : 'orange'}
-                      >
-                        {contractStatus.detailedStatus.workerSigned ? '已签约' : '未签约'}
-                      </Tag>
-                    </div>
-                  </div>
-                </Col>
-              </Row>
-            </div>
-          )}
+              );
+            };
+
+            return (
+              <div style={{ marginTop: 16 }}>
+                <p><strong>详细签署状态：</strong></p>
+                <Row gutter={[12, 8]}>
+                  {renderSigner('甲方（客户）', contractStatus.detailedStatus.customer.name || '客户', contractStatus.detailedStatus.customerSigned)}
+                  {renderSigner('乙方（阿姨）', contractStatus.detailedStatus.worker.name || '阿姨', contractStatus.detailedStatus.workerSigned)}
+                </Row>
+              </div>
+            );
+          })()}
           
           {/* 🔥 显示签署方详细状态（支持signers和signUsers两种数据格式） */}
           {!contractStatus.detailedStatus?.detailed && (contractStatus.data?.signers?.length > 0 || contractStatus.data?.signUsers?.length > 0) && (
@@ -482,23 +473,48 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
               <p><strong>签署方状态：</strong></p>
               <Row gutter={[12, 8]}>
                 {(contractStatus.data.signUsers || contractStatus.data.signers || []).map((signer: any, index: number) => {
-                  // 🔥 支持多种签署状态字段格式
-                  const signStatus = signer.signStatus ?? signer.status ?? 0;
-                  // 🔥 修复：根据爱签实际返回的状态码调整
-                  // signStatus: 0=待签约/等待前方签署, 1=签约中, 2=已签约, 3=拒签, 4=已撤销, 5=已过期
+                  // 🔥 统一使用 Number() 转换，避免字符串/数字类型不一致
+                  const signStatus = Number(signer.signStatus ?? signer.status ?? 0);
+                  const overallStatus = Number(contractStatus.data?.status);
+
+                  // 🔥 判断合同整体是否已终止（撤销/作废/过期/拒签）
+                  const isContractTerminated = [3, 4, 5, 6, 7].includes(overallStatus);
+                  const terminatedTextMap: Record<number, string> = {
+                    3: '已过期', 4: '已拒签', 5: '已过期', 6: '已作废', 7: '已撤销',
+                  };
+
                   const isSigned = signStatus === 2;
                   const isPending = signStatus === 0 || signStatus === 1;
-                  // 🔥 修复：只有在合同整体状态不是"签约中"(1)时，才将3视为拒签
-                  // 顺序签约中，未到轮次的签署方可能被API标记为3，但合同仍在进行中，
-                  // 此时后端已修正为0，但此处额外防御：若整体status=1，不显示拒签
-                  const overallStatus = contractStatus.data?.status;
-                  const isRejected = signStatus === 3 && overallStatus !== 1;
+                  const isRejected = signStatus === 3 && !isContractTerminated;
 
-                  const statusColor = isSigned ? 'green' : isRejected ? 'red' : 'orange';
-                  // 🔥 优先使用后端传来的 signStatusText（后端已处理"等待前方签署"等特殊文本）
-                  const statusText = signer.signStatusText || (isSigned ? '已签约' : isRejected ? '已拒签' : isPending ? '待签约' : '未知');
-                  const bgColor = isSigned ? '#f6ffed' : isRejected ? '#fff2f0' : '#fff7e6';
-                  const borderColor = isSigned ? '#b7eb8f' : isRejected ? '#ffccc7' : '#ffd591';
+                  // 🔥 核心修复：合同已终止时，未签约方应显示终止状态而非"签约中"
+                  let statusColor: string;
+                  let statusText: string;
+                  let bgColor: string;
+                  let borderColor: string;
+
+                  if (isSigned) {
+                    statusColor = 'green';
+                    statusText = signer.signStatusText || '已签约';
+                    bgColor = '#f6ffed';
+                    borderColor = '#b7eb8f';
+                  } else if (isContractTerminated) {
+                    // 合同已终止，未签约方显示终止原因
+                    statusColor = 'default';
+                    statusText = terminatedTextMap[Number(overallStatus)] || '已终止';
+                    bgColor = '#f5f5f5';
+                    borderColor = '#d9d9d9';
+                  } else if (isRejected) {
+                    statusColor = 'red';
+                    statusText = signer.signStatusText || '已拒签';
+                    bgColor = '#fff2f0';
+                    borderColor = '#ffccc7';
+                  } else {
+                    statusColor = 'orange';
+                    statusText = signer.signStatusText || (isPending ? '待签约' : '未知');
+                    bgColor = '#fff7e6';
+                    borderColor = '#ffd591';
+                  }
 
                   return (
                     <Col key={index} span={8}>

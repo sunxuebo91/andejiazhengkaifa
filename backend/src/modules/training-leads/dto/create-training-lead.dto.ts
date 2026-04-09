@@ -70,15 +70,11 @@ export class CreateTrainingLeadDto {
   leadSource?: string;
 
   @ApiPropertyOptional({
-    description: '培训类型',
-    enum: ['月嫂', '育儿嫂', '保姆', '护老', '师资'],
+    description: '培训类型（已废弃，请用consultPosition）',
     example: '月嫂'
   })
   @IsOptional()
   @IsString()
-  @IsEnum(['月嫂', '育儿嫂', '保姆', '护老', '师资'], {
-    message: '培训类型必须是：月嫂、育儿嫂、保姆、护老、师资之一'
-  })
   trainingType?: string;
 
   @ApiPropertyOptional({
@@ -181,6 +177,11 @@ export class CreateTrainingLeadDto {
   @IsOptional()
   @IsMongoId({ message: '学员归属必须是有效的用户ID' })
   studentOwner?: string;
+
+  @ApiPropertyOptional({ description: '跟进人ID' })
+  @IsOptional()
+  @IsString()
+  assignedTo?: string;
 
   @ApiPropertyOptional({ description: '备注信息', example: '客户对月嫂培训很感兴趣' })
   @IsOptional()

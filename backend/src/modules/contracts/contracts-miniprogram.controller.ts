@@ -108,14 +108,8 @@ export class ContractsMiniProgramController {
                 contractObj.esignStatus = latestEsignStatus;
                 contractObj.esignStatusText = this.getStatusText(latestEsignStatus);
 
-                // 🔥 根据爱签状态推断本地状态
-                if (latestEsignStatus === '2') {
-                  contractObj.contractStatus = 'active'; // 已签约
-                } else if (latestEsignStatus === '0' || latestEsignStatus === '1') {
-                  contractObj.contractStatus = 'signing'; // 签约中
-                } else if (latestEsignStatus === '6' || latestEsignStatus === '7') {
-                  contractObj.contractStatus = 'cancelled'; // 已作废/撤销
-                }
+                // 🔥 统一映射：爱签状态 → 本地 contractStatus
+                contractObj.contractStatus = this.mapEsignStatusToContractStatus(latestEsignStatus);
 
                 this.logger.log(`✅ 合同 ${contractObj.contractNumber} 状态已同步: ${latestEsignStatus} (${contractObj.esignStatusText})`);
               }
@@ -796,20 +790,10 @@ export class ContractsMiniProgramController {
         esignStatus: esignStatus
       };
 
-      // 根据爱签状态更新 contractStatus
+      // 🔥 统一映射：爱签状态 → 本地 contractStatus
+      updateData.contractStatus = this.mapEsignStatusToContractStatus(esignStatus);
       if (esignStatus === '2') {
-        // 已签约
-        updateData.contractStatus = ContractStatus.ACTIVE;
         updateData.esignSignedAt = new Date();
-      } else if (esignStatus === '1') {
-        // 签约中
-        updateData.contractStatus = ContractStatus.SIGNING;
-      } else if (esignStatus === '0') {
-        // 等待签约
-        updateData.contractStatus = ContractStatus.DRAFT;
-      } else if (esignStatus === '6' || esignStatus === '7') {
-        // 作废或撤销
-        updateData.contractStatus = ContractStatus.CANCELLED;
       }
 
       await this.contractsService.updateContractStatusDirectly(contractId, updateData);
@@ -874,17 +858,8 @@ export class ContractsMiniProgramController {
             const esignStatus = esignResponse.data.status?.toString();
             const oldStatus = contract.contractStatus;
 
-            // 确定新的 contractStatus
-            let newContractStatus = contract.contractStatus;
-            if (esignStatus === '2') {
-              newContractStatus = ContractStatus.ACTIVE;
-            } else if (esignStatus === '1') {
-              newContractStatus = ContractStatus.SIGNING;
-            } else if (esignStatus === '0') {
-              newContractStatus = ContractStatus.DRAFT;
-            } else if (esignStatus === '6' || esignStatus === '7') {
-              newContractStatus = ContractStatus.CANCELLED;
-            }
+            // 🔥 统一映射：爱签状态 → 本地 contractStatus
+            const newContractStatus = this.mapEsignStatusToContractStatus(esignStatus) as any;
 
             // 如果状态有变化，更新数据库
             if (oldStatus !== newContractStatus || contract.esignStatus !== esignStatus) {
@@ -957,36 +932,65 @@ export class ContractsMiniProgramController {
     }
   }
 
-  // 辅助方法：获取合同整体状态文本
+  // ==================== 统一状态映射方法 ====================
+
+  /**
+   * 🔥 统一：爱签合同状态码 → 中文文本
+   * 爱签 /contract/status 接口返回的 data.status 值
+   */
   private getStatusText(status: string): string {
     const statusMap = {
       '0': '等待签约',
       '1': '签约中',
       '2': '已签约',
-      '3': '过期',
-      '4': '拒签',
-      '6': '作废',
-      '7': '撤销',
+      '3': '已过期',
+      '4': '已拒签',
+      '6': '已作废',
+      '7': '已撤销',
     };
     return statusMap[status] || '未知状态';
   }
 
   /**
-   * 🔥 辅助方法：获取签署方个人签署状态文本
-   * 根据爱签API实际返回的状态码：
-   * - 0: 待签约（未开始签署）
-   * - 1: 签约中（正在签署）
-   * - 2: 已签约（签署完成）
-   * - 3: 拒签
-   * - 4: 已撤销
-   * - 5: 已过期
+   * 🔥 统一：爱签合同状态码 → 本地 contractStatus
+   * 所有接口必须使用此方法做映射，确保一致
    */
-  private getSignerStatusText(signStatus: number): string {
-    const statusMap = {
+  private mapEsignStatusToContractStatus(esignStatus: string): string {
+    const map: Record<string, string> = {
+      '0': 'signing',    // 待签署 → 签约中（已发起，不是 draft）
+      '1': 'signing',    // 签约中 → 签约中
+      '2': 'active',     // 已签约 → 生效中
+      '3': 'cancelled',  // 过期 → 已作废
+      '4': 'cancelled',  // 拒签 → 已作废
+      '6': 'cancelled',  // 作废 → 已作废
+      '7': 'cancelled',  // 撤销 → 已作废
+    };
+    return map[esignStatus] || 'draft';
+  }
+
+  /**
+   * 🔥 统一：爱签合同状态是否为终态（不可恢复的结束状态）
+   */
+  private isTerminalEsignStatus(esignStatus: string): boolean {
+    return ['3', '4', '6', '7'].includes(esignStatus);
+  }
+
+  /**
+   * 🔥 统一：签署方个人签署状态码 → 中文文本
+   * 需要结合合同整体状态判断
+   */
+  private getSignerStatusText(signStatus: number, contractOverallStatus?: number): string {
+    // 如果合同整体已终止，未签约方应该显示终止原因
+    if (contractOverallStatus !== undefined && [3, 4, 6, 7].includes(contractOverallStatus) && signStatus !== 2) {
+      const termMap: Record<number, string> = { 3: '已过期', 4: '已拒签', 6: '已作废', 7: '已撤销' };
+      return termMap[contractOverallStatus] || '已终止';
+    }
+
+    const statusMap: Record<number, string> = {
       0: '待签约',
       1: '签约中',
-      2: '已签约',  // 🔥 修复：2 表示已签约
-      3: '拒签',    // 🔥 修复：3 表示拒签
+      2: '已签约',
+      3: '已拒签',
       4: '已撤销',
       5: '已过期'
     };
@@ -1069,25 +1073,35 @@ export class ContractsMiniProgramController {
         return { success: false, message: '查询合同状态失败' };
       }
 
-      const contractStatus = statusResult.data.status;
+      const contractStatus = Number(statusResult.data.status);
       const signUsers = statusResult.data.signUsers || [];
+      const isTerminated = this.isTerminalEsignStatus(contractStatus.toString());
 
-      // 🔥 处理签署方状态，确保状态码映射正确
-      const processedSigners = signUsers.map((user: any, index: number) => ({
-        account: user.account,
-        name: user.name,
-        role: user.role,
-        phone: user.phone,
-        signStatus: user.signStatus,
-        signStatusText: this.getSignerStatusText(user.signStatus ?? 0),
-        signTime: user.signTime,
-        signOrder: user.signOrder,
-        userType: user.userType,
-        // 🔥 添加便于小程序判断的字段
-        isSigned: user.signStatus === 2,
-        isPending: user.signStatus === 0 || user.signStatus === 1,
-        isRejected: user.signStatus === 3,
-      }));
+      // 🔥 处理签署方状态：合同终态时，未签约方应显示终止原因
+      const processedSigners = signUsers.map((user: any, index: number) => {
+        const signStatus = user.signStatus ?? 0;
+        const isSigned = signStatus === 2;
+
+        // 合同已终止且该方未签约 → 标记为终止
+        const isTerminatedUnsigned = isTerminated && !isSigned;
+
+        return {
+          account: user.account,
+          name: user.name,
+          role: user.role,
+          phone: user.phone,
+          signStatus: signStatus,
+          signStatusText: this.getSignerStatusText(signStatus, contractStatus),
+          signTime: user.signTime,
+          signOrder: user.signOrder,
+          userType: user.userType,
+          // 🔥 便于小程序判断的字段
+          isSigned: isSigned,
+          isPending: !isSigned && !isTerminatedUnsigned && (signStatus === 0 || signStatus === 1),
+          isRejected: signStatus === 3 || (isTerminated && contractStatus === 4),
+          isTerminated: isTerminatedUnsigned,
+        };
+      });
 
       return {
         success: true,

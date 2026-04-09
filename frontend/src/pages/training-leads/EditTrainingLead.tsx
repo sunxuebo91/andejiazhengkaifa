@@ -23,6 +23,7 @@ import apiService from '../../services/api';
 import {
   UpdateTrainingLeadDto,
   LEAD_SOURCE_OPTIONS,
+  LEAD_STATUS_OPTIONS,
   TRAINING_TYPE_OPTIONS,
   INTENDED_COURSES_OPTIONS,
   INTENTION_LEVEL_OPTIONS,
@@ -225,26 +226,26 @@ const EditTrainingLead: React.FC = () => {
             </Row>
           </div>
 
-          {/* 培训信息 */}
+          {/* 状态 & 培训信息 */}
           <div style={{ marginBottom: '24px' }}>
             <Divider orientation="left">
               <Space>
                 <BookOutlined style={{ color: '#52c41a' }} />
-                <span style={{ fontSize: '16px', fontWeight: 500 }}>培训信息</span>
+                <span style={{ fontSize: '16px', fontWeight: 500 }}>状态 & 培训信息</span>
               </Space>
             </Divider>
             <Row gutter={[16, 0]}>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item label="培训类型" name="trainingType">
-                  <Select placeholder="请选择培训类型" allowClear>
-                    {TRAINING_TYPE_OPTIONS.map(opt => (
+              <Col xs={24} sm={12} md={6}>
+                <Form.Item label="线索状态" name="status">
+                  <Select placeholder="请选择状态">
+                    {LEAD_STATUS_OPTIONS.map(opt => (
                       <Option key={opt.value} value={opt.value}>{opt.label}</Option>
                     ))}
                   </Select>
                 </Form.Item>
               </Col>
 
-              <Col xs={24} sm={12} md={8}>
+              <Col xs={24} sm={12} md={6}>
                 <Form.Item label="意向程度" name="intentionLevel">
                   <Select placeholder="请选择意向程度" allowClear>
                     {INTENTION_LEVEL_OPTIONS.map(opt => (
@@ -254,10 +255,20 @@ const EditTrainingLead: React.FC = () => {
                 </Form.Item>
               </Col>
 
-              <Col xs={24} sm={12} md={8}>
+              <Col xs={24} sm={12} md={6}>
                 <Form.Item label="线索等级" name="leadGrade">
                   <Select placeholder="请选择线索等级" allowClear>
                     {LEAD_GRADE_OPTIONS.map(opt => (
+                      <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={12} md={6}>
+                <Form.Item label="培训类型" name="trainingType">
+                  <Select placeholder="请选择培训类型" allowClear>
+                    {TRAINING_TYPE_OPTIONS.map(opt => (
                       <Option key={opt.value} value={opt.value}>{opt.label}</Option>
                     ))}
                   </Select>
@@ -365,7 +376,7 @@ const EditTrainingLead: React.FC = () => {
               </Space>
             </Divider>
             <Row gutter={[16, 0]}>
-              <Col xs={24} sm={12} md={8}>
+              <Col xs={24} sm={12} md={6}>
                 <Form.Item label="线索来源" name="leadSource">
                   <Select placeholder="请选择线索来源" allowClear>
                     {LEAD_SOURCE_OPTIONS.map(opt => (
@@ -376,11 +387,27 @@ const EditTrainingLead: React.FC = () => {
               </Col>
 
               {canViewUsers && (
-                <Col xs={24} sm={12} md={8}>
-                  <Form.Item
-                    label="学员归属"
-                    name="studentOwner"
-                  >
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item label="跟进人" name="assignedTo">
+                    <Select
+                      placeholder="请选择跟进人"
+                      allowClear
+                      showSearch
+                      filterOption={(input, option) =>
+                        String(option?.children || '').toLowerCase().includes(input.toLowerCase())
+                      }
+                    >
+                      {users.map(user => (
+                        <Option key={user._id} value={user._id}>{user.name}</Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              )}
+
+              {canViewUsers && (
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item label="学员归属" name="studentOwner">
                     <Select
                       placeholder="请选择学员归属"
                       allowClear
@@ -397,7 +424,7 @@ const EditTrainingLead: React.FC = () => {
                 </Col>
               )}
 
-              <Col xs={24} sm={12} md={8}>
+              <Col xs={24} sm={12} md={6}>
                 <Form.Item
                   label="是否报征"
                   name="isReported"

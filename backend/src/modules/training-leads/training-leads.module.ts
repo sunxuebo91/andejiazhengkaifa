@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
 import { TrainingLeadsController } from './training-leads.controller';
+import { TrainingLeadsMiniProgramController } from './training-leads-miniprogram.controller';
 import { TrainingLeadsService } from './training-leads.service';
 import { TrainingLead, TrainingLeadSchema } from './models/training-lead.model';
 import { TrainingLeadFollowUp, TrainingLeadFollowUpSchema } from './models/training-lead-follow-up.model';
@@ -25,7 +26,7 @@ import { AIModule } from '../ai/ai.module';
     }),
     AIModule,
   ],
-  controllers: [TrainingLeadsController],
+  controllers: [TrainingLeadsController, TrainingLeadsMiniProgramController],
   providers: [TrainingLeadsService],
   exports: [TrainingLeadsService],
 })

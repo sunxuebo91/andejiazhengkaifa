@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  Res,
   HttpCode,
   HttpStatus,
   UseInterceptors,
@@ -16,6 +17,7 @@ import {
   BadRequestException,
   Logger
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
@@ -71,9 +73,7 @@ export class TrainingLeadsController {
   // 检查是否是管理员或经理（有全局查看权限的角色：admin/manager/operator/admissions）
   // dispatch/employee 只能查看自己创建的线索
   private isManagerOrAdmin(user: any): boolean {
-    return user?.role === '系统管理员' || user?.role === 'admin' ||
-           user?.role === '经理' || user?.role === 'manager' ||
-           user?.role === 'operator' || user?.role === 'admissions';
+    return ['系统管理员', 'admin', '经理', 'manager', 'operator'].includes(user?.role);
   }
 
   @Post()
@@ -134,6 +134,78 @@ export class TrainingLeadsController {
         data: null,
         message: `Excel导入失败: ${error.message}`
       };
+    }
+  }
+
+  // ==================== 标准模板下载 + 智能Excel导入 ====================
+
+  /** 列名 → 系统字段 模糊匹配映射表 */
+  private static readonly COLUMN_ALIAS_MAP: Record<string, string[]> = {
+    name:            ['姓名', '名字', '学员姓名', 'name'],
+    gender:          ['性别', 'gender', 'sex'],
+    age:             ['年龄', 'age'],
+    phone:           ['手机号', '手机', '电话', '联系电话', '联系方式', 'phone', 'tel', 'mobile'],
+    wechatId:        ['微信号', '微信', 'wechat', 'wx'],
+    leadSource:      ['渠道来源', '线索来源', '来源', '渠道', 'source'],
+    trainingType:    ['培训类型', '性质', '类型', 'type'],
+    consultPosition: ['咨询职位', '职位', 'position'],
+    intendedCourses: ['意向课程', '课程', 'courses'],
+    intentionLevel:  ['意向程度', '意向', '类别', 'intention'],
+    leadGrade:       ['线索等级', '等级', 'grade'],
+    address:         ['所在地区', '地区', '地址', '城市', 'address', 'city'],
+    budget:          ['预算金额', '预算', 'budget'],
+    remarks:         ['备注', '备注信息', 'remark', 'remarks', 'note'],
+    followUpPerson:  ['跟进人', '录入人', '发起人', '负责人', '创建人'],
+    followUpContent: ['跟进内容', '跟进记录', '沟通内容'],
+    followUpType:    ['跟进方式', '沟通方式'],
+    followUpTime:    ['跟进时间', '沟通时间'],
+  };
+
+  /** 提取单元格文本值 */
+  private getCellText(cell: any): string {
+    const val = cell?.value;
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val.trim();
+    if (typeof val === 'number') return String(val);
+    if (val instanceof Date) return val.toLocaleDateString('zh-CN');
+    if (typeof val === 'object') {
+      if ('result' in val) return String(val.result ?? '').trim();
+      if ('text' in val) return String(val.text ?? '').trim();
+      if ('richText' in val && Array.isArray(val.richText)) {
+        return val.richText.map((r: any) => r.text || '').join('').trim();
+      }
+    }
+    return String(val).trim();
+  }
+
+  /** 根据列名模糊匹配系统字段 */
+  private matchField(header: string): string | null {
+    const h = header.trim().toLowerCase();
+    for (const [field, aliases] of Object.entries(TrainingLeadsController.COLUMN_ALIAS_MAP)) {
+      if (aliases.some(a => a.toLowerCase() === h)) return field;
+    }
+    // 模糊包含匹配
+    for (const [field, aliases] of Object.entries(TrainingLeadsController.COLUMN_ALIAS_MAP)) {
+      if (aliases.some(a => h.includes(a.toLowerCase()) || a.toLowerCase().includes(h))) return field;
+    }
+    return null;
+  }
+
+  /** 模板下载已移到前端生成，后端不再提供此接口 */
+
+  @Post('check-duplicates')
+  @Permissions('training-lead:create')
+  @ApiOperation({ summary: '批量查重手机号（前端解析Excel后调用）' })
+  async checkDuplicates(@Body() body: { phones: string[] }) {
+    const phones = (body.phones || []).filter(Boolean);
+    if (phones.length === 0) return { success: true, data: { duplicatePhones: [] } };
+    try {
+      const existingLeads = await this.trainingLeadsService.findByPhones(phones);
+      const duplicatePhones = existingLeads.map((l: any) => l.phone);
+      return { success: true, data: { duplicatePhones } };
+    } catch (error: any) {
+      this.logger.error(`查重失败: ${error.message}`);
+      return { success: false, data: { duplicatePhones: [] }, message: error.message };
     }
   }
 

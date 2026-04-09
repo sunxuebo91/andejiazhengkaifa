@@ -1,8 +1,10 @@
 // 线索状态枚举
 export enum LeadStatus {
-  NEW = '新线索',
   FOLLOWING = '跟进中',
-  CLOSED = '已成交',
+  ENROLLED = '已报名',
+  GRADUATED = '已结业',
+  ABANDONED = '已放弃',
+  INVALID = '无效线索',
   LOST = '已流失'
 }
 
@@ -143,9 +145,11 @@ export interface ShareTokenResponse {
 
 // 选项配置
 export const LEAD_STATUS_OPTIONS = [
-  { label: '新线索', value: LeadStatus.NEW, color: '#1890ff' },
   { label: '跟进中', value: LeadStatus.FOLLOWING, color: '#fa8c16' },
-  { label: '已成交', value: LeadStatus.CLOSED, color: '#52c41a' },
+  { label: '已报名', value: LeadStatus.ENROLLED, color: '#13c2c2' },
+  { label: '已结业', value: LeadStatus.GRADUATED, color: '#52c41a' },
+  { label: '已放弃', value: LeadStatus.ABANDONED, color: '#ff4d4f' },
+  { label: '无效线索', value: LeadStatus.INVALID, color: '#d9d9d9' },
   { label: '已流失', value: LeadStatus.LOST, color: '#8c8c8c' }
 ];
 

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>发起背调</title>
+  <script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif; background: #f5f5f5; color: #333; font-size: 14px; padding-bottom: env(safe-area-inset-bottom); }
+    .header { background: linear-gradient(135deg, #5DBFB3, #4aada1); color: #fff; padding: 16px; text-align: center; font-size: 18px; font-weight: 600; position: sticky; top: 0; z-index: 100; }
+    .container { padding: 12px; max-width: 750px; margin: 0 auto; }
+    .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #333; display: flex; align-items: center; gap: 6px; }
+    .card-title::before { content: ''; display: inline-block; width: 3px; height: 16px; background: #5DBFB3; border-radius: 2px; }
+    .form-item { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; }
+    .form-label .required { color: #ff4d4f; margin-right: 2px; }
+    .form-input { width: 100%; height: 40px; border: 1px solid #d9d9d9; border-radius: 6px; padding: 0 12px; font-size: 14px; outline: none; transition: border-color 0.3s; -webkit-appearance: none; }
+    .form-input:focus { border-color: #5DBFB3; box-shadow: 0 0 0 2px rgba(93,191,179,0.15); }
+    .form-input::placeholder { color: #bfbfbf; }
+    .form-input.error { border-color: #ff4d4f; }
+    .error-text { color: #ff4d4f; font-size: 12px; margin-top: 4px; display: none; }
+    .package-list { display: flex; flex-direction: column; gap: 10px; }
+    .package-item { border: 2px solid #e8e8e8; border-radius: 8px; padding: 14px; cursor: pointer; transition: all 0.3s; position: relative; }
+    .package-item.active { border-color: #5DBFB3; background: #e6f7f5; }
+    .package-item .pkg-name { font-size: 14px; font-weight: 500; color: #333; }
+    .package-item .pkg-price { font-size: 20px; font-weight: 700; color: #f5222d; margin-top: 4px; }
+    .package-item .pkg-check { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; border: 2px solid #d9d9d9; display: flex; align-items: center; justify-content: center; }
+    .package-item.active .pkg-check { border-color: #5DBFB3; background: #5DBFB3; }
+    .package-item.active .pkg-check::after { content: '✓'; color: #fff; font-size: 13px; }
+    .btn { width: 100%; height: 44px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-primary { background: #5DBFB3; color: #fff; }
+    .btn-primary:active { background: #4aada1; }
+    .btn-primary:disabled { background: #b5b5b5; cursor: not-allowed; }
+    .btn-search { background: #5DBFB3; color: #fff; height: 40px; border-radius: 6px; padding: 0 16px; font-size: 14px; border: none; white-space: nowrap; }
+    .search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .search-row .form-input { flex: 1; }
+    .resume-item { padding: 12px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .resume-item:last-child { border-bottom: none; }
+    .resume-info { flex: 1; min-width: 0; }
+    .resume-info .name { font-weight: 600; font-size: 15px; }
+    .resume-info .detail { color: #999; font-size: 12px; margin-top: 2px; }
+    .btn-select { background: #5DBFB3; color: #fff; border: none; border-radius: 4px; padding: 6px 14px; font-size: 13px; flex-shrink: 0; }
+    .btn-select.selected { background: #52c41a; }
+    .btn-select:disabled { background: #d9d9d9; }
+    .success-banner { background: #e6f7f5; border: 1px solid #a8ddd6; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; color: #5DBFB3; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .loading { text-align: center; padding: 20px; color: #999; }
+    .empty { text-align: center; padding: 30px; color: #bfbfbf; }
+    .steps { display: flex; margin-bottom: 16px; background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .step { flex: 1; text-align: center; position: relative; }
+    .step-num { width: 26px; height: 26px; border-radius: 50%; background: #e8e8e8; color: #999; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+    .step.active .step-num { background: #5DBFB3; color: #fff; }
+    .step.done .step-num { background: #5DBFB3; color: #fff; }
+    .step-text { font-size: 12px; color: #999; margin-top: 4px; }
+    .step.active .step-text { color: #5DBFB3; font-weight: 500; }
+    .step-line { position: absolute; top: 13px; right: -50%; width: 100%; height: 2px; background: #e8e8e8; z-index: 0; }
+    .step.done + .step .step-line, .step.done .step-line { background: #5DBFB3; }
+    .toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.75); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 1000; display: none; max-width: 80%; text-align: center; }
+    .result-page { text-align: center; padding: 40px 20px; }
+    .result-icon { font-size: 60px; margin-bottom: 16px; }
+    .result-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .result-desc { color: #999; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="header">发起背调</div>
+  <div class="container">
+    <!-- 步骤条 -->
+    <div class="steps">
+      <div class="step active" id="step1">
+        <div class="step-num">1</div>
+        <div class="step-text">搜索简历</div>
+      </div>
+      <div class="step" id="step2">
+        <div class="step-num">2</div>
+        <div class="step-text">填写信息</div>
+      </div>
+    </div>
+
+    <!-- 第一步：搜索简历 -->
+    <div id="page-step1">
+      <div class="card">
+        <div class="card-title">搜索简历</div>
+        <div class="search-row">
+          <input class="form-input" id="resumeKeyword" placeholder="输入姓名/手机号搜索" />
+          <button class="btn-search" onclick="searchResumes()">搜索</button>
+        </div>
+        <div id="resumeList"></div>
+      </div>
+      <div id="authBanner" style="display:none"></div>
+      <button class="btn btn-primary" id="btnNextStep" disabled onclick="goToStep2()">下一步</button>
+    </div>
+
+    <!-- 第二步：填写信息 -->
+    <div id="page-step2" style="display:none">
+      <div class="card">
+        <div class="card-title">选择套餐</div>
+        <div class="package-list" id="packageList"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">候选人信息</div>
+        <div class="form-item">
+          <label class="form-label"><span class="required">*</span>姓名</label>
+          <input class="form-input" id="inputName" placeholder="候选人姓名" />
+        </div>
+        <div class="form-item">
+          <label class="form-label"><span class="required">*</span>手机号</label>
+          <input class="form-input" id="inputMobile" placeholder="候选人手机号" type="tel" maxlength="11" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">身份证号</label>
+          <input class="form-input" id="inputIdNo" placeholder="选填" maxlength="18" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">职位</label>
+          <input class="form-input" id="inputPosition" placeholder="如：住家保姆（选填）" />
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" style="background:#f0f0f0;color:#666;flex:1" onclick="backToStep1()">上一步</button>
+        <button class="btn btn-primary" style="flex:2" id="btnSubmit" onclick="submitReport()">确认发起背调</button>
+      </div>
+    </div>
+
+    <!-- 结果页 -->
+    <div id="page-result" style="display:none">
+      <div class="result-page">
+        <div class="result-icon">✅</div>
+        <div class="result-title">背调发起成功</div>
+        <div class="result-desc">背调正在进行中，完成后可在记录中查看结果</div>
+        <button class="btn btn-primary" style="margin-top:24px" onclick="closePage()">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── 配置 ──────────────────────────────────────────────────
+    var BASE_URL = location.origin;
+    var TOKEN = '';
+    var AUTH_DATA = null; // { stuffId, imageUrl, esignContractNo }
+    var SELECTED_RESUME = null;
+    var SELECTED_PKG = '1';
+    var SUBMITTING = false;
+
+    var BG_PACKAGES = [
+      { value: '1', label: '基础查询（身份核实+社会不良信息+涉诉记录）', price: '¥18' },
+      { value: '2', label: '高级查询（基础+金融风险+失信被执行+限高名单）', price: '¥28' },
+    ];
+
+    var JOB_MAP = { 'yuesao': '月嫂', 'zhujia-yuer': '住家育儿', 'baiban-yuer': '白班育儿', 'baojie': '保洁', 'baiban-baomu': '白班保姆', 'zhujia-baomu': '住家保姆', 'yangchong': '养宠', 'xiaoshi': '小时工', 'zhujia-hulao': '住家护老', 'jiajiao': '家教', 'peiban': '陪伴师' };
+
+    // ── 初始化 ────────────────────────────────────────────────
+    (function init() {
+      var params = new URLSearchParams(location.search);
+      TOKEN = params.get('token') || '';
+      if (!TOKEN) {
+        showToast('缺少登录凭证，请从小程序进入');
+        return;
+      }
+      renderPackages();
+
+      // 如果小程序传了 name 参数，直接跳到第二步（填写信息页）
+      var directName = params.get('name') || '';
+      if (directName) {
+        var directPhone = params.get('phone') || '';
+        var directIdNo = params.get('idNo') || '';
+        var directJobType = params.get('jobType') || '';
+        directAutoFill(directName, directPhone, directIdNo, directJobType);
+      }
+    })();
+
+    // ── 直接传参模式：跳过搜索，自动准备授权书并跳到第二步 ──────
+    function directAutoFill(name, phone, idNo, jobType) {
+      // 先跳到第二步界面
+      document.getElementById('page-step1').style.display = 'none';
+      document.getElementById('page-step2').style.display = 'block';
+      document.getElementById('step1').className = 'step done';
+      document.getElementById('step2').className = 'step active';
+
+      // 填充表单
+      document.getElementById('inputName').value = name;
+      document.getElementById('inputMobile').value = phone;
+      document.getElementById('inputIdNo').value = idNo;
+      document.getElementById('inputPosition').value = (jobType && JOB_MAP[jobType]) || '';
+
+      // 自动调用 prepare-auth
+      showToast('正在准备授权书...');
+      var btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      btn.textContent = '授权书准备中...';
+
+      apiRequest('POST', '/api/zmdb/miniprogram/prepare-auth', { workerName: name })
+        .then(function(res) {
+          AUTH_DATA = res.data || res;
+          SELECTED_RESUME = { name: name, phone: phone, idNumber: idNo, jobType: jobType };
+          btn.disabled = false;
+          btn.textContent = '确认发起背调';
+          showToast('授权书准备完成，请确认信息后提交');
+        })
+        .catch(function(e) {
+          showToast(e.message || '授权书准备失败，请返回重试');
+          btn.disabled = true;
+          btn.textContent = '授权书准备失败';
+        });
+    }
+
+    // ── 工具函数 ──────────────────────────────────────────────
+    function showToast(msg, duration) {
+      var el = document.getElementById('toast');
+      el.textContent = msg;
+      el.style.display = 'block';
+      clearTimeout(el._timer);
+      el._timer = setTimeout(function() { el.style.display = 'none'; }, duration || 2500);
+    }
+
+    function apiRequest(method, url, data) {
+      return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open(method, BASE_URL + url);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        if (TOKEN) xhr.setRequestHeader('Authorization', 'Bearer ' + TOKEN);
+        xhr.onload = function() {
+          try {
+            var res = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) resolve(res);
+            else reject(res);
+          } catch(e) { reject({ message: '请求失败' }); }
+        };
+        xhr.onerror = function() { reject({ message: '网络错误' }); };
+        xhr.send(data ? JSON.stringify(data) : null);
+      });
+    }
+
+    // ── 步骤切换 ──────────────────────────────────────────────
+    function goToStep2() {
+      if (!AUTH_DATA) { showToast('请先选择简历'); return; }
+      document.getElementById('page-step1').style.display = 'none';
+      document.getElementById('page-step2').style.display = 'block';
+      document.getElementById('step1').className = 'step done';
+      document.getElementById('step2').className = 'step active';
+    }
+
+    function backToStep1() {
+      document.getElementById('page-step2').style.display = 'none';
+      document.getElementById('page-step1').style.display = 'block';
+      document.getElementById('step1').className = 'step active';
+      document.getElementById('step2').className = 'step';
+    }
+
+    // ── 搜索简历 ──────────────────────────────────────────────
+    function searchResumes() {
+      var keyword = document.getElementById('resumeKeyword').value.trim();
+      if (!keyword) { showToast('请输入搜索内容'); return; }
+
+      var listEl = document.getElementById('resumeList');
+      listEl.innerHTML = '<div class="loading">搜索中...</div>';
+
+      apiRequest('GET', '/api/resumes?keyword=' + encodeURIComponent(keyword) + '&page=1&pageSize=20')
+        .then(function(res) {
+          var items = (res.data && res.data.items) || [];
+          if (items.length === 0) {
+            listEl.innerHTML = '<div class="empty">未找到简历</div>';
+            return;
+          }
+          var html = '';
+          items.forEach(function(r) {
+            html += '<div class="resume-item" data-id="' + (r._id || i) + '">'
+              + '<div class="resume-info">'
+              + '<div class="name">' + (r.name || '-') + '</div>'
+              + '<div class="detail">' + (r.phone || '-') + (r.idNumber ? ' | ' + r.idNumber.slice(0,6) + '****' + r.idNumber.slice(-4) : '') + '</div>'
+              + '</div>'
+              + '<button class="btn-select" onclick=\'selectResume(' + JSON.stringify(r).replace(/'/g, "\\'") + ')\'>选择</button>'
+              + '</div>';
+          });
+          listEl.innerHTML = html;
+        })
+        .catch(function() {
+          listEl.innerHTML = '<div class="empty">搜索失败，请重试</div>';
+        });
+    }
+
+    // ── 选择简历 & 准备授权书 ─────────────────────────────────
+    function selectResume(resume) {
+      if (!resume.name) { showToast('简历缺少姓名'); return; }
+      SELECTED_RESUME = resume;
+
+      // 所有按钮显示"选择"并禁用，当前点击的显示"准备中..."
+      var btns = document.querySelectorAll('.btn-select');
+      btns.forEach(function(b) {
+        b.disabled = true;
+        b.textContent = '选择';
+        b.style.background = '#d9d9d9';
+      });
+      // 找到当前点击的按钮（通过 resume._id 匹配）
+      var currentItem = document.querySelector('.resume-item[data-id="' + resume._id + '"]');
+      var currentBtn = currentItem ? currentItem.querySelector('.btn-select') : null;
+      if (currentBtn) {
+        currentBtn.textContent = '准备中...';
+        currentBtn.style.background = '#faad14';
+      }
+
+      apiRequest('POST', '/api/zmdb/miniprogram/prepare-auth', { workerName: resume.name })
+        .then(function(res) {
+          AUTH_DATA = res.data || res;
+          // 填充表单
+          document.getElementById('inputName').value = resume.name || '';
+          document.getElementById('inputMobile').value = resume.phone || '';
+          document.getElementById('inputIdNo').value = resume.idNumber || '';
+
+          document.getElementById('inputPosition').value = (resume.jobType && JOB_MAP[resume.jobType]) || '';
+
+          // 成功后：当前按钮显示"已选择"（绿色），其他恢复可点击
+          btns.forEach(function(b) {
+            b.disabled = false;
+            b.textContent = '选择';
+            b.style.background = '#5DBFB3';
+          });
+          if (currentBtn) {
+            currentBtn.textContent = '已选择';
+            currentBtn.style.background = '#52c41a';
+            currentBtn.disabled = true;
+          }
+
+          // 显示成功 banner
+          var banner = document.getElementById('authBanner');
+          banner.style.display = 'block';
+          banner.innerHTML = '<div class="success-banner">✅ 已选择：<b>' + resume.name + '</b>（' + (resume.phone || '') + '），授权书准备完成</div>';
+
+          document.getElementById('btnNextStep').disabled = false;
+          showToast('授权书准备完成');
+        })
+        .catch(function(e) {
+          showToast(e.message || '授权书准备失败');
+          SELECTED_RESUME = null;
+          AUTH_DATA = null;
+          // 全部恢复可点击
+          btns.forEach(function(b) {
+            b.disabled = false;
+            b.textContent = '选择';
+            b.style.background = '#5DBFB3';
+          });
+        });
+    }
+
+    // ── 套餐渲染 ──────────────────────────────────────────────
+    function renderPackages() {
+      var html = '';
+      BG_PACKAGES.forEach(function(pkg) {
+        html += '<div class="package-item' + (SELECTED_PKG === pkg.value ? ' active' : '') + '" onclick="selectPackage(\'' + pkg.value + '\')">'
+          + '<div class="pkg-name">' + pkg.label + '</div>'
+          + '<div class="pkg-price">' + pkg.price + '</div>'
+          + '<div class="pkg-check"></div>'
+          + '</div>';
+      });
+      document.getElementById('packageList').innerHTML = html;
+    }
+
+    function selectPackage(val) {
+      SELECTED_PKG = val;
+      renderPackages();
+    }
+
+    // ── 提交背调 ──────────────────────────────────────────────
+    function submitReport() {
+      if (SUBMITTING) return;
+      var name = document.getElementById('inputName').value.trim();
+      var mobile = document.getElementById('inputMobile').value.trim();
+      var idNo = document.getElementById('inputIdNo').value.trim();
+      var position = document.getElementById('inputPosition').value.trim();
+
+      if (!name) { showToast('请输入姓名'); return; }
+      if (!mobile || !/^1[3-9]\d{9}$/.test(mobile)) { showToast('请输入正确的手机号'); return; }
+      if (!AUTH_DATA) { showToast('授权书未准备'); return; }
+
+      SUBMITTING = true;
+      var btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      btn.textContent = '提交中...';
+
+      var payload = {
+        stuffId: AUTH_DATA.stuffId,
+        authStuffUrl: AUTH_DATA.imageUrl,
+        esignContractNo: AUTH_DATA.esignContractNo || ('RESUME_' + (SELECTED_RESUME ? SELECTED_RESUME._id : Date.now())),
+        name: name,
+        mobile: mobile,
+        idNo: idNo || undefined,
+        position: position || undefined,
+        packageType: SELECTED_PKG,
+      };
+
+      apiRequest('POST', '/api/zmdb/miniprogram/reports', payload)
+        .then(function(res) {
+          // 发起背调本身不需要支付（背调费用在后端扣除）
+          document.getElementById('page-step2').style.display = 'none';
+          document.getElementById('page-result').style.display = 'block';
+          document.getElementById('step2').className = 'step done';
+
+          // 通知小程序刷新
+          postToMiniProgram({ action: 'bgCheckSuccess', data: res.data || res });
+        })
+        .catch(function(e) {
+          showToast(e.message || '发起背调失败');
+        })
+        .finally(function() {
+          SUBMITTING = false;
+          btn.disabled = false;
+          btn.textContent = '确认发起背调';
+        });
+    }
+
+    // ── 关闭页面（通知小程序返回上一页）────────────────────────
+    function closePage() {
+      if (window.wx && wx.miniProgram) {
+        wx.miniProgram.navigateBack();
+      } else {
+        window.close();
+      }
+    }
+
+    // ── 重置页面 ──────────────────────────────────────────────
+    function resetPage() {
+      AUTH_DATA = null;
+      SELECTED_RESUME = null;
+      SELECTED_PKG = '1';
+      document.getElementById('page-result').style.display = 'none';
+      document.getElementById('page-step1').style.display = 'block';
+      document.getElementById('step1').className = 'step active';
+      document.getElementById('step2').className = 'step';
+      document.getElementById('resumeKeyword').value = '';
+      document.getElementById('resumeList').innerHTML = '<div class="empty">搜索简历以发起背调</div>';
+      document.getElementById('authBanner').style.display = 'none';
+      document.getElementById('btnNextStep').disabled = true;
+      renderPackages();
+    }
+
+    // ── 与小程序通信 ──────────────────────────────────────────
+    function postToMiniProgram(data) {
+      if (window.wx && wx.miniProgram) {
+        wx.miniProgram.postMessage({ data: data });
+      }
+    }
+
+    // 回车搜索
+    document.getElementById('resumeKeyword').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') searchResumes();
+    });
+  </script>
+</body>
+</html>

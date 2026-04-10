@@ -191,10 +191,29 @@ export class DashubaoMiniprogramController {
       // 调用小程序支付
       const result = await this.dashubaoService.createPaymentOrder(policyRef, 'MINI', openId);
 
+      // 大树保返回失败时，不能把支付参数给前端，否则用户付了钱但大树保没出保单
+      if (result.Success !== 'true') {
+        this.logger.warn(`[支付] 大树保返回失败: ${result.Message}，不返回支付参数`);
+        return {
+          success: false,
+          data: null,
+          message: result.Message || '创建支付订单失败，请稍后重试',
+          paymentType: 'MINI',
+          debug: {
+            configuredAppId,
+            maskedOpenId,
+            openIdSource,
+            dashubaoSuccess: result.Success,
+            dashubaoMessage: result.Message,
+            orderId: result.OrderId,
+          }
+        };
+      }
+
       return {
         success: true,
         data: result,
-        message: result.Success === 'true' ? '获取支付参数成功' : result.Message,
+        message: '获取支付参数成功',
         paymentType: 'MINI',
         debug: {
           configuredAppId,

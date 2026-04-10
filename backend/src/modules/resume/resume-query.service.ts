@@ -54,6 +54,7 @@ export class ResumeQueryService {
     ethnicity?: string,
     currentUserId?: string,
     isDraft?: boolean,
+    isAdmin?: boolean,
   ) {
     if (!this.hasCheckedUpdatedAt) {
       await this.batchFixMissingUpdatedAt();
@@ -128,29 +129,61 @@ export class ResumeQueryService {
       ));
     }
 
+    // 已上户（orderStatus=on-service）的简历可见性控制：
+    // 1. 有有效合同 → 只有管理员和合同归属人能看到
+    // 2. 无有效合同 → 状态异常，自动修正为"想接单"（accepting）
     if (items.length > 0) {
-      const resumeIds = items.map((item: any) => item._id);
-      const activeContracts = await this.contractModel.find({
-        workerId: { $in: resumeIds },
-        contractStatus: 'active',
-      }).select('workerId createdBy').lean().exec();
+      const onServiceItems = items.filter((item: any) => item.orderStatus === 'on-service' && item.phone);
+      const phoneList = onServiceItems.map((item: any) => item.phone);
+      if (phoneList.length > 0) {
+        const activeContracts = await this.contractModel.find({
+          workerPhone: { $in: phoneList },
+          contractStatus: 'active',
+        }).select('workerPhone createdBy').lean().exec();
 
-      const contractOwnerMap = new Map<string, string>();
-      activeContracts.forEach((contract: any) => {
-        const workerId = contract.workerId?.toString();
-        const ownerId = contract.createdBy?.toString();
-        if (workerId && ownerId) {
-          contractOwnerMap.set(workerId, ownerId);
+        // phone -> 合同归属人ID
+        const contractOwnerMap = new Map<string, string>();
+        activeContracts.forEach((contract: any) => {
+          const phone = contract.workerPhone;
+          const ownerId = contract.createdBy?.toString();
+          if (phone && ownerId) {
+            contractOwnerMap.set(phone, ownerId);
+          }
+        });
+
+        // 收集需要自动修正状态的简历ID（已上户但无有效合同）
+        const needFixIds: any[] = [];
+
+        items = items.map((item: any) => {
+          if (item.orderStatus !== 'on-service') return item;
+          const contractOwnerId = contractOwnerMap.get(item.phone);
+          if (!contractOwnerId) {
+            // 已上户但无有效合同 → 状态异常，修正为"想接单"
+            needFixIds.push(item._id);
+            return { ...item, orderStatus: 'accepting' };
+          }
+          return item;
+        });
+
+        // 异步批量修正数据库中的异常状态
+        if (needFixIds.length > 0) {
+          this.resumeModel.updateMany(
+            { _id: { $in: needFixIds } },
+            { orderStatus: 'accepting' },
+          ).exec().catch(err => this.logger.error('自动修正已上户状态失败:', err.message));
         }
-      });
 
-      items = items.filter((item: any) => {
-        const resumeId = item._id?.toString();
-        const contractOwnerId = contractOwnerMap.get(resumeId);
-        if (!contractOwnerId) return true;
-        if (currentUserId) return contractOwnerId === currentUserId;
-        return false;
-      });
+        // 非管理员：已上户+有效合同的简历只有归属人能看到
+        if (!isAdmin) {
+          items = items.filter((item: any) => {
+            if (item.orderStatus !== 'on-service') return true;
+            const contractOwnerId = contractOwnerMap.get(item.phone);
+            if (!contractOwnerId) return true;
+            if (currentUserId) return contractOwnerId === currentUserId;
+            return false;
+          });
+        }
+      }
     }
 
     const itemsWithAvatar = items.map((item: any) => {
@@ -170,7 +203,7 @@ export class ResumeQueryService {
     };
   }
 
-  async findOne(id: string, currentUserId?: string) {
+  async findOne(id: string, currentUserId?: string, isAdmin?: boolean) {
     const resume = await this.resumeModel
       .findById(new Types.ObjectId(id))
       .populate('userId', 'username name')
@@ -180,15 +213,24 @@ export class ResumeQueryService {
       throw new NotFoundException('简历不存在');
     }
 
-    if (currentUserId) {
+    // 已上户（orderStatus=on-service）的简历可见性控制
+    if (resume.orderStatus === 'on-service' && resume.phone) {
       const activeContract = await this.contractModel.findOne({
-        workerId: new Types.ObjectId(id),
+        workerPhone: resume.phone,
         contractStatus: 'active',
       }).select('createdBy').lean().exec();
 
-      if (activeContract) {
+      if (!activeContract) {
+        // 已上户但无有效合同 → 状态异常，自动修正为"想接单"
+        resume.orderStatus = 'accepting' as any;
+        this.resumeModel.updateOne(
+          { _id: resume._id },
+          { orderStatus: 'accepting' },
+        ).exec().catch(err => this.logger.error('自动修正已上户状态失败:', err.message));
+      } else if (!isAdmin) {
+        // 有有效合同，非管理员只有归属人能看到
         const contractOwnerId = activeContract.createdBy?.toString();
-        if (contractOwnerId && contractOwnerId !== currentUserId) {
+        if (!currentUserId || (contractOwnerId && contractOwnerId !== currentUserId)) {
           throw new NotFoundException('简历不存在');
         }
       }

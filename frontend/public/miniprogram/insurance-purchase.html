@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>购买保险</title>
+  <script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif; background: #f5f5f5; color: #333; font-size: 14px; padding-bottom: env(safe-area-inset-bottom); }
+    .header { background: linear-gradient(135deg, #5DBFB3, #4aada1); color: #fff; padding: 16px; text-align: center; font-size: 18px; font-weight: 600; position: sticky; top: 0; z-index: 100; }
+    .container { padding: 12px; max-width: 750px; margin: 0 auto; }
+    .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #333; display: flex; align-items: center; gap: 6px; }
+    .card-title::before { content: ''; display: inline-block; width: 3px; height: 16px; background: #5DBFB3; border-radius: 2px; }
+    .form-item { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; }
+    .form-label .required { color: #ff4d4f; margin-right: 2px; }
+    .form-input, .form-select { width: 100%; height: 40px; border: 1px solid #d9d9d9; border-radius: 6px; padding: 0 12px; font-size: 14px; outline: none; transition: border-color 0.3s; -webkit-appearance: none; background: #fff; }
+    .form-input:focus, .form-select:focus { border-color: #5DBFB3; box-shadow: 0 0 0 2px rgba(93,191,179,0.15); }
+    .form-input::placeholder { color: #bfbfbf; }
+    .btn { width: 100%; height: 44px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-primary { background: #5DBFB3; color: #fff; }
+    .btn-primary:active { background: #4aada1; }
+    .btn-primary:disabled { background: #b5b5b5; cursor: not-allowed; }
+    .product-card { border: 2px solid #e8e8e8; border-radius: 10px; overflow: hidden; margin-bottom: 14px; transition: all 0.3s; }
+    .product-card.active { border-color: #5DBFB3; }
+    .product-header { padding: 14px; display: flex; justify-content: space-between; align-items: center; }
+    .product-header .name { font-size: 15px; font-weight: 600; }
+    .product-header .company { font-size: 12px; color: #999; }
+    .product-header .badge { background: #5DBFB3; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+    .plan-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 14px; }
+    .plan-item { flex: 1; min-width: calc(50% - 4px); border: 2px solid #f0f0f0; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all 0.3s; }
+    .plan-item.active { border-color: #5DBFB3; background: #e6f7f5; }
+    .plan-item .plan-tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 3px; margin-bottom: 4px; }
+    .plan-tag.year { background: #e6f7f5; color: #5DBFB3; }
+    .plan-tag.month { background: #fff3e6; color: #fa8c16; }
+    .plan-item .plan-name { font-size: 12px; color: #666; }
+    .plan-item .plan-price { font-size: 20px; font-weight: 700; color: #f5222d; margin-top: 4px; }
+    .plan-item .plan-unit { font-size: 12px; color: #999; }
+    .steps { display: flex; margin-bottom: 16px; background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .step { flex: 1; text-align: center; }
+    .step-num { width: 26px; height: 26px; border-radius: 50%; background: #e8e8e8; color: #999; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+    .step.active .step-num { background: #5DBFB3; color: #fff; }
+    .step.done .step-num { background: #5DBFB3; color: #fff; }
+    .step-text { font-size: 12px; color: #999; margin-top: 4px; }
+    .step.active .step-text { color: #5DBFB3; font-weight: 500; }
+    .toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.75); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 1000; display: none; max-width: 80%; text-align: center; }
+    .result-page { text-align: center; padding: 40px 20px; }
+    .result-icon { font-size: 60px; margin-bottom: 16px; }
+    .result-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .result-desc { color: #999; font-size: 14px; margin-bottom: 6px; }
+    .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+    .info-row:last-child { border-bottom: none; }
+    .info-row .label { color: #999; }
+    .date-input { display: flex; gap: 8px; }
+    .date-input .form-input { flex: 1; }
+    .month-select { width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="header">🛡️ 购买保险</div>
+  <div class="container">
+    <!-- 步骤条 -->
+    <div class="steps">
+      <div class="step active" id="step1"><div class="step-num">1</div><div class="step-text">选择产品</div></div>
+      <div class="step" id="step2"><div class="step-num">2</div><div class="step-text">填写信息</div></div>
+      <div class="step" id="step3"><div class="step-num">3</div><div class="step-text">完成</div></div>
+    </div>
+
+    <!-- 第一步：选择产品 -->
+    <div id="page-step1"><div id="productList"></div></div>
+
+    <!-- 第二步：填写信息 -->
+    <div id="page-step2" style="display:none">
+      <div id="selectedPlanInfo"></div>
+      <div class="card">
+        <div class="card-title">保单信息</div>
+        <div class="form-item" id="monthsRow" style="display:none">
+          <label class="form-label"><span class="required">*</span>投保月数</label>
+          <select class="form-select" id="inputMonths" onchange="onMonthsChange()">
+            <option value="1">1个月</option><option value="2">2个月</option><option value="3">3个月</option>
+            <option value="4">4个月</option><option value="5">5个月</option><option value="6">6个月</option>
+            <option value="7">7个月</option><option value="8">8个月</option><option value="9">9个月</option>
+            <option value="10">10个月</option><option value="11">11个月</option><option value="12">12个月</option>
+          </select>
+        </div>
+        <div class="form-item">
+          <label class="form-label"><span class="required">*</span>生效日期</label>
+          <input class="form-input" id="inputEffDate" type="date" onchange="onEffDateChange()" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">结束日期</label>
+          <input class="form-input" id="inputExpDate" type="date" disabled />
+        </div>
+        <div class="form-item">
+          <label class="form-label">总保费</label>
+          <div style="font-size:22px;font-weight:700;color:#f5222d" id="totalPremium">¥0</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">被保险人信息</div>
+        <div id="insuredForm"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:20px">
+        <button class="btn" style="background:#f0f0f0;color:#666;flex:1" onclick="toStep(1)">上一步</button>
+        <button class="btn btn-primary" style="flex:2" id="btnSubmit" onclick="submitInsurance()">确认投保</button>
+      </div>
+    </div>
+
+    <!-- 第三步：结果 -->
+    <div id="page-step3" style="display:none">
+      <div class="result-page" id="resultContent"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── 配置 ──────────────────────────────────────────────────
+    var BASE_URL = location.origin;
+    var TOKEN = '';
+    var SELECTED_PLAN = null;  // { productId, productName, company, planCode, productCode, name, price, period, insuranceType }
+    var INSURED_COUNT = 1;
+    var INSURANCE_MONTHS = 1;
+    var SUBMITTING = false;
+
+    // 保险产品配置（与 insuranceProducts.ts 同步）
+    var PRODUCTS = [
+      {
+        id: 'pingan-dashubao', company: '平安保险', name: '大树保服务无忧保障计划', badge: '常用',
+        plans: [
+          { name: '计划一（年）', productCode: 'MP10450164', planCode: 'PK00038868', price: 100, period: 'year' },
+          { name: '计划一（月）', productCode: 'MP10450164', planCode: 'PK00038868', price: 10, period: 'month' },
+          { name: '计划二（年）', productCode: 'MP10450132', planCode: 'PK00029001', price: 120, period: 'year' },
+          { name: '计划二（月）', productCode: 'MP10450132', planCode: 'PK00029001', price: 12, period: 'month' },
+        ]
+      },
+      {
+        id: 'pingan-jiazheng', company: '平安保险', name: '"家政无忧"雇主责任险', badge: '',
+        plans: [
+          { name: '方案A（年）', productCode: 'MP10450101', planCode: 'PK00029001', price: 110, period: 'year' },
+          { name: '方案B（年）', productCode: 'MP10450101', planCode: 'PK00029011', price: 160, period: 'year' },
+          { name: '方案C（年）', productCode: 'MP10450102', planCode: 'PK00029001', price: 280, period: 'year' },
+          { name: '方案D（年）', productCode: 'MP10450102', planCode: 'PK00029011', price: 360, period: 'year' },
+          { name: '方案B（月）', productCode: 'MP10450133', planCode: 'PK00029011', price: 20, period: 'month' },
+          { name: '方案C（月）', productCode: 'MP10450133', planCode: 'PK00056658', price: 40, period: 'month' },
+          { name: '方案D（月）', productCode: 'MP10450133', planCode: 'PK00056659', price: 50, period: 'month' },
+        ]
+      },
+      {
+        id: 'huatai-yuesao', company: '华泰保险', name: '月嫂无忧-尊享计划', badge: '月嫂专属',
+        plans: [
+          { name: '方案A（月）- 个人', productCode: 'JHJYS', planCode: 'QX000000130807', price: 49, period: 'month', insuranceType: 'personal' },
+          { name: '方案B（月）- 个人', productCode: 'JHJYS', planCode: 'QX000000130808', price: 79, period: 'month', insuranceType: 'personal' },
+          { name: '方案C（月）- 个人', productCode: 'JHJYS', planCode: 'QX000000130809', price: 149, period: 'month', insuranceType: 'personal' },
+          { name: '方案D（月）- 个人', productCode: 'JHJYS', planCode: 'QX000000130810', price: 199, period: 'month', insuranceType: 'personal' },
+          { name: '方案A（月）- 企业', productCode: 'JHJYS', planCode: 'QX000000130811', price: 49, period: 'month', insuranceType: 'enterprise' },
+          { name: '方案B（月）- 企业', productCode: 'JHJYS', planCode: 'QX000000130812', price: 79, period: 'month', insuranceType: 'enterprise' },
+          { name: '方案C（月）- 企业', productCode: 'JHJYS', planCode: 'QX000000130813', price: 149, period: 'month', insuranceType: 'enterprise' },
+          { name: '方案D（月）- 企业', productCode: 'JHJYS', planCode: 'QX000000130814', price: 199, period: 'month', insuranceType: 'enterprise' },
+        ]
+      },
+    ];
+
+    // 投保人固定信息
+    var POLICY_HOLDER = {
+      policyHolderType: 'C',
+      policyHolderName: '北京安得家政有限公司',
+      phIdType: '14',
+      phIdNumber: '91110111MACJMD2R5J',
+      phTelephone: '',
+      phAddress: '北京市朝阳区望京园602号楼3层365',
+      phProvinceCode: '110000',
+      phCityCode: '110100',
+      phDistrictCode: '110105',
+    };
+
+    // ── 初始化 ────────────────────────────────────────────────
+    (function init() {
+      var params = new URLSearchParams(location.search);
+      TOKEN = params.get('token') || '';
+
+      // 支持从 URL 预填被保险人信息
+      window._prefillName = params.get('workerName') || '';
+      window._prefillPhone = params.get('workerPhone') || '';
+      window._prefillIdCard = params.get('workerIdCard') || '';
+
+      if (!TOKEN) { showToast('缺少登录凭证，请从小程序进入'); return; }
+      renderProducts();
+      // 设置默认生效日期为明天
+      var tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      document.getElementById('inputEffDate').value = formatDate(tomorrow);
+      document.getElementById('inputEffDate').min = formatDate(new Date());
+    })();
+
+    // ── 工具函数 ──────────────────────────────────────────────
+    function showToast(msg, dur) {
+      var el = document.getElementById('toast');
+      el.textContent = msg; el.style.display = 'block';
+      clearTimeout(el._t); el._t = setTimeout(function() { el.style.display = 'none'; }, dur || 2500);
+    }
+
+    function formatDate(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function formatDateApi(dateStr, isExpire) {
+      // dateStr: YYYY-MM-DD => YYYYMMDDHHmmss
+      var d = dateStr.replace(/-/g, '');
+      return isExpire ? d + '235959' : d + '000000';
+    }
+
+    function apiRequest(method, url, data) {
+      return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open(method, BASE_URL + url);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        if (TOKEN) xhr.setRequestHeader('Authorization', 'Bearer ' + TOKEN);
+        xhr.onload = function() {
+          try {
+            var res = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) resolve(res);
+            else reject(res);
+          } catch(e) { reject({ message: '请求失败' }); }
+        };
+        xhr.onerror = function() { reject({ message: '网络错误' }); };
+        xhr.send(data ? JSON.stringify(data) : null);
+      });
+    }
+
+    function extractInfoFromIdCard(id) {
+      if (!id || id.length !== 18) return null;
+      var birthDate = id.substring(6, 14) + '000000';
+      var gender = parseInt(id.substring(16, 17)) % 2 === 1 ? 'M' : 'F';
+      return { birthDate: birthDate, gender: gender, birthDateStr: id.substring(6, 10) + '-' + id.substring(10, 12) + '-' + id.substring(12, 14) };
+    }
+
+    function postToMiniProgram(data) {
+      if (window.wx && wx.miniProgram) wx.miniProgram.postMessage({ data: data });
+    }
+
+    // ── 渲染产品列表 ──────────────────────────────────────────
+    function renderProducts() {
+      var html = '';
+      PRODUCTS.forEach(function(prod) {
+        html += '<div class="card">'
+          + '<div class="card-title">' + prod.name + '</div>'
+          + '<div style="font-size:12px;color:#999;margin-bottom:10px">' + prod.company
+          + (prod.badge ? ' <span style="background:#5DBFB3;color:#fff;font-size:11px;padding:1px 6px;border-radius:10px">' + prod.badge + '</span>' : '')
+          + '</div>'
+          + '<div class="plan-grid">';
+        prod.plans.forEach(function(plan, idx) {
+          var planId = prod.id + '-' + idx;
+          html += '<div class="plan-item" onclick="choosePlan(\'' + prod.id + '\',' + idx + ')" id="plan-' + planId + '">'
+            + '<span class="plan-tag ' + plan.period + '">' + (plan.period === 'year' ? '年缴' : '月缴') + '</span>'
+            + '<div class="plan-name">' + plan.name + '</div>'
+            + '<div class="plan-price">¥' + plan.price + '</div>'
+            + '<div class="plan-unit">' + (plan.period === 'year' ? '/年' : '/月') + '</div>'
+            + '</div>';
+        });
+        html += '</div></div>';
+      });
+      document.getElementById('productList').innerHTML = html;
+    }
+
+    function choosePlan(prodId, planIdx) {
+      var prod = PRODUCTS.find(function(p) { return p.id === prodId; });
+      if (!prod) return;
+      var plan = prod.plans[planIdx];
+      SELECTED_PLAN = {
+        productId: prodId,
+        productName: prod.name,
+        company: prod.company,
+        planCode: plan.planCode,
+        productCode: plan.productCode,
+        name: plan.name,
+        price: plan.price,
+        period: plan.period,
+        insuranceType: plan.insuranceType || 'enterprise',
+      };
+
+      // 高亮选中
+      document.querySelectorAll('.plan-item').forEach(function(el) { el.classList.remove('active'); });
+      document.getElementById('plan-' + prodId + '-' + planIdx).classList.add('active');
+
+      // 延迟切到第二步
+      setTimeout(function() { toStep(2); }, 300);
+    }
+
+    // ── 步骤切换 ──────────────────────────────────────────────
+    function toStep(n) {
+      if (n === 2 && !SELECTED_PLAN) { showToast('请先选择套餐'); return; }
+      ['page-step1', 'page-step2', 'page-step3'].forEach(function(id, i) {
+        document.getElementById(id).style.display = (i === n - 1) ? 'block' : 'none';
+      });
+      for (var i = 1; i <= 3; i++) {
+        var stepEl = document.getElementById('step' + i);
+        stepEl.className = i < n ? 'step done' : i === n ? 'step active' : 'step';
+      }
+      if (n === 2) {
+        renderStep2();
+      }
+    }
+
+    function renderStep2() {
+      // 选中套餐信息
+      var plan = SELECTED_PLAN;
+      document.getElementById('selectedPlanInfo').innerHTML =
+        '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">'
+        + '<div><div style="font-weight:600">' + plan.productName + '</div>'
+        + '<div style="font-size:12px;color:#999">' + plan.company + ' · ' + plan.name + '</div></div>'
+        + '<div style="font-size:20px;font-weight:700;color:#f5222d">¥' + plan.price + '<span style="font-size:12px;color:#999">' + (plan.period === 'year' ? '/年' : '/月') + '</span></div>'
+        + '</div></div>';
+
+      // 月缴才显示月数选择
+      var monthsRow = document.getElementById('monthsRow');
+      if (plan.period === 'month') {
+        monthsRow.style.display = 'block';
+        document.getElementById('inputMonths').value = '1';
+        INSURANCE_MONTHS = 1;
+      } else {
+        monthsRow.style.display = 'none';
+        INSURANCE_MONTHS = 12;
+      }
+
+      // 被保险人表单
+      renderInsuredForm();
+      calcDatesAndPremium();
+    }
+
+    function renderInsuredForm() {
+      var html = '';
+      for (var i = 0; i < INSURED_COUNT; i++) {
+        html += '<div style="' + (i > 0 ? 'border-top:1px solid #f0f0f0;padding-top:12px;margin-top:12px' : '') + '">'
+          + (INSURED_COUNT > 1 ? '<div style="font-size:13px;font-weight:500;margin-bottom:8px;color:#5DBFB3">被保险人 ' + (i + 1) + '</div>' : '')
+          + '<div class="form-item"><label class="form-label"><span class="required">*</span>姓名</label>'
+          + '<input class="form-input insured-name" placeholder="被保险人姓名" value="' + (i === 0 ? (window._prefillName || '') : '') + '" /></div>'
+          + '<div class="form-item"><label class="form-label"><span class="required">*</span>身份证号</label>'
+          + '<input class="form-input insured-id" placeholder="18位身份证号" maxlength="18" value="' + (i === 0 ? (window._prefillIdCard || '') : '') + '" /></div>'
+          + '<div class="form-item"><label class="form-label"><span class="required">*</span>手机号</label>'
+          + '<input class="form-input insured-phone" placeholder="手机号" type="tel" maxlength="11" value="' + (i === 0 ? (window._prefillPhone || '') : '') + '" /></div>'
+          + '</div>';
+      }
+      document.getElementById('insuredForm').innerHTML = html;
+    }
+
+    // ── 日期与费用计算 ────────────────────────────────────────
+    function onMonthsChange() {
+      INSURANCE_MONTHS = parseInt(document.getElementById('inputMonths').value) || 1;
+      calcDatesAndPremium();
+    }
+
+    function onEffDateChange() {
+      calcDatesAndPremium();
+    }
+
+    function calcDatesAndPremium() {
+      var effStr = document.getElementById('inputEffDate').value;
+      if (!effStr) return;
+      var effDate = new Date(effStr);
+      var expDate = new Date(effDate);
+
+      if (SELECTED_PLAN.period === 'year') {
+        expDate.setFullYear(expDate.getFullYear() + 1);
+      } else {
+        expDate.setMonth(expDate.getMonth() + INSURANCE_MONTHS);
+      }
+      expDate.setDate(expDate.getDate() - 1);
+      document.getElementById('inputExpDate').value = formatDate(expDate);
+
+      var totalPrice = SELECTED_PLAN.period === 'year'
+        ? SELECTED_PLAN.price * INSURED_COUNT
+        : SELECTED_PLAN.price * INSURANCE_MONTHS * INSURED_COUNT;
+      document.getElementById('totalPremium').textContent = '¥' + totalPrice.toFixed(2);
+    }
+
+    // ── 提交投保 ──────────────────────────────────────────────
+    function submitInsurance() {
+      if (SUBMITTING) return;
+
+      var effDate = document.getElementById('inputEffDate').value;
+      var expDate = document.getElementById('inputExpDate').value;
+      if (!effDate || !expDate) { showToast('请选择生效日期'); return; }
+
+      // 收集被保险人信息
+      var names = document.querySelectorAll('.insured-name');
+      var ids = document.querySelectorAll('.insured-id');
+      var phones = document.querySelectorAll('.insured-phone');
+      var insuredList = [];
+
+      for (var i = 0; i < names.length; i++) {
+        var name = names[i].value.trim();
+        var idCard = ids[i].value.trim();
+        var phone = phones[i].value.trim();
+
+        if (!name) { showToast('请输入被保险人姓名'); return; }
+        if (!idCard || idCard.length !== 18) { showToast('请输入正确的18位身份证号'); return; }
+        if (!phone || !/^1[3-9][0-9]{9}$/.test(phone)) { showToast('请输入正确的手机号'); return; }
+
+        var idInfo = extractInfoFromIdCard(idCard);
+        insuredList.push({
+          insuredName: name,
+          idType: '1',
+          idNumber: idCard,
+          birthDate: idInfo ? idInfo.birthDate : '',
+          gender: idInfo ? idInfo.gender : 'M',
+          mobile: phone,
+          occupationCode: 'T100001',
+        });
+      }
+
+      SUBMITTING = true;
+      var btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      btn.textContent = '提交中...';
+
+      var totalPrice = SELECTED_PLAN.period === 'year'
+        ? SELECTED_PLAN.price * INSURED_COUNT
+        : SELECTED_PLAN.price * INSURANCE_MONTHS * INSURED_COUNT;
+
+      var payload = {
+        productCode: SELECTED_PLAN.productCode,
+        planCode: SELECTED_PLAN.planCode,
+        effectiveDate: formatDateApi(effDate, false),
+        expireDate: formatDateApi(expDate, true),
+        groupSize: insuredList.length,
+        totalPremium: totalPrice,
+        policyHolder: POLICY_HOLDER,
+        insuredList: insuredList,
+      };
+
+      apiRequest('POST', '/api/dashubao/miniprogram/policy', payload)
+        .then(function(res) {
+          var policyRef = (res.data && (res.data.agencyPolicyRef || res.data.policyRef)) || '';
+          if (!policyRef) {
+            showPayResult(true, '投保提交成功', '保单正在处理中');
+            return;
+          }
+          // 双保险：postMessage（用户点完成返回时触发）+ navigateTo（立即跳转支付页）
+          window._lastPolicyRef = policyRef;
+          if (window.wx && wx.miniProgram) {
+            // postMessage：备用，用户点"去支付"或"完成"返回小程序时触发
+            wx.miniProgram.postMessage({ data: { action: 'requestPayment', policyRef: policyRef, amount: totalPrice } });
+            // navigateTo：主路径，直接跳到小程序原生支付页
+            wx.miniProgram.navigateTo({
+              url: '/pages/h5-pay/pay?policyRef=' + encodeURIComponent(policyRef) + '&amount=' + totalPrice
+            });
+          }
+          // 显示结果页（带"去支付"按钮，以防 navigateTo 没生效）
+          showPayResult(true, '投保提交成功', policyRef);
+        })
+        .catch(function(e) {
+          showToast(e.message || '投保失败，请重试');
+        })
+        .finally(function() {
+          SUBMITTING = false;
+          btn.disabled = false;
+          btn.textContent = '确认投保';
+        });
+    }
+
+    // 支付完成后小程序会 navigateBack 回到 web-view，监听页面显示事件刷新状态
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && window._waitingPayment) {
+        window._waitingPayment = false;
+        showPayResult(true, '投保提交成功', '如已完成支付，保单将即时生效\n可在保单列表中查看状态');
+      }
+    });
+
+    function showPayResult(success, title, policyRef) {
+      var html = '<div class="result-icon">' + (success ? '✅' : '❌') + '</div>'
+        + '<div class="result-title">' + title + '</div>'
+        + '<div class="result-desc">如支付窗口未弹出，请点击下方按钮支付</div>';
+      if (policyRef) {
+        html += '<button class="btn btn-primary" style="margin-top:20px" onclick="retryPay(\'' + policyRef + '\')">去支付</button>';
+      }
+      html += '<button class="btn" style="margin-top:12px;background:#f0f0f0;color:#666" onclick="closePage()">完成</button>';
+      document.getElementById('resultContent').innerHTML = html;
+      toStep(3);
+    }
+
+    // 重试支付：再次跳转小程序支付页
+    function retryPay(policyRef) {
+      if (window.wx && wx.miniProgram) {
+        wx.miniProgram.postMessage({ data: { action: 'requestPayment', policyRef: policyRef } });
+        wx.miniProgram.navigateTo({
+          url: '/pages/h5-pay/pay?policyRef=' + encodeURIComponent(policyRef)
+        });
+      } else {
+        showToast('请在小程序中操作');
+      }
+    }
+
+    function closePage() {
+      if (window.wx && wx.miniProgram) {
+        wx.miniProgram.navigateBack();
+      } else {
+        window.close();
+      }
+    }
+
+    function resetAll() {
+      SELECTED_PLAN = null;
+      INSURED_COUNT = 1;
+      INSURANCE_MONTHS = 1;
+      SUBMITTING = false;
+      document.querySelectorAll('.plan-item').forEach(function(el) { el.classList.remove('active'); });
+      toStep(1);
+    }
+  </script>
+</body>
+</html>

@@ -313,12 +313,12 @@ export class ResumeService {
     return categorizedFiles;
   }
 
-  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string, isDraft?: boolean) {
-    return this.resumeQueryService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity, currentUserId, isDraft);
+  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string, isDraft?: boolean, isAdmin?: boolean) {
+    return this.resumeQueryService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity, currentUserId, isDraft, isAdmin);
   }
 
-  async findOne(id: string, currentUserId?: string) {
-    return this.resumeQueryService.findOne(id, currentUserId);
+  async findOne(id: string, currentUserId?: string, isAdmin?: boolean) {
+    return this.resumeQueryService.findOne(id, currentUserId, isAdmin);
   }
 
   /**

@@ -551,9 +551,10 @@ export class ResumeController {
       let pageSize = 10;
       let maxAge: number | undefined = undefined;
 
-      // 🆕 权限控制调整：所有用户都能看到所有简历，但已签约的简历只有合同归属人能看到
+      // 🆕 权限控制：已上户且关联有效合同的简历，只有管理员和合同归属人（员工本人）能看到
       const user = req?.user;
       const currentUserId = user?.userId;
+      const isAdmin = user?.role === 'admin' || user?.role === '系统管理员';
 
       // 详细记录请求信息
       this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}, currentUserId=${currentUserId}`);
@@ -613,6 +614,7 @@ export class ResumeController {
         ethnicity,
         currentUserId,
         isDraftFilter,
+        isAdmin,
       );
 
       return {
@@ -765,7 +767,7 @@ export class ResumeController {
         this.logger.warn(`最大年龄解析错误: ${e.message}`);
       }
 
-      // 调用服务获取数据
+      // 调用服务获取数据（公开接口无用户信息，已上户简历会被过滤）
       const result = await this.resumeService.findAll(
         page,
         pageSize,
@@ -774,7 +776,10 @@ export class ResumeController {
         orderStatus,
         maxAge,
         nativePlace,
-        ethnicity
+        ethnicity,
+        undefined, // currentUserId
+        undefined, // isDraft
+        false,     // isAdmin
       );
 
       return {
@@ -800,7 +805,8 @@ export class ResumeController {
   async findOnePublicFull(@Param('id') id: string) {
     try {
       this.logger.log(`公开接口 - 获取简历详情: id=${id}`);
-      const resume = await this.resumeService.findOne(id);
+      // 公开接口无用户信息，已上户+有效合同的简历不可见
+      const resume = await this.resumeService.findOne(id, undefined, false);
 
       if (!resume) {
         return {
@@ -1031,7 +1037,10 @@ export class ResumeController {
     try {
       this.logger.log(`🔍 小程序获取简历详情: ${id}`);
 
-      const resume = await this.resumeService.findOne(id);
+      // 已上户+有效合同的简历权限控制
+      const currentUserId = req?.user?.userId;
+      const isAdmin = req?.user?.role === 'admin' || req?.user?.role === '系统管理员';
+      const resume = await this.resumeService.findOne(id, currentUserId, isAdmin);
 
       // 获取员工评价数据
       const employeeEvaluations = await this.resumeService.getEmployeeEvaluations(id);
@@ -1711,9 +1720,10 @@ export class ResumeController {
     try {
       this.logger.log(`获取公开简历详情: id=${id}, shared=${shared}`);
 
+      // 公开接口无用户信息，已上户+有效合同的简历不可见
       // 如果是分享模式，返回脱敏的公开字段
       if (shared === '1') {
-        const resume = await this.resumeService.findOne(id);
+        const resume = await this.resumeService.findOne(id, undefined, false);
         if (!resume) {
           return {
             success: false,
@@ -1732,7 +1742,7 @@ export class ResumeController {
       }
 
       // 默认行为：返回完整数据（需要权限控制）
-      const resume = await this.resumeService.findOne(id);
+      const resume = await this.resumeService.findOne(id, undefined, false);
       if (!resume) {
         return {
           success: false,
@@ -1835,10 +1845,11 @@ export class ResumeController {
       this.logger.log(`🔧 Controller获取简历详情: id=${id}`);
       this.logger.log(`🔧 准备调用ResumeService.findOne`);
 
-      // 🆕 获取当前用户ID，用于权限检查
+      // 🆕 获取当前用户信息，用于权限检查（已上户+有效合同的简历只有管理员和归属人能看到）
       const currentUserId = req?.user?.userId;
+      const isAdmin = req?.user?.role === 'admin' || req?.user?.role === '系统管理员';
 
-      const resume = await this.resumeService.findOne(id, currentUserId);
+      const resume = await this.resumeService.findOne(id, currentUserId, isAdmin);
       this.logger.log(`🔧 ResumeService.findOne执行完成，结果类型: ${typeof resume}`);
       this.logger.log(`🔧 返回的lastUpdatedBy类型: ${typeof resume?.lastUpdatedBy}`);
 

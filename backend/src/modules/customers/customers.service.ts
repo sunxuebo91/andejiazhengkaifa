@@ -162,7 +162,7 @@ export class CustomersService {
     const assignedToUserId = hasAssignedTo ? dtoAny.assignedTo : userId;
 
     // 🛡️ 防护：确保 leadSource 不为空字符串
-    const validLeadSources = ['美团', '抖音', '快手', '小红书', '转介绍', '99保姆网', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '妈妈网', '犀牛', '宝宝树', '幼亲舒', '官网', '其他'];
+    const validLeadSources = ['美团', '抖音', '快手', '小红书', '转介绍', '99保姆网', '杭州同馨', '握个手平台', '线索购买', '莲心', '美家', '天机鹿', '孕妈联盟', '高阁', '星星', '妈妈网', '犀牛', '宝宝树', '幼亲舒', '熊猫', '官网', '其他'];
     const leadSource = createCustomerDto.leadSource?.trim();
     const finalLeadSource = (leadSource && validLeadSources.includes(leadSource)) ? leadSource : '其他';
 

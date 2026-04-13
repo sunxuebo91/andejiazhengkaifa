@@ -60,6 +60,7 @@ const TrainingLeadList = React.lazy(() => import('./pages/training-leads/Trainin
 const CreateTrainingLead = React.lazy(() => import('./pages/training-leads/CreateTrainingLead'));
 const EditTrainingLead = React.lazy(() => import('./pages/training-leads/EditTrainingLead'));
 const TrainingLeadDetail = React.lazy(() => import('./pages/training-leads/TrainingLeadDetail'));
+const TrainingLeadPublicPool = React.lazy(() => import('./pages/training-leads/PublicPool'));
 // 表单管理相关组件
 const FormList = React.lazy(() => import('./pages/forms/FormList'));
 const FormEditor = React.lazy(() => import('./pages/forms/FormEditor'));
@@ -256,6 +257,10 @@ export default function App({ children }: AppProps) {
                     <Route
                       index
                       element={<AuthorizedRoute element={<TrainingLeadList />} />}
+                    />
+                    <Route
+                      path="public-pool"
+                      element={<AuthorizedRoute element={<TrainingLeadPublicPool />} />}
                     />
                     <Route
                       path="create"

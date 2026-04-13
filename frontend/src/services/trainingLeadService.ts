@@ -120,6 +120,22 @@ export const trainingLeadService = {
     const response = await apiService.post('/api/training-leads/check-duplicates', { phones });
     return response.data;
   },
+
+  /**
+   * 释放线索到公海池
+   */
+  async releaseLead(id: string): Promise<TrainingLead> {
+    const response = await apiService.post(`/api/training-leads/${id}/release`);
+    return response.data;
+  },
+
+  /**
+   * 从公海池认领线索
+   */
+  async claimLead(id: string): Promise<TrainingLead> {
+    const response = await apiService.post(`/api/training-leads/${id}/claim`);
+    return response.data;
+  },
 };
 
 export default trainingLeadService;

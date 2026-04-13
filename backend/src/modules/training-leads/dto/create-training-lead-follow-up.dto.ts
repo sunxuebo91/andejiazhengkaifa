@@ -8,7 +8,7 @@ import {
   MinLength,
   MaxLength
 } from 'class-validator';
-import { FollowUpType } from '../models/training-lead-follow-up.model';
+import { FollowUpType, FollowUpResult } from '../models/training-lead-follow-up.model';
 
 export class CreateTrainingLeadFollowUpDto {
   @ApiProperty({
@@ -19,6 +19,15 @@ export class CreateTrainingLeadFollowUpDto {
   @IsEnum(FollowUpType, { message: '跟进方式必须是：电话、微信、到店、其他之一' })
   @IsNotEmpty({ message: '跟进方式不能为空' })
   type: string;
+
+  @ApiProperty({
+    description: '跟进结果',
+    enum: FollowUpResult,
+    example: FollowUpResult.PHONE_CONNECTED
+  })
+  @IsEnum(FollowUpResult, { message: '跟进结果必须在指定选项中选择' })
+  @IsNotEmpty({ message: '跟进结果不能为空' })
+  followUpResult: string;
 
   @ApiProperty({
     description: '跟进内容',

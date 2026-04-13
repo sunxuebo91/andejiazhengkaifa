@@ -18,8 +18,9 @@ export class TrainingLeadsMiniProgramController {
 
   constructor(private readonly trainingLeadsService: TrainingLeadsService) {}
 
+  // 只有 admin/manager 才能查看全部线索，其余角色只能看自己的
   private isManagerOrAdmin(user: any): boolean {
-    return ['系统管理员', 'admin', '经理', 'manager', 'operator'].includes(user?.role);
+    return ['系统管理员', 'admin', '经理', 'manager'].includes(user?.role);
   }
 
   // ==================== 列表 & 详情 ====================
@@ -34,6 +35,7 @@ export class TrainingLeadsMiniProgramController {
   @ApiQuery({ name: 'trainingType', required: false })
   @ApiQuery({ name: 'intentionLevel', required: false })
   @ApiQuery({ name: 'keyword', required: false, description: '搜索姓名/手机号/学员编号' })
+  @ApiQuery({ name: 'lastFollowUpResult', required: false, description: '最近跟进结果筛选，如：已接通、未接通、已回复、未回复等' })
   async getList(@Query() query: any, @Request() req) {
     try {
       const user = req?.user;
@@ -116,12 +118,17 @@ export class TrainingLeadsMiniProgramController {
   @ApiParam({ name: 'id', description: '线索ID' })
   async addFollowUp(
     @Param('id') id: string,
-    @Body() body: { type: string; content: string; nextFollowUpDate?: string },
+    @Body() body: { type: string; followUpResult: string; content: string; nextFollowUpDate?: string },
     @Request() req,
   ) {
     try {
       const followUp = await this.trainingLeadsService.createFollowUp(
-        id, { type: body.type, content: body.content, nextFollowUpDate: body.nextFollowUpDate } as any,
+        id, {
+          type: body.type,
+          followUpResult: body.followUpResult,
+          content: body.content,
+          nextFollowUpDate: body.nextFollowUpDate
+        } as any,
         req.user.userId,
       );
       return { success: true, data: followUp, message: '跟进记录添加成功' };
@@ -215,8 +222,14 @@ export class TrainingLeadsMiniProgramController {
         consultPositionOptions: ['育婴师', '母婴护理师', '养老护理员', '住家保姆', '月嫂', '育儿嫂', '保姆', '护老', '师资', '其他'],
         intentionLevelOptions: ['高', '中', '低'],
         leadGradeOptions: ['A', 'B', 'C', 'D', 'O'],
-        statusOptions: ['跟进中', '已报名', '已结业', '已放弃', '无效线索', '已流失'],
+        statusOptions: ['跟进中', '已报名', '已结业', '新客未跟进', '流转未跟进', '未跟进', '7天未跟进', '15天未跟进', '无效线索', '已到店'],
         followUpTypeOptions: ['电话', '微信', '到店', '其他'],
+        followUpResultOptions: {
+          电话: ['已接通', '未接通', '关机', '停机', '拒接', '忙线'],
+          微信: ['已回复', '未回复', '已读未回', '已拉黑'],
+          到店: ['已到店', '未到店', '爽约'],
+          其他: ['成功', '失败']
+        },
         intendedCoursesOptions: [
           '高级母婴护理师', '高级催乳师', '高级产后修复师', '月子餐营养师',
           '高级育婴师', '早教指导师', '辅食营养师', '小儿推拿师',

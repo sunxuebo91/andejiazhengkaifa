@@ -21,6 +21,7 @@ import {
   TrainingLeadFollowUp,
   LEAD_STATUS_OPTIONS,
   FOLLOW_UP_TYPE_OPTIONS,
+  FOLLOW_UP_RESULT_OPTIONS,
   LEAD_GRADE_OPTIONS
 } from '../../types/training-lead.types';
 import TrainingLeadFollowUpModal from '../../components/TrainingLeadFollowUpModal';
@@ -94,6 +95,14 @@ const TrainingLeadDetail: React.FC = () => {
   const getFollowUpIcon = (type: string) => {
     const option = FOLLOW_UP_TYPE_OPTIONS.find(opt => opt.value === type);
     return option?.icon || '📝';
+  };
+
+  // 获取跟进结果颜色
+  const getFollowUpResultColor = (type: string, result: string) => {
+    const options = FOLLOW_UP_RESULT_OPTIONS[type];
+    if (!options) return '#8c8c8c';
+    const option = options.find(opt => opt.value === result);
+    return option?.color || '#8c8c8c';
   };
 
   // 格式化用户信息
@@ -240,6 +249,16 @@ const TrainingLeadDetail: React.FC = () => {
                     <Space direction="vertical" style={{ width: '100%' }}>
                       <div>
                         <Tag color="blue">{getFollowUpIcon(followUp.type)} {followUp.type}</Tag>
+                        {followUp.followUpResult && (
+                          <Tag color={getFollowUpResultColor(followUp.type, followUp.followUpResult)}>
+                            {followUp.followUpResult}
+                          </Tag>
+                        )}
+                        {followUp.contactSuccess !== undefined && (
+                          <Tag color={followUp.contactSuccess ? '#52c41a' : '#ff4d4f'}>
+                            {followUp.contactSuccess ? '✓ 联系成功' : '✗ 联系失败'}
+                          </Tag>
+                        )}
                         <span style={{ marginLeft: 8, color: '#666' }}>
                           跟进人：{formatUser(followUp.createdBy)}
                         </span>

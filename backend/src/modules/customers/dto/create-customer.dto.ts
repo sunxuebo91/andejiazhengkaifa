@@ -70,10 +70,17 @@ export class CreateCustomerDto {
   contractStatus: string;
 
   @IsOptional()
-  @IsEnum(['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老'], {
+  @IsEnum(['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老', '家教', '陪伴师'], {
     message: '需求品类必须在指定选项中选择'
   })
   serviceCategory?: string;
+
+  // 兼容小程序端传入的 serviceType 字段（映射到 serviceCategory）
+  @IsOptional()
+  @IsEnum(['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老', '家教', '陪伴师'], {
+    message: '服务类型必须在指定选项中选择'
+  })
+  serviceType?: string;
 
   @IsNotEmpty({ message: '线索等级不能为空' })
   @IsEnum(['O类', 'A类', 'B类', 'C类', 'D类', '流失'], {

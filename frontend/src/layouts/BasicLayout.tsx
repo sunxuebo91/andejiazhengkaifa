@@ -213,6 +213,11 @@ const BasicLayout = () => {
             icon: <UnorderedListOutlined />,
           },
           {
+            path: '/training-leads/public-pool',
+            name: '学员线索公海',
+            icon: <InboxOutlined />,
+          },
+          {
             path: '/forms/submissions',
             name: '表单列表',
             icon: <UnorderedListOutlined />,

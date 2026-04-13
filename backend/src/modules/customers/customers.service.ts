@@ -166,9 +166,13 @@ export class CustomersService {
     const leadSource = createCustomerDto.leadSource?.trim();
     const finalLeadSource = (leadSource && validLeadSources.includes(leadSource)) ? leadSource : '其他';
 
+    // 🔄 兼容处理：如果传入了 serviceType 但没有 serviceCategory，则使用 serviceType
+    const finalServiceCategory = createCustomerDto.serviceCategory || (dtoAny.serviceType as string);
+
     const customerData: any = {
       ...createCustomerDto,
       leadSource: finalLeadSource,  // 使用验证后的值
+      serviceCategory: finalServiceCategory, // 使用兼容后的值
       customerId,
       createdBy: userId,
       expectedStartDate: createCustomerDto.expectedStartDate ? new Date(createCustomerDto.expectedStartDate) : undefined,
@@ -181,6 +185,9 @@ export class CustomersService {
       // 活动时间追踪
       lastActivityAt: now,
     };
+
+    // 🧹 清理：删除 serviceType 字段，只保留 serviceCategory
+    delete customerData.serviceType;
 
     const customer = new this.customerModel(customerData);
     let savedCustomer: CustomerDocument;

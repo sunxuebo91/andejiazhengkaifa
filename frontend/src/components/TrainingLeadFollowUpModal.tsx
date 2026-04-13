@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Modal, Form, Select, Input, Button, message, DatePicker } from 'antd';
 import { trainingLeadService } from '../services/trainingLeadService';
-import { 
-  CreateTrainingLeadFollowUpDto, 
-  FOLLOW_UP_TYPE_OPTIONS 
+import {
+  CreateTrainingLeadFollowUpDto,
+  FOLLOW_UP_TYPE_OPTIONS,
+  FOLLOW_UP_RESULT_OPTIONS
 } from '../types/training-lead.types';
 
 const { Option } = Select;
@@ -26,14 +27,16 @@ const TrainingLeadFollowUpModal: React.FC<TrainingLeadFollowUpModalProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [selectedType, setSelectedType] = useState<string>('电话');
 
   const handleSubmit = async (values: any) => {
     setLoading(true);
     try {
       const data: CreateTrainingLeadFollowUpDto = {
         type: values.type,
+        followUpResult: values.followUpResult,
         content: values.content,
-        nextFollowUpDate: values.nextFollowUpDate 
+        nextFollowUpDate: values.nextFollowUpDate
           ? values.nextFollowUpDate.format('YYYY-MM-DD HH:mm:ss')
           : undefined
       };
@@ -41,6 +44,7 @@ const TrainingLeadFollowUpModal: React.FC<TrainingLeadFollowUpModalProps> = ({
       await trainingLeadService.createFollowUp(leadId, data);
       message.success('跟进记录添加成功');
       form.resetFields();
+      setSelectedType('电话'); // 重置选中的类型
       onSuccess();
     } catch (error: any) {
       message.error(error?.response?.data?.message || '添加跟进记录失败');
@@ -48,6 +52,12 @@ const TrainingLeadFollowUpModal: React.FC<TrainingLeadFollowUpModalProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // 跟进方式改变时，清空跟进结果
+  const handleTypeChange = (value: string) => {
+    setSelectedType(value);
+    form.setFieldValue('followUpResult', undefined);
   };
 
   const handleCancel = () => {
@@ -74,11 +84,29 @@ const TrainingLeadFollowUpModal: React.FC<TrainingLeadFollowUpModalProps> = ({
           label="跟进方式"
           name="type"
           rules={[{ required: true, message: '请选择跟进方式' }]}
+          initialValue="电话"
         >
-          <Select placeholder="请选择跟进方式">
+          <Select
+            placeholder="请选择跟进方式"
+            onChange={handleTypeChange}
+          >
             {FOLLOW_UP_TYPE_OPTIONS.map(option => (
               <Option key={option.value} value={option.value}>
                 {option.icon} {option.label}
+              </Option>
+            ))}
+          </Select>
+        </Form.Item>
+
+        <Form.Item
+          label="跟进结果"
+          name="followUpResult"
+          rules={[{ required: true, message: '请选择跟进结果' }]}
+        >
+          <Select placeholder="请选择跟进结果">
+            {FOLLOW_UP_RESULT_OPTIONS[selectedType]?.map(option => (
+              <Option key={option.value} value={option.value}>
+                <span style={{ color: option.color }}>●</span> {option.label}
               </Option>
             ))}
           </Select>

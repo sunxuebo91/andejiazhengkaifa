@@ -8,6 +8,7 @@ import { TrainingLead, TrainingLeadSchema } from './models/training-lead.model';
 import { TrainingLeadFollowUp, TrainingLeadFollowUpSchema } from './models/training-lead-follow-up.model';
 import { User, UserSchema } from '../users/models/user.entity';
 import { AIModule } from '../ai/ai.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AIModule } from '../ai/ai.module';
       },
     }),
     AIModule,
+    NotificationModule,
   ],
   controllers: [TrainingLeadsController, TrainingLeadsMiniProgramController],
   providers: [TrainingLeadsService],

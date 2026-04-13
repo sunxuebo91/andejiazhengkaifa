@@ -130,10 +130,12 @@ export class ResumeQueryService {
     }
 
     // 已上户（orderStatus=on-service）的简历可见性控制：
+    // 月嫂（yuesao）不涉及上户，跳过过滤，始终可见
+    // 其他工种：
     // 1. 有有效合同 → 只有管理员和合同归属人能看到
     // 2. 无有效合同 → 状态异常，自动修正为"想接单"（accepting）
     if (items.length > 0) {
-      const onServiceItems = items.filter((item: any) => item.orderStatus === 'on-service' && item.phone);
+      const onServiceItems = items.filter((item: any) => item.orderStatus === 'on-service' && item.phone && item.jobType !== 'yuesao');
       const phoneList = onServiceItems.map((item: any) => item.phone);
       if (phoneList.length > 0) {
         const activeContracts = await this.contractModel.find({
@@ -155,7 +157,7 @@ export class ResumeQueryService {
         const needFixIds: any[] = [];
 
         items = items.map((item: any) => {
-          if (item.orderStatus !== 'on-service') return item;
+          if (item.orderStatus !== 'on-service' || item.jobType === 'yuesao') return item;
           const contractOwnerId = contractOwnerMap.get(item.phone);
           if (!contractOwnerId) {
             // 已上户但无有效合同 → 状态异常，修正为"想接单"
@@ -173,9 +175,10 @@ export class ResumeQueryService {
           ).exec().catch(err => this.logger.error('自动修正已上户状态失败:', err.message));
         }
 
-        // 非管理员：已上户+有效合同的简历只有归属人能看到
+        // 非管理员：已上户+有效合同的简历只有归属人能看到（月嫂除外）
         if (!isAdmin) {
           items = items.filter((item: any) => {
+            if (item.jobType === 'yuesao') return true;
             if (item.orderStatus !== 'on-service') return true;
             const contractOwnerId = contractOwnerMap.get(item.phone);
             if (!contractOwnerId) return true;
@@ -214,7 +217,8 @@ export class ResumeQueryService {
     }
 
     // 已上户（orderStatus=on-service）的简历可见性控制
-    if (resume.orderStatus === 'on-service' && resume.phone) {
+    // 月嫂（yuesao）不涉及上户，跳过过滤
+    if (resume.orderStatus === 'on-service' && resume.phone && (resume as any).jobType !== 'yuesao') {
       const activeContract = await this.contractModel.findOne({
         workerPhone: resume.phone,
         contractStatus: 'active',

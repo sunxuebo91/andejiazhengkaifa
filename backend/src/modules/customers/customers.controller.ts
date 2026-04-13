@@ -65,6 +65,91 @@ export class CustomersController {
     };
   }
 
+  @Get('enums')
+  @Public()
+  @ApiOperation({ summary: '获取客户模块枚举配置（供前端/小程序使用）' })
+  async getEnums() {
+    return {
+      success: true,
+      data: {
+        leadSource: [
+          { value: '美团', label: '美团' },
+          { value: '抖音', label: '抖音' },
+          { value: '快手', label: '快手' },
+          { value: '小红书', label: '小红书' },
+          { value: '转介绍', label: '转介绍' },
+          { value: '99保姆网', label: '99保姆网' },
+          { value: '杭州同馨', label: '杭州同馨' },
+          { value: '握个手平台', label: '握个手平台' },
+          { value: '线索购买', label: '线索购买' },
+          { value: '莲心', label: '莲心' },
+          { value: '美家', label: '美家' },
+          { value: '天机鹿', label: '天机鹿' },
+          { value: '孕妈联盟', label: '孕妈联盟' },
+          { value: '高阁', label: '高阁' },
+          { value: '星星', label: '星星' },
+          { value: '妈妈网', label: '妈妈网' },
+          { value: '犀牛', label: '犀牛' },
+          { value: '宝宝树', label: '宝宝树' },
+          { value: '幼亲舒', label: '幼亲舒' },
+          { value: '熊猫', label: '熊猫' },
+          { value: '官网', label: '官网' },
+          { value: '其他', label: '其他' }
+        ],
+        serviceCategory: [
+          { value: '月嫂', label: '月嫂' },
+          { value: '住家育儿嫂', label: '住家育儿嫂' },
+          { value: '保洁', label: '保洁' },
+          { value: '住家保姆', label: '住家保姆' },
+          { value: '养宠', label: '养宠' },
+          { value: '小时工', label: '小时工' },
+          { value: '白班育儿', label: '白班育儿' },
+          { value: '白班保姆', label: '白班保姆' },
+          { value: '住家护老', label: '住家护老' },
+          { value: '家教', label: '家教' },
+          { value: '陪伴师', label: '陪伴师' }
+        ],
+        contractStatus: [
+          { value: '已签约', label: '已签约' },
+          { value: '签约中', label: '签约中' },
+          { value: '匹配中', label: '匹配中' },
+          { value: '已面试', label: '已面试' },
+          { value: '流失客户', label: '流失客户' },
+          { value: '已退款', label: '已退款' },
+          { value: '退款中', label: '退款中' },
+          { value: '待定', label: '待定' }
+        ],
+        leadLevel: [
+          { value: 'O类', label: 'O类' },
+          { value: 'A类', label: 'A类' },
+          { value: 'B类', label: 'B类' },
+          { value: 'C类', label: 'C类' },
+          { value: 'D类', label: 'D类' },
+          { value: '流失', label: '流失' }
+        ],
+        restSchedule: [
+          { value: '单休', label: '单休' },
+          { value: '双休', label: '双休' },
+          { value: '无休', label: '无休' },
+          { value: '调休', label: '调休' },
+          { value: '待定', label: '待定' }
+        ],
+        educationRequirement: [
+          { value: '无学历', label: '无学历' },
+          { value: '小学', label: '小学' },
+          { value: '初中', label: '初中' },
+          { value: '中专', label: '中专' },
+          { value: '职高', label: '职高' },
+          { value: '高中', label: '高中' },
+          { value: '大专', label: '大专' },
+          { value: '本科', label: '本科' },
+          { value: '研究生及以上', label: '研究生及以上' }
+        ]
+      },
+      message: '获取枚举配置成功'
+    };
+  }
+
   // 辅助方法：检查用户是否有权限访问客户
   private canAccessCustomer(customer: any, user: any): boolean {
     const userRole = this.mapRoleToChineseRole(user.role);

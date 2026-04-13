@@ -244,6 +244,44 @@ export class NotificationTemplateService implements OnModuleInit {
         actionUrl: '{{actionUrl}}',
         actionText: '查看详情',
       },
+
+      // ========== 职培线索相关 ==========
+      {
+        type: NotificationType.TRAINING_LEAD_ASSIGNED,
+        name: '职培线索分配通知',
+        description: '职培线索分配/流转给你时通知',
+        title: '您有新的职培线索',
+        content: '【{{leadName}}】已分配给您，电话：{{phone}}，请及时跟进！',
+        priority: NotificationPriority.HIGH,
+        icon: 'UserAddOutlined',
+        color: '#ff4d4f',
+        actionUrl: '/training-leads/{{leadId}}',
+        actionText: '立即跟进',
+      },
+      {
+        type: NotificationType.TRAINING_LEAD_FOLLOW_UP_ADDED,
+        name: '职培线索跟进通知',
+        description: '有人给你负责的线索添加了跟进记录时通知',
+        title: '您的线索有新跟进记录',
+        content: '{{operatorName}} 对线索【{{leadName}}】添加了跟进记录：{{summary}}',
+        priority: NotificationPriority.MEDIUM,
+        icon: 'CommentOutlined',
+        color: '#faad14',
+        actionUrl: '/training-leads/{{leadId}}',
+        actionText: '查看详情',
+      },
+      {
+        type: NotificationType.TRAINING_LEAD_CREATED,
+        name: '新职培线索创建通知',
+        description: '有新职培线索录入时通知管理员',
+        title: '新职培线索录入',
+        content: '{{creatorName}} 录入了新职培线索：{{leadName}}（{{phone}}），请关注！',
+        priority: NotificationPriority.LOW,
+        icon: 'FileAddOutlined',
+        color: '#52c41a',
+        actionUrl: '/training-leads/{{leadId}}',
+        actionText: '查看线索',
+      },
     ];
 
     for (const template of templates) {

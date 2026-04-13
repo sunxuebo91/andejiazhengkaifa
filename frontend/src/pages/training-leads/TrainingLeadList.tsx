@@ -38,7 +38,8 @@ const { RangePicker } = DatePicker;
 
 const TrainingLeadList: React.FC = () => {
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const isAdmin = hasPermission('*') || hasPermission('training-lead:all');
   const [leads, setLeads] = useState<TrainingLead[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -84,7 +85,7 @@ const TrainingLeadList: React.FC = () => {
   const canViewUsers = hasPermission('user:view');
 
   // 搜索条件
-  const [searchFilters, setSearchFilters] = useState<TrainingLeadQuery>({
+  const [searchFilters, setSearchFilters] = useState<TrainingLeadQuery & { lastFollowUpResult?: string }>({
     search: '',
     status: undefined,
     leadSource: undefined,
@@ -92,7 +93,8 @@ const TrainingLeadList: React.FC = () => {
     startDate: undefined,
     endDate: undefined,
     isReported: undefined,
-    studentOwner: undefined
+    studentOwner: undefined,
+    lastFollowUpResult: undefined
   });
 
   // 加载用户列表
@@ -153,7 +155,8 @@ const TrainingLeadList: React.FC = () => {
       startDate: undefined,
       endDate: undefined,
       isReported: undefined,
-      studentOwner: undefined
+      studentOwner: undefined,
+      lastFollowUpResult: undefined
     });
     setCurrentPage(1);
     setTimeout(() => fetchLeads(), 0);
@@ -167,6 +170,17 @@ const TrainingLeadList: React.FC = () => {
       fetchLeads();
     } catch (error: any) {
       message.error(error?.response?.data?.message || '删除失败');
+    }
+  };
+
+  // 释放线索到公海池
+  const handleRelease = async (id: string) => {
+    try {
+      await trainingLeadService.releaseLead(id);
+      message.success('已释放到公海池');
+      fetchLeads();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '释放失败');
     }
   };
 
@@ -326,12 +340,6 @@ const TrainingLeadList: React.FC = () => {
     }
   };
 
-  // 获取状态颜色
-  const getStatusColor = (status: string) => {
-    const option = LEAD_STATUS_OPTIONS.find(opt => opt.value === status);
-    return option?.color || '#8c8c8c';
-  };
-
   // 生成分享链接
   const handleGenerateShare = async () => {
     setShareLoading(true);
@@ -392,31 +400,40 @@ const TrainingLeadList: React.FC = () => {
       render: (text: string) => text || '-'
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 80,
-      render: (text: string) => (
-        <Tag color={getStatusColor(text)}>{text}</Tag>
-      )
-    },
-    {
       title: '跟进状态',
       dataIndex: 'followUpStatus',
       key: 'followUpStatus',
       width: 110,
-      render: (followUpStatus: string | null) => {
-        if (!followUpStatus) return <Tag color="#52c41a">已跟进</Tag>;
+      render: (_: any, record: any) => {
+        const { followUpStatus, lastFollowUpResult } = record;
 
-        // 根据不同状态显示不同颜色
-        let color = '#52c41a'; // 默认绿色（已跟进）
-        if (followUpStatus === '新客未跟进') {
-          color = '#ff4d4f'; // 红色
-        } else if (followUpStatus === '流转未跟进') {
-          color = '#faad14'; // 橙色
-        }
+        // 注意力标记颜色
+        const statusColorMap: Record<string, string> = {
+          '新客未跟进': '#ff4d4f',
+          '流转未跟进': '#faad14',
+        };
 
-        return <Tag color={color}>{followUpStatus}</Tag>;
+        // 最近跟进结果颜色
+        const resultColorMap: Record<string, string> = {
+          '已接通': '#52c41a', '已回复': '#52c41a', '已到店': '#52c41a', '成功': '#52c41a',
+          '未接通': '#ff4d4f', '拒接': '#ff4d4f', '已拉黑': '#ff4d4f', '未到店': '#ff4d4f', '爽约': '#ff4d4f', '失败': '#ff4d4f',
+          '关机': '#8c8c8c', '停机': '#8c8c8c', '忙线': '#faad14',
+          '未回复': '#faad14', '已读未回': '#faad14',
+        };
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+            {/* 注意力标记 */}
+            {followUpStatus
+              ? <Tag style={{ margin: 0 }} color={statusColorMap[followUpStatus] || '#8c8c8c'}>{followUpStatus}</Tag>
+              : <Tag style={{ margin: 0 }} color="#52c41a">已跟进</Tag>
+            }
+            {/* 最近跟进结果 */}
+            {lastFollowUpResult && (
+              <Tag style={{ margin: 0 }} color={resultColorMap[lastFollowUpResult] || '#8c8c8c'}>{lastFollowUpResult}</Tag>
+            )}
+          </div>
+        );
       }
     },
     {
@@ -432,12 +449,12 @@ const TrainingLeadList: React.FC = () => {
     },
     {
       title: '跟进人',
-      dataIndex: 'assignedTo',
-      key: 'assignedTo',
+      dataIndex: 'studentOwner',
+      key: 'studentOwner',
       width: 100,
-      render: (assignedTo: any) => {
-        if (!assignedTo) return <span style={{ color: '#bfbfbf' }}>未分配</span>;
-        return typeof assignedTo === 'object' ? assignedTo.name : <span style={{ color: '#bfbfbf' }}>未分配</span>;
+      render: (studentOwner: any) => {
+        if (!studentOwner) return <span style={{ color: '#bfbfbf' }}>未分配</span>;
+        return typeof studentOwner === 'object' ? studentOwner.name : <span style={{ color: '#bfbfbf' }}>未分配</span>;
       }
     },
     {
@@ -487,6 +504,30 @@ const TrainingLeadList: React.FC = () => {
               详情
             </Button>
           </Link>
+          {(() => {
+            // 与后端 releaseLead 逻辑保持一致：assignedTo 优先，无 assignedTo 时用 studentOwner
+            const assignedId = record.assignedTo
+              ? (typeof record.assignedTo === 'object' ? (record.assignedTo as any)._id : record.assignedTo)
+              : null;
+            const ownerId = record.studentOwner
+              ? (typeof record.studentOwner === 'object' ? (record.studentOwner as any)._id : record.studentOwner)
+              : null;
+            const currentOwner = assignedId || ownerId;
+            const canRelease = isAdmin || currentOwner === user?.id;
+            if (!canRelease) return null;
+            return (
+              <Popconfirm
+                title="确定要释放到公海池吗？释放后该线索将对所有人可见"
+                onConfirm={() => handleRelease(record._id)}
+                okText="确定释放"
+                cancelText="取消"
+              >
+                <Button type="link" size="small" style={{ color: '#faad14' }}>
+                  释放
+                </Button>
+              </Popconfirm>
+            );
+          })()}
           <Popconfirm
             title="确定要删除这条线索吗？"
             onConfirm={() => handleDelete(record._id)}
@@ -511,8 +552,8 @@ const TrainingLeadList: React.FC = () => {
     <div style={{ padding: '24px' }}>
       <Card>
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          {/* 搜索筛选区域 */}
-          <Row gutter={[16, 16]}>
+          {/* 搜索筛选区域 - 第一行 */}
+          <Row gutter={[12, 12]}>
             <Col span={6}>
               <Search
                 placeholder="搜索姓名、手机号、微信号、学员编号"
@@ -523,69 +564,50 @@ const TrainingLeadList: React.FC = () => {
               />
             </Col>
             <Col span={4}>
-              <Select
-                placeholder="状态"
-                value={searchFilters.status}
+              <Select placeholder="状态" value={searchFilters.status}
                 onChange={(value) => setSearchFilters({ ...searchFilters, status: value })}
-                allowClear
-                style={{ width: '100%' }}
-              >
+                allowClear style={{ width: '100%' }}>
                 {LEAD_STATUS_OPTIONS.map(opt => (
                   <Option key={opt.value} value={opt.value}>{opt.label}</Option>
                 ))}
               </Select>
             </Col>
             <Col span={4}>
-              <Select
-                placeholder="线索来源"
-                value={searchFilters.leadSource}
+              <Select placeholder="线索来源" value={searchFilters.leadSource}
                 onChange={(value) => setSearchFilters({ ...searchFilters, leadSource: value })}
-                allowClear
-                style={{ width: '100%' }}
-              >
+                allowClear style={{ width: '100%' }}>
                 {LEAD_SOURCE_OPTIONS.map(opt => (
                   <Option key={opt.value} value={opt.value}>{opt.label}</Option>
                 ))}
               </Select>
             </Col>
             <Col span={4}>
-              <Select
-                placeholder="培训类型"
-                value={searchFilters.trainingType}
+              <Select placeholder="培训类型" value={searchFilters.trainingType}
                 onChange={(value) => setSearchFilters({ ...searchFilters, trainingType: value })}
-                allowClear
-                style={{ width: '100%' }}
-              >
+                allowClear style={{ width: '100%' }}>
                 {TRAINING_TYPE_OPTIONS.map(opt => (
                   <Option key={opt.value} value={opt.value}>{opt.label}</Option>
                 ))}
               </Select>
             </Col>
-            <Col span={4}>
-              <Select
-                placeholder="是否报征"
-                value={searchFilters.isReported}
+            <Col span={3}>
+              <Select placeholder="是否报征" value={searchFilters.isReported}
                 onChange={(value) => setSearchFilters({ ...searchFilters, isReported: value })}
-                allowClear
-                style={{ width: '100%' }}
-              >
+                allowClear style={{ width: '100%' }}>
                 <Option value={true}>是</Option>
                 <Option value={false}>否</Option>
               </Select>
             </Col>
             {canViewUsers && (
-              <Col span={4}>
-                <Select
-                  placeholder="跟进人"
-                  value={searchFilters.studentOwner}
+              <Col span={3}>
+                <Select placeholder="跟进人" value={searchFilters.studentOwner}
                   onChange={(value) => setSearchFilters({ ...searchFilters, studentOwner: value })}
-                  allowClear
-                  showSearch
+                  allowClear showSearch
                   filterOption={(input, option) =>
                     String(option?.children || '').toLowerCase().includes(input.toLowerCase())
                   }
-                  style={{ width: '100%' }}
-                >
+                  style={{ width: '100%' }}>
+                  <Option key="__unassigned__" value="__unassigned__">未分配</Option>
                   {users.map(user => (
                     <Option key={user._id} value={user._id}>{user.name}</Option>
                   ))}
@@ -594,48 +616,53 @@ const TrainingLeadList: React.FC = () => {
             )}
           </Row>
 
-          <Row gutter={[16, 16]}>
-            <Col span={8}>
+          {/* 搜索筛选区域 - 第二行 */}
+          <Row gutter={[12, 12]} style={{ marginTop: 8 }}>
+            <Col span={4}>
+              <Select
+                placeholder="最近跟进结果"
+                value={(searchFilters as any).lastFollowUpResult}
+                onChange={(value) => setSearchFilters({ ...searchFilters, lastFollowUpResult: value } as any)}
+                allowClear
+                style={{ width: '100%' }}
+              >
+                <Option value="已接通">📞 已接通</Option>
+                <Option value="未接通">📵 未接通</Option>
+                <Option value="关机">🔇 关机</Option>
+                <Option value="停机">🔇 停机</Option>
+                <Option value="拒接">🚫 拒接</Option>
+                <Option value="忙线">⏳ 忙线</Option>
+                <Option value="已回复">💬 已回复</Option>
+                <Option value="未回复">💬 未回复</Option>
+                <Option value="已读未回">👁 已读未回</Option>
+                <Option value="已到店">🏠 已到店</Option>
+                <Option value="未到店">🏠 未到店</Option>
+                <Option value="爽约">❌ 爽约</Option>
+                <Option value="成功">✅ 成功</Option>
+                <Option value="失败">❌ 失败</Option>
+              </Select>
+            </Col>
+            <Col span={7}>
               <RangePicker
                 placeholder={['创建开始日期', '创建结束日期']}
                 onChange={handleDateRangeChange}
                 style={{ width: '100%' }}
               />
             </Col>
-            <Col span={16} style={{ textAlign: 'right' }}>
+            <Col span={13} style={{ textAlign: 'right' }}>
               <Space>
                 <Button onClick={handleReset}>重置</Button>
-                <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-                  搜索
-                </Button>
-                <Button
-                  icon={<ShareAltOutlined />}
-                  onClick={handleGenerateShare}
-                  loading={shareLoading}
-                >
+                <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>搜索</Button>
+                <Button icon={<ShareAltOutlined />} onClick={handleGenerateShare} loading={shareLoading}>
                   生成分享链接
                 </Button>
                 {selectedRowKeys.length > 0 && (
-                  <Button
-                    icon={<UserSwitchOutlined />}
-                    onClick={() => setAssignModalVisible(true)}
-                    type="primary"
-                    ghost
-                  >
+                  <Button icon={<UserSwitchOutlined />} onClick={() => setAssignModalVisible(true)} type="primary" ghost>
                     批量分配 ({selectedRowKeys.length})
                   </Button>
                 )}
-                <Button
-                  icon={<UploadOutlined />}
-                  onClick={() => setAiImportModalVisible(true)}
-                >
-                  AI批量导入
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => navigate('/training-leads/create')}
-                >
+                <Button icon={<UploadOutlined />} onClick={() => setAiImportModalVisible(true)}>AI批量导入</Button>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/training-leads/create')}>
                   新建线索
                 </Button>
               </Space>

@@ -3,9 +3,13 @@ export enum LeadStatus {
   FOLLOWING = '跟进中',
   ENROLLED = '已报名',
   GRADUATED = '已结业',
-  ABANDONED = '已放弃',
-  INVALID = '无效线索',
-  LOST = '已流失'
+  NEW_NOT_FOLLOWED_UP = '新客未跟进',
+  TRANSFER_NOT_FOLLOWED_UP = '流转未跟进',
+  NOT_FOLLOWED_UP = '未跟进',
+  NOT_FOLLOWED_UP_7_DAYS = '7天未跟进',
+  NOT_FOLLOWED_UP_15_DAYS = '15天未跟进',
+  VISITED = '已到店',
+  INVALID = '无效线索'
 }
 
 // 意向程度枚举
@@ -59,10 +63,14 @@ export interface TrainingLead {
   assignedTo?: UserInfo | string;
   referredBy?: UserInfo | string; // 用户归属（生成分享链接/二维码的用户）
   lastFollowUpAt?: string;
+  inPublicPool?: boolean;
+  publicPoolAt?: string;
+  publicPoolReason?: 'manual' | 'invalid';
   createdAt: string;
   updatedAt: string;
   followUps?: TrainingLeadFollowUp[];
-  followUpStatus?: string | null; // 跟进状态：'新客未跟进' | '流转未跟进' | null
+  followUpStatus?: string | null;      // 注意力标记：'新客未跟进' | '流转未跟进' | null
+  lastFollowUpResult?: string | null;  // 最近跟进结果：'已接通' | '未接通' | '已回复' | '未回复' | ...
 }
 
 // 跟进记录接口
@@ -70,6 +78,8 @@ export interface TrainingLeadFollowUp {
   _id: string;
   leadId: string;
   type: string;
+  followUpResult: string;  // 跟进结果
+  contactSuccess: boolean; // 是否联系成功
   content: string;
   nextFollowUpDate?: string;
   createdBy: UserInfo | string;
@@ -131,6 +141,7 @@ export interface TrainingLeadListResponse {
 // 创建跟进记录DTO
 export interface CreateTrainingLeadFollowUpDto {
   type: string;
+  followUpResult: string;
   content: string;
   nextFollowUpDate?: string;
 }
@@ -148,9 +159,13 @@ export const LEAD_STATUS_OPTIONS = [
   { label: '跟进中', value: LeadStatus.FOLLOWING, color: '#fa8c16' },
   { label: '已报名', value: LeadStatus.ENROLLED, color: '#13c2c2' },
   { label: '已结业', value: LeadStatus.GRADUATED, color: '#52c41a' },
-  { label: '已放弃', value: LeadStatus.ABANDONED, color: '#ff4d4f' },
-  { label: '无效线索', value: LeadStatus.INVALID, color: '#d9d9d9' },
-  { label: '已流失', value: LeadStatus.LOST, color: '#8c8c8c' }
+  { label: '新客未跟进', value: LeadStatus.NEW_NOT_FOLLOWED_UP, color: '#ff4d4f' },
+  { label: '流转未跟进', value: LeadStatus.TRANSFER_NOT_FOLLOWED_UP, color: '#faad14' },
+  { label: '未跟进', value: LeadStatus.NOT_FOLLOWED_UP, color: '#faad14' },
+  { label: '7天未跟进', value: LeadStatus.NOT_FOLLOWED_UP_7_DAYS, color: '#ff7a45' },
+  { label: '15天未跟进', value: LeadStatus.NOT_FOLLOWED_UP_15_DAYS, color: '#ff4d4f' },
+  { label: '已到店', value: LeadStatus.VISITED, color: '#1890ff' },
+  { label: '无效线索', value: LeadStatus.INVALID, color: '#d9d9d9' }
 ];
 
 export const LEAD_SOURCE_OPTIONS = [
@@ -197,6 +212,33 @@ export const FOLLOW_UP_TYPE_OPTIONS = [
   { label: '到店', value: FollowUpType.VISIT, icon: '🏠' },
   { label: '其他', value: FollowUpType.OTHER, icon: '📝' }
 ];
+
+// 跟进结果选项（根据跟进方式动态选择）
+export const FOLLOW_UP_RESULT_OPTIONS: Record<string, Array<{ label: string; value: string; color: string }>> = {
+  电话: [
+    { label: '已接通', value: '已接通', color: '#52c41a' },
+    { label: '未接通', value: '未接通', color: '#ff4d4f' },
+    { label: '关机', value: '关机', color: '#8c8c8c' },
+    { label: '停机', value: '停机', color: '#8c8c8c' },
+    { label: '拒接', value: '拒接', color: '#ff4d4f' },
+    { label: '忙线', value: '忙线', color: '#faad14' }
+  ],
+  微信: [
+    { label: '已回复', value: '已回复', color: '#52c41a' },
+    { label: '未回复', value: '未回复', color: '#faad14' },
+    { label: '已读未回', value: '已读未回', color: '#faad14' },
+    { label: '已拉黑', value: '已拉黑', color: '#ff4d4f' }
+  ],
+  到店: [
+    { label: '已到店', value: '已到店', color: '#52c41a' },
+    { label: '未到店', value: '未到店', color: '#ff4d4f' },
+    { label: '爽约', value: '爽约', color: '#ff4d4f' }
+  ],
+  其他: [
+    { label: '成功', value: '成功', color: '#52c41a' },
+    { label: '失败', value: '失败', color: '#ff4d4f' }
+  ]
+};
 
 export const LEAD_GRADE_OPTIONS = [
   { label: 'A', value: 'A', color: '#f5222d' },

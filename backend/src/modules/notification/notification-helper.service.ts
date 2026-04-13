@@ -195,6 +195,43 @@ export class NotificationHelperService {
     return this.sendAndPush(userIds, NotificationType.CONTRACT_WORKER_CHANGED, data);
   }
 
+  // ========== 职培线索相关通知 ==========
+
+  /**
+   * 职培线索分配/流转通知（通知新负责人）
+   */
+  async notifyTrainingLeadAssigned(userId: string, data: {
+    leadId: string;
+    leadName: string;
+    phone: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.TRAINING_LEAD_ASSIGNED, data);
+  }
+
+  /**
+   * 职培线索跟进通知（有人给我的线索加了跟进记录）
+   */
+  async notifyTrainingLeadFollowUpAdded(userId: string, data: {
+    leadId: string;
+    leadName: string;
+    operatorName: string;
+    summary: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.TRAINING_LEAD_FOLLOW_UP_ADDED, data);
+  }
+
+  /**
+   * 新职培线索创建通知（通知管理员）
+   */
+  async notifyTrainingLeadCreated(adminUserIds: string[], data: {
+    leadId: string;
+    leadName: string;
+    phone: string;
+    creatorName: string;
+  }) {
+    return this.sendAndPush(adminUserIds, NotificationType.TRAINING_LEAD_CREATED, data);
+  }
+
   // ========== 表单相关通知 ==========
 
   /**

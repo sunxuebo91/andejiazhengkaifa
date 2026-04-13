@@ -9,9 +9,13 @@ export enum LeadStatus {
   FOLLOWING = '跟进中',
   ENROLLED = '已报名',
   GRADUATED = '已结业',
-  ABANDONED = '已放弃',
-  INVALID = '无效线索',
-  LOST = '已流失'
+  NEW_NOT_FOLLOWED_UP = '新客未跟进',
+  TRANSFER_NOT_FOLLOWED_UP = '流转未跟进',
+  NOT_FOLLOWED_UP = '未跟进',
+  NOT_FOLLOWED_UP_7_DAYS = '7天未跟进',
+  NOT_FOLLOWED_UP_15_DAYS = '15天未跟进',
+  VISITED = '已到店',
+  INVALID = '无效线索'
 }
 
 // 意向程度枚举
@@ -163,6 +167,18 @@ export class TrainingLead {
   @Prop()
   lastFollowUpAt: Date;
 
+  @ApiProperty({ description: '是否在公海池' })
+  @Prop({ default: false })
+  inPublicPool: boolean;
+
+  @ApiProperty({ description: '入池时间' })
+  @Prop()
+  publicPoolAt: Date;
+
+  @ApiProperty({ description: '入池原因：manual（手动释放）| invalid（标记无效）' })
+  @Prop({ enum: ['manual', 'invalid'] })
+  publicPoolReason: string;
+
   @ApiProperty({ description: '创建时间' })
   createdAt: Date;
 
@@ -180,4 +196,6 @@ TrainingLeadSchema.index({ assignedTo: 1 });
 TrainingLeadSchema.index({ referredBy: 1 });
 TrainingLeadSchema.index({ studentOwner: 1 });
 TrainingLeadSchema.index({ isReported: 1 });
+TrainingLeadSchema.index({ inPublicPool: 1 });
+TrainingLeadSchema.index({ publicPoolAt: -1 });
 TrainingLeadSchema.index({ createdAt: -1 });

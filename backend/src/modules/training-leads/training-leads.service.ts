@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
   Logger
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -17,6 +18,7 @@ import { UpdateTrainingLeadDto } from './dto/update-training-lead.dto';
 import { TrainingLeadQueryDto } from './dto/training-lead-query.dto';
 import { CreateTrainingLeadFollowUpDto } from './dto/create-training-lead-follow-up.dto';
 import { User } from '../users/models/user.entity';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 
 @Injectable()
 export class TrainingLeadsService {
@@ -27,6 +29,7 @@ export class TrainingLeadsService {
     @InjectModel(TrainingLeadFollowUp.name) private followUpModel: Model<TrainingLeadFollowUpDocument>,
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly jwtService: JwtService,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   /**
@@ -86,6 +89,27 @@ export class TrainingLeadsService {
     const saved = await lead.save();
 
     this.logger.log(`培训线索创建成功: ${saved.studentId}`);
+
+    // 🔔 通知管理员：新线索创建
+    try {
+      const admins = await this.userModel
+        .find({ role: { $in: ['admin', 'operator', '系统管理员'] } })
+        .select('_id')
+        .lean();
+      const adminIds = admins.map((u: any) => u._id.toString()).filter(id => id !== userId);
+      if (adminIds.length > 0) {
+        const creator = await this.userModel.findById(userId).select('name').lean();
+        await this.notificationHelper.notifyTrainingLeadCreated(adminIds, {
+          leadId: (saved as any)._id.toString(),
+          leadName: saved.name,
+          phone: saved.phone || '未填写',
+          creatorName: (creator as any)?.name || '未知',
+        }).catch(e => this.logger.warn(`发送新线索通知失败: ${e?.message}`));
+      }
+    } catch (e: any) {
+      this.logger.warn(`新线索通知查询失败: ${e?.message}`);
+    }
+
     return saved;
   }
 
@@ -95,67 +119,94 @@ export class TrainingLeadsService {
    * @param followUps 跟进记录列表
    * @returns 跟进状态标签：'新客未跟进' | '流转未跟进' | null
    */
+  /**
+   * 计算线索注意力标记（只标记"需要关注"的状态）
+   * 返回: '新客未跟进' | '流转未跟进' | null
+   */
   private calculateFollowUpStatus(lead: any, followUps: any[]): string | null {
-    // 如果没有任何跟进记录，显示"新客未跟进"
-    if (!followUps || followUps.length === 0) {
-      return '新客未跟进';
-    }
+    const hasFollowUps = followUps && followUps.length > 0;
 
-    // 如果有学员归属，检查当前归属人是否做过跟进
-    if (lead.studentOwner) {
+    // 判断是否发生了流转（studentOwner !== createdBy）
+    let isTransferred = false;
+    if (lead.studentOwner && lead.createdBy) {
       const studentOwnerId = typeof lead.studentOwner === 'object'
         ? lead.studentOwner._id?.toString()
         : lead.studentOwner.toString();
-
-      // 检查是否有当前归属人创建的跟进记录
-      const hasOwnerFollowUp = followUps.some(followUp => {
-        const createdById = typeof followUp.createdBy === 'object'
-          ? followUp.createdBy._id?.toString()
-          : followUp.createdBy.toString();
-        return createdById === studentOwnerId;
-      });
-
-      // 如果当前归属人没有做过跟进，显示"流转未跟进"
-      if (!hasOwnerFollowUp) {
-        return '流转未跟进';
-      }
+      const createdById = typeof lead.createdBy === 'object'
+        ? lead.createdBy._id?.toString()
+        : lead.createdBy.toString();
+      isTransferred = studentOwnerId !== createdById;
     }
 
+    // 已流转且有跟进记录 → 流转未跟进（新负责人需要知道此线索已被转给自己）
+    if (isTransferred && hasFollowUps) {
+      return '流转未跟进';
+    }
+
+    // 无跟进记录（不论是否流转）→ 新客未跟进
+    if (!hasFollowUps) {
+      return '新客未跟进';
+    }
+
+    // 未流转且有跟进记录 → 正常跟进中，无特殊标记
     return null;
+  }
+
+  /**
+   * 获取最近一次跟进结果
+   * 返回: '已接通' | '未接通' | '已回复' | '未回复' | ... | null
+   */
+  private getLastFollowUpResult(followUps: any[]): string | null {
+    if (!followUps || followUps.length === 0) return null;
+    const last = followUps.sort((a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )[0];
+    return last?.followUpResult || null;
   }
 
   /**
    * 查询培训线索列表
    */
   async findAll(query: TrainingLeadQueryDto): Promise<any> {
-    const { page = 1, pageSize = 10, search, status, leadSource, trainingType, startDate, endDate, assignedTo, createdBy, isReported, studentOwner } = query;
+    // 小程序端传 limit，CRM端传 pageSize，兼容两者
+    const limit = (query as any).limit;
+    const { page = 1, pageSize = limit ? Number(limit) : 10, search, status, leadSource, trainingType, startDate, endDate, assignedTo, createdBy, isReported, studentOwner } = query;
 
     const filter: any = {};
     const andConditions: any[] = [];
 
-    // 按归属人过滤（普通员工只看自己创建的 + 分配给自己的 + 归属自己的）
+    // 按归属人过滤：
+    // 1. 当前持有人（studentOwner）是自己
+    // 2. 已分配给自己（assignedTo）
+    // 3. 自己创建 且 尚未分配给他人（studentOwner 为空）
+    // ⚠️ 线索一旦被分配给他人，创建者就不再可见，避免数据泄露
     if (createdBy) {
       const uid = new Types.ObjectId(createdBy);
       andConditions.push({
         $or: [
-          { createdBy: uid },
-          { createdBy: createdBy },
-          { assignedTo: uid },
-          { assignedTo: createdBy },
           { studentOwner: uid },
           { studentOwner: createdBy },
+          { assignedTo: uid },
+          { assignedTo: createdBy },
+          {
+            $and: [
+              { $or: [{ createdBy: uid }, { createdBy: createdBy }] },
+              { $or: [{ studentOwner: null }, { studentOwner: { $exists: false } }] }
+            ]
+          }
         ]
       });
     }
 
-    // 搜索条件
-    if (search) {
+    // 搜索条件（search 来自 CRM端，keyword 来自小程序端，兼容两者）
+    const searchKeyword = search || (query as any).keyword;
+    if (searchKeyword) {
       andConditions.push({
         $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { phone: { $regex: search, $options: 'i' } },
-          { wechatId: { $regex: search, $options: 'i' } },
-          { studentId: { $regex: search, $options: 'i' } }
+          { name: { $regex: searchKeyword, $options: 'i' } },
+          { phone: { $regex: searchKeyword, $options: 'i' } },
+          { wechatId: { $regex: searchKeyword, $options: 'i' } },
+          { studentId: { $regex: searchKeyword, $options: 'i' } }
         ]
       });
     }
@@ -171,7 +222,35 @@ export class TrainingLeadsService {
     if (trainingType) filter.trainingType = trainingType;
     if (assignedTo) filter.assignedTo = new Types.ObjectId(assignedTo);
     if (isReported !== undefined) filter.isReported = isReported;
-    if (studentOwner) filter.studentOwner = new Types.ObjectId(studentOwner);
+    if (studentOwner === '__unassigned__') {
+      // 筛选未分配跟进人（跟进人列显示的是 studentOwner，studentOwner 为空即视为"未分配"）
+      andConditions.push({
+        $or: [{ studentOwner: null }, { studentOwner: { $exists: false } }]
+      });
+      if (andConditions.length > 0) filter.$and = andConditions;
+    } else if (studentOwner) {
+      filter.studentOwner = new Types.ObjectId(studentOwner);
+    }
+
+    // 公海池筛选：传 inPublicPool=true 只查公海，否则默认排除公海线索
+    const inPublicPool = (query as any).inPublicPool;
+    if (inPublicPool === true || inPublicPool === 'true') {
+      filter.inPublicPool = true;
+    } else {
+      filter.inPublicPool = { $ne: true };
+    }
+
+    // 按最近跟进结果筛选（聚合最新跟进记录后过滤）
+    const { lastFollowUpResult } = query as any;
+    if (lastFollowUpResult) {
+      const latestFollowUps = await this.followUpModel.aggregate([
+        { $sort: { createdAt: -1 } },
+        { $group: { _id: '$leadId', latestResult: { $first: '$followUpResult' } } },
+        { $match: { latestResult: lastFollowUpResult } }
+      ]);
+      const matchingIds = latestFollowUps.map(r => r._id);
+      filter._id = { $in: matchingIds };
+    }
 
     // 日期范围
     if (startDate || endDate) {
@@ -182,18 +261,50 @@ export class TrainingLeadsService {
 
     const skip = (page - 1) * pageSize;
 
+    // 状态优先级排序（紧急程度从高到低）
+    const STATUS_PRIORITY = [
+      '15天未跟进',
+      '7天未跟进',
+      '新客未跟进',
+      '未跟进',
+      '跟进中',
+      '已到店',
+      '已报名',
+      '已结业',
+      '无效线索',
+    ];
+
     const [items, total] = await Promise.all([
-      this.trainingLeadModel
-        .find(filter)
-        .populate('createdBy', 'name username')
-        .populate('assignedTo', 'name username')
-        .populate('referredBy', 'name username')
-        .populate('studentOwner', 'name username')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(pageSize)
-        .lean()
-        .exec(),
+      this.trainingLeadModel.aggregate([
+        { $match: filter },
+        // 添加状态优先级字段
+        { $addFields: {
+          _sp: {
+            $let: {
+              vars: { idx: { $indexOfArray: [STATUS_PRIORITY, '$status'] } },
+              in: { $cond: [{ $eq: ['$$idx', -1] }, 99, '$$idx'] }
+            }
+          }
+        }},
+        // 先按状态优先级，再按创建时间倒序
+        { $sort: { _sp: 1, createdAt: -1 } },
+        { $skip: skip },
+        { $limit: pageSize },
+        // populate: createdBy
+        { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: '_cb' } },
+        { $addFields: { createdBy: { $arrayElemAt: ['$_cb', 0] } } },
+        // populate: assignedTo
+        { $lookup: { from: 'users', localField: 'assignedTo', foreignField: '_id', as: '_at' } },
+        { $addFields: { assignedTo: { $arrayElemAt: ['$_at', 0] } } },
+        // populate: referredBy
+        { $lookup: { from: 'users', localField: 'referredBy', foreignField: '_id', as: '_rb' } },
+        { $addFields: { referredBy: { $arrayElemAt: ['$_rb', 0] } } },
+        // populate: studentOwner
+        { $lookup: { from: 'users', localField: 'studentOwner', foreignField: '_id', as: '_so' } },
+        { $addFields: { studentOwner: { $arrayElemAt: ['$_so', 0] } } },
+        // 清除临时字段
+        { $project: { _sp: 0, _cb: 0, _at: 0, _rb: 0, _so: 0 } }
+      ]),
       this.trainingLeadModel.countDocuments(filter)
     ]);
 
@@ -207,12 +318,15 @@ export class TrainingLeadsService {
           .lean()
           .exec();
 
-        // 计算跟进状态
+        // 注意力标记（新客未跟进 / 流转未跟进 / null）
         const followUpStatus = this.calculateFollowUpStatus(lead, followUps);
+        // 最近跟进结果（已接通 / 未接通 / 已回复 / 未回复 / ... / null）
+        const lastFollowUpResult = this.getLastFollowUpResult(followUps);
 
         return {
           ...lead,
-          followUpStatus
+          followUpStatus,
+          lastFollowUpResult
         };
       })
     );
@@ -251,13 +365,16 @@ export class TrainingLeadsService {
       .lean()
       .exec();
 
-    // 计算跟进状态
+    // 注意力标记（新客未跟进 / 流转未跟进 / null）
     const followUpStatus = this.calculateFollowUpStatus(lead, followUps);
+    // 最近跟进结果（已接通 / 未接通 / 已回复 / 未回复 / ... / null）
+    const lastFollowUpResult = this.getLastFollowUpResult(followUps);
 
     return {
       ...lead,
       followUps,
-      followUpStatus
+      followUpStatus,
+      lastFollowUpResult
     };
   }
 
@@ -287,15 +404,101 @@ export class TrainingLeadsService {
     }
 
     // 处理学员归属
+    const prevOwnerId = lead.studentOwner?.toString();
     if (updateDto.studentOwner) {
       updateData.studentOwner = new Types.ObjectId(updateDto.studentOwner);
+    }
+
+    // 标记为无效线索时自动流入公海池
+    if (updateDto.status === LeadStatus.INVALID && lead.status !== LeadStatus.INVALID) {
+      updateData.inPublicPool = true;
+      updateData.publicPoolAt = new Date();
+      updateData.publicPoolReason = 'invalid';
+      updateData.assignedTo = null;
+      updateData.studentOwner = null;
+      this.logger.log(`线索 ${lead.studentId} 标记为无效，自动流入公海池`);
     }
 
     Object.assign(lead, updateData);
     const updated = await lead.save();
 
     this.logger.log(`培训线索更新成功: ${updated.studentId}`);
+
+    // 🔔 通知新负责人：线索已分配给你
+    const newOwnerId = updateDto.studentOwner;
+    if (newOwnerId && newOwnerId !== prevOwnerId) {
+      this.notificationHelper.notifyTrainingLeadAssigned(newOwnerId, {
+        leadId: (updated as any)._id.toString(),
+        leadName: updated.name,
+        phone: updated.phone || '未填写',
+      }).catch(e => this.logger.warn(`发送线索分配通知失败: ${e?.message}`));
+    }
+
     return updated;
+  }
+
+  /**
+   * 释放线索到公海池（手动）
+   * 本人持有 或 管理员 可操作
+   */
+  async releaseLead(id: string, userId: string, isAdmin: boolean): Promise<TrainingLead> {
+    const lead = await this.trainingLeadModel.findById(id);
+    if (!lead) throw new NotFoundException('培训线索不存在');
+
+    const currentOwner = lead.assignedTo?.toString() || lead.studentOwner?.toString();
+    if (!isAdmin && currentOwner !== userId) {
+      throw new ForbiddenException('只能释放自己持有的线索');
+    }
+    if ((lead as any).inPublicPool) {
+      throw new BadRequestException('该线索已在公海池中');
+    }
+
+    const updated = await this.trainingLeadModel.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          inPublicPool: true,
+          publicPoolAt: new Date(),
+          publicPoolReason: 'manual',
+          assignedTo: null,
+          studentOwner: null,
+        }
+      },
+      { new: true }
+    );
+
+    this.logger.log(`线索 ${lead.studentId} 被用户 ${userId} 手动释放到公海池`);
+    return updated as TrainingLead;
+  }
+
+  /**
+   * 从公海池认领线索（原子操作防并发）
+   */
+  async claimLead(id: string, userId: string): Promise<TrainingLead> {
+    const uid = new Types.ObjectId(userId);
+    const updated = await this.trainingLeadModel.findOneAndUpdate(
+      { _id: new Types.ObjectId(id), inPublicPool: true, assignedTo: null },
+      {
+        $set: {
+          inPublicPool: false,
+          publicPoolAt: null,
+          publicPoolReason: null,
+          assignedTo: uid,
+          studentOwner: uid,
+        }
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      // 检查线索是否存在
+      const lead = await this.trainingLeadModel.findById(id);
+      if (!lead) throw new NotFoundException('培训线索不存在');
+      throw new ConflictException('该线索已被他人认领');
+    }
+
+    this.logger.log(`线索 ${(updated as any).studentId} 被用户 ${userId} 认领`);
+    return updated as TrainingLead;
   }
 
   /**
@@ -366,6 +569,27 @@ export class TrainingLeadsService {
       .exec();
 
     this.logger.log(`跟进记录创建成功`);
+
+    // 🔔 通知线索负责人：有人跟进了你的线索（跟进人 ≠ 负责人时才通知）
+    const ownerId = lead.studentOwner?.toString();
+    if (ownerId && ownerId !== userId) {
+      try {
+        const operator = await this.userModel.findById(userId).select('name').lean();
+        const operatorName = (operator as any)?.name || '同事';
+        const summary = createDto.content
+          ? createDto.content.slice(0, 30) + (createDto.content.length > 30 ? '…' : '')
+          : '（无内容）';
+        this.notificationHelper.notifyTrainingLeadFollowUpAdded(ownerId, {
+          leadId: leadId,
+          leadName: lead.name,
+          operatorName,
+          summary,
+        }).catch(e => this.logger.warn(`发送跟进通知失败: ${e?.message}`));
+      } catch (e: any) {
+        this.logger.warn(`发送跟进通知查询失败: ${e?.message}`);
+      }
+    }
+
     return populated as any;
   }
 
@@ -433,9 +657,12 @@ export class TrainingLeadsService {
       followingUp: statusMap['跟进中'] || 0,
       enrolled: statusMap['已报名'] || 0,
       graduated: statusMap['已结业'] || 0,
-      abandoned: statusMap['已放弃'] || 0,
+      newNotFollowedUp: statusMap['新客未跟进'] || 0,
+      transferNotFollowedUp: statusMap['流转未跟进'] || 0,
+      notFollowedUp: statusMap['未跟进'] || 0,
+      notFollowedUp7Days: statusMap['7天未跟进'] || 0,
+      notFollowedUp15Days: statusMap['15天未跟进'] || 0,
       invalid: statusMap['无效线索'] || 0,
-      lost: statusMap['已流失'] || 0,
       bySource: bySource.map((s: any) => ({ source: s._id || '未知', count: s.count })),
       byTrainingType: byTrainingType.map((t: any) => ({ type: t._id || '未知', count: t.count })),
       totalFollowUps: recentFollowUps,
@@ -779,7 +1006,8 @@ export class TrainingLeadsService {
               type: resolvedType,
               content: followUpContent,
               createdBy: resolvedFollowUpUserId,
-              ...(followUpTime ? { nextFollowUpDate: undefined, createdAt: followUpDate } : {}),
+              // 不覆盖 createdAt，由 Mongoose timestamps 自动设置为当前时间
+              // Excel 里的日期（仅有日期无时分）只用于更新 lastFollowUpAt
             });
             await followUp.save();
             // 同步更新线索的最后跟进时间

@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsEnum, IsNumber, Min, IsBoolean, IsMongoId } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsEnum, IsNumber, Min, IsBoolean } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 import { LeadStatus } from '../models/training-lead.model';
 
 export class TrainingLeadQueryDto {
@@ -76,9 +76,20 @@ export class TrainingLeadQueryDto {
   @IsBoolean()
   isReported?: boolean;
 
-  @ApiPropertyOptional({ description: '学员归属筛选（负责该学员的人员ID）' })
+  @ApiPropertyOptional({ description: '学员归属筛选（负责该学员的人员ID，或传 __unassigned__ 筛选未分配）' })
   @IsOptional()
-  @IsMongoId()
+  @IsString()
   studentOwner?: string;
+
+  @ApiPropertyOptional({ description: '最近跟进结果筛选', example: '已接通' })
+  @IsOptional()
+  @IsString()
+  lastFollowUpResult?: string;
+
+  @ApiPropertyOptional({ description: '是否查询公海池线索', example: true })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  inPublicPool?: boolean;
 }
 

@@ -70,10 +70,10 @@ export class TrainingLeadsController {
     private readonly qwenAIService: QwenAIService,
   ) {}
 
-  // 检查是否是管理员或经理（有全局查看权限的角色：admin/manager/operator/admissions）
-  // dispatch/employee 只能查看自己创建的线索
+  // 检查是否是管理员或经理（只有 admin/manager 才能查看全部线索）
+  // operator/admissions/employee/dispatch 只能查看自己创建/分配/归属的线索
   private isManagerOrAdmin(user: any): boolean {
-    return ['系统管理员', 'admin', '经理', 'manager', 'operator'].includes(user?.role);
+    return ['系统管理员', 'admin', '经理', 'manager'].includes(user?.role);
   }
 
   @Post()
@@ -439,6 +439,35 @@ export class TrainingLeadsController {
       success: true,
       data: result,
       message: '分享链接生成成功'
+    };
+  }
+
+  @Post(':id/release')
+  @Permissions('training-lead:edit')
+  @ApiOperation({ summary: '释放线索到公海池' })
+  @ApiResponse({ status: 200, description: '释放成功' })
+  @ApiResponse({ status: 403, description: '只能释放自己持有的线索' })
+  async releaseLead(@Param('id') id: string, @Request() req) {
+    const isAdmin = this.isManagerOrAdmin(req.user);
+    const lead = await this.trainingLeadsService.releaseLead(id, req.user.userId, isAdmin);
+    return {
+      success: true,
+      data: lead,
+      message: '已释放到公海池'
+    };
+  }
+
+  @Post(':id/claim')
+  @Permissions('training-lead:edit')
+  @ApiOperation({ summary: '从公海池认领线索' })
+  @ApiResponse({ status: 200, description: '认领成功' })
+  @ApiResponse({ status: 409, description: '该线索已被他人认领' })
+  async claimLead(@Param('id') id: string, @Request() req) {
+    const lead = await this.trainingLeadsService.claimLead(id, req.user.userId);
+    return {
+      success: true,
+      data: lead,
+      message: '认领成功'
     };
   }
 

@@ -32,6 +32,8 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { QwenAIService, ParsedTrainingLead } from '../ai/qwen-ai.service';
+import { TrainingLeadAutoTransferService } from './services/training-lead-auto-transfer.service';
+import { TrainingLeadStatusUpdaterService } from './services/training-lead-status-updater.service';
 
 // Multer配置 - Excel文件上传
 const multerConfig = {
@@ -68,6 +70,8 @@ export class TrainingLeadsController {
   constructor(
     private readonly trainingLeadsService: TrainingLeadsService,
     private readonly qwenAIService: QwenAIService,
+    private readonly autoTransferService: TrainingLeadAutoTransferService,
+    private readonly statusUpdaterService: TrainingLeadStatusUpdaterService,
   ) {}
 
   // 检查是否是管理员或经理（只有 admin/manager 才能查看全部线索）
@@ -498,6 +502,38 @@ export class TrainingLeadsController {
       this.logger.error(`公开表单提交失败: ${error.message}`);
       throw error;
     }
+  }
+
+  // ─────────────────── 自动流转管理接口 ───────────────────
+
+  @Post('admin/auto-transfer/trigger-all')
+  @ApiOperation({ summary: '手动触发全部学员线索自动流转（管理员测试用）' })
+  @ApiResponse({ status: 200, description: '触发成功' })
+  @Permissions('training_leads:admin')
+  async triggerAutoTransferAll() {
+    this.logger.log('🔧 管理员手动触发学员线索自动流转');
+    await this.autoTransferService.executeAutoTransfer();
+    return { success: true, message: '自动流转任务已触发，请查看日志' };
+  }
+
+  @Post('admin/auto-transfer/trigger-rule/:ruleId')
+  @ApiOperation({ summary: '手动触发指定规则的学员线索自动流转（管理员测试用）' })
+  @ApiResponse({ status: 200, description: '触发成功' })
+  @Permissions('training_leads:admin')
+  async triggerAutoTransferByRule(@Param('ruleId') ruleId: string) {
+    this.logger.log(`🔧 管理员手动触发规则 ${ruleId}`);
+    const result = await this.autoTransferService.executeRuleById(ruleId);
+    return { success: true, data: result };
+  }
+
+  @Post('admin/status-update/trigger')
+  @ApiOperation({ summary: '手动触发学员线索状态推进（管理员测试用）' })
+  @ApiResponse({ status: 200, description: '触发成功' })
+  @Permissions('training_leads:admin')
+  async triggerStatusUpdate() {
+    this.logger.log('🔧 管理员手动触发学员线索状态推进');
+    const result = await this.statusUpdaterService.executeStatusUpdate();
+    return { success: true, data: result };
   }
 }
 

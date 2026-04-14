@@ -91,5 +91,13 @@ export class TrainingLeadQueryDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   inPublicPool?: boolean;
+
+  @ApiPropertyOptional({
+    description: '按 leadStatus 分组过滤：notFollowed=未跟进类，followingUp=跟进中，enrolled=已报名',
+    enum: ['notFollowed', 'followingUp', 'enrolled'],
+  })
+  @IsOptional()
+  @IsEnum(['notFollowed', 'followingUp', 'enrolled'])
+  statFilter?: 'notFollowed' | 'followingUp' | 'enrolled';
 }
 

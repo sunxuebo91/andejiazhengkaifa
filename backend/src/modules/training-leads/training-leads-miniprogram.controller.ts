@@ -36,6 +36,7 @@ export class TrainingLeadsMiniProgramController {
   @ApiQuery({ name: 'intentionLevel', required: false })
   @ApiQuery({ name: 'keyword', required: false, description: '搜索姓名/手机号/学员编号' })
   @ApiQuery({ name: 'lastFollowUpResult', required: false, description: '最近跟进结果筛选，如：已接通、未接通、已回复、未回复等' })
+  @ApiQuery({ name: 'statFilter', required: false, enum: ['notFollowed', 'followingUp', 'enrolled'], description: '按 leadStatus 分组过滤：notFollowed=未跟进类，followingUp=跟进中，enrolled=已报名' })
   async getList(@Query() query: any, @Request() req) {
     try {
       const user = req?.user;

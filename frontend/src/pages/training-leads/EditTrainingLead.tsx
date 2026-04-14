@@ -25,6 +25,7 @@ import {
   UpdateTrainingLeadDto,
   LEAD_SOURCE_OPTIONS,
   LEAD_STATUS_OPTIONS,
+  LEAD_STATUS_MANUAL_OPTIONS,
   TRAINING_TYPE_OPTIONS,
   INTENDED_COURSES_OPTIONS,
   INTENTION_LEVEL_OPTIONS,
@@ -43,7 +44,7 @@ const EditTrainingLead: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
-  const [followUpStatus, setFollowUpStatus] = useState<string | null>(null);
+  const [leadStatus, setLeadStatus] = useState<string | null>(null);
   const canViewUsers = hasPermission('user:view');
 
   // 加载用户列表
@@ -74,7 +75,7 @@ const EditTrainingLead: React.FC = () => {
       setFetching(true);
       try {
         const lead = await trainingLeadService.getTrainingLeadById(id);
-        setFollowUpStatus(lead.followUpStatus || null);
+        setLeadStatus((lead as any).leadStatus || lead.followUpStatus || null);
         form.setFieldsValue({
           ...lead,
           expectedStartDate: lead.expectedStartDate ? dayjs(lead.expectedStartDate) : undefined
@@ -240,8 +241,8 @@ const EditTrainingLead: React.FC = () => {
             <Row gutter={[16, 0]}>
               <Col xs={24} sm={12} md={8}>
                 <Form.Item label="线索状态" name="status">
-                  <Select placeholder="请选择状态">
-                    {LEAD_STATUS_OPTIONS.map(opt => (
+                  <Select placeholder="请选择状态" allowClear>
+                    {LEAD_STATUS_MANUAL_OPTIONS.map(opt => (
                       <Option key={opt.value} value={opt.value}>{opt.label}</Option>
                     ))}
                   </Select>
@@ -285,21 +286,14 @@ const EditTrainingLead: React.FC = () => {
               </Col>
 
               <Col xs={24} sm={12} md={8}>
-                <Form.Item label="跟进状态">
-                  {followUpStatus ? (
+                <Form.Item label="当前状态">
+                  {leadStatus && (
                     <Tag
-                      color={
-                        followUpStatus === '新客未跟进' ? '#ff4d4f' :
-                        followUpStatus === '流转未跟进' ? '#faad14' :
-                        followUpStatus === '已跟进' ? '#52c41a' :
-                        '#8c8c8c'
-                      }
+                      color={LEAD_STATUS_OPTIONS.find(o => o.value === leadStatus)?.color || '#8c8c8c'}
                       style={{ fontSize: '14px', padding: '4px 12px', lineHeight: '22px' }}
                     >
-                      {followUpStatus}
+                      {leadStatus}
                     </Tag>
-                  ) : (
-                    <Tag color="#52c41a" style={{ fontSize: '14px', padding: '4px 12px', lineHeight: '22px' }}>已跟进</Tag>
                   )}
                 </Form.Item>
               </Col>

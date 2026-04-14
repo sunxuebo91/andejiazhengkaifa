@@ -282,6 +282,32 @@ export class NotificationTemplateService implements OnModuleInit {
         actionUrl: '/training-leads/{{leadId}}',
         actionText: '查看线索',
       },
+
+      // ========== 职培线索自动流转相关 ==========
+      {
+        type: NotificationType.TRAINING_LEAD_AUTO_TRANSFER_OUT,
+        name: '职培线索自动流出通知',
+        description: '系统自动流转学员线索时通知流出方',
+        title: '学员线索已自动流转',
+        content: '【{{time}}】系统根据规则「{{ruleName}}」将您名下 {{count}} 条学员线索自动流转给其他顾问，请知悉',
+        priority: NotificationPriority.HIGH,
+        icon: 'SwapRightOutlined',
+        color: '#faad14',
+        actionUrl: '/training-leads',
+        actionText: '查看线索',
+      },
+      {
+        type: NotificationType.TRAINING_LEAD_AUTO_TRANSFER_IN,
+        name: '职培线索自动流入通知',
+        description: '系统自动流转学员线索时通知流入方',
+        title: '您有新的学员线索',
+        content: '【{{time}}】系统根据规则「{{ruleName}}」将 {{count}} 条学员线索分配给您，请尽快跟进！',
+        priority: NotificationPriority.HIGH,
+        icon: 'SwapLeftOutlined',
+        color: '#52c41a',
+        actionUrl: '/training-leads',
+        actionText: '立即跟进',
+      },
     ];
 
     for (const template of templates) {

@@ -232,6 +232,30 @@ export class NotificationHelperService {
     return this.sendAndPush(adminUserIds, NotificationType.TRAINING_LEAD_CREATED, data);
   }
 
+  // ========== 职培线索自动流转相关通知 ==========
+
+  /**
+   * 学员线索流出通知
+   */
+  async notifyTrainingLeadTransferOut(userId: string, data: {
+    count: number;
+    time: string;
+    ruleName: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.TRAINING_LEAD_AUTO_TRANSFER_OUT, data);
+  }
+
+  /**
+   * 学员线索流入通知
+   */
+  async notifyTrainingLeadTransferIn(userId: string, data: {
+    count: number;
+    time: string;
+    ruleName: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.TRAINING_LEAD_AUTO_TRANSFER_IN, data);
+  }
+
   // ========== 表单相关通知 ==========
 
   /**

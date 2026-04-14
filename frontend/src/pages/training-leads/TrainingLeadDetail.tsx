@@ -176,14 +176,9 @@ const TrainingLeadDetail: React.FC = () => {
               ) : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Space>
-                <Tag color={getStatusColor(lead.status)}>{lead.status}</Tag>
-                {lead.followUpStatus && (
-                  <Tag color={lead.followUpStatus === '新客未跟进' ? '#ff4d4f' : '#faad14'}>
-                    {lead.followUpStatus}
-                  </Tag>
-                )}
-              </Space>
+              <Tag color={getStatusColor((lead as any).leadStatus ?? lead.status)}>
+                {(lead as any).leadStatus ?? lead.status}
+              </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="所在地区">{lead.address || '-'}</Descriptions.Item>
             <Descriptions.Item label="意向课程" span={2}>

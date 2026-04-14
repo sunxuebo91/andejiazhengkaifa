@@ -134,6 +134,9 @@ export class LeadTransferRule extends Document {
   @Prop({ default: true })
   enabled: boolean; // 是否启用
 
+  @Prop({ default: 'customer', enum: ['customer', 'training'] })
+  targetModule: string; // 作用模块：customer=客户线索，training=学员线索
+
   @Prop({ type: TriggerConditionsSchema, required: true })
   triggerConditions: TriggerConditions; // 触发条件
 

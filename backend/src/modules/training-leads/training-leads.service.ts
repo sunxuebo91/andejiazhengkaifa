@@ -119,6 +119,41 @@ export class TrainingLeadsService {
    * @param followUps 跟进记录列表
    * @returns 跟进状态标签：'新客未跟进' | '流转未跟进' | null
    */
+  // 终态：人工设置后系统不覆盖
+  private static readonly TERMINAL_STATUSES = new Set([
+    LeadStatus.ENROLLED,   // 已报名
+    LeadStatus.GRADUATED,  // 已结业
+    LeadStatus.VISITED,    // 已到店
+    LeadStatus.INVALID,    // 无效线索
+  ]);
+
+  /**
+   * 计算统一的 leadStatus 字段：
+   * - 终态（已报名/已结业/已到店/无效线索）→ 保持 status 原值，不覆盖
+   * - 非终态 → 根据跟进记录实时计算，覆盖 status 的 DB 值
+   *   · 已流转 + 无跟进 → '流转未跟进'
+   *   · 未流转 + 无跟进 → '新客未跟进'
+   *   · 有跟进 → '跟进中'
+   */
+  private computeLeadStatus(lead: any, followUps: any[]): string {
+    // 终态直接返回，不被系统计算覆盖
+    if (TrainingLeadsService.TERMINAL_STATUSES.has(lead.status)) {
+      return lead.status;
+    }
+
+    const hasFollowUps = followUps && followUps.length > 0;
+
+    if (!hasFollowUps) {
+      // 判断是否流转（studentOwner !== createdBy）
+      const studentOwnerId = lead.studentOwner?._id?.toString?.() ?? lead.studentOwner?.toString?.();
+      const createdById   = lead.createdBy?._id?.toString?.()    ?? lead.createdBy?.toString?.();
+      const isTransferred = !!(studentOwnerId && createdById && studentOwnerId !== createdById);
+      return isTransferred ? LeadStatus.TRANSFER_NOT_FOLLOWED_UP : LeadStatus.NEW_NOT_FOLLOWED_UP;
+    }
+
+    return LeadStatus.FOLLOWING;
+  }
+
   /**
    * 计算线索注意力标记（只标记"需要关注"的状态）
    * 返回: '新客未跟进' | '流转未跟进' | null
@@ -138,17 +173,17 @@ export class TrainingLeadsService {
       isTransferred = studentOwnerId !== createdById;
     }
 
-    // 已流转且有跟进记录 → 流转未跟进（新负责人需要知道此线索已被转给自己）
-    if (isTransferred && hasFollowUps) {
+    // 已流转但无跟进记录 → 流转未跟进（新负责人尚未跟进）
+    if (isTransferred && !hasFollowUps) {
       return '流转未跟进';
     }
 
-    // 无跟进记录（不论是否流转）→ 新客未跟进
+    // 未流转且无跟进记录 → 新客未跟进
     if (!hasFollowUps) {
       return '新客未跟进';
     }
 
-    // 未流转且有跟进记录 → 正常跟进中，无特殊标记
+    // 有跟进记录 → 正常跟进中，无特殊标记
     return null;
   }
 
@@ -252,6 +287,35 @@ export class TrainingLeadsService {
       filter._id = { $in: matchingIds };
     }
 
+    // statFilter：按 leadStatus 分组过滤（与现有 status 单值过滤互不干扰）
+    // notFollowed  → leadStatus in ['新客未跟进','流转未跟进','7天未跟进','15天未跟进']
+    //               = 非终态 + 无跟进记录
+    // followingUp  → leadStatus = '跟进中' = 非终态 + 有跟进记录
+    // enrolled     → leadStatus = '已报名' = status === '已报名'
+    const statFilter = (query as any).statFilter;
+    if (statFilter) {
+      const terminalStatuses = [
+        LeadStatus.ENROLLED,
+        LeadStatus.GRADUATED,
+        LeadStatus.VISITED,
+        LeadStatus.INVALID,
+      ];
+      if (statFilter === 'enrolled') {
+        andConditions.push({ status: LeadStatus.ENROLLED });
+      } else {
+        // 查出全部有跟进记录的 leadId（后续与 filter 中的可见性条件做交集，不影响权限）
+        const leadsWithFollowUps = await this.followUpModel.distinct('leadId');
+        andConditions.push({ status: { $nin: terminalStatuses } });
+        if (statFilter === 'notFollowed') {
+          andConditions.push({ _id: { $nin: leadsWithFollowUps } });
+        } else {
+          // followingUp
+          andConditions.push({ _id: { $in: leadsWithFollowUps } });
+        }
+      }
+      filter.$and = andConditions;
+    }
+
     // 日期范围
     if (startDate || endDate) {
       filter.createdAt = {};
@@ -261,33 +325,11 @@ export class TrainingLeadsService {
 
     const skip = (page - 1) * pageSize;
 
-    // 状态优先级排序（紧急程度从高到低）
-    const STATUS_PRIORITY = [
-      '15天未跟进',
-      '7天未跟进',
-      '新客未跟进',
-      '未跟进',
-      '跟进中',
-      '已到店',
-      '已报名',
-      '已结业',
-      '无效线索',
-    ];
-
     const [items, total] = await Promise.all([
       this.trainingLeadModel.aggregate([
         { $match: filter },
-        // 添加状态优先级字段
-        { $addFields: {
-          _sp: {
-            $let: {
-              vars: { idx: { $indexOfArray: [STATUS_PRIORITY, '$status'] } },
-              in: { $cond: [{ $eq: ['$$idx', -1] }, 99, '$$idx'] }
-            }
-          }
-        }},
-        // 先按状态优先级，再按创建时间倒序
-        { $sort: { _sp: 1, createdAt: -1 } },
+        // 按创建时间倒序排列（新到旧）
+        { $sort: { createdAt: -1 } },
         { $skip: skip },
         { $limit: pageSize },
         // populate: createdBy
@@ -303,7 +345,7 @@ export class TrainingLeadsService {
         { $lookup: { from: 'users', localField: 'studentOwner', foreignField: '_id', as: '_so' } },
         { $addFields: { studentOwner: { $arrayElemAt: ['$_so', 0] } } },
         // 清除临时字段
-        { $project: { _sp: 0, _cb: 0, _at: 0, _rb: 0, _so: 0 } }
+        { $project: { _hasFollowUp: 0, _cb: 0, _at: 0, _rb: 0, _so: 0 } }
       ]),
       this.trainingLeadModel.countDocuments(filter)
     ]);
@@ -322,11 +364,14 @@ export class TrainingLeadsService {
         const followUpStatus = this.calculateFollowUpStatus(lead, followUps);
         // 最近跟进结果（已接通 / 未接通 / 已回复 / 未回复 / ... / null）
         const lastFollowUpResult = this.getLastFollowUpResult(followUps);
+        // 统一线索状态（合并 status + followUpStatus，前端只读此字段）
+        const leadStatus = this.computeLeadStatus(lead, followUps);
 
         return {
           ...lead,
           followUpStatus,
-          lastFollowUpResult
+          lastFollowUpResult,
+          leadStatus,
         };
       })
     );
@@ -369,12 +414,15 @@ export class TrainingLeadsService {
     const followUpStatus = this.calculateFollowUpStatus(lead, followUps);
     // 最近跟进结果（已接通 / 未接通 / 已回复 / 未回复 / ... / null）
     const lastFollowUpResult = this.getLastFollowUpResult(followUps);
+    // 统一线索状态（合并 status + followUpStatus，前端只读此字段）
+    const leadStatus = this.computeLeadStatus(lead, followUps);
 
     return {
       ...lead,
       followUps,
       followUpStatus,
-      lastFollowUpResult
+      lastFollowUpResult,
+      leadStatus,
     };
   }
 
@@ -551,8 +599,10 @@ export class TrainingLeadsService {
     const followUp = new this.followUpModel(followUpData);
     const saved = await followUp.save();
 
-    // 更新线索的最后跟进时间
-    lead.lastFollowUpAt = new Date();
+    // 更新线索的最后跟进时间 & 最后活跃时间
+    const now = new Date();
+    lead.lastFollowUpAt = now;
+    (lead as any).lastActivityAt = now;
 
     // 确保跟进时线索状态为"跟进中"
     if (lead.status !== LeadStatus.ENROLLED && lead.status !== LeadStatus.GRADUATED) {
@@ -651,10 +701,40 @@ export class TrainingLeadsService {
     const statusMap: Record<string, number> = {};
     byStatus.forEach((s: any) => { if (s._id) statusMap[s._id] = s.count; });
 
+    // ----------------------------------------------------------------
+    // 与 statFilter=notFollowed / followingUp 使用完全相同的逻辑：
+    //   · 非终态 + 有跟进记录  → followingUp（跟进中）
+    //   · 非终态 + 无跟进记录  → notFollowedCount（待跟进）
+    // 这样保证统计数字与列表筛选结果严格一致。
+    // ----------------------------------------------------------------
+    const terminalStatuses = [
+      LeadStatus.ENROLLED,
+      LeadStatus.GRADUATED,
+      LeadStatus.VISITED,
+      LeadStatus.INVALID,
+    ];
+
+    // 1. 取可见范围内的非终态线索 _id 列表
+    const nonTerminalIds: any[] = await this.trainingLeadModel.distinct('_id', {
+      ...match,
+      status: { $nin: terminalStatuses },
+    });
+
+    // 2. 在上述 ID 中，找出有跟进记录的
+    const idsWithFollowUp: any[] = await this.followUpModel.distinct('leadId', {
+      leadId: { $in: nonTerminalIds },
+    });
+
+    const followingUpCount = idsWithFollowUp.length;
+    const notFollowedCount = nonTerminalIds.length - followingUpCount;
+
     return {
       total,
       byStatus: statusMap,
-      followingUp: statusMap['跟进中'] || 0,
+      // 由跟进记录表动态计算，与 statFilter=followingUp 列表结果一致
+      followingUp: followingUpCount,
+      // 由跟进记录表动态计算，与 statFilter=notFollowed 列表结果一致
+      notFollowedCount,
       enrolled: statusMap['已报名'] || 0,
       graduated: statusMap['已结业'] || 0,
       newNotFollowedUp: statusMap['新客未跟进'] || 0,
@@ -1010,10 +1090,10 @@ export class TrainingLeadsService {
               // Excel 里的日期（仅有日期无时分）只用于更新 lastFollowUpAt
             });
             await followUp.save();
-            // 同步更新线索的最后跟进时间
+            // 同步更新线索的最后跟进时间 & 最后活跃时间
             await this.trainingLeadModel.findByIdAndUpdate(
               (created as any)._id,
-              { lastFollowUpAt: followUpDate }
+              { lastFollowUpAt: followUpDate, lastActivityAt: followUpDate }
             );
           } catch (fuErr) {
             this.logger.warn(`第 ${i + 1} 条 [${lead.name}] 跟进记录创建失败: ${fuErr.message}`);

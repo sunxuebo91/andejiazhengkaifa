@@ -15,6 +15,7 @@ export interface LeadTransferRule {
   ruleName: string;
   description?: string;
   enabled: boolean;
+  targetModule?: 'customer' | 'training';
   triggerConditions: {
     inactiveHours: number;
     transferCooldownHours?: number;
@@ -74,6 +75,7 @@ export interface CreateLeadTransferRuleDto {
   ruleName: string;
   description?: string;
   enabled: boolean;
+  targetModule?: 'customer' | 'training';
   triggerConditions: {
     inactiveHours: number;
     transferCooldownHours?: number;
@@ -107,9 +109,10 @@ export interface LeadTransferStatistics {
 }
 
 class LeadTransferService {
-  // 获取所有规则
-  async getRules(): Promise<LeadTransferRule[]> {
-    const response: any = await apiService.get('/api/lead-transfer/rules');
+  // 获取所有规则（可按模块过滤）
+  async getRules(targetModule?: 'customer' | 'training'): Promise<LeadTransferRule[]> {
+    const params = targetModule ? { targetModule } : {};
+    const response: any = await apiService.get('/api/lead-transfer/rules', params);
     if (Array.isArray(response?.data)) {
       return response.data;
     }
@@ -117,6 +120,26 @@ class LeadTransferService {
       return response;
     }
     return [];
+  }
+
+  // 获取学员线索流转规则
+  async getTrainingRules(): Promise<LeadTransferRule[]> {
+    return this.getRules('training');
+  }
+
+  // 手动执行学员线索流转规则
+  async executeTrainingNow(ruleId: string): Promise<{
+    transferredCount: number;
+    message: string;
+    userStats?: Array<{ userId: string; userName: string; transferredOut: number; transferredIn: number }>;
+  }> {
+    const response: any = await apiService.post(`/api/training-leads/admin/auto-transfer/trigger-rule/${ruleId}`, {});
+    const data = response?.data ?? response;
+    return {
+      transferredCount: data?.data?.transferredCount ?? 0,
+      message: data?.message ?? '执行完成',
+      userStats: data?.data?.userStats,
+    };
   }
 
   // 获取单个规则详情

@@ -154,7 +154,7 @@ export interface ShareTokenResponse {
   qrCodeUrl: string;
 }
 
-// 选项配置
+// 选项配置（全量，用于列表筛选/颜色映射）
 export const LEAD_STATUS_OPTIONS = [
   { label: '跟进中', value: LeadStatus.FOLLOWING, color: '#fa8c16' },
   { label: '已报名', value: LeadStatus.ENROLLED, color: '#13c2c2' },
@@ -166,6 +166,15 @@ export const LEAD_STATUS_OPTIONS = [
   { label: '15天未跟进', value: LeadStatus.NOT_FOLLOWED_UP_15_DAYS, color: '#ff4d4f' },
   { label: '已到店', value: LeadStatus.VISITED, color: '#1890ff' },
   { label: '无效线索', value: LeadStatus.INVALID, color: '#d9d9d9' }
+];
+
+// 仅限人工手动选择的终态（创建/编辑表单下拉专用）
+// 其余状态（跟进中/新客未跟进/流转未跟进/7天未跟进/15天未跟进/未跟进）由系统自动计算，不在表单中出现
+export const LEAD_STATUS_MANUAL_OPTIONS = [
+  { label: '已报名', value: LeadStatus.ENROLLED, color: '#13c2c2' },
+  { label: '已到店', value: LeadStatus.VISITED, color: '#1890ff' },
+  { label: '已结业', value: LeadStatus.GRADUATED, color: '#52c41a' },
+  { label: '无效线索', value: LeadStatus.INVALID, color: '#d9d9d9' },
 ];
 
 export const LEAD_SOURCE_OPTIONS = [

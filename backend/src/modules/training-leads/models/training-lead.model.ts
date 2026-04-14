@@ -167,6 +167,10 @@ export class TrainingLead {
   @Prop()
   lastFollowUpAt: Date;
 
+  @ApiProperty({ description: '最后活跃时间（跟进/更新时同步，用于自动流转判断）' })
+  @Prop()
+  lastActivityAt: Date;
+
   @ApiProperty({ description: '是否在公海池' })
   @Prop({ default: false })
   inPublicPool: boolean;
@@ -175,9 +179,21 @@ export class TrainingLead {
   @Prop()
   publicPoolAt: Date;
 
-  @ApiProperty({ description: '入池原因：manual（手动释放）| invalid（标记无效）' })
-  @Prop({ enum: ['manual', 'invalid'] })
+  @ApiProperty({ description: '入池原因：manual（手动释放）| invalid（标记无效）| auto_transfer（自动流转入池）' })
+  @Prop({ enum: ['manual', 'invalid', 'auto_transfer'] })
   publicPoolReason: string;
+
+  @ApiProperty({ description: '累计流转次数' })
+  @Prop({ default: 0, min: 0 })
+  transferCount: number;
+
+  @ApiProperty({ description: '上次流转时间（用于冷却期判断）' })
+  @Prop()
+  lastTransferredAt: Date;
+
+  @ApiProperty({ description: '是否允许自动流转（转介绍等特殊线索可设为false）' })
+  @Prop({ default: true })
+  autoTransferEnabled: boolean;
 
   @ApiProperty({ description: '创建时间' })
   createdAt: Date;
@@ -199,3 +215,7 @@ TrainingLeadSchema.index({ isReported: 1 });
 TrainingLeadSchema.index({ inPublicPool: 1 });
 TrainingLeadSchema.index({ publicPoolAt: -1 });
 TrainingLeadSchema.index({ createdAt: -1 });
+TrainingLeadSchema.index({ lastActivityAt: 1 });
+TrainingLeadSchema.index({ lastTransferredAt: 1 });
+TrainingLeadSchema.index({ transferCount: 1 });
+TrainingLeadSchema.index({ autoTransferEnabled: 1 });

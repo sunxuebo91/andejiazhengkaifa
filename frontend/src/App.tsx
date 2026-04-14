@@ -61,6 +61,7 @@ const CreateTrainingLead = React.lazy(() => import('./pages/training-leads/Creat
 const EditTrainingLead = React.lazy(() => import('./pages/training-leads/EditTrainingLead'));
 const TrainingLeadDetail = React.lazy(() => import('./pages/training-leads/TrainingLeadDetail'));
 const TrainingLeadPublicPool = React.lazy(() => import('./pages/training-leads/PublicPool'));
+const TrainingLeadTransferRules = React.lazy(() => import('./pages/training-leads/TrainingLeadTransferRules'));
 // 表单管理相关组件
 const FormList = React.lazy(() => import('./pages/forms/FormList'));
 const FormEditor = React.lazy(() => import('./pages/forms/FormEditor'));
@@ -273,6 +274,10 @@ export default function App({ children }: AppProps) {
                     <Route
                       path=":id"
                       element={<AuthorizedRoute element={<TrainingLeadDetail />} />}
+                    />
+                    <Route
+                      path="transfer-rules"
+                      element={<AuthorizedRoute element={<TrainingLeadTransferRules />} role={['admin', 'manager']} />}
                     />
                   </Route>
 

@@ -34,9 +34,9 @@ export class TriggerConditionsDto {
   @Min(0)
   maxTransferCount?: number;
 
-  @ApiProperty({ description: '客户状态', example: ['待定', '匹配中'] })
+  @ApiProperty({ description: '客户/学员状态', example: ['待定', '匹配中'] })
   @IsArray()
-  @IsEnum(['已签约', '匹配中', '已面试', '流失客户', '已退款', '退款中', '待定'], { each: true })
+  @IsString({ each: true })
   contractStatuses: string[];
 
   @ApiProperty({ description: '线索来源筛选', required: false, example: ['美团', '抖音'] })
@@ -127,4 +127,10 @@ export class CreateLeadTransferRuleDto {
   @ValidateNested()
   @Type(() => DistributionConfigDto)
   distributionConfig?: DistributionConfigDto;
+
+  @ApiProperty({ description: '规则作用模块：customer=客户线索，training=学员线索', required: false, example: 'customer' })
+  @IsOptional()
+  @IsString()
+  @IsEnum(['customer', 'training'])
+  targetModule?: string;
 }

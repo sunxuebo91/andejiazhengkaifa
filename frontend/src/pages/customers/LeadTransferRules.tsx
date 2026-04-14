@@ -64,7 +64,7 @@ const LeadTransferRules: React.FC = () => {
     setLoading(true);
     try {
       console.log('开始获取规则列表...');
-      const data = await leadTransferService.getRules();
+      const data = await leadTransferService.getRules('customer');
       console.log('获取到的规则数据:', data);
       setRules(data);
     } catch (error: any) {

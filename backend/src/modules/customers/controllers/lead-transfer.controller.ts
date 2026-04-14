@@ -52,10 +52,10 @@ export class LeadTransferController {
   @Get('rules')
   @Roles('admin', 'manager', 'operator')
   @Permissions('customer:view')
-  @ApiOperation({ summary: '获取规则列表' })
-  async getRules(): Promise<ApiResponse> {
+  @ApiOperation({ summary: '获取规则列表（targetModule=customer|training）' })
+  async getRules(@Query('targetModule') targetModule?: string): Promise<ApiResponse> {
     try {
-      const rules = await this.ruleService.findAll();
+      const rules = await this.ruleService.findAll(targetModule);
       return this.createResponse(true, '获取成功', rules);
     } catch (error) {
       return this.createResponse(false, '获取失败', null, error.message);

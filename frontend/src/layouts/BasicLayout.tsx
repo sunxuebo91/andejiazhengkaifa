@@ -229,6 +229,13 @@ const BasicLayout = () => {
           },
         ],
       };
+
+      trainingLeadMenu.routes!.push({
+        path: '/training-leads/transfer-rules',
+        name: '线索流转规则',
+        icon: <SwapOutlined />,
+      });
+
       baseMenus.push(trainingLeadMenu);
     }
 

@@ -400,17 +400,25 @@ const TrainingLeadList: React.FC = () => {
       render: (text: string) => text || '-'
     },
     {
-      title: '跟进状态',
-      dataIndex: 'followUpStatus',
-      key: 'followUpStatus',
-      width: 110,
+      title: '线索状态',
+      dataIndex: 'leadStatus',
+      key: 'leadStatus',
+      width: 120,
       render: (_: any, record: any) => {
-        const { followUpStatus, lastFollowUpResult } = record;
+        const { leadStatus, lastFollowUpResult } = record;
 
-        // 注意力标记颜色
+        // 统一线索状态颜色
         const statusColorMap: Record<string, string> = {
-          '新客未跟进': '#ff4d4f',
-          '流转未跟进': '#faad14',
+          '新客未跟进':  '#ff4d4f',
+          '流转未跟进':  '#faad14',
+          '7天未跟进':   '#fa8c16',
+          '15天未跟进':  '#f5222d',
+          '跟进中':      '#52c41a',
+          '已报名':      '#1677ff',
+          '已到店':      '#13c2c2',
+          '已结业':      '#722ed1',
+          '无效线索':    '#8c8c8c',
+          '未跟进':      '#faad14',
         };
 
         // 最近跟进结果颜色
@@ -421,13 +429,13 @@ const TrainingLeadList: React.FC = () => {
           '未回复': '#faad14', '已读未回': '#faad14',
         };
 
+        const displayStatus = leadStatus || record.status;
+
         return (
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-            {/* 注意力标记 */}
-            {followUpStatus
-              ? <Tag style={{ margin: 0 }} color={statusColorMap[followUpStatus] || '#8c8c8c'}>{followUpStatus}</Tag>
-              : <Tag style={{ margin: 0 }} color="#52c41a">已跟进</Tag>
-            }
+            <Tag style={{ margin: 0 }} color={statusColorMap[displayStatus] || '#8c8c8c'}>
+              {displayStatus}
+            </Tag>
             {/* 最近跟进结果 */}
             {lastFollowUpResult && (
               <Tag style={{ margin: 0 }} color={resultColorMap[lastFollowUpResult] || '#8c8c8c'}>{lastFollowUpResult}</Tag>
@@ -458,12 +466,12 @@ const TrainingLeadList: React.FC = () => {
       }
     },
     {
-      title: '最后跟进时间',
-      dataIndex: 'lastFollowUpAt',
-      key: 'lastFollowUpAt',
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
       width: 150,
       render: (text: string) => {
-        if (!text) return <span style={{ color: '#bfbfbf' }}>暂无跟进</span>;
+        if (!text) return <span style={{ color: '#bfbfbf' }}>-</span>;
         return dayjs(text).format('YYYY-MM-DD HH:mm');
       }
     },

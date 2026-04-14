@@ -35,6 +35,7 @@ export class LeadTransferRuleService {
       ruleName: dto.ruleName,
       description: dto.description,
       enabled: dto.enabled,
+      targetModule: dto.targetModule || 'customer',
       triggerConditions: {
         inactiveHours: dto.triggerConditions.inactiveHours,
         transferCooldownHours: dto.triggerConditions.transferCooldownHours ?? 24,
@@ -143,11 +144,12 @@ export class LeadTransferRuleService {
   }
 
   /**
-   * 获取规则列表
+   * 获取规则列表（可按 targetModule 过滤）
    */
-  async findAll(): Promise<LeadTransferRule[]> {
+  async findAll(targetModule?: string): Promise<LeadTransferRule[]> {
+    const query = targetModule ? { targetModule } : {};
     const rules = await this.ruleModel
-      .find()
+      .find(query)
       .populate('createdBy', 'name username')
       .sort({ createdAt: -1 })
       .exec();
@@ -171,10 +173,18 @@ export class LeadTransferRuleService {
   }
 
   /**
-   * 获取所有启用的规则
+   * 获取所有启用的规则（可按模块过滤）
+   * @param targetModule 'customer'（默认）或 'training'
    */
-  async findEnabledRules(): Promise<LeadTransferRule[]> {
-    return await this.ruleModel.find({ enabled: true }).exec();
+  async findEnabledRules(targetModule: 'customer' | 'training' = 'customer'): Promise<LeadTransferRule[]> {
+    return await this.ruleModel.find({ enabled: true, targetModule }).exec();
+  }
+
+  /**
+   * 获取所有启用的学员线索流转规则
+   */
+  async findEnabledTrainingRules(): Promise<LeadTransferRule[]> {
+    return this.findEnabledRules('training');
   }
 
   /**

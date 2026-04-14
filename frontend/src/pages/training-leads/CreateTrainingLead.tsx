@@ -21,7 +21,6 @@ import apiService from '../../services/api';
 import {
   CreateTrainingLeadDto,
   LEAD_SOURCE_OPTIONS,
-  LEAD_STATUS_OPTIONS,
   TRAINING_TYPE_OPTIONS,
   INTENDED_COURSES_OPTIONS,
   INTENTION_LEVEL_OPTIONS,
@@ -201,16 +200,6 @@ const CreateTrainingLead: React.FC = () => {
               </Space>
             </Divider>
             <Row gutter={[16, 0]}>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item label="线索状态" name="status" initialValue="跟进中">
-                  <Select placeholder="请选择状态">
-                    {LEAD_STATUS_OPTIONS.map(opt => (
-                      <Option key={opt.value} value={opt.value}>{opt.label}</Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              </Col>
-
               <Col xs={24} sm={12} md={8}>
                 <Form.Item label="意向程度" name="intentionLevel">
                   <Select placeholder="请选择意向程度" allowClear>

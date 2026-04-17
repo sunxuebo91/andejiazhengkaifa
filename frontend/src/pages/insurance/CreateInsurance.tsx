@@ -481,7 +481,7 @@ const CreateInsurance: React.FC = () => {
     }
   };
 
-  const onFinish = async (values: any) => {
+  const doSubmit = async (values: any) => {
     setLoading(true);
     try {
       // 构建请求数据
@@ -538,10 +538,48 @@ const CreateInsurance: React.FC = () => {
         message.success('投保成功！');
       }
     } catch (error: any) {
-      message.error(error.message || '投保失败，请重试');
+      // 优先从服务端响应中提取详细错误信息
+      const serverMessage = error.response?.data?.message;
+      const errorMessage = serverMessage || error.message || '投保失败，请重试';
+      Modal.error({
+        title: '投保失败',
+        content: errorMessage,
+        okText: '我知道了',
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  const onFinish = (values: any) => {
+    // 获取当前选择险种的投保须知
+    const detail = selectedProduct ? productDetails[selectedProduct] : null;
+    const notices = detail?.notices || [];
+
+    Modal.confirm({
+      title: '投保须知确认',
+      width: 560,
+      content: (
+        <div>
+          <p style={{ fontWeight: 600, marginBottom: 8, color: '#fa8c16' }}>请仔细阅读以下投保须知，确认后方可提交：</p>
+          <ol style={{ paddingLeft: 20, margin: 0 }}>
+            {notices.length > 0
+              ? notices.map((item, idx) => (
+                  <li key={idx} style={{ marginBottom: 6, color: '#333' }}>{item}</li>
+                ))
+              : <li>同一保险期间同一雇员限投保 1 份，多保无效。</li>
+            }
+          </ol>
+          <p style={{ marginTop: 12, color: '#595959' }}>
+            点击「确认投保」即表示您已阅读并同意上述投保须知。
+          </p>
+        </div>
+      ),
+      okText: '确认投保',
+      cancelText: '取消',
+      okButtonProps: { type: 'primary' },
+      onOk: () => doSubmit(values),
+    });
   };
 
   // 支付成功回调

@@ -28,6 +28,7 @@ import {
   RollbackOutlined,
   SwapOutlined,
   DeleteOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
@@ -52,6 +53,8 @@ const InsuranceList: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [statusFilter, setStatusFilter] = useState<PolicyStatus | undefined>();
+  const [searchType, setSearchType] = useState<'insuredName' | 'mobile' | 'idNumber'>('insuredName');
+  const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<InsurancePolicy | null>(null);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
@@ -71,13 +74,18 @@ const InsuranceList: React.FC = () => {
     (currentUser?.name === '孙学博' || currentUser?.username === '孙学博');
 
   // 加载保单列表
-  const loadPolicies = async () => {
+  const loadPolicies = async (overrideKeyword?: string, overrideType?: string) => {
     setLoading(true);
+    const kw = (overrideKeyword !== undefined ? overrideKeyword : searchKeyword).trim();
+    const st = overrideType || searchType;
     try {
       const result = await insuranceService.getPolicies({
         status: statusFilter,
         page,
         limit: pageSize,
+        insuredName: st === 'insuredName' && kw ? kw : undefined,
+        mobile: st === 'mobile' && kw ? kw : undefined,
+        idNumber: st === 'idNumber' && kw ? kw : undefined,
       });
       setPolicies(result.data);
       setTotal(result.total);
@@ -86,6 +94,18 @@ const InsuranceList: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = () => {
+    setPage(1);
+    loadPolicies(searchKeyword, searchType);
+  };
+
+  const handleReset = () => {
+    setSearchKeyword('');
+    setStatusFilter(undefined);
+    setPage(1);
+    loadPolicies('', searchType);
   };
 
   useEffect(() => {
@@ -570,20 +590,47 @@ const InsuranceList: React.FC = () => {
       ]}
     >
       <Card>
-        <Space style={{ marginBottom: 16 }}>
+        <Space wrap style={{ marginBottom: 16 }}>
           <Select
             placeholder="保单状态"
             allowClear
-            style={{ width: 150 }}
+            style={{ width: 120 }}
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={(val) => { setStatusFilter(val); setPage(1); }}
           >
             {Object.entries(POLICY_STATUS_MAP).map(([key, val]) => (
               <Option key={key} value={key}>{val.text}</Option>
             ))}
           </Select>
-          <Button icon={<ReloadOutlined />} onClick={loadPolicies}>
-            刷新
+
+          <Input.Group compact>
+            <Select
+              value={searchType}
+              style={{ width: 110 }}
+              onChange={(val) => setSearchType(val)}
+            >
+              <Option value="insuredName">姓名</Option>
+              <Option value="mobile">手机号</Option>
+              <Option value="idNumber">身份证号</Option>
+            </Select>
+            <Input
+              style={{ width: 200 }}
+              placeholder={
+                searchType === 'insuredName' ? '请输入被保险人姓名' :
+                searchType === 'mobile' ? '请输入手机号' : '请输入身份证号'
+              }
+              value={searchKeyword}
+              allowClear
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              onPressEnter={handleSearch}
+            />
+          </Input.Group>
+
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+            查询
+          </Button>
+          <Button icon={<ReloadOutlined />} onClick={handleReset}>
+            重置
           </Button>
         </Space>
 

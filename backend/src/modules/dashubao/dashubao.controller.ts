@@ -220,15 +220,21 @@ export class DashubaoController {
   @ApiQuery({ name: 'resumeId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'insuredName', required: false, description: '被保险人姓名（模糊查询）' })
+  @ApiQuery({ name: 'mobile', required: false, description: '被保险人手机号' })
+  @ApiQuery({ name: 'idNumber', required: false, description: '被保险人身份证号' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getPolicies(
     @Query('status') status?: PolicyStatus,
     @Query('resumeId') resumeId?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('insuredName') insuredName?: string,
+    @Query('mobile') mobile?: string,
+    @Query('idNumber') idNumber?: string,
   ) {
     // 保险权限已公开，不再按角色过滤 createdBy
-    return this.dashubaoService.getPolicies({ status, resumeId, page, limit });
+    return this.dashubaoService.getPolicies({ status, resumeId, page, limit, insuredName, mobile, idNumber });
   }
 
   @Get('policy/:id')

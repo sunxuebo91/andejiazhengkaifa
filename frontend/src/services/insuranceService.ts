@@ -82,6 +82,9 @@ export const insuranceService = {
     resumeId?: string;
     page?: number;
     limit?: number;
+    insuredName?: string;
+    mobile?: string;
+    idNumber?: string;
   } = {}): Promise<{ data: InsurancePolicy[]; total: number }> {
     const response = await apiService.get('/api/dashubao/policies', params);
     return response.data;

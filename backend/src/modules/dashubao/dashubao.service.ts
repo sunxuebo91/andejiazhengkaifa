@@ -1061,6 +1061,9 @@ export class DashubaoService {
     page?: number;
     limit?: number;
     createdBy?: string;
+    insuredName?: string;
+    mobile?: string;
+    idNumber?: string;
   }): Promise<{ data: InsurancePolicy[]; total: number }> {
     const filter: any = {};
 
@@ -1078,6 +1081,18 @@ export class DashubaoService {
         { createdBy: new Types.ObjectId(query.createdBy) },
         { createdBy: query.createdBy }
       ];
+    }
+    // 被保险人姓名模糊查询
+    if (query.insuredName) {
+      filter['insuredList.insuredName'] = { $regex: query.insuredName, $options: 'i' };
+    }
+    // 被保险人手机号精确查询
+    if (query.mobile) {
+      filter['insuredList.mobile'] = query.mobile.trim();
+    }
+    // 被保险人身份证号精确查询
+    if (query.idNumber) {
+      filter['insuredList.idNumber'] = query.idNumber.trim();
     }
 
     const page = query.page || 1;

@@ -322,8 +322,11 @@ export class QwenAIService {
    - endDate: "YYYY-MM"格式，"至今"转为当前年月"2026-03"
    - description: 工作内容描述，包含服务对象、工作内容、服务人数/面积等关键信息。如"在北京小红门附近从事半自理老人照护，做饭做家务，负责300平卫生"
    - district: 工作区域（如"朝阳区"、"海淀区"）。如果文本提到具体地名如"小红门""广安门"等，尝试推断对应区域
-   - customerName: 根据工作经历虚构一个客户称谓，格式为"姓氏+先生/女士"，如"李先生"、"张女士"、"王先生"（随机选常见姓氏，月嫂/育儿类客户以女士为主）
-   - customerReview: 根据description和工种，用第一人称客户视角写20-30字的好评，如"月嫂非常专业，照顾产妇和宝宝细心周到，强烈推荐！"
+   - customerName: 【严格判断】只有"私人入户服务"才填写，其他一律返回空字符串""
+     ✅ 应填写（在私人家庭上门服务）：月嫂在客户家服务、育儿嫂/保姆入户、住家护老上门、小时工上门做家务、住家家教辅导孩子、陪伴师入户
+     ❌ 必须返回""（机构任职或非家政工作）：在幼儿园/学校/机构担任教师/保育员/助教、在月子中心/养老院/康复机构上班、在医院担任护士/护工、在餐厅/工厂/公司/部队/夏令营上班、自营商店/诊所、全职在家照顾自家孩子
+     填写规则：从百家姓广泛随机选择，严禁集中使用张/李/王，须覆盖赵/钱/孙/周/吴/郑/冯/陈/褚/卫/蒋/沈/韩/杨等姓氏，育儿月嫂类以女士为主
+   - customerReview: 【严格判断】仅当customerName非空时才填写，否则返回""。用第一人称客户视角写20-30字好评，语气自然真实，根据description内容定制，避免格式化套话
    - 相邻多行属于同一段经历时要合并，不要拆碎
    - 无法确认的经历不要编造
 
@@ -404,7 +407,7 @@ export class QwenAIService {
   "expectedSalary": 数字,
   "certificatesText": "证书列表文字",
   "workExperiences": [
-    {"startDate":"YYYY-MM","endDate":"YYYY-MM","description":"内容","district":"区域","customerName":"李先生","customerReview":"20-30字客户好评"}
+    {"startDate":"YYYY-MM","endDate":"YYYY-MM","description":"内容","district":"区域","customerName":"私人入户服务填姓氏+称谓，机构/非家政工作填空字符串","customerReview":"customerName非空时填20-30字好评，否则填空字符串"}
   ],
   "selfIntroduction": "综合介绍",
   "familySituation": "家庭情况",

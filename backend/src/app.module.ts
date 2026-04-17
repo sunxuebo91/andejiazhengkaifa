@@ -36,6 +36,7 @@ import { ContractApprovalsModule } from './modules/contract-approvals/contract-a
 import { ZmdbModule } from './modules/zmdb/zmdb.module';
 import { AIModule } from './modules/ai/ai.module';
 import { MiniProgramNotificationModule } from './modules/miniprogram-notification/miniprogram-notification.module';
+import { ReferralModule } from './modules/referral/referral.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { MiniprogramLoggerMiddleware } from './common/middleware/miniprogram-logger.middleware';
@@ -91,6 +92,7 @@ import { MiniprogramLoggerMiddleware } from './common/middleware/miniprogram-log
     ZmdbModule,
     AIModule,
     MiniProgramNotificationModule,
+    ReferralModule,
   ],
   controllers: [AppController],
   providers: [

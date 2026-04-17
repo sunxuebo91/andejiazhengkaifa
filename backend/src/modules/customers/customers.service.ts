@@ -416,7 +416,18 @@ export class CustomersService {
         'restSchedule': '休息安排',
         'idCardNumber': '身份证号',
         'assignedTo': '负责人',
-        'inPublicPool': '公海状态'
+        'inPublicPool': '公海状态',
+        'needOrderType': '订单类型',
+        'needWorkingHours': '工作时间',
+        'needSalary': '薪资要求',
+        'needRestTime': '休息时间',
+        'needFamilyMembers': '家庭成员',
+        'needServiceAddress': '服务地址',
+        'needHouseArea': '房屋面积',
+        'needWorkContent': '工作内容',
+        'needRemarks': '需求备注',
+        'needServicePeriod': '服务周期',
+        'needOnboardingTime': '上户时间',
       };
 
       // 构建变更详情

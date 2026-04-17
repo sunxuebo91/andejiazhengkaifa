@@ -220,7 +220,13 @@ export const resumeService = {
   getOperationLogs: async (resumeId: string): Promise<any[]> => {
     const response = await apiService.get(`/api/resumes/${resumeId}/operation-logs`);
     return response.data;
-  }
+  },
+
+  // 切换推荐简历隐藏状态（归属员工或管理员）
+  toggleHidden: async (resumeId: string): Promise<{ isHidden: boolean }> => {
+    const response = await apiService.patch(`/api/resumes/${resumeId}/toggle-hidden`, {});
+    return response.data;
+  },
 };
 
 export default resumeService;

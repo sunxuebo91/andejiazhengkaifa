@@ -55,6 +55,7 @@ export class ResumeQueryService {
     currentUserId?: string,
     isDraft?: boolean,
     isAdmin?: boolean,
+    filterLowQuality?: boolean,
   ) {
     if (!this.hasCheckedUpdatedAt) {
       await this.batchFixMissingUpdatedAt();
@@ -81,6 +82,32 @@ export class ResumeQueryService {
       query.isDraft = { $ne: true };
     }
     // isDraft === undefined 时不加过滤，返回全部
+
+    // ── 褓贝小程序公开列表：过滤掉"无照片且薪资为0"的简历 ──
+    // 条件：必须满足（有个人照片 OR 有photoUrls OR 薪资>0）其中之一
+    if (filterLowQuality) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { 'personalPhoto.0': { $exists: true } }, // personalPhoto 数组有内容
+          { 'photoUrls.0': { $exists: true } },      // photoUrls 数组有内容
+          { expectedSalary: { $gt: 0 } },            // 薪资 > 0
+        ],
+      });
+    }
+
+    // ── 推荐来源简历隐藏过滤 ──────────────────────────────
+    // isHidden=true 的简历只有「referralAssignedStaffId 对应员工」和「管理员」可见
+    // 管理员：跳过过滤；普通员工：只能看到自己归属的或非隐藏的
+    if (!isAdmin) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { isHidden: { $ne: true } },                  // 未隐藏的全部可见
+          { referralAssignedStaffId: currentUserId },    // 隐藏但归属本人
+        ],
+      });
+    }
 
     const total = await this.resumeModel.countDocuments(query).exec();
 
@@ -214,6 +241,14 @@ export class ResumeQueryService {
 
     if (!resume) {
       throw new NotFoundException('简历不存在');
+    }
+
+    // ── 推荐来源简历隐藏拦截 ─────────────────────────────
+    if ((resume as any).isHidden && !isAdmin) {
+      const assignedStaffId = (resume as any).referralAssignedStaffId;
+      if (!currentUserId || currentUserId !== assignedStaffId) {
+        throw new NotFoundException('简历不存在');
+      }
     }
 
     // 已上户（orderStatus=on-service）的简历可见性控制

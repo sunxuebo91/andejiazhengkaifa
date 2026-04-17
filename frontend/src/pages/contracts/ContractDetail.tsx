@@ -1163,6 +1163,7 @@ const ContractDetail: React.FC = () => {
       [ContractType.BAIBAN_YUER]: 'lime',
       [ContractType.BAIBAN_BAOMU]: 'gold',
       [ContractType.ZHUJIA_HULAO]: 'magenta',
+      [ContractType.ERTONG_PEIBAN]: 'volcano',
     };
     return colors[type] || 'default';
   };

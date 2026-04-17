@@ -195,7 +195,8 @@ const EditRole: React.FC = () => {
   };
 
   useEffect(() => {
-    if (id) {
+    // id 为 'new' 时是创建模式，不需要请求后端
+    if (id && id !== 'new') {
       fetchRoleDetail(id);
     } else {
       setInitialValues({

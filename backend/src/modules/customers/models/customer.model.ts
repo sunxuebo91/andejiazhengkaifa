@@ -87,6 +87,40 @@ export class Customer {
   @Prop()
   dealAmount: number; // 成交金额
 
+  // 客户需求详情（内联编辑卡片专用字段）
+  @Prop()
+  needOrderType: string; // 订单类型
+
+  @Prop()
+  needWorkingHours: string; // 工作时间
+
+  @Prop()
+  needSalary: string; // 薪资要求
+
+  @Prop()
+  needRestTime: string; // 休息时间
+
+  @Prop()
+  needFamilyMembers: string; // 家庭成员
+
+  @Prop()
+  needServiceAddress: string; // 服务地址
+
+  @Prop()
+  needHouseArea: string; // 房屋面积
+
+  @Prop()
+  needWorkContent: string; // 工作内容
+
+  @Prop()
+  needRemarks: string; // 需求备注
+
+  @Prop()
+  needServicePeriod: string; // 服务周期
+
+  @Prop()
+  needOnboardingTime: string; // 上户时间
+
   @Prop({ required: true })
   createdBy: string;
 

@@ -13,8 +13,10 @@ import {
   Timeline,
   Empty,
   Alert,
+  Input,
+  Tooltip,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined, HistoryOutlined, DownOutlined, UpOutlined, AuditOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined, HistoryOutlined, DownOutlined, UpOutlined, AuditOutlined, SaveOutlined, CopyOutlined } from '@ant-design/icons';
 import { customerService } from '../../services/customerService';
 import { contractService } from '../../services/contractService';
 import { Customer } from '../../types/customer.types';
@@ -52,6 +54,22 @@ const CustomerDetail: React.FC = () => {
 
   // 冻结操作状态
   const [freezeLoading, setFreezeLoading] = useState(false);
+
+  // 客户需求卡片内联编辑状态
+  const [needsForm, setNeedsForm] = useState({
+    needOrderType: '',
+    needWorkingHours: '',
+    needSalary: '',
+    needRestTime: '',
+    needFamilyMembers: '',
+    needServiceAddress: '',
+    needHouseArea: '',
+    needWorkContent: '',
+    needRemarks: '',
+    needServicePeriod: '',
+    needOnboardingTime: '',
+  });
+  const [needsSaving, setNeedsSaving] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -156,12 +174,69 @@ const CustomerDetail: React.FC = () => {
       setLoading(true);
       const response = await customerService.getCustomerById(id);
       setCustomer(response);
+      // 同步客户需求字段到本地表单状态
+      setNeedsForm({
+        needOrderType: response.needOrderType || '',
+        needWorkingHours: response.needWorkingHours || '',
+        needSalary: response.needSalary || '',
+        needRestTime: response.needRestTime || '',
+        needFamilyMembers: response.needFamilyMembers || '',
+        needServiceAddress: response.needServiceAddress || '',
+        needHouseArea: response.needHouseArea || '',
+        needWorkContent: response.needWorkContent || '',
+        needRemarks: response.needRemarks || '',
+        needServicePeriod: response.needServicePeriod || '',
+        needOnboardingTime: response.needOnboardingTime || '',
+      });
     } catch (error) {
       console.error('获取客户详情失败:', error);
       message.error('获取客户详情失败');
     } finally {
       setLoading(false);
     }
+  };
+
+  // 保存客户需求字段
+  const handleSaveNeeds = async () => {
+    if (!customer) return;
+    try {
+      setNeedsSaving(true);
+      await customerService.updateCustomer(customer._id, needsForm);
+      message.success('客户需求已保存');
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '保存失败');
+    } finally {
+      setNeedsSaving(false);
+    }
+  };
+
+  // 复制客户需求（只复制有内容的字段，按顺序）
+  const handleCopyNeeds = () => {
+    const fields: { label: string; key: keyof typeof needsForm }[] = [
+      { label: '订单类型', key: 'needOrderType' },
+      { label: '工作时间', key: 'needWorkingHours' },
+      { label: '薪资要求', key: 'needSalary' },
+      { label: '休息时间', key: 'needRestTime' },
+      { label: '家庭成员', key: 'needFamilyMembers' },
+      { label: '服务地址', key: 'needServiceAddress' },
+      { label: '房屋面积', key: 'needHouseArea' },
+      { label: '工作内容', key: 'needWorkContent' },
+      { label: '需求备注', key: 'needRemarks' },
+      { label: '服务周期', key: 'needServicePeriod' },
+      { label: '上户时间', key: 'needOnboardingTime' },
+    ];
+    const lines = fields
+      .filter(f => needsForm[f.key]?.trim())
+      .map(f => `【${f.label}】：${needsForm[f.key]}`);
+    if (lines.length === 0) {
+      message.warning('暂无可复制的内容');
+      return;
+    }
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      message.success('已复制到剪贴板');
+    }).catch(() => {
+      message.error('复制失败，请手动复制');
+    });
   };
 
   // 🆕 新增：获取客户换人历史记录
@@ -518,6 +593,132 @@ const CustomerDetail: React.FC = () => {
 
                 <Descriptions.Item label="学历要求" span={1}>
                   {customer.educationRequirement || '无特殊要求'}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </Col>
+
+          {/* 客户需求 - 内联可编辑 */}
+          <Col span={24}>
+            <Card
+              type="inner"
+              title="客户需求"
+              style={{ marginBottom: '16px' }}
+              extra={
+                <Space>
+                  <Tooltip title="复制有内容的字段">
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      onClick={handleCopyNeeds}
+                    >
+                      复制
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="编辑后点击保存">
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<SaveOutlined />}
+                      loading={needsSaving}
+                      onClick={handleSaveNeeds}
+                    >
+                      保存
+                    </Button>
+                  </Tooltip>
+                </Space>
+              }
+            >
+              <Descriptions column={3} bordered>
+                <Descriptions.Item label="订单类型" span={1}>
+                  <Input
+                    value={needsForm.needOrderType}
+                    onChange={e => setNeedsForm(f => ({ ...f, needOrderType: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="工作时间" span={1}>
+                  <Input
+                    value={needsForm.needWorkingHours}
+                    onChange={e => setNeedsForm(f => ({ ...f, needWorkingHours: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="薪资要求" span={1}>
+                  <Input
+                    value={needsForm.needSalary}
+                    onChange={e => setNeedsForm(f => ({ ...f, needSalary: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="休息时间" span={1}>
+                  <Input
+                    value={needsForm.needRestTime}
+                    onChange={e => setNeedsForm(f => ({ ...f, needRestTime: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="家庭成员" span={1}>
+                  <Input
+                    value={needsForm.needFamilyMembers}
+                    onChange={e => setNeedsForm(f => ({ ...f, needFamilyMembers: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="服务地址" span={1}>
+                  <Input
+                    value={needsForm.needServiceAddress}
+                    onChange={e => setNeedsForm(f => ({ ...f, needServiceAddress: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="房屋面积" span={1}>
+                  <Input
+                    value={needsForm.needHouseArea}
+                    onChange={e => setNeedsForm(f => ({ ...f, needHouseArea: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="工作内容" span={2}>
+                  <Input.TextArea
+                    value={needsForm.needWorkContent}
+                    onChange={e => setNeedsForm(f => ({ ...f, needWorkContent: e.target.value }))}
+                    placeholder="请输入"
+                    autoSize={{ minRows: 1, maxRows: 4 }}
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="需求备注" span={3}>
+                  <Input.TextArea
+                    value={needsForm.needRemarks}
+                    onChange={e => setNeedsForm(f => ({ ...f, needRemarks: e.target.value }))}
+                    placeholder="请输入"
+                    autoSize={{ minRows: 1, maxRows: 4 }}
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="服务周期" span={1}>
+                  <Input
+                    value={needsForm.needServicePeriod}
+                    onChange={e => setNeedsForm(f => ({ ...f, needServicePeriod: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="上户时间" span={2}>
+                  <Input
+                    value={needsForm.needOnboardingTime}
+                    onChange={e => setNeedsForm(f => ({ ...f, needOnboardingTime: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
                 </Descriptions.Item>
               </Descriptions>
             </Card>

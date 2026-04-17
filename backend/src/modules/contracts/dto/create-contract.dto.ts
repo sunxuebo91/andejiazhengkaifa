@@ -30,7 +30,7 @@ export class CreateContractDto {
 
   @IsOptional()
   @IsEnum(ContractType, {
-    message: '合同类型必须是：月嫂、住家育儿嫂、保洁、住家保姆、养宠、小时工、白班育儿、白班保姆、住家护老之一'
+    message: '合同类型必须是：月嫂、住家育儿嫂、保洁、住家保姆、养宠、小时工、白班育儿、白班保姆、住家护老、儿童陪伴师之一'
   })
   contractType?: ContractType;
 

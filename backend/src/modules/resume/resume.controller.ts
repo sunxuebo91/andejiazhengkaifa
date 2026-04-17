@@ -644,6 +644,24 @@ export class ResumeController {
     }
   }
 
+  @Patch(':id/toggle-hidden')
+  @Permissions('resume:edit')
+  @ApiOperation({ summary: '切换推荐简历隐藏状态（归属员工或管理员可操作）' })
+  async toggleHidden(@Param('id') id: string, @Req() req: any) {
+    try {
+      const currentUserId = req?.user?.userId;
+      const isAdmin = req?.user?.role === 'admin' || req?.user?.role === '系统管理员';
+      const result = await this.resumeService.toggleHidden(id, currentUserId, isAdmin);
+      return {
+        success: true,
+        data: result,
+        message: result.isHidden ? '已设为仅归属员工可见' : '已取消隐藏，全员可见',
+      };
+    } catch (error) {
+      return { success: false, data: null, message: error.message };
+    }
+  }
+
   @Patch(':id/assign')
   @Permissions('resume:assign')
   @ApiOperation({ summary: '分配阿姨给指定员工（管理员/经理）' })
@@ -768,6 +786,7 @@ export class ResumeController {
       }
 
       // 调用服务获取数据（公开接口无用户信息，已上户简历会被过滤）
+      // filterLowQuality=true：过滤掉"无个人照片且薪资为0"的低质量简历
       const result = await this.resumeService.findAll(
         page,
         pageSize,
@@ -780,6 +799,7 @@ export class ResumeController {
         undefined, // currentUserId
         undefined, // isDraft
         false,     // isAdmin
+        true,      // filterLowQuality：公开列表过滤无照片且薪资=0的简历
       );
 
       return {

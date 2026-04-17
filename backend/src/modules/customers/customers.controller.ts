@@ -911,6 +911,80 @@ export class CustomersController {
     }
   }
 
+  // ==================== 安得褓贝小程序专用接口 ====================
+
+  /**
+   * 褓贝小程序 - 获取客户列表
+   * 返回字段：客户编号、客户姓名、客户电话、签约状态、客户需求（11个need字段）
+   * 支持分页、关键词搜索、签约状态筛选
+   * 普通员工只能看分配给自己的客户；管理员/经理可看全部
+   */
+  @Get('baobei/list')
+  @ApiOperation({ summary: '【褓贝小程序】客户列表（含客户需求）' })
+  @Permissions('customer:view')
+  async getListForBaobei(
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+    @Query('search') search?: string,
+    @Query('contractStatus') contractStatus?: string,
+    @Request() req?,
+  ): Promise<ApiResponse> {
+    try {
+      const userId = req.user.userId;
+      const userRole = this.mapRoleToChineseRole(req.user.role);
+
+      const query: CustomerQueryDto = {
+        page: Number(page) || 1,
+        limit: Math.min(Number(limit) || 20, 100), // 最多100条
+        search,
+        contractStatus: contractStatus as any,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      };
+
+      // 普通员工只能查看分配给自己的客户
+      if (userRole === '普通员工') {
+        query.assignedTo = userId;
+      }
+
+      const result = await this.customersService.findAll(query, userId);
+
+      // 只返回褓贝小程序需要的字段
+      const customers = result.customers.map((c: any) => ({
+        id: c._id,
+        customerId: c.customerId,
+        name: c.name,
+        phone: c.phone,
+        contractStatus: c.contractStatus,
+        needs: {
+          orderType: c.needOrderType || '',
+          workingHours: c.needWorkingHours || '',
+          salary: c.needSalary || '',
+          restTime: c.needRestTime || '',
+          familyMembers: c.needFamilyMembers || '',
+          serviceAddress: c.needServiceAddress || '',
+          houseArea: c.needHouseArea || '',
+          workContent: c.needWorkContent || '',
+          remarks: c.needRemarks || '',
+          servicePeriod: c.needServicePeriod || '',
+          onboardingTime: c.needOnboardingTime || '',
+        },
+      }));
+
+      return this.createResponse(true, '客户列表获取成功', {
+        customers,
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+        hasMore: result.page * result.limit < result.total,
+      });
+    } catch (error) {
+      this.logger.error(`褓贝小程序获取客户列表失败: ${error.message}`);
+      return this.createResponse(false, '获取客户列表失败', null, error.message);
+    }
+  }
+
   @Get('miniprogram/:id')
   @ApiOperation({ summary: '小程序获取客户详情（权限控制）' })
   @ApiParam({ name: 'id', description: '客户ID' })

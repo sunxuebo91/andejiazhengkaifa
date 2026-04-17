@@ -16,6 +16,7 @@ import { WeixinModule } from '../weixin/weixin.module';
 import { UsersModule } from '../users/users.module';
 import { NotificationModule } from '../notification/notification.module';
 import { LeadTransferController } from './controllers/lead-transfer.controller';
+import { CustomersBaobeiController } from './customers-baobei.controller';
 import { LeadTransferRuleService } from './services/lead-transfer-rule.service';
 import { LeadAutoTransferService } from './services/lead-auto-transfer.service';
 import { LeadTransferRecordService } from './services/lead-transfer-record.service';
@@ -41,7 +42,7 @@ import { CustomerReadService } from './services/customer-read.service';
     UsersModule,
     NotificationModule,
   ],
-  controllers: [CustomersController, LeadTransferController],
+  controllers: [CustomersController, LeadTransferController, CustomersBaobeiController],
   providers: [
     CustomersService,
     CustomerFollowUpStatusService,

@@ -54,6 +54,18 @@ export interface Customer {
   updatedAt: string;
   // 跟进状态
   followUpStatus?: string | null; // '新客未跟进' | '流转未跟进' | null
+  // 客户需求详情（内联编辑卡片）
+  needOrderType?: string;
+  needWorkingHours?: string;
+  needSalary?: string;
+  needRestTime?: string;
+  needFamilyMembers?: string;
+  needServiceAddress?: string;
+  needHouseArea?: string;
+  needWorkContent?: string;
+  needRemarks?: string;
+  needServicePeriod?: string;
+  needOnboardingTime?: string;
 }
 
 export interface CreateCustomerData {
@@ -80,6 +92,18 @@ export interface CreateCustomerData {
   // 创建时可选指定负责人
   assignedTo?: string;
   assignmentReason?: string;
+  // 客户需求详情
+  needOrderType?: string;
+  needWorkingHours?: string;
+  needSalary?: string;
+  needRestTime?: string;
+  needFamilyMembers?: string;
+  needServiceAddress?: string;
+  needHouseArea?: string;
+  needWorkContent?: string;
+  needRemarks?: string;
+  needServicePeriod?: string;
+  needOnboardingTime?: string;
 }
 
 export interface CustomerQuery {

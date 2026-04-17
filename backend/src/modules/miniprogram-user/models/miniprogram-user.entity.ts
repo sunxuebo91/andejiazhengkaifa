@@ -39,6 +39,9 @@ export class MiniProgramUser extends Document {
   @Prop({ default: 'active' })
   status: string; // 状态：active-活跃, inactive-不活跃, blocked-已封禁
 
+  @Prop({ default: 'customer' })
+  role?: string; // 角色：customer / 推荐官 / staff / admin（角色优先级：admin > staff > 推荐官 > customer）
+
   @Prop()
   lastLoginAt?: Date; // 最近登录时间
 

@@ -19,6 +19,10 @@ export interface UserWithoutPassword {
   wechatOpenId?: string;
   wechatNickname?: string;
   wechatAvatar?: string;
+  // 推荐返费系统字段
+  isAdmin?: boolean;
+  isActive?: boolean;
+  leftAt?: Date;
   createdAt?: any;
   updatedAt?: any;
   __v?: number;
@@ -71,6 +75,16 @@ export class User extends Document {
 
   @Prop()
   wechatAvatar?: string;
+
+  // 推荐返费系统字段
+  @Prop({ default: false })
+  isAdmin?: boolean; // 是否为管理员
+
+  @Prop({ default: true })
+  isActive?: boolean; // 是否在职，默认 true；标记离职时设为 false
+
+  @Prop()
+  leftAt?: Date; // 离职日期（离职时由管理员填写），是返费归属的分割线
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

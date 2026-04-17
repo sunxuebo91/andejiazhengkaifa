@@ -313,8 +313,8 @@ export class ResumeService {
     return categorizedFiles;
   }
 
-  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string, isDraft?: boolean, isAdmin?: boolean) {
-    return this.resumeQueryService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity, currentUserId, isDraft, isAdmin);
+  async findAll(page: number, pageSize: number, keyword?: string, jobType?: string, orderStatus?: string, maxAge?: number, nativePlace?: string, ethnicity?: string, currentUserId?: string, isDraft?: boolean, isAdmin?: boolean, filterLowQuality?: boolean) {
+    return this.resumeQueryService.findAll(page, pageSize, keyword, jobType, orderStatus, maxAge, nativePlace, ethnicity, currentUserId, isDraft, isAdmin, filterLowQuality);
   }
 
   async findOne(id: string, currentUserId?: string, isAdmin?: boolean) {
@@ -3030,6 +3030,165 @@ export class ResumeService {
       ...log,
       operator: log.operatorId,
     }));
+  }
+
+  /**
+   * 查询 resumes 集合中 phone 或 idCard 是否已存在
+   * 被 referralService.checkDuplicate 调用（内部方法，不对外暴露接口）
+   * @returns { exists: boolean; matchField: 'phone' | 'idCard' | null }
+   */
+  async checkExistsByPhoneOrIdCard(phone?: string, idCard?: string): Promise<{ exists: boolean; matchField: 'phone' | 'idCard' | null }> {
+    if (!phone && !idCard) {
+      return { exists: false, matchField: null };
+    }
+
+    if (phone) {
+      const byPhone = await this.resumeModel.findOne({ phone }).select('_id').lean().exec();
+      if (byPhone) {
+        return { exists: true, matchField: 'phone' };
+      }
+    }
+
+    if (idCard) {
+      const byIdCard = await this.resumeModel.findOne({ idNumber: idCard }).select('_id').lean().exec();
+      if (byIdCard) {
+        return { exists: true, matchField: 'idCard' };
+      }
+    }
+
+    return { exists: false, matchField: null };
+  }
+
+  /**
+   * 标记简历"推荐激活"：简历已存在时，不新建记录，仅在原简历上打激活标记。
+   * 员工可在简历列表看到"已被推荐"标签，提示有推荐人关注该阿姨。
+   */
+  async markAsReferralActivated(resumeId: string, referrerName: string): Promise<void> {
+    await this.resumeModel.findByIdAndUpdate(resumeId, {
+      referralActivated: true,
+      referralActivatedAt: new Date(),
+      referralActivatedByName: referrerName,
+    }).exec();
+  }
+
+  // ============================================================
+  // 推荐来源简历：自动入库 + 隐藏控制
+  // ============================================================
+
+  /**
+   * 将推荐简历审核通过后自动入库（resumeService 内部调用）
+   * - 先做去重：phone / idNumber 任意命中已有简历，直接返回已有简历ID
+   * - 不重复时，创建新的 isDraft=true 简历，isHidden=true，只有归属员工/管理员可见
+   * @returns { resumeId: string; isDuplicate: boolean; existingResumeId?: string }
+   */
+  async createFromReferral(params: {
+    referralResumeId: string;
+    assignedStaffId: string;    // referral_resumes.assignedStaffId（归属员工，控制可见性）
+    name: string;
+    phone?: string;
+    idCard?: string;
+    serviceType: string;
+    experience?: string;
+    remark?: string;
+    operatorId?: string;
+  }): Promise<{ resumeId: string; isDuplicate: boolean }> {
+    const { referralResumeId, assignedStaffId, name, phone, idCard, serviceType, experience, remark, operatorId } = params;
+
+    // 1. 去重检查
+    const dupCheck = await this.checkExistsByPhoneOrIdCard(phone, idCard);
+    if (dupCheck.exists) {
+      // 已有同手机号/身份证的简历，直接关联，不重复创建
+      const existing = phone
+        ? await this.resumeModel.findOne({ phone }).select('_id').lean().exec()
+        : await this.resumeModel.findOne({ idNumber: idCard }).select('_id').lean().exec();
+      const existingId = (existing as any)?._id?.toString();
+      return { resumeId: existingId, isDuplicate: true };
+    }
+
+    // 2. serviceType → jobType 映射
+    //    新格式：serviceType 已是英文 key（与 JobType 枚举一致），直接透传
+    //    历史格式：中文字符串（云DB同步旧数据），走旧映射兜底
+    const validJobTypeKeys = new Set([
+      'yuesao', 'zhujia-yuer', 'baiban-yuer', 'baojie', 'baiban-baomu',
+      'zhujia-baomu', 'yangchong', 'xiaoshi', 'zhujia-hulao', 'jiajiao', 'peiban',
+    ]);
+    const legacyJobTypeMap: Record<string, string> = {
+      '月嫂':   'yuesao',
+      '育婴嫂': 'zhujia-yuer',
+      '保姆':   'zhujia-baomu',
+      '护老':   'zhujia-hulao',
+      '小时工': 'xiaoshi',
+    };
+    const jobType = validJobTypeKeys.has(serviceType)
+      ? serviceType
+      : (legacyJobTypeMap[serviceType] || 'zhujia-baomu');
+
+    // 3. 创建草稿简历（缺少的字段用合理默认值，员工后续补全）
+    const resume = await this.resumeModel.create({
+      name,
+      phone: phone || undefined,
+      idNumber: idCard || undefined,
+      jobType,
+      gender: 'female',        // 家政从业者多为女性，默认值，员工可修改
+      age: 0,                  // 待员工补全
+      education: 'junior',     // 默认初中，员工可修改
+      expectedSalary: 0,       // 待员工补全
+      nativePlace: '',
+      experienceYears: 0,
+      skills: [],
+      selfIntroduction: experience || '',
+      remarks: remark || '',
+      leadSource: 'referral',
+      status: 'pending',
+      isDraft: true,           // 草稿状态，需员工补全基本信息
+      // 推荐来源字段
+      fromReferral: true,
+      linkedReferralResumeId: referralResumeId,
+      referralAssignedStaffId: assignedStaffId,
+      isHidden: true,          // 默认隐藏，只有归属员工和管理员可见
+    });
+
+    // 4. 写操作日志
+    await this.logOperation(
+      (resume as any)._id.toString(),
+      operatorId || assignedStaffId,
+      'create_from_referral',
+      '推荐入库（自动创建）',
+      { description: `推荐简历审核通过，自动入库，来源推荐记录ID: ${referralResumeId}` },
+    );
+
+    return { resumeId: (resume as any)._id.toString(), isDuplicate: false };
+  }
+
+  /**
+   * 切换简历隐藏状态（管理员或归属员工可操作）
+   * true→隐藏，false→取消隐藏
+   */
+  async toggleHidden(resumeId: string, currentUserId: string, isAdmin: boolean): Promise<{ isHidden: boolean }> {
+    if (!Types.ObjectId.isValid(resumeId)) {
+      throw new BadRequestException('无效的简历ID');
+    }
+    const resume = await this.resumeModel.findById(resumeId).lean().exec();
+    if (!resume) throw new NotFoundException('简历不存在');
+
+    const r = resume as any;
+    // 只有管理员或归属员工可操作
+    if (!isAdmin && r.referralAssignedStaffId !== currentUserId) {
+      throw new ForbiddenException('您没有权限操作该简历的可见性');
+    }
+
+    const newHidden = !r.isHidden;
+    await this.resumeModel.findByIdAndUpdate(resumeId, { isHidden: newHidden }).exec();
+
+    await this.logOperation(
+      resumeId,
+      currentUserId,
+      newHidden ? 'hide' : 'unhide',
+      newHidden ? '隐藏简历' : '取消隐藏简历',
+      { description: `简历可见性变更为: ${newHidden ? '仅归属员工可见' : '全员可见'}` },
+    );
+
+    return { isHidden: newHidden };
   }
 
 }

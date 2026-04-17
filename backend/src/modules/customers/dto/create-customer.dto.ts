@@ -165,6 +165,51 @@ export class CreateCustomerDto {
   @Transform(({ value }) => value ? parseFloat(value) : undefined)
   dealAmount?: number;
 
+  // 客户需求详情字段（内联编辑卡片）
+  @IsOptional()
+  @IsString()
+  needOrderType?: string;
+
+  @IsOptional()
+  @IsString()
+  needWorkingHours?: string;
+
+  @IsOptional()
+  @IsString()
+  needSalary?: string;
+
+  @IsOptional()
+  @IsString()
+  needRestTime?: string;
+
+  @IsOptional()
+  @IsString()
+  needFamilyMembers?: string;
+
+  @IsOptional()
+  @IsString()
+  needServiceAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  needHouseArea?: string;
+
+  @IsOptional()
+  @IsString()
+  needWorkContent?: string;
+
+  @IsOptional()
+  @IsString()
+  needRemarks?: string;
+
+  @IsOptional()
+  @IsString()
+  needServicePeriod?: string;
+
+  @IsOptional()
+  @IsString()
+  needOnboardingTime?: string;
+
   // 客户分配相关字段（管理员可选）
   @IsOptional()
   @IsString()

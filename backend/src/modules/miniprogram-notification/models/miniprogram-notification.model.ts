@@ -7,11 +7,22 @@ export type MiniProgramNotificationDocument = MiniProgramNotification & Document
  * 小程序通知类型枚举
  */
 export enum MiniProgramNotificationType {
+  // ── 褓贝客户端（合同/支付） ─────────────────────────────────
   CONTRACT_INVITE = 'contract_invite',       // 合同签约邀请
   CONTRACT_SIGNED = 'contract_signed',       // 合同签署完成
   PAYMENT_DONE = 'payment_done',             // 付款完成
   NANNY_CONFIRMED = 'nanny_confirmed',       // 阿姨确认上户
   CONTRACT_EXPIRING = 'contract_expiring',   // 合同即将到期
+
+  // ── 推荐奖励系统（推荐人小程序端） ─────────────────────────
+  REFERRAL_NEW_REFERRER = 'referral_new_referrer',   // 新推荐人申请（通知员工/管理员）
+  REFERRAL_APPROVED = 'referral_approved',           // 推荐人申请已通过（通知推荐人）
+  REFERRAL_REJECTED = 'referral_rejected',           // 推荐人申请未通过（通知推荐人）
+  REFERRAL_SUBMITTED = 'referral_submitted',         // 新推荐简历提交（通知绑定员工）
+  REFERRAL_REVIEW_RESULT = 'referral_review_result', // 简历审核结果（通知推荐人）
+  REFERRAL_REASSIGNED = 'referral_reassigned',       // 推荐记录重新分配（通知员工）
+  REFERRAL_TIMEOUT = 'referral_timeout',             // 超时未审核，自动流转（通知员工/管理员）
+  REFERRAL_REWARD_PAID = 'referral_reward_paid',     // 返费已打款（通知推荐人）
 }
 
 /**

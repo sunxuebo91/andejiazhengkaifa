@@ -18,7 +18,8 @@ export class MiniProgramUserService {
   ) {}
 
   /**
-   * 判断手机号是否属于 CRM 员工
+   * 判断手机号是否属于 CRM 员工，以及是否为管理员
+   * 返回 { isStaff, isAdmin }
    */
   private async checkIsStaff(phone?: string): Promise<boolean> {
     if (!phone) return false;
@@ -28,6 +29,33 @@ export class MiniProgramUserService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * 判断角色层级：admin > staff > referrer > customer
+   * 根据 phone/openid 综合判断用户的最高角色
+   */
+  async resolveUserRole(openid: string, phone?: string): Promise<{ role: string; isAdmin: boolean; isStaff: boolean }> {
+    // 1. 先判断是否为 CRM 员工/管理员
+    if (phone) {
+      try {
+        const { isStaff, isAdmin } = await this.usersService.checkStaffAndAdmin(phone);
+        if (isAdmin) return { role: 'admin', isAdmin: true, isStaff: true };
+        if (isStaff) return { role: 'staff', isAdmin: false, isStaff: true };
+      } catch {}
+    }
+
+    // 2. 查 miniprogram_users 的 role 字段
+    // 兼容旧值 'referrer'（已迁移为 '推荐官'，但保留兼容判断）
+    const mpUser = await this.miniProgramUserModel.findOne({ openid }).lean().exec();
+    if (mpUser) {
+      const role = (mpUser as any).role;
+      if (role === '推荐官' || role === 'referrer') {
+        return { role: '推荐官', isAdmin: false, isStaff: false };
+      }
+    }
+
+    return { role: 'customer', isAdmin: false, isStaff: false };
   }
 
   /**
@@ -420,6 +448,13 @@ export class MiniProgramUserService {
     if (!result) {
       throw new NotFoundException('用户不存在');
     }
+  }
+
+  /**
+   * 根据 openid 更新用户角色（供推荐人审批通过时使用）
+   */
+  async updateRoleByOpenid(openid: string, role: string): Promise<void> {
+    await this.miniProgramUserModel.findOneAndUpdate({ openid }, { $set: { role } }).exec();
   }
 
   /**

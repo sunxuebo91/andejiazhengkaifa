@@ -160,6 +160,38 @@ export class WechatCloudService {
    * @param signerRole 签署方角色：'customer'(甲方) | 'worker'(乙方) | 'both'(双方)
    * @param statusText 状态描述文本
    */
+  /**
+   * 查询小程序云数据库
+   * @param query TCB JQL 查询字符串，例如 "db.collection('xxx').where({...}).limit(100).get()"
+   * @returns 解析后的文档数组
+   */
+  async queryCloudDatabase(query: string): Promise<any[]> {
+    if (!this.appSecret) {
+      this.logger.warn('⚠️ 小程序AppSecret未配置，跳过云DB查询');
+      return [];
+    }
+
+    const accessToken = await this.getAccessToken();
+    const url = `https://api.weixin.qq.com/tcb/databasequery?access_token=${accessToken}`;
+
+    this.logger.log(`📦 查询云数据库: ${query.substring(0, 80)}...`);
+
+    const response = await axios.post(url, { env: this.cloudEnv, query });
+    const result = response.data;
+
+    if (result.errcode !== 0) {
+      this.logger.error(`❌ 云数据库查询失败: ${result.errcode} - ${result.errmsg}`);
+      throw new Error(`云数据库查询失败: ${result.errmsg}`);
+    }
+
+    const records = (result.data || []).map((item: string) => {
+      try { return JSON.parse(item); } catch { return null; }
+    }).filter(Boolean);
+
+    this.logger.log(`✅ 云数据库查询成功，返回 ${records.length} 条记录`);
+    return records;
+  }
+
   async sendContractSignedNotification(
     contractData: {
       _id: string;

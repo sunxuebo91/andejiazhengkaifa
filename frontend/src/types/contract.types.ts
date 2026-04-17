@@ -83,7 +83,8 @@ export enum ContractType {
   XIAOSHI = '小时工',
   BAIBAN_YUER = '白班育儿',
   BAIBAN_BAOMU = '白班保姆',
-  ZHUJIA_HULAO = '住家护老'
+  ZHUJIA_HULAO = '住家护老',
+  ERTONG_PEIBAN = '儿童陪伴师'
 }
 
 export const CONTRACT_TYPES = Object.values(ContractType);

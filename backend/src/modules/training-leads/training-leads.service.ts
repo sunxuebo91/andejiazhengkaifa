@@ -252,7 +252,47 @@ export class TrainingLeadsService {
     }
 
     // 筛选条件
-    if (status) filter.status = status;
+    // ─────────────────────────────────────────────────────────────────────
+    // 状态筛选：UI 显示的是「计算状态」(leadStatus)，由 computeLeadStatus() 动态算出，
+    // 并非 DB 中存储的 status 字段。两者映射关系：
+    //   终态（已报名/已结业/已到店/无效线索）→ DB status 直接存储，直接过滤即可
+    //   跟进中                              → 非终态 + 有跟进记录
+    //   新客未跟进/流转未跟进/未跟进         → 非终态 + 无跟进记录
+    //   7天未跟进/15天未跟进               → 非终态 + 无跟进记录 + DB status 精确匹配
+    // 直接用 filter.status = status 只能查终态或时间段状态，动态状态会不准，故分支处理。
+    // ─────────────────────────────────────────────────────────────────────
+    if (status) {
+      const terminalStatusList = [
+        LeadStatus.ENROLLED,
+        LeadStatus.GRADUATED,
+        LeadStatus.VISITED,
+        LeadStatus.INVALID,
+      ];
+      if (terminalStatusList.includes(status as LeadStatus)) {
+        // 终态：DB 中有确定值，直接过滤
+        filter.status = status;
+      } else if (status === LeadStatus.FOLLOWING) {
+        // 跟进中 = 非终态 + 有跟进记录
+        const followedIds = await this.followUpModel.distinct('leadId');
+        andConditions.push({ status: { $nin: terminalStatusList } });
+        andConditions.push({ _id: { $in: followedIds } });
+        filter.$and = andConditions;
+      } else {
+        // 新客未跟进 / 流转未跟进 / 未跟进 / 7天未跟进 / 15天未跟进
+        // 共同特征：非终态 + 无跟进记录
+        const followedIds = await this.followUpModel.distinct('leadId');
+        andConditions.push({ status: { $nin: terminalStatusList } });
+        andConditions.push({ _id: { $nin: followedIds } });
+        // 7天/15天 额外按 DB 存储的状态细分
+        if (
+          status === LeadStatus.NOT_FOLLOWED_UP_7_DAYS ||
+          status === LeadStatus.NOT_FOLLOWED_UP_15_DAYS
+        ) {
+          andConditions.push({ status });
+        }
+        filter.$and = andConditions;
+      }
+    }
     if (leadSource) filter.leadSource = leadSource;
     if (trainingType) filter.trainingType = trainingType;
     if (assignedTo) filter.assignedTo = new Types.ObjectId(assignedTo);

@@ -1,11 +1,12 @@
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber, Upload, Popconfirm } from 'antd';
 import type { TablePaginationConfig, UploadProps } from 'antd';
-import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined, UserSwitchOutlined, DeleteOutlined } from '@ant-design/icons';
+import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined, UserSwitchOutlined, DeleteOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import apiService from '../../services/api';
+import { resumeService } from '../../services/resume.service';
 import { createFollowUp } from '@/services/followUp.service';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -62,6 +63,11 @@ interface ResumeData {
   hasMedicalReport: boolean;
   createdAt?: string;
   updatedAt?: string;
+  // 推荐来源字段
+  fromReferral?: boolean;
+  isHidden?: boolean;
+  referralAssignedStaffId?: string;
+  linkedReferralResumeId?: string;
   [key: string]: any;
 }
 
@@ -618,6 +624,11 @@ const ResumeList = () => {
         <span>
           {text}
           {record.isDraft && <Tag color="orange" style={{ marginLeft: 6, fontSize: 11 }}>草稿</Tag>}
+          {(record as any).referralActivated && (
+            <Tooltip title={`推荐人：${(record as any).referralActivatedByName || '未知'} · ${(record as any).referralActivatedAt ? new Date((record as any).referralActivatedAt).toLocaleDateString('zh-CN') : ''}`}>
+              <Tag color="volcano" style={{ marginLeft: 6, fontSize: 11 }}>已被推荐</Tag>
+            </Tooltip>
+          )}
         </span>
       ),
     },
@@ -658,16 +669,24 @@ const ResumeList = () => {
       },
     },
     {
-      title: '创建来源',
-      dataIndex: 'userId',
-      key: 'userId',
-      render: (userId: string) => {
-        if (!userId) {
-          return <Tag color="blue">自助注册</Tag>;
-        } else {
-          return <Tag color="orange">员工创建</Tag>;
-        }
-      },
+      title: '来源/可见性',
+      key: 'source',
+      width: 130,
+      render: (_: any, record: ResumeData) => (
+        <Space size={4} wrap>
+          {record.fromReferral
+            ? <Tag color="purple">推荐入库</Tag>
+            : record.userId
+              ? <Tag color="orange">员工创建</Tag>
+              : <Tag color="blue">自助注册</Tag>
+          }
+          {record.fromReferral && (
+            record.isHidden
+              ? <Tag color="red" style={{ cursor: 'default' }}>仅归属可见</Tag>
+              : <Tag color="green" style={{ cursor: 'default' }}>全员可见</Tag>
+          )}
+        </Space>
+      ),
     },
     {
       title: '体检报告',
@@ -709,6 +728,29 @@ const ResumeList = () => {
                 onClick={() => handleOpenAssign(record)}
               />
             </Tooltip>
+          )}
+          {record.fromReferral && (
+            <Popconfirm
+              title={record.isHidden ? '确认取消隐藏？' : '确认设为仅归属员工可见？'}
+              description={record.isHidden ? '取消后所有员工都可以看到这条简历' : '隐藏后只有您和管理员可以看到这条简历'}
+              onConfirm={async () => {
+                try {
+                  const res = await resumeService.toggleHidden(record.id);
+                  messageApi.success(res.isHidden ? '已设为仅归属员工可见' : '已取消隐藏，全员可见');
+                  fetchResumeList();
+                } catch { messageApi.error('操作失败'); }
+              }}
+              okText="确认"
+              cancelText="取消"
+            >
+              <Tooltip title={record.isHidden ? '取消隐藏（设为全员可见）' : '隐藏（仅归属员工可见）'}>
+                <Button
+                  size="small"
+                  icon={record.isHidden ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                  style={{ color: record.isHidden ? '#52c41a' : '#faad14' }}
+                />
+              </Tooltip>
+            </Popconfirm>
           )}
           {canDelete && (
             <Popconfirm

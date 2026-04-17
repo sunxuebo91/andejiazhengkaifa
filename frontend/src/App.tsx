@@ -72,6 +72,10 @@ const PublicTrainingLeadForm = React.lazy(() => import('./pages/public/PublicTra
 // 背调管理
 const BackgroundCheckPage = React.lazy(() => import('./pages/background-check/BackgroundCheckPage'));
 const BackgroundCheckDetail = React.lazy(() => import('./pages/background-check/BackgroundCheckDetail'));
+// 推荐返费系统
+const ReferralResumeReview = React.lazy(() => import('./pages/referral/ReferralResumeReview'));
+const ReferralManage = React.lazy(() => import('./pages/referral/ReferralManage'));
+const ReferrerList = React.lazy(() => import('./pages/referral/ReferrerList'));
 // H5 移动端合同页面（用于小程序 WebView 内嵌）
 // const MobileContractCreate = React.lazy(() => import('./pages/mobile/contract/MobileContractCreate'));
 
@@ -423,6 +427,22 @@ export default function App({ children }: AppProps) {
                     <Route
                       path="banner/edit/:id"
                       element={<AuthorizedRoute element={<BannerForm />} role={["admin", "manager"]} />}
+                    />
+                  </Route>
+
+                  {/* 推荐返费系统 */}
+                  <Route path="referral">
+                    <Route
+                      path="referrers"
+                      element={<AuthorizedRoute element={<ReferrerList />} role="admin" />}
+                    />
+                    <Route
+                      path="resume-review"
+                      element={<AuthorizedRoute element={<ReferralResumeReview />} />}
+                    />
+                    <Route
+                      path="manage"
+                      element={<AuthorizedRoute element={<ReferralManage />} role="admin" />}
                     />
                   </Route>
 

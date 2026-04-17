@@ -13,7 +13,8 @@ export enum ContractType {
   BAIBAN_YUER = '白班育儿',
   BAIBAN_YUER_SAO = '白班育儿嫂', // 🔥 新增：白班育儿嫂
   BAIBAN_BAOMU = '白班保姆',
-  ZHUJIA_HULAO = '住家护老'
+  ZHUJIA_HULAO = '住家护老',
+  ERTONG_PEIBAN = '儿童陪伴师'
 }
 
 // 新增：合同状态枚举

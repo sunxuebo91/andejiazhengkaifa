@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, isValidObjectId } from 'mongoose';
 import { Role } from './models/role.entity';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -63,6 +63,9 @@ export class RolesService implements OnModuleInit {
   }
 
   async findOne(id: string): Promise<Role> {
+    if (!isValidObjectId(id)) {
+      throw new BadRequestException(`无效的角色ID：${id}`);
+    }
     const role = await this.roleModel.findById(id).exec();
     if (!role) {
       throw new NotFoundException('角色不存在');
@@ -71,6 +74,9 @@ export class RolesService implements OnModuleInit {
   }
 
   async update(id: string, updateRoleDto: UpdateRoleDto): Promise<Role> {
+    if (!isValidObjectId(id)) {
+      throw new BadRequestException(`无效的角色ID：${id}`);
+    }
     const updatedRole = await this.roleModel
       .findByIdAndUpdate(id, this.normalizeRolePayload(updateRoleDto), { new: true })
       .exec();
@@ -83,6 +89,9 @@ export class RolesService implements OnModuleInit {
   }
 
   async remove(id: string): Promise<void> {
+    if (!isValidObjectId(id)) {
+      throw new BadRequestException(`无效的角色ID：${id}`);
+    }
     const result = await this.roleModel.findByIdAndDelete(id).exec();
     if (!result) {
       throw new NotFoundException('角色不存在');

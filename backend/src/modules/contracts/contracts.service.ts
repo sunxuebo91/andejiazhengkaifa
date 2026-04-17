@@ -376,7 +376,7 @@ export class ContractsService {
       }
 
       // 🔥 修复：自动从中文字段"服务类型及方式"映射到 contractType
-      const validContractTypes = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班育儿嫂', '白班保姆', '住家护老'];
+      const validContractTypes = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班育儿嫂', '白班保姆', '住家护老', '儿童陪伴师'];
       const dtoAny = createContractDto as any;
 
       // 如果 contractType 为空或不在有效枚举中，尝试从中文字段映射
@@ -1540,7 +1540,7 @@ export class ContractsService {
       }
 
       // 🔥 修复：自动从中文字段"服务类型及方式"映射到 contractType（换人合同也需要）
-      const validContractTypes = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班育儿嫂', '白班保姆', '住家护老'];
+      const validContractTypes = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班育儿嫂', '白班保姆', '住家护老', '儿童陪伴师'];
       const dtoAny = createContractDto as any;
 
       // 如果 contractType 为空或不在有效枚举中，尝试从中文字段映射或继承原合同

@@ -287,4 +287,82 @@ export class UsersService {
   private normalizeRole(role?: string | null): string | null {
     return this.rolesService.normalizeRoleCode(role);
   }
+
+  /**
+   * 根据手机号判断是否为员工，以及是否为管理员
+   * 用于推荐返费系统的角色判断
+   */
+  async checkStaffAndAdmin(phone?: string): Promise<{ isStaff: boolean; isAdmin: boolean; staffUser?: any }> {
+    if (!phone) return { isStaff: false, isAdmin: false };
+    try {
+      const staffUser = await this.userModel.findOne({ phone }).select('-password').lean().exec();
+      if (!staffUser) return { isStaff: false, isAdmin: false };
+      return {
+        isStaff: true,
+        isAdmin: !!(staffUser as any).isAdmin,
+        staffUser,
+      };
+    } catch {
+      return { isStaff: false, isAdmin: false };
+    }
+  }
+
+  /**
+   * 获取所有在职员工列表（isActive=true），供管理员重新分配时选择
+   */
+  async findActiveStaff(): Promise<UserWithoutPassword[]> {
+    const users = await this.userModel
+      .find({ isActive: { $ne: false }, active: true })
+      .select('-password')
+      .lean()
+      .exec();
+    return Promise.all((users as UserWithoutPassword[]).map((user) => this.toUserWithoutPassword(user)));
+  }
+
+  /**
+   * 获取管理员用户：
+   *  优先找 isAdmin=true 的在职用户；
+   *  若找不到，兜底找 role='admin' 的活跃用户。
+   */
+  async findAdminUser(): Promise<UserWithoutPassword | null> {
+    // 优先：推荐返费系统专属 isAdmin 标志
+    let user = await this.userModel
+      .findOne({ isAdmin: true, isActive: { $ne: false } })
+      .select('-password')
+      .lean()
+      .exec();
+
+    // 兜底：系统管理员 role
+    if (!user) {
+      user = await this.userModel
+        .findOne({ role: { $in: ['admin', '系统管理员', '管理员'] }, active: { $ne: false } })
+        .select('-password')
+        .lean()
+        .exec();
+    }
+
+    return user ? this.toUserWithoutPassword(user as UserWithoutPassword) : null;
+  }
+
+  /**
+   * 标记员工离职
+   */
+  async markStaffDeparted(staffId: string, leftAt: Date): Promise<UserWithoutPassword> {
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(staffId, { isActive: false, leftAt }, { new: true })
+      .select('-password')
+      .lean()
+      .exec();
+    if (!updatedUser) {
+      throw new NotFoundException('员工不存在');
+    }
+    return this.toUserWithoutPassword(updatedUser as UserWithoutPassword);
+  }
+
+  /**
+   * 根据ID获取用户（含离职信息，用于返费归属判断）
+   */
+  async findByIdWithDeparture(id: string): Promise<any> {
+    return this.userModel.findById(id).select('-password').lean().exec();
+  }
 }

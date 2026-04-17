@@ -354,6 +354,50 @@ export class Resume extends Document implements IResume {
   @IsString()
   @IsOptional()
   familySituation?: string;
+
+  // ── 推荐来源字段 ──────────────────────────────
+  /** 是否来自推荐人推荐（审核通过后自动入库） */
+  @Prop({ type: Boolean, default: false })
+  @IsOptional()
+  fromReferral?: boolean;
+
+  /** 关联的推荐简历 ID（referral_resumes._id） */
+  @Prop({ nullable: true })
+  @IsOptional()
+  linkedReferralResumeId?: string;
+
+  /**
+   * 推荐归属员工 ID（referral_resumes.assignedStaffId 快照）
+   * 只有该员工和管理员可见，其他人看不到（isHidden=true 时生效）
+   */
+  @Prop({ nullable: true })
+  @IsOptional()
+  referralAssignedStaffId?: string;
+
+  /**
+   * 是否隐藏（推荐入库时默认 true）
+   * true → 只有 referralAssignedStaffId 对应的员工和管理员可见
+   * false → 所有人可见（手动取消隐藏后）
+   */
+  @Prop({ type: Boolean, default: false })
+  @IsOptional()
+  isHidden?: boolean;
+
+  // ── 推荐激活标记 ──────────────────────────────
+  /** 是否被推荐人推荐激活（简历已存在，不新建记录，仅打标记） */
+  @Prop({ type: Boolean, default: false })
+  @IsOptional()
+  referralActivated?: boolean;
+
+  /** 最近一次推荐激活时间 */
+  @Prop({ nullable: true })
+  @IsOptional()
+  referralActivatedAt?: Date;
+
+  /** 最近一次推荐人姓名（用于员工看板提示） */
+  @Prop({ nullable: true })
+  @IsOptional()
+  referralActivatedByName?: string;
 }
 
 export const ResumeSchema = SchemaFactory.createForClass(Resume);

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User, UserWithoutPassword } from './models/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -364,5 +364,22 @@ export class UsersService {
    */
   async findByIdWithDeparture(id: string): Promise<any> {
     return this.userModel.findById(id).select('-password').lean().exec();
+  }
+
+  /**
+   * 批量根据ID列表查询用户姓名（仅返回 id→name 映射，不做权限处理，高性能）
+   * 用于列表页需要展示员工名字但不需要其他信息的场景
+   */
+  async findNamesByIds(ids: string[]): Promise<Record<string, string>> {
+    const validIds = ids.filter(id => id && Types.ObjectId.isValid(id));
+    if (!validIds.length) return {};
+    const users = await this.userModel
+      .find({ _id: { $in: validIds } })
+      .select('_id name')
+      .lean()
+      .exec();
+    const map: Record<string, string> = {};
+    for (const u of users as any[]) map[u._id.toString()] = u.name;
+    return map;
   }
 }

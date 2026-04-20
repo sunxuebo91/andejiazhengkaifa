@@ -4,7 +4,7 @@ import {
   Card, Table, Button, Space, Tag, Input, App, Select,
   Modal, Form, Tooltip, Descriptions, Drawer,
 } from 'antd';
-import { SearchOutlined, EditOutlined, EyeOutlined, PlusOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import { SearchOutlined, EditOutlined, EyeOutlined, PlusOutlined, CheckOutlined, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../../contexts/AuthContext';
 import * as referralService from '../../services/referralService';
@@ -15,8 +15,9 @@ const { Option } = Select;
 const { TextArea } = Input;
 
 const ReferrerList: React.FC = () => {
-  const { message } = App.useApp();
-  const { user } = useAuth();
+  const { message, modal } = App.useApp();
+  const { user, hasRole } = useAuth();
+  const isAdmin = hasRole('admin');
 
   const [list, setList] = useState<Referrer[]>([]);
   const [total, setTotal] = useState(0);
@@ -89,6 +90,24 @@ const ReferrerList: React.FC = () => {
       } else { message.error(res.message || '创建失败'); }
     } catch (e: any) { if (!e.errorFields) message.error(e.response?.data?.message || '创建失败'); }
     finally { setCreateLoading(false); }
+  };
+
+  // 删除推荐人（仅管理员）
+  const handleDelete = (referrerId: string, referrerName: string) => {
+    modal.confirm({
+      title: `确认删除推荐人「${referrerName}」？`,
+      content: '删除后该推荐人记录将被永久移除，其名下未完结的推荐记录将标记为无效。此操作不可撤销。',
+      okText: '确认删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const res = await referralService.deleteReferrer(user!.id, referrerId);
+          if ((res as any).success) { message.success('已删除'); fetchList(page); }
+          else message.error((res as any).message || '删除失败');
+        } catch (e: any) { message.error(e.response?.data?.message || '删除失败'); }
+      },
+    });
   };
 
   // 通过审批
@@ -188,6 +207,12 @@ const ReferrerList: React.FC = () => {
                   onClick={() => { setRejectModal({ open: true, referrerId: record._id, referrerName: record.name }); setRejectReason(''); }} />
               </Tooltip>
             </>
+          )}
+          {isAdmin && (
+            <Tooltip title="删除推荐人">
+              <Button danger size="small" icon={<DeleteOutlined />}
+                onClick={() => handleDelete(record._id, record.name)} />
+            </Tooltip>
           )}
         </Space>
       ),

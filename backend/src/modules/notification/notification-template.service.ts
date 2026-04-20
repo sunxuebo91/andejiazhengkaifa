@@ -283,6 +283,20 @@ export class NotificationTemplateService implements OnModuleInit {
         actionText: '查看线索',
       },
 
+      // ========== 推荐奖励系统（CRM 铃铛） ==========
+      {
+        type: NotificationType.REFERRAL_NEW_REFERRER_APPROVAL,
+        name: '新推荐人待审批通知',
+        description: '有新的推荐人申请注册，通知管理员/来源员工审批',
+        title: '新推荐人待审批',
+        content: '{{referrerName}}（{{referrerPhone}}）申请注册推荐人，请尽快审批',
+        priority: NotificationPriority.HIGH,
+        icon: 'UserAddOutlined',
+        color: '#faad14',
+        actionUrl: '/referral/referrers',
+        actionText: '去审批',
+      },
+
       // ========== 职培线索自动流转相关 ==========
       {
         type: NotificationType.TRAINING_LEAD_AUTO_TRANSFER_OUT,

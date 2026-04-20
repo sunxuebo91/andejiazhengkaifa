@@ -7,6 +7,7 @@ import { TrainingLeadsService } from './training-leads.service';
 import { TrainingLead, TrainingLeadSchema } from './models/training-lead.model';
 import { TrainingLeadFollowUp, TrainingLeadFollowUpSchema } from './models/training-lead-follow-up.model';
 import { TrainingLeadTransferRecord, TrainingLeadTransferRecordSchema } from './models/training-lead-transfer-record.model';
+import { TrainingLeadOperationLog, TrainingLeadOperationLogSchema } from './models/training-lead-operation-log.model';
 import { User, UserSchema } from '../users/models/user.entity';
 import { LeadTransferRule, LeadTransferRuleSchema } from '../customers/models/lead-transfer-rule.model';
 import { AIModule } from '../ai/ai.module';
@@ -21,6 +22,7 @@ import { LeadTransferRuleService } from '../customers/services/lead-transfer-rul
       { name: TrainingLead.name, schema: TrainingLeadSchema },
       { name: TrainingLeadFollowUp.name, schema: TrainingLeadFollowUpSchema },
       { name: TrainingLeadTransferRecord.name, schema: TrainingLeadTransferRecordSchema },
+      { name: TrainingLeadOperationLog.name, schema: TrainingLeadOperationLogSchema },
       { name: User.name, schema: UserSchema },
       { name: LeadTransferRule.name, schema: LeadTransferRuleSchema },
     ]),

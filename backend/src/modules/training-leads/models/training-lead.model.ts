@@ -127,6 +127,10 @@ export class TrainingLead {
   @Prop({ min: 0 })
   serviceFeeAmount: number;
 
+  @ApiProperty({ description: '是否网课' })
+  @Prop({ default: false })
+  isOnlineCourse: boolean;
+
   @ApiProperty({ description: '所在地区' })
   @Prop()
   address: string;

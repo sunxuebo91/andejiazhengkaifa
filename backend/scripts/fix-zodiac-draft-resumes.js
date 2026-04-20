@@ -1,10 +1,11 @@
 /**
- * 数据修复脚本：修正草稿简历的错误生肖
+ * 数据修复脚本：修正所有简历的错误生肖
  *
- * 问题：大量草稿简历的 zodiac 字段被错误地设为 'tiger'（属虎）
- * 修复：根据 birthDate 或 age 字段重新计算正确的生肖并更新
+ * 问题：AI 识别简历时不管什么年龄都返回 'tiger'（属虎）
+ * 修复：遍历所有有 birthDate 或 age 字段的简历，
+ *       根据出生年份重新计算正确的生肖并更新
  *
- * 计算规则：(出生年份 - 4) % 12 → 对应生肖索引
+ * 计算规则：((出生年份 - 4) % 12 + 12) % 12 → 对应生肖索引
  * 运行方式：node backend/scripts/fix-zodiac-draft-resumes.js
  */
 
@@ -66,24 +67,24 @@ async function fixZodiac() {
 
     const col = mongoose.connection.db.collection('resumes');
 
-    // 查询所有草稿简历（有 birthDate 或 age 字段）
-    const drafts = await col.find(
-      { isDraft: true },
-      { projection: { _id: 1, name: 1, age: 1, birthDate: 1, zodiac: 1 } }
+    // 查询所有有 birthDate 或 age 的简历（不限草稿/正式）
+    const resumes = await col.find(
+      { $or: [{ birthDate: { $exists: true, $ne: null, $ne: '' } }, { age: { $exists: true, $ne: null } }] },
+      { projection: { _id: 1, name: 1, age: 1, birthDate: 1, zodiac: 1, isDraft: 1 } }
     ).toArray();
 
-    console.log(`📋 共找到草稿简历：${drafts.length} 条\n`);
+    console.log(`📋 共找到简历（含草稿+正式）：${resumes.length} 条\n`);
 
     let updated = 0;
     let skipped = 0;
     let noData = 0;
 
-    for (const resume of drafts) {
+    for (const resume of resumes) {
       // 1. 优先用 birthDate 算出生年份
       let birthYear = extractYear(resume.birthDate);
 
       // 2. 退而用 age 估算
-      if (!birthYear && resume.age && resume.age >= 18 && resume.age <= 70) {
+      if (!birthYear && resume.age && resume.age >= 18 && resume.age <= 80) {
         birthYear = CURRENT_YEAR - resume.age;
       }
 
@@ -105,19 +106,20 @@ async function fixZodiac() {
         { $set: { zodiac: correctZodiac } }
       );
 
+      const draftLabel = resume.isDraft ? '[草稿]' : '[正式]';
       console.log(
-        `✏️  ${resume.name || '未知'} | 出生年：${birthYear} | ` +
+        `✏️  ${draftLabel} ${resume.name || '未知'} | 出生年：${birthYear} | ` +
         `原生肖：${ZODIAC_CN[resume.zodiac] || resume.zodiac || '空'} → ` +
         `新生肖：${ZODIAC_CN[correctZodiac]}（${correctZodiac}）`
       );
       updated++;
     }
 
-    console.log('\n========== 修复完成 ==========');
+    console.log('\n========== 修复完成（全量简历）==========');
     console.log(`✅ 已更新：${updated} 条`);
-    console.log(`⏭️  无需修改：${skipped} 条`);
-    console.log(`⚠️  无年龄/生日数据，跳过：${noData} 条`);
-    console.log('================================\n');
+    console.log(`⏭️  生肖已正确，无需修改：${skipped} 条`);
+    console.log(`⚠️  无有效年龄/生日数据，跳过：${noData} 条`);
+    console.log('==========================================\n');
   } catch (err) {
     console.error('❌ 脚本执行失败：', err.message);
     process.exit(1);

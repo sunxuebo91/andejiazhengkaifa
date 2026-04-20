@@ -474,6 +474,165 @@
   }
   ```
 
+### 推荐返费系统（/api/referral）
+
+所有接口均为 `Public`（无 JWT 守卫），通过业务层参数（openid / staffId / X-Service-Secret）鉴权。
+
+#### 归属员工解析规则（assignedStaffId）
+
+每次提交推荐时，`assignedStaffId` 按以下优先级解析：
+1. 请求体中的 `targetStaffId`（本次扫码海报员工，需在职）
+2. 推荐人永久绑定的 `sourceStaffId`（需在职）
+3. 兜底：系统管理员
+
+`rewardOwnerStaffId`（返费归属）在合同签署回调时一次性快照，之后不变。
+
+---
+
+#### 小程序端（miniprogram）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/referral/miniprogram/register-referrer` | 推荐人注册申请 |
+| GET | `/api/referral/miniprogram/referrer-status?openid=` | 查询申请状态（轮询） |
+| GET | `/api/referral/miniprogram/check-duplicate?phone=&idCard=` | 推荐前去重查询 |
+| POST | `/api/referral/miniprogram/submit-referral` | 录入被推荐阿姨信息 |
+| GET | `/api/referral/miniprogram/my-referrals?openid=&page=&pageSize=` | 我的推荐记录列表（脱敏） |
+| GET | `/api/referral/miniprogram/referral-detail/:id?openid=` | 推荐记录详情（脱敏） |
+| GET | `/api/referral/miniprogram/job-types` | 工种枚举列表 |
+| GET | `/api/referral/miniprogram/staff-info?staffId=` | 员工公共信息（海报落地页用） |
+| POST | `/api/referral/miniprogram/apply-settlement` | 推荐人申请结算 |
+
+##### POST `/api/referral/miniprogram/register-referrer`
+
+请求体：
+```json
+{
+  "openid": "string",
+  "name": "string",
+  "phone": "string",
+  "sourceStaffId": "string",       // 来源员工ID（扫哪位员工海报）
+  "sourceCustomerId": "string"     // 可选，来源客户ID
+}
+```
+
+##### POST `/api/referral/miniprogram/submit-referral`
+
+请求体：
+```json
+{
+  "openid": "string",
+  "name": "string",
+  "phone": "string",               // 手机号和身份证号至少填一个
+  "idCard": "string",
+  "serviceType": "string",
+  "experience": "string",
+  "remark": "string",
+  "targetStaffId": "string"        // 可选：本次扫码的海报员工ID，决定 assignedStaffId
+}
+```
+
+响应：新建的 `referral_resumes` 文档。
+
+##### GET `/api/referral/miniprogram/staff-info`
+
+查询参数：`staffId`
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "string",
+    "name": "string",
+    "avatar": "string",
+    "phone": "string",
+    "isActive": true        // false 表示该员工已离职，小程序应提示"推荐将由管理员接管"
+  }
+}
+```
+
+---
+
+#### 员工端（staff）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/referral/staff/assigned-referrals?staffId=&isAdmin=` | 我的待审核/跟进推荐列表 |
+| POST | `/api/referral/staff/review-referral` | 审核推荐简历（通过/拒绝） |
+| POST | `/api/referral/staff/update-status` | 更新推荐跟进状态 |
+| POST | `/api/referral/staff/process-reward` | 返费审核/打款（基于 rewardOwnerStaffId） |
+
+##### POST `/api/referral/staff/review-referral`
+
+请求体：
+```json
+{
+  "staffId": "string",
+  "isAdmin": false,
+  "id": "referral_resume_id",
+  "result": "approve | reject",
+  "note": "string"          // 拒绝时必填
+}
+```
+
+---
+
+#### 管理员端（admin）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/referral/admin/referrers?approvalStatus=&search=&page=&pageSize=` | 推荐人列表（含统计） |
+| POST | `/api/referral/admin/create-referrer` | 直接创建推荐人（跳过审批） |
+| POST | `/api/referral/admin/update-referrer-info` | 更新推荐人银行/身份证信息 |
+| GET | `/api/referral/admin/pending-referrers?page=&pageSize=` | 待审批推荐人列表 |
+| POST | `/api/referral/admin/approve-referrer` | 通过推荐人注册申请 |
+| POST | `/api/referral/admin/reject-referrer` | 拒绝推荐人注册申请 |
+| GET | `/api/referral/admin/all-referrals?assignedStaffId=&status=&page=&pageSize=` | 全量推荐记录 |
+| POST | `/api/referral/admin/reassign-binding` | 手动重新分配绑定员工 |
+| POST | `/api/referral/admin/mark-staff-departed` | 标记员工离职，触发批量自动流转 |
+| GET | `/api/referral/admin/binding-logs/:referralResumeId` | 绑定变更日志 |
+| POST | `/api/referral/admin/sync-cloud-referrals` | 从小程序云数据库同步推荐简历 |
+| POST | `/api/referral/admin/process-reward` | 全量返费审核/打款（无 rewardOwnerStaffId 限制） |
+
+##### GET `/api/referral/admin/all-referrals`
+
+查询参数：
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `assignedStaffId` | string | 按归属员工筛选 |
+| `status` | string | 按业务状态筛选 |
+| `page` | number | 页码（默认 1） |
+| `pageSize` | number | 每页条数（默认 20） |
+
+每条记录额外携带 `referrerSourceStaffId`（推荐人的来源员工 ID），可用于"来源员工 vs 归属员工"对比展示。
+
+---
+
+#### CRM 回调端（crm，X-Service-Secret 鉴权）
+
+请求头需携带：`X-Service-Secret: <配置的 secret>`
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/referral/crm/contract-signed` | 合同签署回调（快照 rewardOwnerStaffId） |
+| POST | `/api/referral/crm/onboarded` | 上户回调 |
+| POST | `/api/referral/crm/contract-terminated` | 合同提前终止回调（工作不足30天，状态回退至 following_up） |
+
+##### POST `/api/referral/crm/contract-signed`
+
+```json
+{
+  "referralResumeId": "string",
+  "contractId": "string",
+  "contractSignedAt": "ISO8601",
+  "serviceFee": 9000
+}
+```
+
+---
+
 ### 百度OCR和地图服务
 
 #### 获取地点建议
@@ -857,6 +1016,7 @@ interface WorkExperience {
 
 | 版本 | 发布日期 | 主要变更 |
 |------|---------|---------|
+| v1.4 | 2026-04-18 | 新增推荐返费系统完整 API 文档（assignedStaffId 解析逻辑、isActive 字段、targetStaffId 入参） |
 | v1.3 | 2026-01-05 | 新增烹饪照片等作品展示类型 |
 | v1.2 | 2025-12-15 | 优化文件上传接口 |
 | v1.1 | 2025-11-20 | 新增小程序专用接口 |
@@ -864,6 +1024,6 @@ interface WorkExperience {
 
 ---
 
-**文档版本**: v1.3
-**最后更新**: 2026-01-05
+**文档版本**: v1.4
+**最后更新**: 2026-04-18
 **维护团队**: 安得家政技术团队

@@ -136,6 +136,14 @@ export const trainingLeadService = {
     const response = await apiService.post(`/api/training-leads/${id}/claim`);
     return response.data;
   },
+
+  /**
+   * 获取学员线索操作日志（仅管理员可访问）
+   */
+  async getOperationLogs(id: string): Promise<any[]> {
+    const response = await apiService.get(`/api/training-leads/${id}/operation-logs`);
+    return response.data;
+  },
 };
 
 export default trainingLeadService;

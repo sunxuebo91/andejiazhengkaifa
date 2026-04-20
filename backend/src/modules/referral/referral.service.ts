@@ -19,6 +19,7 @@ import { UsersService } from '../users/users.service';
 import { MiniProgramUserService } from '../miniprogram-user/miniprogram-user.service';
 import { MiniProgramNotificationService } from '../miniprogram-notification/miniprogram-notification.service';
 import { MiniProgramNotificationType } from '../miniprogram-notification/models/miniprogram-notification.model';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 import { WechatCloudService } from '../weixin/services/wechat-cloud.service';
 
 /** 简历库工种枚举（英文 key → 中文 label），小程序以此为准提交 serviceType */
@@ -78,6 +79,7 @@ export class ReferralService {
     private readonly usersService: UsersService,
     private readonly mpUserService: MiniProgramUserService,
     private readonly notificationService: MiniProgramNotificationService,
+    private readonly notificationHelperService: NotificationHelperService,
     private readonly wechatCloudService: WechatCloudService,
   ) {}
 
@@ -165,16 +167,36 @@ export class ReferralService {
   /**
    * 查询当前 openid 的推荐人申请状态（供等待页轮询）
    */
-  async checkReferrerStatus(openid: string): Promise<{ status: string; referrer?: any }> {
+  async checkReferrerStatus(openid: string): Promise<{
+    approvalStatus: string;
+    name?: string;
+    phone?: string;
+    sourceStaffId?: string;
+    sourceCustomerId?: string;
+    rejectedReason?: string;
+    createdAt?: Date;
+  }> {
     const referrer = await this.referrerModel.findOne({ openid }).lean().exec();
-    if (!referrer) return { status: 'not_applied' };
-    return { status: (referrer as any).approvalStatus, referrer };
+    if (!referrer) return { approvalStatus: 'not_applied' };
+    // 字段全部展开到顶层，小程序可直接读 data.approvalStatus / data.name 等，无需二次解包
+    return {
+      approvalStatus: (referrer as any).approvalStatus,
+      name: referrer.name,
+      phone: referrer.phone,
+      sourceStaffId: referrer.sourceStaffId,
+      sourceCustomerId: (referrer as any).sourceCustomerId,
+      rejectedReason: (referrer as any).rejectedReason,
+      createdAt: (referrer as any).createdAt,
+    };
   }
 
   /** 通知来源员工和管理员有新的推荐人申请 */
   private async notifyReferrerRegistration(referrer: ReferrerDocument) {
     try {
-      // 通知来源员工
+      const referrerId = referrer._id?.toString();
+      const crmNotifyUserIds: string[] = []; // 收集需要推送 CRM 铃铛的用户 ID
+
+      // 通知来源员工（小程序通知 + CRM 铃铛）
       const sourceStaff = await this.usersService.findById(referrer.sourceStaffId);
       if (sourceStaff?.phone) {
         await this.sendNotification(
@@ -182,10 +204,12 @@ export class ReferralService {
           MiniProgramNotificationType.REFERRAL_NEW_REFERRER,
           '有人通过您的海报申请成为推荐人',
           `${referrer.name} 通过您的招募海报申请注册推荐人，请等待管理员审批`,
-          { referrerId: referrer._id?.toString(), referrerName: referrer.name },
+          { referrerId, referrerName: referrer.name },
         );
+        if (sourceStaff._id) crmNotifyUserIds.push(sourceStaff._id.toString());
       }
-      // 通知管理员
+
+      // 通知管理员（小程序通知 + CRM 铃铛）
       const admin = await this.usersService.findAdminUser();
       if (admin?.phone) {
         await this.sendNotification(
@@ -193,8 +217,19 @@ export class ReferralService {
           MiniProgramNotificationType.REFERRAL_NEW_REFERRER,
           '新的推荐人注册待审批',
           `${referrer.name}（${referrer.phone}）申请注册推荐人，请尽快审批`,
-          { referrerId: referrer._id?.toString() },
+          { referrerId },
         );
+        const adminId = (admin as any)._id?.toString();
+        if (adminId && !crmNotifyUserIds.includes(adminId)) crmNotifyUserIds.push(adminId);
+      }
+
+      // 推送 CRM 通知中心铃铛（WebSocket 实时推送）
+      if (crmNotifyUserIds.length > 0) {
+        await this.notificationHelperService.notifyReferralNewApplicant(crmNotifyUserIds, {
+          referrerName: referrer.name,
+          referrerPhone: referrer.phone,
+          referrerId: referrerId ?? '',
+        });
       }
     } catch (err) {
       this.logger.warn(`通知推荐人注册失败: ${err.message}`);
@@ -228,7 +263,11 @@ export class ReferralService {
 
   /**
    * 录入被推荐阿姨信息（仅 referrer 可调用）
-   * 自动继承 sourceStaffId 为 assignedStaffId，设置 reviewDeadlineAt=提交时间+24h
+   * assignedStaffId 取值优先级：
+   *   1. 入参 targetStaffId（本次扫码海报员工，且该员工在职）
+   *   2. 回落到 referrer.sourceStaffId
+   * 若最终 assignedStaffId 对应员工已离职，自动兜底为管理员。
+   * reviewDeadlineAt = 提交时间 + 24h
    */
   async submitReferral(openid: string, data: {
     name: string;
@@ -237,6 +276,7 @@ export class ReferralService {
     serviceType: string;
     experience?: string;
     remark?: string;
+    targetStaffId?: string;
   }): Promise<ReferralResumeDocument> {
     // 校验推荐人身份
     const referrer = await this.referrerModel.findOne({ openid, approvalStatus: 'approved' }).exec();
@@ -254,6 +294,12 @@ export class ReferralService {
         `无效的工种：${data.serviceType}，请调用 /api/referral/miniprogram/job-types 获取合法选项`,
       );
     }
+
+    // 确定本次推荐的归属员工（assignedStaffId）
+    const assignedStaffId = await this.resolveAssignedStaffId(
+      data.targetStaffId,
+      referrer.sourceStaffId,
+    );
 
     // 去重检查（先查简历库，再查推荐记录）
     const resumeCheck = await this.resumeService.checkExistsByPhoneOrIdCard(data.phone, data.idCard);
@@ -278,7 +324,7 @@ export class ReferralService {
             serviceType:     normalizedServiceType,
             experience:      data.experience,
             remark:          data.remark,
-            assignedStaffId: referrer.sourceStaffId,
+            assignedStaffId,
             reviewStatus:    'activated',
             status:          'activated',
             linkedResumeId:  resumeId,
@@ -315,7 +361,7 @@ export class ReferralService {
       serviceType: normalizedServiceType,   // 统一存英文 key
       experience: data.experience,
       remark: data.remark,
-      assignedStaffId: referrer.sourceStaffId,
+      assignedStaffId,
       // 从推荐人记录继承来源客户ID（若推荐人注册时扫的是客户海报）
       ...(referrer.sourceCustomerId ? { customerId: referrer.sourceCustomerId } : {}),
       reviewStatus: 'pending_review',
@@ -327,9 +373,9 @@ export class ReferralService {
     // 更新推荐人累计数量
     await this.referrerModel.findByIdAndUpdate(referrer._id, { $inc: { totalReferrals: 1 } });
 
-    // 通知绑定员工
+    // 通知归属员工（assignedStaffId = 本次扫码海报员工，或回落 sourceStaffId，或兜底管理员）
     try {
-      const staff = await this.usersService.findById(referrer.sourceStaffId);
+      const staff = await this.usersService.findById(assignedStaffId);
       if (staff?.phone) {
         await this.sendNotification(
           staff.phone,
@@ -344,6 +390,60 @@ export class ReferralService {
     }
 
     return resume;
+  }
+
+  /**
+   * 解析本次推荐的归属员工（assignedStaffId）
+   * 优先使用入参 targetStaffId；若为空、无效或对应员工已离职，则回落 sourceStaffId；
+   * sourceStaffId 也已离职时，最终兜底为管理员 openid。
+   */
+  private async resolveAssignedStaffId(
+    targetStaffId: string | undefined,
+    sourceStaffId: string,
+  ): Promise<string> {
+    const candidate = targetStaffId && targetStaffId.trim() ? targetStaffId.trim() : sourceStaffId;
+    const staff = await this.usersService.findById(candidate).catch(() => null);
+    if (staff && staff.isActive !== false) return candidate;
+
+    // 候选员工离职或不存在，尝试回落 sourceStaffId（若候选本身就是 sourceStaffId 则跳过）
+    if (candidate !== sourceStaffId) {
+      const src = await this.usersService.findById(sourceStaffId).catch(() => null);
+      if (src && src.isActive !== false) {
+        this.logger.log(`[resolveAssignedStaffId] 目标员工 ${candidate} 已离职，回落至 sourceStaffId=${sourceStaffId}`);
+        return sourceStaffId;
+      }
+    }
+
+    // sourceStaffId 也已离职，兜底管理员
+    const admin = await this.usersService.findAdminUser();
+    if (!admin) {
+      this.logger.warn(`[resolveAssignedStaffId] 归属员工均已离职且未找到管理员，使用原始候选 ${candidate}`);
+      return candidate;
+    }
+    this.logger.log(`[resolveAssignedStaffId] 候选员工均已离职，兜底管理员 ${(admin._id as any).toString()}`);
+    return (admin._id as any).toString();
+  }
+
+  /**
+   * 按 staffId 查员工公共信息（供海报扫码落地页展示、离职判断）
+   * 返回字段刻意最小化，避免泄露敏感信息
+   */
+  async getStaffPublicInfo(staffId: string): Promise<{
+    _id: string;
+    name: string;
+    avatar?: string;
+    phone?: string;
+    isActive: boolean;
+  } | null> {
+    const user = await this.usersService.findById(staffId).catch(() => null);
+    if (!user) return null;
+    return {
+      _id: (user._id as any).toString(),
+      name: user.name,
+      avatar: user.avatar,
+      phone: user.phone,
+      isActive: user.isActive !== false,
+    };
   }
 
   // ============================================================
@@ -366,6 +466,9 @@ export class ReferralService {
     // 白名单：只返回列表页所需字段，不含任何内部字段或客户隐私
     const desensitized = list.map((item: any) => {
       const isContracted = ['contracted', 'onboarded', 'reward_pending', 'reward_paid'].includes(item.status);
+      // 已激活状态对小程序脱敏：推荐人只看到"推荐人已存在"，不暴露"已激活"字样
+      // （CRM 员工侧仍正常显示激活状态）
+      const isActivated = item.status === 'activated';
       return {
         _id:              item._id,
         // 展示字段（以 CRM 为准，覆盖本地库）
@@ -375,8 +478,8 @@ export class ReferralService {
         experience:       item.experience       ?? null,
         remark:           item.remark           ?? null,
         // 状态
-        status:           item.status,
-        statusLabel:      ReferralService.STATUS_LABEL[item.status] ?? item.status,
+        status:           isActivated ? 'referrer_exists' : item.status,
+        statusLabel:      isActivated ? '推荐人已存在' : (ReferralService.STATUS_LABEL[item.status] ?? item.status),
         // 时间轴
         contractSignedAt: item.contractSignedAt ?? null,
         onboardedAt:      item.onboardedAt      ?? null,
@@ -402,7 +505,10 @@ export class ReferralService {
     if (!resume) throw new NotFoundException('推荐记录不存在');
 
     const r = resume as any;
-    const isContracted = ['contracted', 'onboarded', 'reward_pending', 'reward_paid'].includes(r.status);
+    const isContracted = ['contracted', 'onboarded', 'reward_pending', 'reward_approved', 'reward_paid'].includes(r.status);
+    // 已激活状态对小程序脱敏：推荐人只看到"推荐人已存在"，不暴露"已激活"字样
+    // （CRM 员工侧通过 getAdminReferralDetail 仍拿到原始 activated 状态）
+    const isActivated = r.status === 'activated';
 
     // ⚡ 白名单：只返回小程序详情页所需字段，不含 referrerPhone / assignedStaffId 等内部字段
     const result: any = {
@@ -412,8 +518,8 @@ export class ReferralService {
       experience:        r.experience        ?? null,
       remark:            r.remark            ?? null,
       // 状态
-      status:            r.status,
-      statusLabel:       ReferralService.STATUS_LABEL[r.status] ?? r.status,
+      status:            isActivated ? 'referrer_exists' : r.status,
+      statusLabel:       isActivated ? '推荐人已存在' : (ReferralService.STATUS_LABEL[r.status] ?? r.status),
       reviewNote:        r.reviewNote ?? null,   // 审核备注（拒绝时由员工填写）
       // 时间轴
       createdAt:         r.createdAt         ?? null,
@@ -454,6 +560,46 @@ export class ReferralService {
         }
       } catch (err) {
         this.logger.warn(`getReferralDetail: 查询合同失败 contractId=${r.contractId} err=${err.message}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 推荐记录详情（CRM 管理员/员工视角，完整字段 + 关联合同数据）
+   */
+  async getAdminReferralDetail(id: string): Promise<any> {
+    const resume = await this.referralResumeModel.findById(id).lean().exec();
+    if (!resume) throw new NotFoundException('推荐记录不存在');
+    const r = resume as any;
+
+    const result: any = { ...r };
+
+    // 关联合同数据（同小程序详情逻辑，CRM 侧不脱敏）
+    if (r.contractId) {
+      try {
+        const contract = await this.contractModel
+          .findById(r.contractId)
+          .populate('createdBy', 'name')
+          .lean()
+          .exec();
+
+        if (contract) {
+          const c = contract as any;
+          result.contract = {
+            orderNumber:       c.contractNumber,
+            orderType:         c.contractType,
+            serviceFee:        c.customerServiceFee ?? null,
+            nannySalary:       c.workerSalary       ?? null,
+            onboardDate:       c.startDate          ?? null,
+            contractStartDate: c.startDate          ?? null,
+            contractEndDate:   c.endDate            ?? null,
+            createdByName:     c.createdBy && typeof c.createdBy === 'object' ? c.createdBy.name : null,
+          };
+        }
+      } catch (err) {
+        this.logger.warn(`getAdminReferralDetail: 查询合同失败 contractId=${r.contractId} err=${err.message}`);
       }
     }
 
@@ -625,6 +771,24 @@ export class ReferralService {
     }
 
     await this.referralResumeModel.findByIdAndUpdate(id, { status }).exec();
+
+    // 转到 reward_pending 时通知 rewardOwnerStaffId（返费待审核提醒）
+    if (status === 'reward_pending' && resume.rewardOwnerStaffId) {
+      try {
+        const staff = await this.usersService.findById(resume.rewardOwnerStaffId);
+        if (staff?.phone) {
+          await this.sendNotification(
+            staff.phone,
+            MiniProgramNotificationType.REFERRAL_SUBMITTED,
+            '有推荐记录进入返费待审核',
+            `推荐阿姨「${resume.name}」已上户，推荐记录进入返费待审核阶段，请及时处理`,
+            { referralResumeId: id },
+          );
+        }
+      } catch (err) {
+        this.logger.warn(`[updateReferralStatus] 通知返费待审核失败: ${(err as any).message}`);
+      }
+    }
   }
 
   /**
@@ -633,6 +797,7 @@ export class ReferralService {
    */
   async applySettlement(openid: string, data: {
     referralId: string;
+    idCard: string;       // 推荐人本人身份证号（防刷单）
     payeeName: string;
     payeePhone: string;
     bankCard: string;
@@ -654,9 +819,21 @@ export class ReferralService {
       throw new BadRequestException(`当前状态（${ReferralService.STATUS_LABEL[resume.status] ?? resume.status}）不允许申请结算，须在"已上户"状态下申请`);
     }
 
-    // 校验必填收款信息
+    // 校验必填字段（含身份证）
+    if (!data.idCard) {
+      throw new BadRequestException('身份证号为必填项，用于身份核验');
+    }
+    if (!/^\d{17}[\dXx]$/.test(data.idCard)) {
+      throw new BadRequestException('身份证号格式不正确，请填写18位居民身份证号');
+    }
     if (!data.payeeName || !data.payeePhone || !data.bankCard || !data.bankName) {
       throw new BadRequestException('收款人姓名、手机号、银行卡号、开户行均为必填项');
+    }
+
+    // 防刷单：若该推荐人档案已存有身份证，校验必须一致
+    const existingIdCard = (referrer as any).idCard;
+    if (existingIdCard && existingIdCard !== data.idCard) {
+      throw new BadRequestException('身份证号与注册信息不符，请核实后重新填写');
     }
 
     const now = new Date();
@@ -670,7 +847,14 @@ export class ReferralService {
       settlementAppliedAt:  now,
     }).exec();
 
-    this.logger.log(`[applySettlement] 推荐人 ${referrer.name} 申请结算，referralId=${data.referralId}`);
+    // 同步收款信息 + 身份证到推荐人档案
+    await this.referrerModel.findByIdAndUpdate(referrerId, {
+      idCard:         data.idCard,
+      bankCardNumber: data.bankCard,
+      bankName:       data.bankName,
+    }).exec();
+
+    this.logger.log(`[applySettlement] 推荐人 ${referrer.name} 申请结算，referralId=${data.referralId}，已同步身份证+银行卡`);
 
     // 通知 rewardOwnerStaffId 对应员工（返费归属人）有新的结算待审核
     if (resume.rewardOwnerStaffId) {
@@ -857,7 +1041,7 @@ export class ReferralService {
   // 管理员侧：全量推荐管理
   // ============================================================
 
-  /** 全量推荐记录查询 */
+  /** 全量推荐记录查询（附带推荐人来源员工 referrerSourceStaffId） */
   async listAllReferrals(filter: { assignedStaffId?: string; status?: string; page?: number; pageSize?: number }): Promise<any> {
     const { assignedStaffId, status, page = 1, pageSize = 20 } = filter;
     const skip = (page - 1) * pageSize;
@@ -865,11 +1049,54 @@ export class ReferralService {
     if (assignedStaffId) query.assignedStaffId = assignedStaffId;
     if (status) query.status = status;
 
-    const [list, total] = await Promise.all([
-      this.referralResumeModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(pageSize).lean().exec(),
+    // reward_pending / reward_approved / pending_review 置顶（需要人工处理），其余按创建时间倒序
+    const PRIORITY_ORDER = ['reward_pending', 'reward_approved', 'pending_review'];
+    const [sortedList, total] = await Promise.all([
+      this.referralResumeModel.aggregate([
+        { $match: query },
+        {
+          $addFields: {
+            _sortPriority: {
+              $switch: {
+                branches: PRIORITY_ORDER.map((s, i) => ({ case: { $eq: ['$status', s] }, then: i })),
+                default: PRIORITY_ORDER.length,
+              },
+            },
+          },
+        },
+        { $sort: { _sortPriority: 1, createdAt: -1 } },
+        { $skip: skip },
+        { $limit: pageSize },
+      ]).exec(),
       this.referralResumeModel.countDocuments(query),
     ]);
 
+    // 批量查询推荐人的 sourceStaffId（来源员工）
+    const referrerIds = Array.from(new Set(sortedList.map((r: any) => r.referrerId).filter(Boolean)));
+    const referrers = referrerIds.length
+      ? await this.referrerModel.find({ _id: { $in: referrerIds } }).select('_id sourceStaffId').lean().exec()
+      : [];
+    const sourceMap: Record<string, string> = {};
+    for (const r of referrers as any[]) sourceMap[r._id.toString()] = r.sourceStaffId;
+
+    // 收集所有需要查名字的员工 ID（来源员工 + 归属员工 + 返费归属员工），单次批量查询
+    const allStaffIds = Array.from(new Set([
+      ...Object.values(sourceMap).filter(Boolean),
+      ...sortedList.map((r: any) => r.assignedStaffId).filter(Boolean),
+      ...sortedList.map((r: any) => r.rewardOwnerStaffId).filter(Boolean),
+    ])) as string[];
+    const staffNameMap = await this.usersService.findNamesByIds(allStaffIds);
+
+    const list = sortedList.map((r: any) => {
+      const sourceStaffId = sourceMap[r.referrerId] || null;
+      return {
+        ...r,
+        referrerSourceStaffId: sourceStaffId,
+        referrerSourceStaffName: sourceStaffId ? (staffNameMap[sourceStaffId] ?? null) : null,
+        assignedStaffName: r.assignedStaffId ? (staffNameMap[r.assignedStaffId] ?? null) : null,
+        rewardOwnerStaffName: r.rewardOwnerStaffId ? (staffNameMap[r.rewardOwnerStaffId] ?? null) : null,
+      };
+    });
     return { list, total, page, pageSize };
   }
 
@@ -878,8 +1105,8 @@ export class ReferralService {
    * 解决小程序云函数 submitReferral 未调用 CRM 后端 API 的问题
    * @param adminStaffId 操作管理员ID（作为 assignedStaffId 的兜底值）
    */
-  async syncFromCloudDb(adminStaffId: string): Promise<{ imported: number; skipped: number; errors: number; details: string[] }> {
-    let imported = 0, skipped = 0, errors = 0;
+  async syncFromCloudDb(adminStaffId: string): Promise<{ imported: number; activated: number; skipped: number; errors: number; details: string[] }> {
+    let imported = 0, activated = 0, skipped = 0, errors = 0;
     const details: string[] = [];
 
     try {
@@ -893,12 +1120,43 @@ export class ReferralService {
       for (const record of cloudRecords) {
         const cloudId = record._id;
         try {
-          // 检查是否已导入
+          // 检查是否已导入（cloudDbId 去重，无论最终状态为 pending_review 还是 activated）
           const existing = await this.referralResumeModel.findOne({ cloudDbId: cloudId }).exec();
           if (existing) {
             skipped++;
             details.push(`跳过（已存在）: ${cloudId} - ${record.name}`);
             continue;
+          }
+
+          // 活跃推荐记录去重：排除 rejected/invalid/activated —
+          // activated 不阻断本次同步，简历库命中时每次都应单独落一条 activated 记录（与 submitReferral 对齐）
+          const activeNonActivatedStatuses = { $nin: ['rejected', 'invalid', 'activated'] };
+          if (record.phone) {
+            const phoneDup = await this.referralResumeModel.findOne({ phone: record.phone, status: activeNonActivatedStatuses }).select('_id').lean().exec();
+            if (phoneDup) {
+              skipped++;
+              details.push(`跳过（手机号重复）: ${cloudId} - ${record.name}（${record.phone}）`);
+              this.logger.warn(`[syncFromCloudDb] 手机号 ${record.phone} 已存在活跃推荐记录，跳过云DB记录 ${cloudId}`);
+              continue;
+            }
+          }
+          if (record.idCard) {
+            const idCardDup = await this.referralResumeModel.findOne({ idCard: record.idCard, status: activeNonActivatedStatuses }).select('_id').lean().exec();
+            if (idCardDup) {
+              skipped++;
+              details.push(`跳过（身份证重复）: ${cloudId} - ${record.name}（${record.idCard}）`);
+              this.logger.warn(`[syncFromCloudDb] 身份证 ${record.idCard} 已存在活跃推荐记录，跳过云DB记录 ${cloudId}`);
+              continue;
+            }
+          }
+
+          // 查找简历库已有档案，若命中则本次同步走 activated 路径
+          let existingResume: any = null;
+          if (record.phone) {
+            existingResume = await this.resumeService.findByPhone(record.phone);
+          }
+          if (!existingResume && record.idCard) {
+            existingResume = await this.resumeService.findByIdNumber(record.idCard);
           }
 
           // 根据 referrerOpenid 查找 CRM 推荐人
@@ -919,32 +1177,50 @@ export class ReferralService {
             ? referrer.sourceStaffId
             : adminStaffId;
 
-          // 计算审核截止时间（若云DB已有则使用，否则用当前+24h）
-          const reviewDeadlineAt = record.reviewDeadlineAt
-            ? new Date(record.reviewDeadlineAt)
-            : new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-          await this.referralResumeModel.create({
-            cloudDbId: cloudId,
-            referrerId: (referrer._id as any).toString(),
+          const baseDoc = {
+            cloudDbId:     cloudId,
+            referrerId:    (referrer._id as any).toString(),
             referrerPhone: referrer.phone,
-            referrerName: referrer.name,
-            name: record.name,
-            phone: record.phone || undefined,
-            idCard: record.idCard || undefined,
-            serviceType: record.serviceType,
-            experience: record.experience || undefined,
-            remark: record.remark || undefined,
+            referrerName:  referrer.name,
+            name:          record.name,
+            phone:         record.phone  || undefined,
+            idCard:        record.idCard || undefined,
+            serviceType:   record.serviceType,
+            experience:    record.experience || undefined,
+            remark:        record.remark     || undefined,
             assignedStaffId,
-            reviewStatus: 'pending_review',
-            status: 'pending_review',
-            reviewDeadlineAt,
-            rewardStatus: 'pending',
-          });
+            rewardStatus:  'pending' as const,
+          };
 
-          imported++;
-          details.push(`导入成功: ${cloudId} - ${record.name}（分配给员工 ${assignedStaffId}）`);
-          this.logger.log(`[syncFromCloudDb] ✅ 导入成功: cloudId=${cloudId} name=${record.name}`);
+          if (existingResume) {
+            // 简历库已存在 → 打激活标记 + 创建 activated 推荐记录（供审核页"已激活"标签页展示）
+            const resumeId = (existingResume as any)._id.toString();
+            await this.resumeService.markAsReferralActivated(resumeId, referrer.name);
+            await this.referralResumeModel.create({
+              ...baseDoc,
+              reviewStatus:   'activated',
+              status:         'activated',
+              linkedResumeId: resumeId,
+            });
+            activated++;
+            details.push(`激活（简历库已存在）: ${cloudId} - ${record.name}`);
+            this.logger.log(`[syncFromCloudDb] ✅ 激活简历: cloudId=${cloudId} resumeId=${resumeId} name=${record.name}`);
+          } else {
+            // 简历库无记录 → 正常导入为待审核
+            const reviewDeadlineAt = record.reviewDeadlineAt
+              ? new Date(record.reviewDeadlineAt)
+              : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+            await this.referralResumeModel.create({
+              ...baseDoc,
+              reviewStatus: 'pending_review',
+              status:       'pending_review',
+              reviewDeadlineAt,
+            });
+            imported++;
+            details.push(`导入成功: ${cloudId} - ${record.name}（分配给员工 ${assignedStaffId}）`);
+            this.logger.log(`[syncFromCloudDb] ✅ 导入成功: cloudId=${cloudId} name=${record.name}`);
+          }
         } catch (err) {
           errors++;
           details.push(`错误（导入失败）: ${cloudId} - ${err.message}`);
@@ -956,8 +1232,8 @@ export class ReferralService {
       throw err;
     }
 
-    this.logger.log(`[syncFromCloudDb] 完成：导入=${imported} 跳过=${skipped} 错误=${errors}`);
-    return { imported, skipped, errors, details };
+    this.logger.log(`[syncFromCloudDb] 完成：导入=${imported} 激活=${activated} 跳过=${skipped} 错误=${errors}`);
+    return { imported, activated, skipped, errors, details };
   }
 
   /** 重新分配绑定员工（管理员手动干预） */
@@ -1498,5 +1774,60 @@ export class ReferralService {
     if (data.bankCardNumber !== undefined) update.bankCardNumber = data.bankCardNumber;
     if (data.bankName !== undefined) update.bankName = data.bankName;
     await this.referrerModel.findByIdAndUpdate(referrerId, update).exec();
+  }
+
+  /** 删除单条推荐记录（仅管理员，硬删除） */
+  async deleteReferralResume(adminStaffId: string, referralResumeId: string): Promise<void> {
+    if (!Types.ObjectId.isValid(referralResumeId)) {
+      throw new BadRequestException('无效的推荐记录ID');
+    }
+    const resume = await this.referralResumeModel.findById(referralResumeId).exec();
+    if (!resume) throw new NotFoundException('推荐记录不存在');
+
+    await this.referralResumeModel.findByIdAndDelete(referralResumeId).exec();
+    this.logger.log(`[deleteReferralResume] 管理员 ${adminStaffId} 删除推荐记录 ${resume.name}（${referralResumeId}）`);
+  }
+
+  /** 删除推荐人（仅管理员）：同时软删除关联推荐简历（置为 invalid），并降级小程序角色 */
+  async deleteReferrer(adminStaffId: string, referrerId: string): Promise<void> {
+    if (!Types.ObjectId.isValid(referrerId)) {
+      throw new BadRequestException('无效的推荐人ID');
+    }
+    const referrer = await this.referrerModel.findById(referrerId).exec();
+    if (!referrer) throw new NotFoundException('推荐人不存在');
+
+    // 将该推荐人名下所有未终态的推荐记录标记为 invalid
+    await this.referralResumeModel.updateMany(
+      {
+        referrerId: referrerId,
+        status: { $nin: ['contracted', 'onboarded', 'reward_pending', 'reward_approved', 'reward_paid'] },
+      },
+      { status: 'invalid' },
+    ).exec();
+
+    await this.referrerModel.findByIdAndDelete(referrerId).exec();
+
+    // 同步降级小程序用户角色：推荐官 → staff（如果是员工）或 customer
+    // 严格遵循 PRD §10 角色优先级：admin > staff > referrer > customer
+    // admin_created_ 占位 openid 的推荐人无对应 mpUser，findByPhone 会返回 null，静默跳过
+    try {
+      const mpUser = await this.mpUserService.findByPhone(referrer.phone);
+      if (mpUser) {
+        const { role: resolvedRole } = await this.mpUserService.resolveUserRole(
+          (mpUser as any).openid,
+          referrer.phone,
+        );
+        // resolveUserRole 已去掉推荐人身份后实时计算：若是员工会返回 staff，否则返回 customer
+        // 但此时 referrers 记录刚被删除（上方 findByIdAndDelete），referrer 优先级自然失效
+        // 若仍返回推荐官（极端竞态），则强制降为 customer
+        const targetRole = (resolvedRole === '推荐官' || resolvedRole === 'referrer') ? 'customer' : resolvedRole;
+        await this.mpUserService.updateRoleByOpenid((mpUser as any).openid, targetRole);
+        this.logger.log(`[deleteReferrer] 已将 ${referrer.name} 小程序角色降级为 ${targetRole}`);
+      }
+    } catch (err) {
+      this.logger.warn(`[deleteReferrer] 降级小程序角色失败（不影响删除）: ${(err as Error).message}`);
+    }
+
+    this.logger.log(`[deleteReferrer] 管理员 ${adminStaffId} 删除推荐人 ${referrer.name}（${referrerId}）`);
   }
 }

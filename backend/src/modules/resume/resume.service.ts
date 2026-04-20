@@ -2234,13 +2234,13 @@ export class ResumeService {
   }
 
   /**
-   * 根据手机号获取CRM员工的姓名、头像、手机号（供安得褓贝小程序使用）
+   * 根据手机号获取CRM员工的姓名、头像、手机号、在职状态（供安得褓贝小程序使用）
    * 只查询CRM员工（User表），不查阿姨简历
    */
-  async getStaffInfoByPhone(phone: string): Promise<{ name: string; avatar: string; phone: string } | null> {
+  async getStaffInfoByPhone(phone: string): Promise<{ name: string; avatar: string; phone: string; isActive: boolean } | null> {
     const user = await this.userModel
       .findOne({ phone, active: true })
-      .select('name avatar phone')
+      .select('name avatar phone isActive')
       .lean()
       .exec();
 
@@ -2250,6 +2250,7 @@ export class ResumeService {
       name: (user as any).name || '',
       avatar: (user as any).avatar || '',
       phone: (user as any).phone || '',
+      isActive: (user as any).isActive !== false,
     };
   }
 

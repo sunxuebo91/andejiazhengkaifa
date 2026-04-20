@@ -13,7 +13,7 @@ import {
   Timeline,
   Empty
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, MessageOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, MessageOutlined, AuditOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { trainingLeadService } from '../../services/trainingLeadService';
 import {
@@ -25,10 +25,13 @@ import {
   LEAD_GRADE_OPTIONS
 } from '../../types/training-lead.types';
 import TrainingLeadFollowUpModal from '../../components/TrainingLeadFollowUpModal';
+import Authorized from '../../components/Authorized';
+import { useAuth } from '../../contexts/AuthContext';
 
 const TrainingLeadDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [lead, setLead] = useState<TrainingLead | null>(null);
   const [loading, setLoading] = useState(true);
   const [followUpModal, setFollowUpModal] = useState({
@@ -37,9 +40,32 @@ const TrainingLeadDetail: React.FC = () => {
     leadName: ''
   });
 
+  // 操作日志（仅管理员可见）
+  const [operationLogs, setOperationLogs] = useState<any[]>([]);
+  const [operationLogsLoading, setOperationLogsLoading] = useState(false);
+  const [showAllOperationLogs, setShowAllOperationLogs] = useState(false);
+
   useEffect(() => {
     fetchLeadDetail();
   }, [id]);
+
+  // 获取操作日志（仅管理员）
+  useEffect(() => {
+    const fetchOperationLogs = async () => {
+      if (!id || user?.role !== 'admin') return;
+      try {
+        setOperationLogsLoading(true);
+        const logs = await trainingLeadService.getOperationLogs(id);
+        setOperationLogs(Array.isArray(logs) ? logs : []);
+      } catch (e) {
+        console.error('获取操作日志失败', e);
+        setOperationLogs([]);
+      } finally {
+        setOperationLogsLoading(false);
+      }
+    };
+    fetchOperationLogs();
+  }, [id, user?.role]);
 
   const fetchLeadDetail = async () => {
     if (!id) {
@@ -273,6 +299,111 @@ const TrainingLeadDetail: React.FC = () => {
             <Empty description="暂无跟进记录" />
           )}
         </Card>
+
+        {/* 操作日志 - 仅管理员可见 */}
+        <Authorized role={['admin']} noMatch={null}>
+          <Card
+            title={
+              <Space>
+                <AuditOutlined />
+                <span>操作日志</span>
+                {operationLogs && operationLogs.length > 1 && (
+                  <Tag color="purple">{operationLogs.length} 条记录</Tag>
+                )}
+              </Space>
+            }
+            loading={operationLogsLoading}
+          >
+            {operationLogs && operationLogs.length > 0 ? (
+              <>
+                <Timeline
+                  mode="left"
+                  items={(showAllOperationLogs ? operationLogs : operationLogs.slice(0, 1)).map((log: any, idx: number) => {
+                    const operatedAt = log.operatedAt || log.createdAt;
+                    const operatorName = log.operator?.name || log.operator?.username || '系统';
+                    const colorMap: Record<string, string> = {
+                      'create': 'green',
+                      'update': 'blue',
+                      'delete': 'red',
+                      'assign': 'orange',
+                      'release_to_pool': 'orange',
+                      'claim_from_pool': 'cyan',
+                      'create_follow_up': 'purple',
+                      'change_status': 'geekblue',
+                    };
+                    const color = colorMap[log.operationType] || 'gray';
+                    const fieldNameMap: Record<string, string> = {
+                      name: '客户姓名', gender: '性别', age: '年龄', consultPosition: '咨询职位',
+                      phone: '手机号', wechatId: '微信号', leadSource: '线索来源',
+                      trainingType: '培训类型', intendedCourses: '意向课程', reportedCertificates: '已报证书',
+                      intentionLevel: '意向程度', leadGrade: '线索等级', expectedStartDate: '期望开课时间',
+                      budget: '预算金额', courseAmount: '报课金额', serviceFeeAmount: '服务费金额',
+                      isOnlineCourse: '网课', address: '所在地区', isReported: '是否报征',
+                      remarks: '备注信息', status: '线索状态', studentOwner: '学员归属',
+                    };
+                    return {
+                      key: log._id || idx,
+                      color,
+                      label: operatedAt ? dayjs(operatedAt).format('YYYY-MM-DD HH:mm:ss') : '-',
+                      children: (
+                        <Card size="small" style={{ backgroundColor: '#fafafa' }}>
+                          <Space direction="vertical" style={{ width: '100%' }}>
+                            <div>
+                              <strong>{log.operationName}</strong>
+                            </div>
+                            {log.details?.description && (
+                              <div style={{ fontSize: 12, color: '#666' }}>
+                                {log.details.description}
+                              </div>
+                            )}
+                            {log.operationType === 'update' && log.details?.before && log.details?.after && (
+                              <div style={{ marginTop: 8, fontSize: 12 }}>
+                                {Object.keys(log.details.after).map((field) => {
+                                  const beforeValue = log.details.before[field];
+                                  const afterValue = log.details.after[field];
+                                  const fieldLabel = fieldNameMap[field] || field;
+                                  const fmt = (v: any) => {
+                                    if (v === null || v === undefined || v === '') return '空';
+                                    if (Array.isArray(v)) return v.length ? v.join('、') : '空';
+                                    return String(v);
+                                  };
+                                  return (
+                                    <div key={field} style={{ padding: '4px 0', borderBottom: '1px dashed #e8e8e8' }}>
+                                      <span style={{ color: '#666', fontWeight: 500 }}>{fieldLabel}：</span>
+                                      <span style={{ color: '#ff4d4f', textDecoration: 'line-through' }}>{fmt(beforeValue)}</span>
+                                      <span style={{ margin: '0 8px', color: '#999' }}>→</span>
+                                      <span style={{ color: '#52c41a', fontWeight: 500 }}>{fmt(afterValue)}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <div style={{ fontSize: 12, color: '#999' }}>
+                              操作人：{operatorName}
+                            </div>
+                          </Space>
+                        </Card>
+                      ),
+                    };
+                  })}
+                />
+                {operationLogs.length > 1 && (
+                  <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                    <Button
+                      type="link"
+                      onClick={() => setShowAllOperationLogs(!showAllOperationLogs)}
+                      icon={showAllOperationLogs ? <UpOutlined /> : <DownOutlined />}
+                    >
+                      {showAllOperationLogs ? '收起日志' : `查看全部 ${operationLogs.length} 条日志`}
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <Empty description="暂无操作日志" style={{ padding: '40px 0' }} />
+            )}
+          </Card>
+        </Authorized>
       </Space>
 
       {/* 跟进记录弹窗 */}

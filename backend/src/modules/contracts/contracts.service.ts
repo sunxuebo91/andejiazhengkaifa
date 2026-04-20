@@ -1484,6 +1484,38 @@ export class ContractsService {
         serviceDays
       });
 
+      // 🔧 解析最终 workerId：保留前端传入的真实简历ID，仅在无效时才生成随机ID兜底
+      // （此前这里直接 new Types.ObjectId() 覆盖了前端传入的真实 workerId，导致换人合同与简历断链）
+      const rawWorkerId = (createContractDto as any).workerId;
+      const finalWorkerId = Types.ObjectId.isValid(rawWorkerId)
+        ? new Types.ObjectId(rawWorkerId)
+        : new Types.ObjectId();
+
+      // 🔧 根据 workerId 反查简历，用于补全前端未传的阿姨字段（phone/name/idCard/address）
+      // 直接用 resumeModel 查询，绕过 resumeService.findOne 的可见性过滤（该过滤针对前台请求场景）
+      let resumeForWorker: any = null;
+      if (Types.ObjectId.isValid(rawWorkerId)) {
+        try {
+          resumeForWorker = await this.resumeModel
+            .findById(new Types.ObjectId(rawWorkerId))
+            .select('name phone idNumber currentAddress')
+            .lean()
+            .exec();
+          this.logger.debug('📋 [换人合同] 根据 workerId 查到简历', {
+            workerId: String(rawWorkerId),
+            found: !!resumeForWorker,
+            hasName: !!resumeForWorker?.name,
+            hasPhone: !!resumeForWorker?.phone,
+            hasIdNumber: !!resumeForWorker?.idNumber,
+          });
+        } catch (error) {
+          this.logger.warn('⚠️ [换人合同] 根据 workerId 查简历失败', {
+            workerId: String(rawWorkerId),
+            error: error?.message,
+          });
+        }
+      }
+
       // 🆕 使用新的合同数据但保持客户信息一致
       const mergedContractData = {
         ...createContractDto,
@@ -1494,7 +1526,7 @@ export class ContractsService {
         customerId: originalContract.customerId || new Types.ObjectId(),
 
         // 处理新的服务人员信息（来自createContractDto）
-        workerId: new Types.ObjectId(),
+        workerId: finalWorkerId,
 
         // 设置创建人：优先使用传入的userId，其次继承原合同的创建人
         createdBy: Types.ObjectId.isValid(userId)
@@ -1505,15 +1537,31 @@ export class ContractsService {
         // 例如：原合同 2025-06-01 ~ 2026-05-31，换人后新合同为 2025-12-03（当日）~ 2026-05-31
         startDate: currentDate.toISOString(),  // 换人当日作为新合同开始时间
         endDate: originalEndDate.toISOString(),  // 结束时间保持原合同不变
-        
+
         // 合并状态管理
         isLatest: true,
         contractStatus: createContractDto.contractStatus || 'draft',
-        
+
         // 换人历史记录
         replacesContractId: originalContract._id,
         changeDate: currentDate
       };
+
+      // 🔧 从简历补全前端未传的阿姨字段（避免 Mongoose 校验因 workerPhone 等必填项缺失而失败）
+      if (resumeForWorker) {
+        if (!mergedContractData.workerName && resumeForWorker.name) {
+          (mergedContractData as any).workerName = resumeForWorker.name;
+        }
+        if (!mergedContractData.workerPhone && resumeForWorker.phone) {
+          (mergedContractData as any).workerPhone = resumeForWorker.phone;
+        }
+        if (!mergedContractData.workerIdCard && resumeForWorker.idNumber) {
+          (mergedContractData as any).workerIdCard = resumeForWorker.idNumber;
+        }
+        if (!mergedContractData.workerAddress && resumeForWorker.currentAddress) {
+          (mergedContractData as any).workerAddress = resumeForWorker.currentAddress;
+        }
+      }
 
       // 如果没有提供合同编号，使用爱签返回的编号或生成新的
       if (!mergedContractData.contractNumber) {

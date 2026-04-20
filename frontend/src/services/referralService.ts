@@ -35,7 +35,11 @@ export interface ReferralResume {
   experience?: string;
   remark?: string;
   assignedStaffId: string;
+  assignedStaffName?: string | null;       // 归属员工姓名（后端批量查询返回）
+  referrerSourceStaffId?: string | null;   // 推荐人的来源员工 ID（扫了谁的海报注册成推荐人）
+  referrerSourceStaffName?: string | null; // 来源员工姓名（后端批量查询返回）
   rewardOwnerStaffId?: string;
+  rewardOwnerStaffName?: string | null;    // 返费归属员工姓名（后端批量查询返回）
   reviewStatus: 'pending_review' | 'approved' | 'rejected' | 'activated';
   reviewDeadlineAt?: string;
   reviewedAt?: string;
@@ -50,7 +54,24 @@ export interface ReferralResume {
   rewardExpectedAt?: string;
   rewardPaidAt?: string;
   rewardStatus: string;
+  // 小程序结算申请时推荐人提交的收款信息
+  payeeName?: string;
+  payeePhone?: string;
+  bankCard?: string;
+  bankName?: string;
+  settlementAppliedAt?: string;
   createdAt: string;
+  // 关联合同数据（通过 admin/referral-detail/:id 接口获取）
+  contract?: {
+    orderNumber?: string;
+    orderType?: string;
+    serviceFee?: number;
+    nannySalary?: number;
+    onboardDate?: string;
+    contractStartDate?: string;
+    contractEndDate?: string;
+    createdByName?: string;
+  };
 }
 
 export interface BindingLog {
@@ -79,6 +100,9 @@ export const adminCreateReferrer = (adminStaffId: string, data: {
 
 export const updateReferrerInfo = (referrerId: string, data: { idCard?: string; bankCardNumber?: string; bankName?: string }) =>
   apiService.post(`${BASE}/admin/update-referrer-info`, { referrerId, ...data });
+
+export const deleteReferrer = (adminStaffId: string, referrerId: string) =>
+  apiService.post(`${BASE}/admin/delete-referrer`, { adminStaffId, referrerId });
 
 // ── 管理员：推荐人审批 ─────────────────────────────────────
 export const listPendingReferrers = (page = 1, pageSize = 20) =>
@@ -122,9 +146,15 @@ export const getBindingLogs = (referralResumeId: string) =>
 export const adminProcessReward = (adminStaffId: string, referralResumeId: string, action: string, remark?: string) =>
   apiService.post(`${BASE}/admin/process-reward`, { adminStaffId, referralResumeId, action, remark });
 
+export const getReferralAdminDetail = (id: string) =>
+  apiService.get<ReferralResume>(`${BASE}/admin/referral-detail/${id}`);
+
+export const deleteReferralResume = (adminStaffId: string, referralResumeId: string) =>
+  apiService.post(`${BASE}/admin/delete-referral`, { adminStaffId, referralResumeId });
+
 // ── 管理员：从小程序云数据库同步推荐记录 ─────────────────────
 export const syncFromCloudDb = (adminStaffId: string) =>
-  apiService.post<{ imported: number; skipped: number; errors: number; details: string[] }>(
+  apiService.post<{ imported: number; activated: number; skipped: number; errors: number; details: string[] }>(
     `${BASE}/admin/sync-cloud-referrals`,
     { adminStaffId },
   );

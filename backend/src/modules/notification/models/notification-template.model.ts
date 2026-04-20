@@ -50,6 +50,9 @@ export enum NotificationType {
   WEEKLY_REPORT = 'WEEKLY_REPORT',                     // 周报
   MONTHLY_REPORT = 'MONTHLY_REPORT',                   // 月报
 
+  // 推荐奖励系统（CRM 侧铃铛通知）
+  REFERRAL_NEW_REFERRER_APPROVAL = 'REFERRAL_NEW_REFERRER_APPROVAL', // 新推荐人待审批（通知管理员/来源员工）
+
   // 系统相关
   SYSTEM_ANNOUNCEMENT = 'SYSTEM_ANNOUNCEMENT',         // 系统公告
   PERMISSION_CHANGED = 'PERMISSION_CHANGED',           // 权限变更

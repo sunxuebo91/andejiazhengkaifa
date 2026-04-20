@@ -88,9 +88,9 @@ export class TrainingLeadsMiniProgramController {
   @Permissions('training-lead:edit')
   @ApiOperation({ summary: '【小程序】更新学员线索' })
   @ApiParam({ name: 'id', description: '线索ID' })
-  async updateLead(@Param('id') id: string, @Body() dto: UpdateTrainingLeadDto) {
+  async updateLead(@Param('id') id: string, @Body() dto: UpdateTrainingLeadDto, @Request() req) {
     try {
-      const lead = await this.trainingLeadsService.update(id, dto);
+      const lead = await this.trainingLeadsService.update(id, dto, req.user?.userId);
       return { success: true, data: lead, message: '线索更新成功' };
     } catch (error: any) {
       return { success: false, message: error.message || '更新失败' };
@@ -148,12 +148,13 @@ export class TrainingLeadsMiniProgramController {
   async assignLead(
     @Param('id') id: string,
     @Body() body: { assignedTo: string; studentOwner?: string },
+    @Request() req,
   ) {
     try {
       const updateData: any = { assignedTo: body.assignedTo };
       if (body.studentOwner) updateData.studentOwner = body.studentOwner;
       else updateData.studentOwner = body.assignedTo; // 默认归属=跟进人
-      const lead = await this.trainingLeadsService.update(id, updateData);
+      const lead = await this.trainingLeadsService.update(id, updateData, req.user?.userId);
       return { success: true, data: lead, message: '线索分配成功' };
     } catch (error: any) {
       return { success: false, message: error.message || '分配失败' };
@@ -168,9 +169,10 @@ export class TrainingLeadsMiniProgramController {
   async updateStatus(
     @Param('id') id: string,
     @Body() body: { status: string },
+    @Request() req,
   ) {
     try {
-      const lead = await this.trainingLeadsService.update(id, { status: body.status } as any);
+      const lead = await this.trainingLeadsService.update(id, { status: body.status } as any, req.user?.userId);
       return { success: true, data: lead, message: '状态更新成功' };
     } catch (error: any) {
       return { success: false, message: error.message || '状态更新失败' };
@@ -182,9 +184,9 @@ export class TrainingLeadsMiniProgramController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '【小程序】删除线索' })
   @ApiParam({ name: 'id', description: '线索ID' })
-  async deleteLead(@Param('id') id: string) {
+  async deleteLead(@Param('id') id: string, @Request() req) {
     try {
-      await this.trainingLeadsService.remove(id);
+      await this.trainingLeadsService.remove(id, req.user?.userId);
       return { success: true, message: '线索删除成功' };
     } catch (error: any) {
       return { success: false, message: error.message || '删除失败' };

@@ -13,6 +13,7 @@ import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import { TrainingLead, TrainingLeadDocument, LeadStatus } from './models/training-lead.model';
 import { TrainingLeadFollowUp, TrainingLeadFollowUpDocument } from './models/training-lead-follow-up.model';
+import { TrainingLeadOperationLog } from './models/training-lead-operation-log.model';
 import { CreateTrainingLeadDto } from './dto/create-training-lead.dto';
 import { UpdateTrainingLeadDto } from './dto/update-training-lead.dto';
 import { TrainingLeadQueryDto } from './dto/training-lead-query.dto';
@@ -27,10 +28,72 @@ export class TrainingLeadsService {
   constructor(
     @InjectModel(TrainingLead.name) private trainingLeadModel: Model<TrainingLeadDocument>,
     @InjectModel(TrainingLeadFollowUp.name) private followUpModel: Model<TrainingLeadFollowUpDocument>,
+    @InjectModel(TrainingLeadOperationLog.name) private operationLogModel: Model<TrainingLeadOperationLog>,
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly jwtService: JwtService,
     private readonly notificationHelper: NotificationHelperService,
   ) {}
+
+  /**
+   * 记录学员线索操作日志
+   */
+  async logOperation(
+    leadId: string | Types.ObjectId,
+    operatorId: string,
+    operationType: string,
+    operationName: string,
+    details?: {
+      before?: Record<string, any>;
+      after?: Record<string, any>;
+      description?: string;
+      relatedId?: string;
+      relatedType?: string;
+    }
+  ): Promise<void> {
+    try {
+      const isValidObjectId = (id: string) => /^[a-fA-F0-9]{24}$/.test(id);
+      const operatorObjectId = operatorId && isValidObjectId(operatorId)
+        ? new Types.ObjectId(operatorId)
+        : new Types.ObjectId('000000000000000000000000');
+
+      await this.operationLogModel.create({
+        leadId: new Types.ObjectId(leadId.toString()),
+        operatorId: operatorObjectId,
+        entityType: 'training_lead',
+        entityId: leadId.toString(),
+        operationType,
+        operationName,
+        details,
+        operatedAt: new Date(),
+      });
+    } catch (error: any) {
+      this.logger.warn(`写入学员线索操作日志失败: ${error?.message}`);
+    }
+  }
+
+  /**
+   * 获取学员线索操作日志
+   */
+  async getOperationLogs(leadId: string): Promise<any[]> {
+    const lead = await this.trainingLeadModel.findById(leadId);
+    if (!lead) {
+      throw new NotFoundException('培训线索不存在');
+    }
+    return this.operationLogModel
+      .find({ leadId: new Types.ObjectId(leadId) })
+      .populate('operatorId', 'name username')
+      .sort({ operatedAt: -1 })
+      .lean()
+      .exec()
+      .then((logs: any[]) =>
+        logs.map((log) => ({
+          ...log,
+          operator: log.operatorId && typeof log.operatorId === 'object' && log.operatorId._id
+            ? { _id: log.operatorId._id, name: log.operatorId.name, username: log.operatorId.username }
+            : null,
+        }))
+      );
+  }
 
   /**
    * 生成学员编号
@@ -89,6 +152,25 @@ export class TrainingLeadsService {
     const saved = await lead.save();
 
     this.logger.log(`培训线索创建成功: ${saved.studentId}`);
+
+    // 📝 记录操作日志 - 创建线索
+    await this.logOperation(
+      (saved as any)._id.toString(),
+      userId,
+      'create',
+      '创建学员线索',
+      {
+        description: `创建学员线索：${saved.name}（${saved.studentId}）`,
+        after: {
+          name: saved.name,
+          phone: saved.phone || '',
+          wechatId: saved.wechatId || '',
+          leadSource: saved.leadSource || '',
+          intentionLevel: saved.intentionLevel || '',
+          leadGrade: saved.leadGrade || '',
+        },
+      }
+    );
 
     // 🔔 通知管理员：新线索创建
     try {
@@ -469,7 +551,7 @@ export class TrainingLeadsService {
   /**
    * 更新培训线索
    */
-  async update(id: string, updateDto: UpdateTrainingLeadDto): Promise<TrainingLead> {
+  async update(id: string, updateDto: UpdateTrainingLeadDto, userId?: string): Promise<TrainingLead> {
     this.logger.log(`更新培训线索: ${id}, 数据: ${JSON.stringify(updateDto)}`);
 
     const lead = await this.trainingLeadModel.findById(id);
@@ -485,6 +567,9 @@ export class TrainingLeadsService {
       }
     }
 
+    // 保留修改前的值，用于后续写操作日志
+    const leadBeforeSnapshot: any = (lead as any).toObject ? (lead as any).toObject() : { ...(lead as any) };
+
     // 处理日期字段
     const updateData: any = { ...updateDto };
     if (updateDto.expectedStartDate) {
@@ -498,7 +583,9 @@ export class TrainingLeadsService {
     }
 
     // 标记为无效线索时自动流入公海池
-    if (updateDto.status === LeadStatus.INVALID && lead.status !== LeadStatus.INVALID) {
+    const wasMarkedInvalid =
+      updateDto.status === LeadStatus.INVALID && lead.status !== LeadStatus.INVALID;
+    if (wasMarkedInvalid) {
       updateData.inPublicPool = true;
       updateData.publicPoolAt = new Date();
       updateData.publicPoolReason = 'invalid';
@@ -512,6 +599,19 @@ export class TrainingLeadsService {
 
     this.logger.log(`培训线索更新成功: ${updated.studentId}`);
 
+    // 📝 记录操作日志 - 编辑线索 / 分配 / 变更状态 / 释放到公海
+    if (userId) {
+      await this.writeUpdateOperationLogs(
+        id,
+        userId,
+        updateDto,
+        leadBeforeSnapshot,
+        updated,
+        prevOwnerId,
+        wasMarkedInvalid
+      );
+    }
+
     // 🔔 通知新负责人：线索已分配给你
     const newOwnerId = updateDto.studentOwner;
     if (newOwnerId && newOwnerId !== prevOwnerId) {
@@ -523,6 +623,91 @@ export class TrainingLeadsService {
     }
 
     return updated;
+  }
+
+  /**
+   * 根据 update DTO 拆分记录多条操作日志（字段修改 / 分配负责人 / 状态变更 / 自动流入公海）
+   */
+  private async writeUpdateOperationLogs(
+    leadId: string,
+    userId: string,
+    updateDto: UpdateTrainingLeadDto,
+    before: any,
+    after: any,
+    prevOwnerId: string | undefined,
+    wasMarkedInvalid: boolean,
+  ): Promise<void> {
+    // 1) 分配负责人变更
+    if (updateDto.studentOwner !== undefined) {
+      const newOwnerId = updateDto.studentOwner ? String(updateDto.studentOwner) : '';
+      if (newOwnerId && newOwnerId !== (prevOwnerId || '')) {
+        let prevOwnerName = '-';
+        let newOwnerName = '-';
+        try {
+          if (prevOwnerId) {
+            const u = await this.userModel.findById(prevOwnerId).select('name username').lean();
+            prevOwnerName = (u as any)?.name || (u as any)?.username || '-';
+          }
+          const nu = await this.userModel.findById(newOwnerId).select('name username').lean();
+          newOwnerName = (nu as any)?.name || (nu as any)?.username || '-';
+        } catch (_) {}
+        await this.logOperation(leadId, userId, 'assign', '分配负责人', {
+          description: `学员归属由【${prevOwnerName}】变更为【${newOwnerName}】`,
+          before: { studentOwner: prevOwnerName },
+          after: { studentOwner: newOwnerName },
+        });
+      }
+    }
+
+    // 2) 状态变更（status）
+    if (updateDto.status !== undefined && updateDto.status !== before.status) {
+      await this.logOperation(leadId, userId, 'change_status', '变更线索状态', {
+        description: `状态由【${before.status || '-'}】变更为【${updateDto.status}】`,
+        before: { status: before.status },
+        after: { status: updateDto.status },
+      });
+    }
+
+    // 3) 标记无效 → 自动流入公海
+    if (wasMarkedInvalid) {
+      await this.logOperation(leadId, userId, 'release_to_pool', '标记无效，流入公海', {
+        description: '线索被标记为无效，自动流入公海池',
+      });
+    }
+
+    // 4) 其他字段编辑（字段差异）
+    const fieldNameMap: Record<string, string> = {
+      name: '客户姓名', gender: '性别', age: '年龄', consultPosition: '咨询职位',
+      phone: '手机号', wechatId: '微信号', leadSource: '线索来源',
+      trainingType: '培训类型', intendedCourses: '意向课程', reportedCertificates: '已报证书',
+      intentionLevel: '意向程度', leadGrade: '线索等级', expectedStartDate: '期望开课时间',
+      budget: '预算金额', courseAmount: '报课金额', serviceFeeAmount: '服务费金额',
+      isOnlineCourse: '网课', address: '所在地区', isReported: '是否报征',
+      remarks: '备注信息',
+    };
+    const trackedFields = Object.keys(fieldNameMap);
+    const beforeData: Record<string, any> = {};
+    const afterData: Record<string, any> = {};
+    const changed: string[] = [];
+    for (const f of trackedFields) {
+      if (!(f in updateDto)) continue;
+      const newVal = (updateDto as any)[f];
+      const oldVal = (before as any)[f];
+      const norm = (v: any) => (Array.isArray(v) ? v.join(',') : v instanceof Date ? v.toISOString() : String(v ?? ''));
+      if (norm(oldVal) !== norm(newVal)) {
+        changed.push(f);
+        beforeData[f] = Array.isArray(oldVal) ? oldVal : oldVal ?? '';
+        afterData[f] = Array.isArray(newVal) ? newVal : newVal ?? '';
+      }
+    }
+    if (changed.length > 0) {
+      const names = changed.map(f => fieldNameMap[f]).join('、');
+      await this.logOperation(leadId, userId, 'update', '编辑学员信息', {
+        description: `修改了：${names}`,
+        before: beforeData,
+        after: afterData,
+      });
+    }
   }
 
   /**
@@ -556,6 +741,12 @@ export class TrainingLeadsService {
     );
 
     this.logger.log(`线索 ${lead.studentId} 被用户 ${userId} 手动释放到公海池`);
+
+    // 📝 记录操作日志 - 释放到公海
+    await this.logOperation(id, userId, 'release_to_pool', '释放到公海池', {
+      description: `将学员线索【${lead.name}】释放到公海池`,
+    });
+
     return updated as TrainingLead;
   }
 
@@ -586,18 +777,36 @@ export class TrainingLeadsService {
     }
 
     this.logger.log(`线索 ${(updated as any).studentId} 被用户 ${userId} 认领`);
+
+    // 📝 记录操作日志 - 从公海领取
+    await this.logOperation(id, userId, 'claim_from_pool', '从公海领取', {
+      description: `从公海池认领学员线索【${updated.name}】`,
+    });
+
     return updated as TrainingLead;
   }
 
   /**
    * 删除培训线索
    */
-  async remove(id: string): Promise<void> {
+  async remove(id: string, userId?: string): Promise<void> {
     this.logger.log(`删除培训线索: ${id}`);
 
     const lead = await this.trainingLeadModel.findById(id);
     if (!lead) {
       throw new NotFoundException('培训线索不存在');
+    }
+
+    // 📝 记录操作日志 - 删除线索（在删除前记录）
+    if (userId) {
+      await this.logOperation(id, userId, 'delete', '删除学员线索', {
+        description: `删除学员线索：${lead.name}（${lead.studentId}）`,
+        before: {
+          name: lead.name,
+          phone: lead.phone || '',
+          studentId: lead.studentId,
+        },
+      });
     }
 
     // 删除相关的跟进记录
@@ -659,6 +868,24 @@ export class TrainingLeadsService {
       .exec();
 
     this.logger.log(`跟进记录创建成功`);
+
+    // 📝 记录操作日志 - 添加跟进记录
+    await this.logOperation(
+      leadId,
+      userId,
+      'create_follow_up',
+      '添加跟进记录',
+      {
+        description: `新增跟进记录：${createDto.type || ''}${createDto.followUpResult ? ' / ' + createDto.followUpResult : ''}`,
+        relatedId: (saved as any)._id.toString(),
+        relatedType: 'follow_up',
+        after: {
+          type: createDto.type,
+          followUpResult: createDto.followUpResult,
+          content: (createDto.content || '').slice(0, 200),
+        },
+      }
+    );
 
     // 🔔 通知线索负责人：有人跟进了你的线索（跟进人 ≠ 负责人时才通知）
     const ownerId = lead.studentOwner?.toString();

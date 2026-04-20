@@ -337,19 +337,25 @@ export class MiniProgramUserService {
 
   /**
    * 根据openid获取用户完整信息（含isStaff判断，供小程序个人中心使用）
+   * 注意：role 字段通过 resolveUserRole 实时计算，严格遵循 admin > staff > referrer > customer 优先级，
+   * 而不是直接返回数据库中存储的 role 字段，以防止角色字段未及时同步导致的显示错误。
    */
   async getInfoByOpenid(openid: string): Promise<any> {
     const user = await this.miniProgramUserModel.findOne({ openid }).lean().exec();
     if (!user) return null;
 
-    const isStaff = await this.checkIsStaff((user as any).phone);
+    const phone = (user as any).phone;
+    const { role, isAdmin, isStaff } = await this.resolveUserRole(openid, phone);
+
     const userObj = { ...user };
     delete (userObj as any).password;
 
     return {
       ...userObj,
-      hasPhone: !!(user as any).phone,
+      role,       // 覆盖数据库中可能过期的 role 字段
+      hasPhone: !!phone,
       isStaff,
+      isAdmin,
     };
   }
 

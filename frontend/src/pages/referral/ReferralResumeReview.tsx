@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import {
   Card, Table, Button, Space, Tag, Modal, Input, App, Tabs,
-  Descriptions, Select, Tooltip, Badge,
+  Descriptions, Select, Tooltip, Badge, Spin, Divider,
 } from 'antd';
 import { CheckOutlined, CloseOutlined, EyeOutlined, SwapOutlined, SyncOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -13,7 +13,7 @@ import type { ReferralResume } from '../../services/referralService';
 const { TextArea } = Input;
 const { Option } = Select;
 
-import { RESUME_STATUS_MAP as STATUS_MAP, REVIEW_STATUS_MAP } from './constants';
+import { RESUME_STATUS_MAP as STATUS_MAP, REVIEW_STATUS_MAP, REWARD_STATUS_MAP } from './constants';
 
 /** 工种英文 key → 中文 label（兼容历史中文值直接透传） */
 const JOB_TYPE_LABEL: Record<string, string> = {
@@ -43,6 +43,16 @@ const ReferralResumeReview: React.FC = () => {
 
   // 详情弹窗
   const [detailModal, setDetailModal] = useState<{ open: boolean; record: ReferralResume | null }>({ open: false, record: null });
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const openDetail = async (base: ReferralResume) => {
+    setDetailModal({ open: true, record: base });
+    setDetailLoading(true);
+    try {
+      const res = await referralService.getReferralAdminDetail(base._id);
+      if (res.success && res.data) setDetailModal({ open: true, record: res.data });
+    } catch { /* 用列表数据兜底 */ } finally { setDetailLoading(false); }
+  };
 
   // 审核弹窗
   const [reviewModal, setReviewModal] = useState<{ open: boolean; id: string; action: 'approve' | 'reject' | null }>({ open: false, id: '', action: null });
@@ -102,11 +112,16 @@ const ReferralResumeReview: React.FC = () => {
     try {
       const res = await referralService.syncFromCloudDb(user.id);
       if (res.success && res.data) {
-        const { imported, skipped, errors } = res.data;
-        if (imported > 0) {
-          message.success(`同步完成：新导入 ${imported} 条，跳过 ${skipped} 条${errors > 0 ? `，错误 ${errors} 条` : ''}`);
+        const { imported, activated = 0, skipped, errors } = res.data;
+        if (imported > 0 || activated > 0) {
+          const parts: string[] = [];
+          if (imported > 0)  parts.push(`新导入 ${imported} 条待审核`);
+          if (activated > 0) parts.push(`新激活 ${activated} 条`);
+          if (skipped > 0)   parts.push(`跳过 ${skipped} 条`);
+          if (errors > 0)    parts.push(`错误 ${errors} 条`);
+          message.success(`同步完成：${parts.join('，')}`);
           fetchList(tabToReviewStatus(activeTab) as string, 1);
-        } else if (skipped > 0 && imported === 0 && errors === 0) {
+        } else if (skipped > 0 && errors === 0) {
           message.info(`同步完成：${skipped} 条已存在，无新数据`);
         } else {
           message.info('暂无待同步数据');
@@ -244,7 +259,7 @@ const ReferralResumeReview: React.FC = () => {
       fixed: 'right',
       render: (_, record) => (
         <Space size="small" wrap>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailModal({ open: true, record })}>详情</Button>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(record)}>详情</Button>
           {record.reviewStatus === 'pending_review' && (
             <>
               <Button type="primary" size="small" icon={<CheckOutlined />}
@@ -330,28 +345,82 @@ const ReferralResumeReview: React.FC = () => {
       </Card>
 
       {/* 详情弹窗 */}
-      <Modal title="推荐简历详情" open={detailModal.open} onCancel={() => setDetailModal({ open: false, record: null })} footer={null} width={640}>
-        {record && (
-          <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="阿姨姓名">{record.name}</Descriptions.Item>
-            <Descriptions.Item label="阿姨工种">{record.serviceType}</Descriptions.Item>
-            <Descriptions.Item label="阿姨电话">{record.phone || '-'}</Descriptions.Item>
-            <Descriptions.Item label="身份证号">{record.idCard || '-'}</Descriptions.Item>
-            <Descriptions.Item label="从业经验" span={2}>{record.experience || '-'}</Descriptions.Item>
-            <Descriptions.Item label="推荐人备注" span={2}>{record.remark || '-'}</Descriptions.Item>
-            <Descriptions.Item label="推荐人姓名">{record.referrerName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="推荐人电话">{record.referrerPhone}</Descriptions.Item>
-            <Descriptions.Item label="整体状态">
-              {(() => { const item = STATUS_MAP[record.status]; return <Tag color={item?.color}>{item?.label || record.status}</Tag>; })()}
-            </Descriptions.Item>
-            <Descriptions.Item label="审核状态">
-              {(() => { const item = REVIEW_STATUS_MAP[record.reviewStatus]; return <Tag color={item?.color}>{item?.label || record.reviewStatus}</Tag>; })()}
-            </Descriptions.Item>
-            <Descriptions.Item label="审核备注">{record.reviewNote || '-'}</Descriptions.Item>
-            {record.contractSignedAt && <><Descriptions.Item label="签单时间">{new Date(record.contractSignedAt).toLocaleDateString('zh-CN')}</Descriptions.Item><Descriptions.Item label="服务费">¥{record.serviceFee ?? '-'}</Descriptions.Item><Descriptions.Item label="预计返费">¥{record.rewardAmount ?? '-'}</Descriptions.Item><Descriptions.Item label="预计到账">{record.rewardExpectedAt ? new Date(record.rewardExpectedAt).toLocaleDateString('zh-CN') : '-'}</Descriptions.Item></>}
-            <Descriptions.Item label="提交时间" span={2}>{new Date(record.createdAt).toLocaleString('zh-CN')}</Descriptions.Item>
-          </Descriptions>
-        )}
+      <Modal title="推荐简历详情" open={detailModal.open} onCancel={() => setDetailModal({ open: false, record: null })} footer={null} width={680}>
+        <Spin spinning={detailLoading}>
+        {record && (() => {
+          const onboardedDays = record.onboardedAt ? Math.floor((Date.now() - new Date(record.onboardedAt).getTime()) / 86400000) : null;
+          const remainDays = record.rewardExpectedAt ? Math.ceil((new Date(record.rewardExpectedAt).getTime() - Date.now()) / 86400000) : null;
+          return (
+            <>
+              <Divider orientation="left" orientationMargin={0} style={{ fontSize: 13 }}>推荐信息</Divider>
+              <Descriptions column={2} bordered size="small">
+                <Descriptions.Item label="阿姨姓名">{record.name}</Descriptions.Item>
+                <Descriptions.Item label="阿姨工种">{JOB_TYPE_LABEL[record.serviceType] || record.serviceType}</Descriptions.Item>
+                <Descriptions.Item label="阿姨电话">{record.phone || '-'}</Descriptions.Item>
+                <Descriptions.Item label="身份证号">{record.idCard || '-'}</Descriptions.Item>
+                <Descriptions.Item label="从业经验" span={2}>{record.experience || '-'}</Descriptions.Item>
+                <Descriptions.Item label="推荐人备注" span={2}>{record.remark || '-'}</Descriptions.Item>
+                <Descriptions.Item label="推荐人姓名">{record.referrerName || '-'}</Descriptions.Item>
+                <Descriptions.Item label="推荐人电话">{record.referrerPhone}</Descriptions.Item>
+                <Descriptions.Item label="整体状态">
+                  {(() => { const item = STATUS_MAP[record.status]; return <Tag color={item?.color}>{item?.label || record.status}</Tag>; })()}
+                </Descriptions.Item>
+                <Descriptions.Item label="简历审核">
+                  {(() => { const item = REVIEW_STATUS_MAP[record.reviewStatus]; return <Tag color={item?.color}>{item?.label || record.reviewStatus}</Tag>; })()}
+                </Descriptions.Item>
+                <Descriptions.Item label="审核备注" span={2}>{record.reviewNote || '-'}</Descriptions.Item>
+                <Descriptions.Item label="提交时间" span={2}>{new Date(record.createdAt).toLocaleString('zh-CN')}</Descriptions.Item>
+              </Descriptions>
+
+              {record.contractSignedAt && <>
+                <Divider orientation="left" orientationMargin={0} style={{ fontSize: 13, marginTop: 12 }}>签单信息</Divider>
+                <Descriptions column={2} bordered size="small">
+                  <Descriptions.Item label="签单时间">{new Date(record.contractSignedAt).toLocaleDateString('zh-CN')}</Descriptions.Item>
+                  <Descriptions.Item label="上户时间">{record.onboardedAt ? new Date(record.onboardedAt).toLocaleDateString('zh-CN') : '-'}</Descriptions.Item>
+                  {onboardedDays !== null && <Descriptions.Item label="上户已满" span={2}>
+                    <span style={{ color: onboardedDays >= 30 ? '#52c41a' : '#fa8c16' }}>{onboardedDays} 天</span>
+                    {remainDays !== null && remainDays > 0 && <span style={{ color: '#999', marginLeft: 8 }}>（还需 {remainDays} 天）</span>}
+                    {remainDays !== null && remainDays <= 0 && <span style={{ color: '#52c41a', marginLeft: 8 }}>✅ 已满足结算条件</span>}
+                  </Descriptions.Item>}
+                  <Descriptions.Item label="客户服务费">¥{record.serviceFee ?? '-'}</Descriptions.Item>
+                  <Descriptions.Item label="预计返费" ><span style={{ color: '#52c41a', fontWeight: 600 }}>¥{record.rewardAmount ?? '-'}</span></Descriptions.Item>
+                  <Descriptions.Item label="预计到账">{record.rewardExpectedAt ? new Date(record.rewardExpectedAt).toLocaleDateString('zh-CN') : '-'}</Descriptions.Item>
+                  <Descriptions.Item label="到账状态">
+                    {(() => { const item = REWARD_STATUS_MAP[record.rewardStatus]; return item ? <Tag color={item.color}>{item.label}</Tag> : <Tag>{record.rewardStatus || '-'}</Tag>; })()}
+                  </Descriptions.Item>
+                </Descriptions>
+              </>}
+
+              {record.contract && <>
+                <Divider orientation="left" orientationMargin={0} style={{ fontSize: 13, marginTop: 12 }}>合同记录</Divider>
+                <Descriptions column={2} bordered size="small">
+                  <Descriptions.Item label="订单编号" span={2}><span style={{ color: '#1677ff', wordBreak: 'break-all' }}>{record.contract.orderNumber || '-'}</span></Descriptions.Item>
+                  <Descriptions.Item label="订单类型">{record.contract.orderType || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="服务费金额"><span style={{ color: '#fa8c16', fontWeight: 600 }}>¥{record.contract.serviceFee ?? '-'}</span></Descriptions.Item>
+                  <Descriptions.Item label="阿姨工资">¥{record.contract.nannySalary ?? '-'}/月</Descriptions.Item>
+                  <Descriptions.Item label="上户时间">{record.contract.onboardDate ? new Date(record.contract.onboardDate).toLocaleDateString('zh-CN') : '-'}</Descriptions.Item>
+                  <Descriptions.Item label="合同周期" span={2}>
+                    {record.contract.contractStartDate && record.contract.contractEndDate
+                      ? `${new Date(record.contract.contractStartDate).toLocaleDateString('zh-CN')} 至 ${new Date(record.contract.contractEndDate).toLocaleDateString('zh-CN')}`
+                      : '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="合同创建人">{record.contract.createdByName || '-'}</Descriptions.Item>
+                </Descriptions>
+              </>}
+
+              {['reward_pending', 'reward_approved', 'reward_paid'].includes(record.status) && (record.payeeName || record.bankCard) && <>
+                <Divider orientation="left" orientationMargin={0} style={{ fontSize: 13, marginTop: 12 }}>收款信息</Divider>
+                <Descriptions column={2} bordered size="small">
+                  <Descriptions.Item label="收款人">{record.payeeName || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="收款手机">{record.payeePhone || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="银行卡号">{record.bankCard || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="开户行">{record.bankName || '-'}</Descriptions.Item>
+                </Descriptions>
+              </>}
+            </>
+          );
+        })()}
+        </Spin>
       </Modal>
 
       {/* 审核弹窗 */}

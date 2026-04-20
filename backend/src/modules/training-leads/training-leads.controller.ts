@@ -378,8 +378,8 @@ export class TrainingLeadsController {
   @ApiResponse({ status: 200, description: '更新成功' })
   @ApiResponse({ status: 404, description: '线索不存在' })
   @ApiResponse({ status: 409, description: '手机号已存在' })
-  async update(@Param('id') id: string, @Body() updateDto: UpdateTrainingLeadDto) {
-    const lead = await this.trainingLeadsService.update(id, updateDto);
+  async update(@Param('id') id: string, @Body() updateDto: UpdateTrainingLeadDto, @Request() req) {
+    const lead = await this.trainingLeadsService.update(id, updateDto, req.user?.userId);
     return {
       success: true,
       data: lead,
@@ -393,11 +393,32 @@ export class TrainingLeadsController {
   @ApiOperation({ summary: '删除培训线索' })
   @ApiResponse({ status: 200, description: '删除成功' })
   @ApiResponse({ status: 404, description: '线索不存在' })
-  async remove(@Param('id') id: string) {
-    await this.trainingLeadsService.remove(id);
+  async remove(@Param('id') id: string, @Request() req) {
+    await this.trainingLeadsService.remove(id, req.user?.userId);
     return {
       success: true,
       message: '培训线索删除成功'
+    };
+  }
+
+  @Get(':id/operation-logs')
+  @Permissions('training-lead:view')
+  @ApiOperation({ summary: '获取学员线索操作日志（仅管理员）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async getOperationLogs(@Param('id') id: string, @Request() req) {
+    // 仅管理员可查看
+    if (!this.isManagerOrAdmin(req.user)) {
+      return {
+        success: false,
+        data: [],
+        message: '权限不足，仅管理员可查看操作日志'
+      };
+    }
+    const logs = await this.trainingLeadsService.getOperationLogs(id);
+    return {
+      success: true,
+      data: logs,
+      message: '操作日志获取成功'
     };
   }
 

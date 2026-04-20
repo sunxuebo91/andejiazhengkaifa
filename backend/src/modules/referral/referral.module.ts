@@ -12,6 +12,7 @@ import { ResumeModule } from '../resume/resume.module';
 import { UsersModule } from '../users/users.module';
 import { MiniProgramUserModule } from '../miniprogram-user/miniprogram-user.module';
 import { MiniProgramNotificationModule } from '../miniprogram-notification/miniprogram-notification.module';
+import { NotificationModule } from '../notification/notification.module';
 import { WeixinModule } from '../weixin/weixin.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { WeixinModule } from '../weixin/weixin.module';
     UsersModule,
     MiniProgramUserModule,
     MiniProgramNotificationModule,
+    NotificationModule,
     WeixinModule,
   ],
   controllers: [ReferralController],

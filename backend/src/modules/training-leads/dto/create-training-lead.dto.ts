@@ -162,6 +162,11 @@ export class CreateTrainingLeadDto {
   @Min(0, { message: '服务费金额不能为负数' })
   serviceFeeAmount?: number;
 
+  @ApiPropertyOptional({ description: '是否网课', example: false })
+  @IsOptional()
+  @IsBoolean({ message: '是否网课必须是布尔值' })
+  isOnlineCourse?: boolean;
+
   @ApiPropertyOptional({ description: '所在地区', example: '杭州市西湖区' })
   @IsOptional()
   @IsString()

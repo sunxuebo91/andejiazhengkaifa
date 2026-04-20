@@ -57,7 +57,15 @@ export class ReferralController {
         sourceStaffId: body.sourceStaffId,
         sourceCustomerId: body.sourceCustomerId,
       });
-      return { success: true, data: referrer, message: '申请已提交，等待管理员审核' };
+      // 显式返回 id 字段（小程序存为 crmReferrerId 做后续关联）
+      return {
+        success: true,
+        data: {
+          id: (referrer as any)._id?.toString() ?? (referrer as any).id,
+          approvalStatus: referrer.approvalStatus,
+        },
+        message: '申请已提交，等待管理员审核',
+      };
     } catch (error) {
       throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);
     }
@@ -102,6 +110,7 @@ export class ReferralController {
     serviceType: string;
     experience?: string;
     remark?: string;
+    targetStaffId?: string; // 可选：本次扫码海报员工ID，决定 assignedStaffId；不传则回落 sourceStaffId
   }) {
     try {
       const resume = await this.referralService.submitReferral(body.openid, {
@@ -111,6 +120,7 @@ export class ReferralController {
         serviceType: body.serviceType,
         experience: body.experience,
         remark: body.remark,
+        targetStaffId: body.targetStaffId,
       });
       return { success: true, data: resume, message: '推荐信息提交成功' };
     } catch (error) {
@@ -142,6 +152,22 @@ export class ReferralController {
   }
 
   @Public()
+  @Get('miniprogram/staff-info')
+  @ApiOperation({ summary: '按 staffId 查员工公共信息（供海报扫码落地页使用）' })
+  async getStaffPublicInfo(@Query('staffId') staffId: string) {
+    if (!staffId) {
+      return { success: false, data: null, message: '请提供 staffId' };
+    }
+    try {
+      const data = await this.referralService.getStaffPublicInfo(staffId);
+      if (!data) return { success: false, data: null, message: '未找到该员工' };
+      return { success: true, data, message: '查询成功' };
+    } catch (error) {
+      throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Public()
   @Get('miniprogram/referral-detail/:id')
   @ApiOperation({ summary: '推荐记录详情（推荐人视角，脱敏）' })
   async getReferralDetail(@Param('id') id: string, @Query('openid') openid: string) {
@@ -159,6 +185,7 @@ export class ReferralController {
   async applySettlement(@Body() body: {
     openid: string;
     referralId: string;
+    idCard: string;
     payeeName: string;
     payeePhone: string;
     bankCard: string;
@@ -167,6 +194,7 @@ export class ReferralController {
     try {
       await this.referralService.applySettlement(body.openid, {
         referralId:  body.referralId,
+        idCard:      body.idCard,
         payeeName:   body.payeeName,
         payeePhone:  body.payeePhone,
         bankCard:    body.bankCard,
@@ -324,6 +352,18 @@ export class ReferralController {
   }
 
   @Public()
+  @Post('admin/delete-referrer')
+  @ApiOperation({ summary: '删除推荐人（仅管理员）' })
+  async deleteReferrer(@Body() body: { adminStaffId: string; referrerId: string }) {
+    try {
+      await this.referralService.deleteReferrer(body.adminStaffId, body.referrerId);
+      return { success: true, message: '已删除' };
+    } catch (error) {
+      throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Public()
   @Get('admin/pending-referrers')
   @ApiOperation({ summary: '待审批的推荐人申请列表（管理员）' })
   async listPendingReferrers(@Query('page') page?: number, @Query('pageSize') pageSize?: number) {
@@ -397,6 +437,30 @@ export class ReferralController {
     try {
       const result = await this.referralService.markStaffDeparted(body.adminStaffId, body.staffId, new Date(body.leftAt));
       return { success: true, data: result, message: `离职处理完成，共流转 ${result.transferredCount} 条记录` };
+    } catch (error) {
+      throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Public()
+  @Post('admin/delete-referral')
+  @ApiOperation({ summary: '删除单条推荐记录（仅管理员）' })
+  async deleteReferralResume(@Body() body: { adminStaffId: string; referralResumeId: string }) {
+    try {
+      await this.referralService.deleteReferralResume(body.adminStaffId, body.referralResumeId);
+      return { success: true, message: '已删除' };
+    } catch (error) {
+      throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Public()
+  @Get('admin/referral-detail/:id')
+  @ApiOperation({ summary: '推荐记录详情（CRM 管理员/员工，含合同数据）' })
+  async getAdminReferralDetail(@Param('id') id: string) {
+    try {
+      const data = await this.referralService.getAdminReferralDetail(id);
+      return { success: true, data };
     } catch (error) {
       throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);
     }

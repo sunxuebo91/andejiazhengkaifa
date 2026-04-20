@@ -270,5 +270,18 @@ export class NotificationHelperService {
   }) {
     return this.sendAndPush([userId], NotificationType.FORM_SUBMISSION_RECEIVED, data);
   }
+
+  // ========== 推荐奖励系统（CRM 铃铛通知） ==========
+
+  /**
+   * 新推荐人申请待审批通知（通知管理员和来源员工的 CRM 铃铛）
+   */
+  async notifyReferralNewApplicant(userIds: string[], data: {
+    referrerName: string;
+    referrerPhone: string;
+    referrerId: string;
+  }) {
+    return this.sendAndPush(userIds, NotificationType.REFERRAL_NEW_REFERRER_APPROVAL, data);
+  }
 }
 

@@ -54,6 +54,7 @@ export interface TrainingLead {
   budget?: number;
   courseAmount?: number;
   serviceFeeAmount?: number;
+  isOnlineCourse?: boolean;
   address?: string;
   isReported?: boolean;
   studentOwner?: UserInfo | string;
@@ -105,6 +106,7 @@ export interface CreateTrainingLeadDto {
   budget?: number;
   courseAmount?: number;
   serviceFeeAmount?: number;
+  isOnlineCourse?: boolean;
   address?: string;
   isReported?: boolean;
   studentOwner?: string;

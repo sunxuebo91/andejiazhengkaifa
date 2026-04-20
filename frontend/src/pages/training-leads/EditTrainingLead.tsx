@@ -381,6 +381,16 @@ const EditTrainingLead: React.FC = () => {
                   />
                 </Form.Item>
               </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="网课"
+                  name="isOnlineCourse"
+                  valuePropName="checked"
+                >
+                  <Switch checkedChildren="是" unCheckedChildren="否" />
+                </Form.Item>
+              </Col>
             </Row>
           </div>
 

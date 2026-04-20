@@ -546,7 +546,8 @@ export class CreateResumeV2Dto {
         startDate: '2020-01',
         endDate: '2022-12',
         description: '在郑州市某家庭担任育儿嫂，负责照顾2岁幼儿的日常生活和早教',
-        orderNumber: 'WO-20200101-1234',
+        orderNumber: 'CON12345678901',
+        jobType: 'zhujia-yuer',
         district: 'chaoyang',
         customerName: '张女士',
         customerReview: '服务态度好，专业能力强',
@@ -567,6 +568,7 @@ export class CreateResumeV2Dto {
           endDate: exp.endDate || '',
           description: exp.description || '',
           orderNumber: exp.orderNumber || undefined,
+          jobType: exp.jobType || undefined,
           district: exp.district || undefined,
           customerName: exp.customerName || undefined,
           customerReview: exp.customerReview || undefined,
@@ -581,6 +583,7 @@ export class CreateResumeV2Dto {
       endDate: exp.endDate || '',
       description: exp.description || '',
       orderNumber: exp.orderNumber || undefined,
+      jobType: exp.jobType || undefined,
       district: exp.district || undefined,
       customerName: exp.customerName || undefined,
       customerReview: exp.customerReview || undefined,
@@ -592,6 +595,7 @@ export class CreateResumeV2Dto {
     endDate: string;
     description: string;
     orderNumber?: string;
+    jobType?: string;
     district?: string;
     customerName?: string;
     customerReview?: string;
@@ -946,7 +950,8 @@ export class CreateResumeDto {
         startDate: '2020-01',
         endDate: '2022-12',
         description: '在郑州市某家庭担任育儿嫂，负责照顾2岁幼儿的日常生活和早教',
-        orderNumber: 'WO-20200101-1234',
+        orderNumber: 'CON12345678901',
+        jobType: 'zhujia-yuer',
         district: 'chaoyang',
         customerName: '张女士',
         customerReview: '服务态度好，专业能力强',
@@ -966,6 +971,7 @@ export class CreateResumeDto {
           endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined,
           description: exp.description,
           orderNumber: exp.orderNumber || undefined,
+          jobType: exp.jobType || undefined,
           district: exp.district || undefined,
           customerName: exp.customerName || undefined,
           customerReview: exp.customerReview || undefined,
@@ -980,6 +986,7 @@ export class CreateResumeDto {
       endDate: exp.endDate ? dayjs(exp.endDate).format('YYYY-MM') : undefined,
       description: exp.description,
       orderNumber: exp.orderNumber || undefined,
+      jobType: exp.jobType || undefined,
       district: exp.district || undefined,
       customerName: exp.customerName || undefined,
       customerReview: exp.customerReview || undefined,
@@ -991,6 +998,7 @@ export class CreateResumeDto {
     endDate: string;
     description: string;
     orderNumber?: string;
+    jobType?: string;
     district?: string;
     customerName?: string;
     customerReview?: string;

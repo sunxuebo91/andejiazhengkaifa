@@ -877,41 +877,6 @@ const CreateResume: React.FC = () => {
     return undefined;
   };
 
-  /**
-   * 判断工作经历是否为机构任职/非私人入户服务
-   * 用于拦截 AI 对非家政经历错误生成的 customerName/customerReview
-   */
-  const isInstitutionWork = (desc?: string): boolean => {
-    if (!desc) return false;
-    // 排除误判：家政服务中"协助送孩子上幼儿园/带宝宝直至上幼儿园"等，幼儿园是时间节点而非任职机构
-    if (/协助上幼儿园|照顾.{1,15}(宝宝|孩子).{1,30}(幼儿园|上学)|带.{1,10}(宝宝|孩子).{1,20}幼儿园/.test(desc)) return false;
-    const patterns = [
-      // 幼儿园/学校任职
-      /在.{0,12}(幼儿园|小学|中学|高中|大学|学校).{0,6}(担任|任职|做老师|做教师|做幼师|做助教|教书|当老师|工作|上班|从事)/,
-      /担任.{0,10}(幼教|幼师|教师|教员|助教|保育员|园长|生活老师|班主任)/,
-      /当.{0,6}(班主任|幼师|幼教|园长)/,
-      /从事.{0,8}(幼儿园|幼教|幼师|教学).{0,8}(工作|教育)/,
-      // 月子中心/养老院机构（以机构雇员身份，非随客户回家）
-      /在.{0,12}(月子中心|月子会所|月嫂中心).{0,5}(工作|任职|担任|从事|上班)/,
-      /在.{0,12}(养老院|护理院|康复中心|老年公寓).{0,5}(工作|任职|担任|从事|上班)/,
-      // 医院护士/护工
-      /在.{0,12}(医院|妇产科|妇幼|诊所|卫生院).{0,5}(担任护士|做护士|任职|护工|做护工|实习护士)/,
-      // 部队/夏令营
-      /在.{0,12}(部队|军队|战队).{0,5}(服役)/,
-      /夏令营.{0,6}(教官|总教官|副总教官)/,
-      // 餐饮/工厂/企业
-      /在.{0,12}(餐厅|饭店|饭馆|西餐厅|食堂|酒店餐饮).{0,5}(工作|上班|任职|担任)/,
-      /在.{0,12}(工厂|车间|流水线|公交公司|超市|便利店).{0,5}(工作|上班|任职)/,
-      // 培训机构/补习班
-      /在.{0,12}(培训机构|补习班|辅导班|培训学校).{0,5}(工作|上班|担任|任职)/,
-      // 自营商店/诊所
-      /自家经营|老家经营|经营.{1,8}(商店|店铺|母婴店|诊所|玩具店|饭店)/,
-      // 全职在家带自己孩子（非客户孩子）
-      /全职在家照顾自家|全职在家带.{0,4}(自己孩子|二宝)/,
-    ];
-    return patterns.some(p => p.test(desc));
-  };
-
   const handleAIParse = async () => {
     const isImageMode = !!aiImage;
 
@@ -1015,22 +980,15 @@ const CreateResume: React.FC = () => {
       if (p.workExperiences?.length) {
         formValues.workExperiences = p.workExperiences.map((exp: any) => {
           const jobType = inferJobTypeFromText(exp.description);
-          // 双重过滤：
-          // 1. AI 已判断为非私人入户服务（返回空字符串）→ 不使用
-          // 2. 前端兜底检测：即使 AI 判断错误生成了客户信息，经历属于机构/非家政 → 强制清空
-          const institution = isInstitutionWork(exp.description);
-          const customerName   = institution ? undefined : (exp.customerName?.trim()   || undefined);
-          const customerReview = institution ? undefined : (exp.customerReview?.trim() || undefined);
           return {
             startDate:      exp.startDate      || '',
             endDate:        exp.endDate        || '',
             jobType,
             description:    exp.description    || '',
             district:       exp.district       || undefined,
-            customerName,
-            customerReview,
-            // orderNumber 不自动生成：历史经历无真实合同，用户需要时手动点"生成"按钮关联
-            orderNumber:    undefined,
+            customerName:   exp.customerName?.trim()   || undefined,
+            customerReview: exp.customerReview?.trim() || undefined,
+            orderNumber:    exp.orderNumber?.trim()    || undefined,
           };
         });
       }

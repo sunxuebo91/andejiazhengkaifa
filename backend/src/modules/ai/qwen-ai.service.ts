@@ -74,6 +74,7 @@ export interface ParsedResume {
     district?: string;        // 区域
     customerName?: string;    // 客户称谓，如"李先生"
     customerReview?: string;  // 20-30字客户好评
+    orderNumber?: string;     // 订单号：仅私人入户家政经历服务端生成，非家政经历为空
   }>;
 
   // 期望薪资
@@ -243,14 +244,10 @@ export class QwenAIService {
    - "single"=未婚, "married"=已婚, "divorced"=离异, "widowed"=丧偶
 
 4. zodiac（中国生肖/属相）：
-   - 若简历明确写了属相/生肖，从以下返回对应值：
+   - 只有简历中明确写了"属相/生肖/属×"时才返回对应枚举值：
      "rat"=鼠, "ox"=牛, "tiger"=虎, "rabbit"=兔, "dragon"=龙, "snake"=蛇
      "horse"=马, "goat"=羊, "monkey"=猴, "rooster"=鸡, "dog"=狗, "pig"=猪
-   - 若简历没写属相但有年龄，按出生年份推算（当前年2026年，年龄减法得出生年）：
-     生肖12年一循环：鼠1984/1996/2008，牛1985/1997/2009，虎1986/1998/2010
-     兔1987/1999/2011，龙1988/2000/2012，蛇1989/2001/2013，马1990/2002/2014
-     羊1991/2003/2015，猴1992/2004/2016，鸡1993/2005/2017，狗1994/2006/2018，猪1995/2007/2019
-     例：年龄40→出生年1986（2026-40）→虎年→"tiger"
+   - 若简历没有明确写属相/生肖，一律返回空字符串""（系统会根据年龄自动计算，不需要你推算）
    - ⚠️ "星座：金牛/白羊"是西方星座，不是生肖，不要用于zodiac字段
 
 4b. constellation（西方星座）必须是以下之一（若无法确定返回空字符串""）:
@@ -327,6 +324,7 @@ export class QwenAIService {
      ❌ 必须返回""（机构任职或非家政工作）：在幼儿园/学校/机构担任教师/保育员/助教、在月子中心/养老院/康复机构上班、在医院担任护士/护工、在餐厅/工厂/公司/部队/夏令营上班、自营商店/诊所、全职在家照顾自家孩子
      填写规则：从百家姓广泛随机选择，严禁集中使用张/李/王，须覆盖赵/钱/孙/周/吴/郑/冯/陈/褚/卫/蒋/沈/韩/杨等姓氏，育儿月嫂类以女士为主
    - customerReview: 【严格判断】仅当customerName非空时才填写，否则返回""。用第一人称客户视角写20-30字好评，语气自然真实，根据description内容定制，避免格式化套话
+   - orderNumber: 统一返回空字符串""，服务端会根据是否为私人入户家政经历自动生成订单编号，AI不要自己编造
    - 相邻多行属于同一段经历时要合并，不要拆碎
    - 无法确认的经历不要编造
 
@@ -407,7 +405,7 @@ export class QwenAIService {
   "expectedSalary": 数字,
   "certificatesText": "证书列表文字",
   "workExperiences": [
-    {"startDate":"YYYY-MM","endDate":"YYYY-MM","description":"内容","district":"区域","customerName":"私人入户服务填姓氏+称谓，机构/非家政工作填空字符串","customerReview":"customerName非空时填20-30字好评，否则填空字符串"}
+    {"startDate":"YYYY-MM","endDate":"YYYY-MM","description":"内容","district":"区域","customerName":"私人入户服务填姓氏+称谓，机构/非家政工作填空字符串","customerReview":"customerName非空时填20-30字好评，否则填空字符串","orderNumber":""}
   ],
   "selfIntroduction": "综合介绍",
   "familySituation": "家庭情况",
@@ -479,35 +477,92 @@ export class QwenAIService {
     return undefined;
   }
 
-  private normalizeParsedResume(parsed: ParsedResume, rawText?: string): ParsedResume {
-    if (!rawText) {
-      return parsed;
-    }
+  /**
+   * 根据出生年份计算生肖（服务端精确计算，不依赖 AI 推算）
+   */
+  private calcZodiac(birthYear: number): ParsedResume['zodiac'] {
+    const ZODIAC_LIST: ParsedResume['zodiac'][] = [
+      'rat', 'ox', 'tiger', 'rabbit', 'dragon', 'snake',
+      'horse', 'goat', 'monkey', 'rooster', 'dog', 'pig',
+    ];
+    const idx = ((birthYear - 4) % 12 + 12) % 12;
+    return ZODIAC_LIST[idx];
+  }
 
+  private normalizeParsedResume(parsed: ParsedResume, rawText?: string): ParsedResume {
     const next: ParsedResume = { ...parsed };
 
-    if (!next.birthDate) {
-      next.birthDate = this.extractBirthDate(rawText);
+    if (rawText) {
+      if (!next.birthDate) {
+        next.birthDate = this.extractBirthDate(rawText);
+      }
+
+      if (!next.currentAddress) {
+        next.currentAddress = this.extractCurrentAddress(rawText);
+      }
+
+      if (!next.hukouAddress) {
+        next.hukouAddress = this.extractHukouAddress(rawText);
+      }
+
+      const expectedSalary = this.extractExpectedSalary(rawText, next.jobType);
+      if (expectedSalary && (!next.expectedSalary || next.expectedSalary <= 0)) {
+        next.expectedSalary = expectedSalary;
+      }
+
+      if (expectedSalary && /不带睡|带睡/.test(rawText.replace(/\s+/g, '')) && next.expectedSalary) {
+        next.expectedSalary = expectedSalary;
+      }
     }
 
-    if (!next.currentAddress) {
-      next.currentAddress = this.extractCurrentAddress(rawText);
+    // 服务端精确计算生肖：AI 只负责识别明确写出的属相，未明确写则由代码推算
+    if (!next.zodiac) {
+      const CURRENT_YEAR = new Date().getFullYear();
+      let birthYear: number | null = null;
+
+      // 1. 优先从 birthDate 提取出生年份
+      if (next.birthDate) {
+        const match = String(next.birthDate).match(/(\d{4})/);
+        if (match) {
+          const y = parseInt(match[1], 10);
+          if (y >= 1940 && y <= 2010) birthYear = y;
+        }
+      }
+
+      // 2. 退而用 age 估算出生年份
+      if (!birthYear && next.age && next.age >= 18 && next.age <= 80) {
+        birthYear = CURRENT_YEAR - next.age;
+      }
+
+      if (birthYear) {
+        next.zodiac = this.calcZodiac(birthYear);
+        this.logger.debug(`[生肖推算] 出生年份: ${birthYear} → ${next.zodiac}`);
+      }
     }
 
-    if (!next.hukouAddress) {
-      next.hukouAddress = this.extractHukouAddress(rawText);
-    }
-
-    const expectedSalary = this.extractExpectedSalary(rawText, next.jobType);
-    if (expectedSalary && (!next.expectedSalary || next.expectedSalary <= 0)) {
-      next.expectedSalary = expectedSalary;
-    }
-
-    if (expectedSalary && /不带睡|带睡/.test(rawText.replace(/\s+/g, '')) && next.expectedSalary) {
-      next.expectedSalary = expectedSalary;
+    // 工作经历订单号规则：家政经历（customerName 非空）服务端生成订单号；
+    // 机构任职/非家政经历（customerName 为空）强制置空，防止小程序/CRM 端显示到无关记录上
+    if (Array.isArray(next.workExperiences)) {
+      next.workExperiences = next.workExperiences.map((exp, idx) => {
+        const hasCustomer = !!(exp.customerName && exp.customerName.trim());
+        if (!hasCustomer) {
+          return { ...exp, orderNumber: '' };
+        }
+        const existing = exp.orderNumber?.trim();
+        return { ...exp, orderNumber: existing || this.generateWorkOrderNumber(idx) };
+      });
     }
 
     return next;
+  }
+
+  /**
+   * 生成工作经历订单号（格式与前端 generateOrderNumber 保持一致：CON + 时间戳后8位 + 3位随机）
+   */
+  private generateWorkOrderNumber(idx = 0): string {
+    const timestamp = (Date.now() + idx).toString();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `CON${timestamp.slice(-8)}${random}`;
   }
 
   /**

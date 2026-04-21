@@ -55,6 +55,10 @@ export class TrainingLead {
   @Prop()
   wechatId: string;
 
+  @ApiProperty({ description: '身份证号' })
+  @Prop()
+  idCardNumber: string;
+
   @ApiProperty({ description: '线索来源' })
   @Prop({
     enum: ['美团', '抖音', '快手', '小红书', '转介绍', '幼亲舒', 'BOSS', 'BOSS直聘', '其他']

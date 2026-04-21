@@ -283,6 +283,24 @@ export class ReferralController {
     }
   }
 
+  @Public()
+  @Post('staff/release-to-resume-library')
+  @ApiOperation({ summary: '释放推荐记录到简历库（管理员 或 简历归属员工）' })
+  async releaseToResumeLibrary(@Body() body: {
+    staffId: string;
+    isAdmin?: boolean;
+    referralResumeId: string;
+  }) {
+    try {
+      const result = await this.referralService.releaseToResumeLibrary(
+        body.staffId, body.isAdmin || false, body.referralResumeId,
+      );
+      return { success: true, data: result, message: '已释放到简历库' };
+    } catch (error) {
+      throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);
+    }
+  }
+
   // ================================================================
   // 管理员侧：推荐人审批（Public，传 adminStaffId 鉴权）
   // ================================================================

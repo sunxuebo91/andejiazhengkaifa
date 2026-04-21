@@ -792,6 +792,95 @@ export class ReferralService {
   }
 
   /**
+   * 释放推荐记录到简历库
+   * - 权限：管理员 或 当前 assignedStaffId
+   * - 可释放状态：approved / following_up（推荐已通过审核但尚未签单，手动把它搬进简历库）
+   * - 数据流转：将 referral_resume.status 置为 released，然后在 resumes 创建一条新记录
+   *   （leadSource='referral'，只带核心字段，CRM 侧后续补全），最后回写 linkedResumeId
+   */
+  async releaseToResumeLibrary(
+    callerStaffId: string,
+    isAdmin: boolean,
+    referralResumeId: string,
+  ): Promise<{ resumeId: string }> {
+    const ref = await this.referralResumeModel.findById(referralResumeId).exec();
+    if (!ref) throw new NotFoundException('推荐记录不存在');
+
+    // 权限：管理员 或 assignedStaffId
+    if (!isAdmin && ref.assignedStaffId !== callerStaffId) {
+      throw new ForbiddenException('仅简历归属员工或管理员可释放该记录');
+    }
+
+    // 状态校验：仅 approved / following_up 可释放
+    if (!['approved', 'following_up'].includes(ref.status)) {
+      throw new BadRequestException(`当前状态「${ref.status}」不支持释放，仅 approved/following_up 可释放`);
+    }
+
+    // 防重：已有关联简历则不允许再次释放
+    if (ref.linkedResumeId) {
+      throw new BadRequestException('该推荐记录已关联简历，无需重复释放');
+    }
+
+    // 先将推荐记录状态置为 released（排除于双向查重），释放后续 resume.create 路径
+    const originalStatus = ref.status;
+    await this.referralResumeModel.updateOne(
+      { _id: ref._id },
+      { $set: { status: 'released', releasedAt: new Date(), releasedBy: callerStaffId } },
+    ).exec();
+
+    // 创建正式简历（最小字段 + leadSource=referral）
+    let savedResume: any;
+    try {
+      savedResume = await this.resumeService.createMinimalFromReferral({
+        name: ref.name,
+        phone: ref.phone,
+        idCard: ref.idCard,
+        jobType: ref.serviceType,
+        experience: ref.experience,
+        remark: ref.remark,
+        referrerName: ref.referrerName,
+        operatorStaffId: callerStaffId,
+      });
+    } catch (err) {
+      // 回滚推荐记录状态，避免状态与 resumes 脱节
+      await this.referralResumeModel.updateOne(
+        { _id: ref._id },
+        { $set: { status: originalStatus }, $unset: { releasedAt: 1, releasedBy: 1 } },
+      ).exec();
+      throw err;
+    }
+
+    // 回写 linkedResumeId，完成闭环（后续签单/上户/返费结算仍走推荐记录）
+    const resumeId = (savedResume._id as any).toString();
+    await this.referralResumeModel.updateOne(
+      { _id: ref._id },
+      { $set: { linkedResumeId: resumeId } },
+    ).exec();
+
+    // 写简历操作日志，详情页可见
+    const caller = await this.usersService.findById(callerStaffId).catch(() => null);
+    const callerName = caller?.name || caller?.username || callerStaffId;
+    const assignedStaff = ref.assignedStaffId !== callerStaffId
+      ? await this.usersService.findById(ref.assignedStaffId).catch(() => null)
+      : caller;
+    const assignedStaffName = assignedStaff?.name || assignedStaff?.username || ref.assignedStaffId;
+    await this.resumeService.logOperation(
+      resumeId,
+      callerStaffId,
+      'release_from_referral',
+      '从推荐库释放',
+      {
+        description: `操作人：${callerName}；归属员工：${assignedStaffName}；推荐人：${ref.referrerName || '-'}（${ref.referrerPhone || '-'}）；原推荐记录：${referralResumeId}；原状态：${originalStatus}`,
+        relatedId: referralResumeId,
+        relatedType: 'referral_resume',
+      },
+    );
+
+    this.logger.log(`[releaseToResumeLibrary] 推荐记录 ${referralResumeId} 已释放到简历库 ${resumeId}，操作人: ${callerStaffId}`);
+    return { resumeId };
+  }
+
+  /**
    * 推荐人申请结算（小程序侧）
    * 校验推荐记录状态为 onboarded，保存收款信息，推进到 reward_pending（返费待审核）
    */

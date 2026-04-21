@@ -28,6 +28,7 @@ import {
 import esignService from '../../services/esignService';
 import { customerService } from '../../services/customerService';
 import { contractService } from '../../services/contractService';
+import { trainingLeadService } from '../../services/trainingLeadService';
 import { JobType, JOB_TYPE_MAP } from '../../types/resume';
 import apiService from '../../services/api';
 
@@ -71,7 +72,7 @@ interface UserSearchResult {
   name: string;
   phone: string;
   idCard?: string;
-  type: 'customer' | 'worker';
+  type: 'customer' | 'worker' | 'student';
   source: string;
   // 扩展字段
   address?: string;
@@ -86,6 +87,11 @@ interface UserSearchResult {
   expectedSalary?: string;
   workExperience?: string;
   education?: string;
+  // 学员线索特有字段
+  courseAmount?: number;
+  serviceFeeAmount?: number;
+  intendedCourses?: string[];
+  consultPosition?: string;
 }
 
 // 数字转中文大写金额的函数
@@ -148,7 +154,12 @@ const convertToChineseAmount = (amount: string | number, suffix: 'none' | 'yuanz
 			.trim();
 	};
 
-const ESignatureStepPage: React.FC = () => {
+interface ESignaturePageProps {
+  mode?: 'customer' | 'student';
+}
+
+const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }) => {
+  const isStudentMode = mode === 'student';
   const { message } = App.useApp();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -343,7 +354,7 @@ const ESignatureStepPage: React.FC = () => {
     {
       title: '添加陌生用户',
       content: 'step1',
-      description: '添加甲方（客户）和乙方（阿姨）用户'
+      description: isStudentMode ? '添加乙方（学员）用户' : '添加甲方（客户）和乙方（阿姨）用户'
     },
     {
       title: '上传待签署文件',
@@ -450,7 +461,7 @@ const ESignatureStepPage: React.FC = () => {
     return uniqueResults;
   };
 
-  // 处理甲方搜索（只搜索客户库）
+  // 处理甲方搜索（客户模式搜客户库 / 学员模式搜学员线索库）
   const handlePartyASearch = async (value: string) => {
     setPartyASearchValue(value);
     if (value) {
@@ -458,32 +469,60 @@ const ESignatureStepPage: React.FC = () => {
       try {
         const results: UserSearchResult[] = [];
 
-        // 只搜索客户库 - 使用电子签名专用搜索接口（包含流失客户）
-        const customerResponse = await apiService.get('/api/customers/search', {
-          search: value,
-          limit: 10
-        });
-
-        // 响应数据结构: { success: true, data: [...] }
-        if (customerResponse.success && customerResponse.data) {
-          customerResponse.data.forEach((customer: any) => {
+        if (isStudentMode) {
+          // 搜索学员线索库
+          const leadRes = await trainingLeadService.getTrainingLeads({
+            search: value,
+            page: 1,
+            pageSize: 10,
+          });
+          (leadRes?.items || []).forEach((lead: any) => {
+            if (!lead?.phone) return;
             results.push({
-              id: customer._id,
-              name: customer.name,
-              phone: customer.phone,
-              idCard: customer.idCardNumber,
-              type: 'customer',
-              source: '客户库',
-              address: customer.address,
-              customerAddress: customer.address
+              id: lead._id,
+              name: lead.name,
+              phone: lead.phone,
+              idCard: lead.idCardNumber || '',
+              type: 'student',
+              source: '学员线索库',
+              address: lead.address,
+              customerAddress: lead.address,
+              age: lead.age,
+              gender: lead.gender,
+              courseAmount: lead.courseAmount,
+              serviceFeeAmount: lead.serviceFeeAmount,
+              intendedCourses: lead.intendedCourses,
+              consultPosition: lead.consultPosition,
             });
           });
+        } else {
+          // 只搜索客户库 - 使用电子签名专用搜索接口（包含流失客户）
+          const customerResponse = await apiService.get('/api/customers/search', {
+            search: value,
+            limit: 10
+          });
+
+          // 响应数据结构: { success: true, data: [...] }
+          if (customerResponse.success && customerResponse.data) {
+            customerResponse.data.forEach((customer: any) => {
+              results.push({
+                id: customer._id,
+                name: customer.name,
+                phone: customer.phone,
+                idCard: customer.idCardNumber,
+                type: 'customer',
+                source: '客户库',
+                address: customer.address,
+                customerAddress: customer.address
+              });
+            });
+          }
         }
 
         setPartyASearchResults(results);
       } catch (error) {
-        console.error('搜索客户失败:', error);
-        message.error('搜索客户失败');
+        console.error(isStudentMode ? '搜索学员失败:' : '搜索客户失败:', error);
+        message.error(isStudentMode ? '搜索学员失败' : '搜索客户失败');
       } finally {
         setSearchLoading(false);
       }
@@ -1066,21 +1105,37 @@ const ESignatureStepPage: React.FC = () => {
         结束日: values.templateParams?.['结束日'],
       });
 
+      // 学员模式：公司=甲方，学员=乙方（学员数据存在 partyA* 字段中）
+      // 客户模式：客户=甲方，阿姨=乙方
+      const studentName = stepData.users?.batchRequest?.partyAName;
+      const studentMobile = stepData.users?.batchRequest?.partyAMobile;
+      const studentIdCard = stepData.users?.batchRequest?.partyAIdCard;
       const enhancedTemplateParams = {
         ...values.templateParams,
         // 只映射模板控件真正需要的字段，避免重复
         // ⚠️ 注意："甲方"、"乙方"、"丙方" 是签署区字段（dataType 6/7），不是文本字段！
         // 这些字段由爱签系统自动处理，不需要我们填充！
-        // 甲方（客户）详细信息 - 使用模板控件要求的字段名
-        '客户姓名': values.templateParams?.['客户姓名'] || stepData.users?.batchRequest?.partyAName,
-        '客户电话': values.templateParams?.['客户电话'] || values.templateParams?.['客户联系方式'] || values.templateParams?.['甲方电话'] || values.templateParams?.['甲方联系电话'] || values.templateParams?.['甲方联系方式'] || stepData.users?.batchRequest?.partyAMobile,
-        '客户联系方式': values.templateParams?.['客户联系方式'] || values.templateParams?.['客户电话'] || values.templateParams?.['甲方联系方式'] || values.templateParams?.['甲方电话'] || stepData.users?.batchRequest?.partyAMobile,
-        '客户身份证号': values.templateParams?.['客户身份证号'] || values.templateParams?.['甲方身份证'] || values.templateParams?.['甲方身份证号'] || stepData.users?.batchRequest?.partyAIdCard,
-        // 乙方（阿姨）详细信息 - 使用模板控件要求的字段名
-        '阿姨姓名': values.templateParams?.['阿姨姓名'] || values.templateParams?.['乙方姓名'] || stepData.users?.batchRequest?.partyBName,
-        '阿姨电话': values.templateParams?.['阿姨电话'] || values.templateParams?.['乙方电话'] || stepData.users?.batchRequest?.partyBMobile,
-        '阿姨身份证号': values.templateParams?.['阿姨身份证号'] || values.templateParams?.['阿姨身份证'] || values.templateParams?.['乙方身份证'] || stepData.users?.batchRequest?.partyBIdCard,
-        '阿姨身份证': values.templateParams?.['阿姨身份证'] || values.templateParams?.['阿姨身份证号'] || values.templateParams?.['乙方身份证'] || stepData.users?.batchRequest?.partyBIdCard,
+        // 甲方（客户模式：客户 / 学员模式：企业）详细信息
+        '客户姓名': values.templateParams?.['客户姓名'] || (isStudentMode ? '北京安得家政有限公司' : stepData.users?.batchRequest?.partyAName),
+        '客户电话': values.templateParams?.['客户电话'] || values.templateParams?.['客户联系方式'] || values.templateParams?.['甲方电话'] || values.templateParams?.['甲方联系电话'] || values.templateParams?.['甲方联系方式'] || (isStudentMode ? '400-000-0000' : stepData.users?.batchRequest?.partyAMobile),
+        '客户联系方式': values.templateParams?.['客户联系方式'] || values.templateParams?.['客户电话'] || values.templateParams?.['甲方联系方式'] || values.templateParams?.['甲方电话'] || (isStudentMode ? '400-000-0000' : stepData.users?.batchRequest?.partyAMobile),
+        '客户身份证号': values.templateParams?.['客户身份证号'] || values.templateParams?.['甲方身份证'] || values.templateParams?.['甲方身份证号'] || (isStudentMode ? '' : stepData.users?.batchRequest?.partyAIdCard),
+        // 乙方（客户模式：阿姨 / 学员模式：学员）详细信息
+        '阿姨姓名': values.templateParams?.['阿姨姓名'] || values.templateParams?.['乙方姓名'] || (isStudentMode ? studentName : stepData.users?.batchRequest?.partyBName),
+        '阿姨电话': values.templateParams?.['阿姨电话'] || values.templateParams?.['乙方电话'] || (isStudentMode ? studentMobile : stepData.users?.batchRequest?.partyBMobile),
+        '阿姨身份证号': values.templateParams?.['阿姨身份证号'] || values.templateParams?.['阿姨身份证'] || values.templateParams?.['乙方身份证'] || (isStudentMode ? studentIdCard : stepData.users?.batchRequest?.partyBIdCard),
+        '阿姨身份证': values.templateParams?.['阿姨身份证'] || values.templateParams?.['阿姨身份证号'] || values.templateParams?.['乙方身份证'] || (isStudentMode ? studentIdCard : stepData.users?.batchRequest?.partyBIdCard),
+        // 学员模式下额外映射：学员姓名/电话/身份证号（兼容培训模板可能使用的字段名）
+        ...(isStudentMode ? {
+          '学员姓名': values.templateParams?.['学员姓名'] || studentName,
+          '学员电话': values.templateParams?.['学员电话'] || studentMobile,
+          '学员身份证号': values.templateParams?.['学员身份证号'] || studentIdCard,
+          '乙方姓名': values.templateParams?.['乙方姓名'] || studentName,
+          '乙方电话': values.templateParams?.['乙方电话'] || studentMobile,
+          '乙方身份证号': values.templateParams?.['乙方身份证号'] || studentIdCard,
+          '甲方姓名': values.templateParams?.['甲方姓名'] || '北京安得家政有限公司',
+          '甲方电话': values.templateParams?.['甲方电话'] || '400-000-0000',
+        } : {}),
         // 服务费相关 - 自动生成大写金额（⚠️ 只添加模板中实际存在的字段）
         // 🔥 强制使用新的转换函数重新生成大写金额，确保格式正确
         // '大写服务费': values.templateParams?.['大写服务费'] || convertToChineseAmount(values.templateParams?.['服务费'] || '0'),  // ❌ 模板中不存在
@@ -1284,6 +1339,91 @@ const ESignatureStepPage: React.FC = () => {
       // 根据爱签官方API文档，响应格式为 { code, msg, data }
       // code: 100000 表示成功，其他表示异常
       if (response && response.code === 100000) {
+        // 学员模式：写入 Contract 表（orderCategory=training），复用合同列表/详情展示
+        if (isStudentMode) {
+          try {
+            const partyA = stepData.users?.batchRequest;
+            const selA: any = stepData.selectedPartyA || {};
+            const trainingPayload: any = {
+              contractNumber: contractNo,
+              orderCategory: 'training',
+              customerName: partyA?.partyAName || selA.name,
+              customerPhone: partyA?.partyAMobile || selA.phone,
+              customerIdCard: partyA?.partyAIdCard || selA.idCardNumber || selA.idCard,
+              customerAddress: partyA?.partyAAddress || selA.address,
+              // 职培专用字段：优先取学员线索上的数据，没有则从步骤2模板表单兜底
+              trainingLeadId: selA._id || selA.id || undefined,
+              courseAmount: (() => {
+                const v = selA.courseAmount ?? enhancedTemplateParams?.['报课金额'] ?? enhancedTemplateParams?.['报课金额（元）'];
+                const n = v !== undefined && v !== '' ? Number(v) : undefined;
+                return Number.isFinite(n) ? n : undefined;
+              })(),
+              serviceFeeAmount: (() => {
+                const v = selA.serviceFeeAmount ?? enhancedTemplateParams?.['服务费'] ?? enhancedTemplateParams?.['服务费金额'];
+                const n = v !== undefined && v !== '' ? Number(v) : undefined;
+                return Number.isFinite(n) ? n : undefined;
+              })(),
+              // 报名课程：优先取步骤2用户实际勾选的（templateParams['多选1']），回退到线索意向课程
+              intendedCourses: (() => {
+                const raw = enhancedTemplateParams?.['多选1'];
+                if (Array.isArray(raw) && raw.length) return raw;
+                if (typeof raw === 'string' && raw.trim()) {
+                  return raw.split(/[；;,，]/).map((s: string) => s.trim()).filter(Boolean);
+                }
+                return Array.isArray(selA.intendedCourses) ? selA.intendedCourses : undefined;
+              })(),
+              consultPosition: selA.consultPosition,
+              remarks: values.templateParams?.['备注'] || values.templateParams?.['服务备注'] || undefined,
+              // 爱签相关
+              esignContractNo: contractNo,
+              esignStatus: '0',
+              esignCreatedAt: new Date().toISOString(),
+              esignTemplateNo: values.templateNo,
+              templateParams: enhancedTemplateParams,
+              paymentEnabled: !!stepData.paymentEnabled,
+              createdBy: 'temp',
+            };
+
+            console.log('准备保存的培训订单数据:', trainingPayload);
+            const localContract = await contractService.createContract(trainingPayload);
+            console.log('培训订单本地保存成功:', localContract);
+
+            setStepData(prev => ({
+              ...prev,
+              localContractId: localContract._id,
+              contract: {
+                contractNo: contractNo,
+                contractName: selectedTemplate?.templateName || '安得家政技术咨询协议',
+                templateNo: values.templateNo,
+                templateParams: enhancedTemplateParams,
+                success: true,
+                localSynced: true,
+                localContractId: localContract._id,
+                ...response.data
+              }
+            }));
+            message.success('培训订单创建成功！');
+            setCurrentStep(2);
+          } catch (localError) {
+            console.error('培训订单本地保存失败:', localError);
+            message.warning('爱签合同创建成功，但本地数据同步失败。');
+            setStepData(prev => ({
+              ...prev,
+              contract: {
+                contractNo: contractNo,
+                contractName: selectedTemplate?.templateName || '安得家政技术咨询协议',
+                templateNo: values.templateNo,
+                templateParams: enhancedTemplateParams,
+                success: true,
+                localSyncError: localError instanceof Error ? localError.message : String(localError),
+                ...response.data
+              }
+            }));
+            setCurrentStep(2);
+          }
+          return;
+        }
+
         // 🔥 新增：保存到本地数据库
         try {
           console.log('爱签合同创建成功，开始保存到本地数据库...');
@@ -1490,6 +1630,71 @@ const ESignatureStepPage: React.FC = () => {
     try {
       console.log('提交甲乙双方用户数据:', values);
 
+      if (isStudentMode) {
+        // 学员模式：仅添加乙方（学员）用户，甲方为公司（已实名测试企业账号，无需添加陌生用户）
+        const partyAResp = await esignService.addStranger({
+          account: values.partyAMobile,
+          userType: 2,
+          name: values.partyAName,
+          mobile: values.partyAMobile,
+          idCard: values.partyAIdCard,
+          isNotice: 0,
+          isSignPwdNotice: 0,
+        });
+        console.log('学员模式：添加乙方（学员）响应:', partyAResp);
+
+        // 100000 成功；100074 重复添加；100021 用户已存在——均视为成功
+        const partyAOk = partyAResp && (partyAResp.code === 100000 || partyAResp.code === 100074 || partyAResp.code === 100021);
+        if (!partyAOk) {
+          const msg = partyAResp?.msg || partyAResp?.message || '未知错误';
+          Modal.error({
+            title: '添加用户失败',
+            content: (
+              <div>
+                <p style={{ marginBottom: 12 }}>根据爱签平台返回的信息：</p>
+                <div style={{ background: '#fff2f0', border: '1px solid #ffccc7', borderRadius: 4, padding: 12 }}>
+                  乙方（学员）添加失败：{msg}
+                </div>
+              </div>
+            ),
+            width: 500
+          });
+          return;
+        }
+
+        message.success('学员用户添加成功！正在进入下一步...', 1.5);
+
+        const partyARequest = {
+          account: values.partyAMobile,
+          name: values.partyAName,
+          mobile: values.partyAMobile,
+          idCard: values.partyAIdCard,
+        };
+
+        setStepData(prev => ({
+          ...prev,
+          paymentEnabled: !!values.paymentEnabled,
+          users: {
+            partyA: { success: true, message: '', request: partyARequest, response: partyAResp },
+            partyB: null,
+            batchRequest: {
+              partyAName: values.partyAName,
+              partyAMobile: values.partyAMobile,
+              partyAIdCard: values.partyAIdCard,
+              isNotice: values.isNotice !== false,
+              isSignPwdNotice: values.isSignPwdNotice === true
+            },
+            batchResponse: { partyA: partyAResp }
+          }
+        }));
+
+        form.resetFields();
+        setTimeout(() => {
+          setCurrentStep(1);
+        }, 500);
+        return;
+      }
+
       const response = await esignService.addUsersBatch({
         partyAName: values.partyAName,
         partyAMobile: values.partyAMobile,
@@ -1627,19 +1832,21 @@ const ESignatureStepPage: React.FC = () => {
       )}
 
       <Alert
-        message="步骤1：添加甲乙双方用户"
-        description="同时添加甲方（客户）和乙方（阿姨）用户到爱签平台。支持从客户库和阿姨简历库快速搜索选择。"
+        message={isStudentMode ? '步骤1：添加学员用户' : '步骤1：添加甲乙双方用户'}
+        description={isStudentMode
+          ? '添加乙方（学员）用户到爱签平台，甲方为公司（自动签章，无需添加）。支持从学员线索库快速搜索选择。'
+          : '同时添加甲方（客户）和乙方（阿姨）用户到爱签平台。支持从客户库和阿姨简历库快速搜索选择。'}
         type="info"
         showIcon
         style={{ marginBottom: 24 }}
       />
 
-      {/* 甲方（客户）信息 */}
-          <Card 
+      {/* 甲方（客户/学员）信息 */}
+          <Card
             title={
               <Space>
             <UserOutlined style={{ color: '#1890ff' }} />
-            <span style={{ color: '#1890ff' }}>甲方信息（客户）</span>
+            <span style={{ color: '#1890ff' }}>{isStudentMode ? '乙方信息（学员）' : '甲方信息（客户）'}</span>
               </Space>
             }
         style={{ marginBottom: 24, borderColor: '#1890ff' }}
@@ -1647,8 +1854,10 @@ const ESignatureStepPage: React.FC = () => {
         <Row gutter={16}>
           <Col span={24}>
             <Form.Item
-              label="快速搜索甲方用户"
-              help={isChangeMode ? "换人模式：客户信息已锁定" : "输入姓名或手机号搜索客户库"}
+              label={isStudentMode ? '快速搜索乙方用户' : '快速搜索甲方用户'}
+              help={isChangeMode
+                ? '换人模式：客户信息已锁定'
+                : (isStudentMode ? '输入姓名或手机号搜索学员线索库' : '输入姓名或手机号搜索客户库')}
             >
               <AutoComplete
                 value={partyASearchValue}
@@ -1661,7 +1870,9 @@ const ESignatureStepPage: React.FC = () => {
               >
                 <Input
                   prefix={<SearchOutlined />}
-                  placeholder={isChangeMode ? "换人模式：客户信息已锁定" : "输入姓名或手机号搜索客户库..."}
+                  placeholder={isChangeMode
+                    ? '换人模式：客户信息已锁定'
+                    : (isStudentMode ? '输入姓名或手机号搜索学员线索库...' : '输入姓名或手机号搜索客户库...')}
                   disabled={isChangeMode}
                 />
               </AutoComplete>
@@ -1672,12 +1883,12 @@ const ESignatureStepPage: React.FC = () => {
         <Row gutter={16}>
           <Col span={8}>
             <Form.Item
-              label="客户姓名"
+              label={isStudentMode ? '学员姓名' : '客户姓名'}
               name="partyAName"
-              rules={[{ required: true, message: '请输入客户姓名' }]}
+              rules={[{ required: true, message: isStudentMode ? '请输入学员姓名' : '请输入客户姓名' }]}
             >
               <Input
-                placeholder="请输入客户姓名"
+                placeholder={isStudentMode ? '请输入学员姓名' : '请输入客户姓名'}
                 disabled={isChangeMode}
               />
             </Form.Item>
@@ -1734,8 +1945,9 @@ const ESignatureStepPage: React.FC = () => {
         </Row>
           </Card>
 
-      {/* 乙方（阿姨）信息 */}
-      <Card 
+      {/* 乙方（阿姨）信息 - 学员模式下隐藏 */}
+      {!isStudentMode && (
+      <Card
         title={
           <Space>
             <UserOutlined style={{ color: '#52c41a' }} />
@@ -1810,6 +2022,7 @@ const ESignatureStepPage: React.FC = () => {
           </Col>
         </Row>
       </Card>
+      )}
 
       {/* 通知设置已隐藏，使用默认值：短信通知开启，签约密码通知关闭 */}
       <Form.Item name="isNotice" initialValue={true} hidden>
@@ -1821,7 +2034,7 @@ const ESignatureStepPage: React.FC = () => {
 
                 <Form.Item>
         <Button type="primary" htmlType="submit" loading={loading} size="large" block>
-          添加甲乙双方用户
+          {isStudentMode ? '添加学员用户' : '添加甲乙双方用户'}
                   </Button>
                 </Form.Item>
               </Form>
@@ -2454,7 +2667,40 @@ const ESignatureStepPage: React.FC = () => {
                   const { partyAName, partyAMobile, partyAIdCard, partyBName, partyBMobile, partyBIdCard } = stepData.users.batchRequest;
                   const selectedPartyA = stepData.selectedPartyA;
                   const selectedPartyB = stepData.selectedPartyB;
-                  
+
+                  // 学员模式字段匹配（partyA 槽位存的是学员数据）
+                  if (isStudentMode) {
+                    if (fieldKey.includes('学员姓名') || fieldKey.includes('学生姓名')) {
+                      return partyAName;
+                    }
+                    if (fieldKey.includes('学员电话') || fieldKey.includes('学生电话') || fieldKey.includes('学员联系方式')) {
+                      return partyAMobile;
+                    }
+                    if (fieldKey.includes('学员身份证') || fieldKey.includes('学生身份证')) {
+                      return partyAIdCard;
+                    }
+                    if (fieldKey.includes('报课金额') || fieldLabel.includes('报课金额')) {
+                      return selectedPartyA?.courseAmount;
+                    }
+                    if (fieldKey.includes('服务费') || fieldLabel.includes('服务费')) {
+                      return selectedPartyA?.serviceFeeAmount;
+                    }
+                    // 意向课程（多选）：根据 label/key 中的"课程"或原始 key "多选1"匹配
+                    if (
+                      fieldKey.includes('意向课程') || fieldLabel.includes('意向课程') ||
+                      fieldKey.includes('培训课程') || fieldLabel.includes('培训课程') ||
+                      fieldKey === '多选1' || field.key === '多选1'
+                    ) {
+                      return selectedPartyA?.intendedCourses;
+                    }
+                    if (fieldKey.includes('咨询职位') || fieldLabel.includes('咨询职位')) {
+                      return selectedPartyA?.consultPosition;
+                    }
+                    if (fieldKey.includes('学员地址') || fieldKey.includes('学生地址') || fieldKey.includes('联系地址')) {
+                      return selectedPartyA?.address || selectedPartyA?.customerAddress;
+                    }
+                  }
+
                   // 甲方（客户）信息匹配
                   if (fieldKey.includes('客户姓名') || fieldKey.includes('签署人姓名') || fieldKey.includes('甲方姓名')) {
                     console.log(`🔍 匹配到客户姓名字段: ${field.key}, 填充值: ${partyAName}`);
@@ -3119,32 +3365,51 @@ const ESignatureStepPage: React.FC = () => {
         console.log('合同数据:', stepData.contract);
 
         // 构建签署方数据（使用模板坐标签章）
-        const signersData = [
-          {
-            account: stepData.users.partyA.request.mobile, // 甲方账号（手机号）
-            name: stepData.users.partyA.request.name,
-            mobile: stepData.users.partyA.request.mobile,
-            signType: 'manual' as const, // 有感知签约
-            validateType: 'sms' as const // 短信验证码
-            // 移除signPosition，让后端使用模板坐标签章策略
-          },
-          {
-            account: stepData.users.partyB.request.mobile, // 乙方账号（手机号）
-            name: stepData.users.partyB.request.name,
-            mobile: stepData.users.partyB.request.mobile,
-            signType: 'manual' as const, // 有感知签约
-            validateType: 'sms' as const // 短信验证码
-            // 移除signPosition，让后端使用模板坐标签章策略
-          },
-          {
-            account: 'ASIGN91110111MACJMD2R5J', // 🔑 官方已实名测试企业账号（支持无感知签约）
-            name: '北京安得家政有限公司',
-            mobile: '400-000-0000', // 企业客服电话
-            signType: 'auto' as const, // 无感知签约（自动签章）
-            validateType: 'sms' as const // 虽然是无感知，但仍需设置验证方式
-            // 移除signPosition，让后端使用模板坐标签章策略
-          }
-        ];
+        // 学员模式：甲方（公司自动签章）+ 乙方（学员）
+        // 客户模式：甲方（客户）+ 乙方（阿姨）+ 丙方（公司自动签章）
+        const signersData = isStudentMode
+          ? [
+              {
+                account: 'ASIGN91110111MACJMD2R5J', // 甲方：官方已实名测试企业账号
+                name: '北京安得家政有限公司',
+                mobile: '400-000-0000',
+                signType: 'auto' as const,
+                validateType: 'sms' as const
+              },
+              {
+                account: stepData.users.partyA.request.mobile, // 乙方账号（学员手机号）
+                name: stepData.users.partyA.request.name,
+                mobile: stepData.users.partyA.request.mobile,
+                signType: 'manual' as const,
+                validateType: 'sms' as const
+              }
+            ]
+          : [
+              {
+                account: stepData.users.partyA.request.mobile, // 甲方账号（手机号）
+                name: stepData.users.partyA.request.name,
+                mobile: stepData.users.partyA.request.mobile,
+                signType: 'manual' as const, // 有感知签约
+                validateType: 'sms' as const // 短信验证码
+                // 移除signPosition，让后端使用模板坐标签章策略
+              },
+              {
+                account: stepData.users.partyB.request.mobile, // 乙方账号（手机号）
+                name: stepData.users.partyB.request.name,
+                mobile: stepData.users.partyB.request.mobile,
+                signType: 'manual' as const, // 有感知签约
+                validateType: 'sms' as const // 短信验证码
+                // 移除signPosition，让后端使用模板坐标签章策略
+              },
+              {
+                account: 'ASIGN91110111MACJMD2R5J', // 🔑 官方已实名测试企业账号（支持无感知签约）
+                name: '北京安得家政有限公司',
+                mobile: '400-000-0000', // 企业客服电话
+                signType: 'auto' as const, // 无感知签约（自动签章）
+                validateType: 'sms' as const // 虽然是无感知，但仍需设置验证方式
+                // 移除signPosition，让后端使用模板坐标签章策略
+              }
+            ];
         
         console.log('签署方数据构建完成:', signersData);
 
@@ -3185,7 +3450,9 @@ const ESignatureStepPage: React.FC = () => {
                   const signUrls = statusResult.data.signUser.map((user: any, index: number) => ({
                     name: user.name,
                     mobile: user.account,
-                    role: index === 0 ? '甲方（客户）' : index === 1 ? '乙方（服务人员）' : '丙方（企业）',
+                    role: isStudentMode
+                      ? (index === 0 ? '甲方（企业）' : '乙方（学员）')
+                      : (index === 0 ? '甲方（客户）' : index === 1 ? '乙方（服务人员）' : '丙方（企业）'),
                     signUrl: user.signUrl,
                     account: user.account,
                     signOrder: user.signOrder
@@ -3222,7 +3489,9 @@ const ESignatureStepPage: React.FC = () => {
                 const signUrls = result.data.signUser.map((user: any, index: number) => ({
                   name: user.name,
                   mobile: user.account,
-                  role: index === 0 ? '甲方（客户）' : index === 1 ? '乙方（服务人员）' : '丙方（企业）',
+                  role: isStudentMode
+                    ? (index === 0 ? '甲方（企业）' : '乙方（学员）')
+                    : (index === 0 ? '甲方（客户）' : index === 1 ? '乙方（服务人员）' : '丙方（企业）'),
                   signUrl: user.signUrl,
                   account: user.account,
                   signOrder: user.signOrder
@@ -3271,7 +3540,9 @@ const ESignatureStepPage: React.FC = () => {
       <Card title="步骤3：添加签署方" bordered={false}>
         <Alert
           message="准备添加签署方"
-          description="将为甲方（客户）、乙方（阿姨）和丙方（企业）添加签署权限，并生成签署链接。"
+          description={isStudentMode
+            ? '将为甲方（企业）和乙方（学员）添加签署权限，并生成签署链接。'
+            : '将为甲方（客户）、乙方（阿姨）和丙方（企业）添加签署权限，并生成签署链接。'}
           type="info"
           showIcon
           style={{ marginBottom: 24 }}
@@ -3280,37 +3551,60 @@ const ESignatureStepPage: React.FC = () => {
         {stepData.users && stepData.contract && (
           <div style={{ marginBottom: 24 }}>
             <Row gutter={16}>
-              <Col span={8}>
-                <Card title="甲方（客户）" size="small" style={{ background: '#f6ffed' }}>
-                  <p><strong>姓名：</strong>{stepData.users.partyA?.request?.name}</p>
-                  <p><strong>手机：</strong>{stepData.users.partyA?.request?.mobile}</p>
-                  <p><strong>签署方式：</strong>有感知签约（短信验证码）</p>
-                  <p><strong>签名位置：</strong>模板预设位置（甲方签名区）</p>
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card title="乙方（阿姨）" size="small" style={{ background: '#fff7e6' }}>
-                  <p><strong>姓名：</strong>{stepData.users.partyB?.request?.name}</p>
-                  <p><strong>手机：</strong>{stepData.users.partyB?.request?.mobile}</p>
-                  <p><strong>签署方式：</strong>有感知签约（短信验证码）</p>
-                  <p><strong>签名位置：</strong>模板预设位置（乙方签名区）</p>
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card title="丙方（企业）" size="small" style={{ background: '#f0f9ff' }}>
-                  <p><strong>名称：</strong>北京安得家政有限公司</p>
-                  <p><strong>联系方式：</strong>400-000-0000</p>
-                  <p><strong>签署方式：</strong>无感知签约（自动签章）</p>
-                  <p><strong>签章位置：</strong>模板预设位置（丙方签章区）</p>
-                </Card>
-              </Col>
+              {isStudentMode ? (
+                <>
+                  <Col span={12}>
+                    <Card title="甲方（企业）" size="small" style={{ background: '#f6ffed' }}>
+                      <p><strong>名称：</strong>北京安得家政有限公司</p>
+                      <p><strong>联系方式：</strong>400-000-0000</p>
+                      <p><strong>签署方式：</strong>无感知签约（自动签章）</p>
+                      <p><strong>签章位置：</strong>模板预设位置（甲方签章区）</p>
+                    </Card>
+                  </Col>
+                  <Col span={12}>
+                    <Card title="乙方（学员）" size="small" style={{ background: '#fff7e6' }}>
+                      <p><strong>姓名：</strong>{stepData.users.partyA?.request?.name}</p>
+                      <p><strong>手机：</strong>{stepData.users.partyA?.request?.mobile}</p>
+                      <p><strong>签署方式：</strong>有感知签约（短信验证码）</p>
+                      <p><strong>签名位置：</strong>模板预设位置（乙方签名区）</p>
+                    </Card>
+                  </Col>
+                </>
+              ) : (
+                <>
+                  <Col span={8}>
+                    <Card title="甲方（客户）" size="small" style={{ background: '#f6ffed' }}>
+                      <p><strong>姓名：</strong>{stepData.users.partyA?.request?.name}</p>
+                      <p><strong>手机：</strong>{stepData.users.partyA?.request?.mobile}</p>
+                      <p><strong>签署方式：</strong>有感知签约（短信验证码）</p>
+                      <p><strong>签名位置：</strong>模板预设位置（甲方签名区）</p>
+                    </Card>
+                  </Col>
+                  <Col span={8}>
+                    <Card title="乙方（阿姨）" size="small" style={{ background: '#fff7e6' }}>
+                      <p><strong>姓名：</strong>{stepData.users.partyB?.request?.name}</p>
+                      <p><strong>手机：</strong>{stepData.users.partyB?.request?.mobile}</p>
+                      <p><strong>签署方式：</strong>有感知签约（短信验证码）</p>
+                      <p><strong>签名位置：</strong>模板预设位置（乙方签名区）</p>
+                    </Card>
+                  </Col>
+                  <Col span={8}>
+                    <Card title="丙方（企业）" size="small" style={{ background: '#f0f9ff' }}>
+                      <p><strong>名称：</strong>北京安得家政有限公司</p>
+                      <p><strong>联系方式：</strong>400-000-0000</p>
+                      <p><strong>签署方式：</strong>无感知签约（自动签章）</p>
+                      <p><strong>签章位置：</strong>模板预设位置（丙方签章区）</p>
+                    </Card>
+                  </Col>
+                </>
+              )}
             </Row>
 
             <Card title="合同信息" size="small" style={{ marginTop: 16, background: '#f0f9ff' }}>
               <p><strong>合同编号：</strong>{stepData.contract.contractNo}</p>
-              <p><strong>合同名称：</strong>{stepData.contract.contractName || '安得家政三方服务合同'}</p>
+              <p><strong>合同名称：</strong>{stepData.contract.contractName || (isStudentMode ? '安得家政培训合同' : '安得家政三方服务合同')}</p>
               <p><strong>模板编号：</strong>{stepData.contract.templateNo}</p>
-              <p><strong>签署顺序：</strong>并行签署（三方可同时签署）</p>
+              <p><strong>签署顺序：</strong>{isStudentMode ? '并行签署（双方可同时签署）' : '并行签署（三方可同时签署）'}</p>
             </Card>
           </div>
         )}
@@ -3352,13 +3646,15 @@ const ESignatureStepPage: React.FC = () => {
         {signUrls.length > 0 ? (
           <div style={{ marginBottom: 24 }}>
             {signUrls.map((signUser: any, index: number) => (
-              <Card 
+              <Card
                 key={index}
-                title={`${index === 0 ? '甲方' : '乙方'}签署链接`}
-                size="small" 
-                style={{ 
+                title={`${isStudentMode
+                  ? (index === 0 ? '甲方（企业）' : '乙方（学员）')
+                  : (index === 0 ? '甲方' : index === 1 ? '乙方' : '丙方')}签署链接`}
+                size="small"
+                style={{
                   marginBottom: 16,
-                  background: index === 0 ? '#f6ffed' : '#fff7e6'
+                  background: index === 0 ? '#f6ffed' : index === 1 ? '#fff7e6' : '#f0f9ff'
                 }}
               >
                 <p><strong>签署人：</strong>{signUser.name}</p>
@@ -3512,12 +3808,12 @@ const ESignatureStepPage: React.FC = () => {
 };
 
 // 包装组件提供App上下文
-const ESignaturePageWithApp: React.FC = () => {
+const ESignaturePageWithApp: React.FC<ESignaturePageProps> = ({ mode }) => {
   return (
     <App>
-      <ESignatureStepPage />
+      <ESignatureStepPage mode={mode} />
     </App>
   );
 };
 
-export default ESignaturePageWithApp; 
+export default ESignaturePageWithApp;

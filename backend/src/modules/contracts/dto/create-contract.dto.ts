@@ -12,7 +12,7 @@ import {
   IsMongoId
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ContractType, OnboardStatus } from '../models/contract.model';
+import { ContractType, OnboardStatus, OrderCategory } from '../models/contract.model';
 
 export class CreateContractDto {
   @IsString()
@@ -227,4 +227,31 @@ export class CreateContractDto {
   @IsOptional()
   @IsBoolean()
   paymentEnabled?: boolean;
+
+  // 订单类别：区分家政订单与职培订单
+  @IsOptional()
+  @IsEnum(OrderCategory, { message: '订单类别必须是 housekeeping 或 training' })
+  orderCategory?: OrderCategory;
+
+  // 职培订单专用字段
+  @IsOptional()
+  @IsString()
+  trainingLeadId?: string;
+
+  @IsOptional()
+  @IsNumber({}, { message: '报课金额必须是数字' })
+  @Transform(({ value }) => value ? parseFloat(value) : undefined)
+  courseAmount?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: '培训服务费必须是数字' })
+  @Transform(({ value }) => value ? parseFloat(value) : undefined)
+  serviceFeeAmount?: number;
+
+  @IsOptional()
+  intendedCourses?: string[];
+
+  @IsOptional()
+  @IsString()
+  consultPosition?: string;
 }

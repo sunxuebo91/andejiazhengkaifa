@@ -21,6 +21,19 @@ import { ResumeQueryService } from './resume-query.service';
 import { DashubaoService } from '../dashubao/dashubao.service';
 import { BackgroundCheck, BackgroundCheckDocument } from '../zmdb/models/background-check.model';
 import { QwenAIService } from '../ai/qwen-ai.service';
+import { ReferralResume, ReferralResumeDocument } from '../referral/models/referral-resume.model';
+
+/** 状态中文 label（推荐冲突提示用） */
+const REFERRAL_STATUS_LABEL: Record<string, string> = {
+  pending_review:   '待审核',
+  approved:         '已通过',
+  following_up:     '推荐中',
+  contracted:       '已签单',
+  onboarded:        '已上户',
+  reward_pending:   '返费待审核',
+  reward_approved:  '返费待打款',
+  reward_paid:      '返费已打款',
+};
 
 @Injectable()
 export class ResumeService {
@@ -46,6 +59,8 @@ export class ResumeService {
     @InjectModel(BackgroundCheck.name)
     private readonly backgroundCheckModel: Model<BackgroundCheckDocument>,
     private readonly qwenAIService: QwenAIService,
+    @InjectModel(ReferralResume.name)
+    private readonly referralResumeModel: Model<ReferralResumeDocument>,
   ) {}
 
   // 🆕 系统操作人ID（用于系统自动操作）
@@ -112,6 +127,9 @@ export class ResumeService {
 
     // 2. 统一去重检查（手机号 + 身份证号）
     await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber);
+
+    // 2b. 反查推荐库（双向去重，保护推荐人权益）
+    await this.validateReferralUniqueness(normalizedData.phone, normalizedData.idNumber);
 
     // 3. 处理文件上传
     const filesArray = Array.isArray(files) ? files : [];
@@ -1223,6 +1241,109 @@ export class ResumeService {
   }
 
   /**
+   * 反查推荐库去重（双向去重：CRM 录简历时调用，保护推荐人权益）
+   * 排除 rejected/invalid/activated/released 四种"已终结"或"已放行"状态。
+   * 命中则抛 ConflictException，错误信息带推荐人姓名+状态 label。
+   */
+  private async validateReferralUniqueness(phone?: string, idNumber?: string): Promise<void> {
+    if (!phone && !idNumber) return;
+
+    const excludedStatuses = ['rejected', 'invalid', 'activated', 'released'];
+    const or: any[] = [];
+    if (phone)    or.push({ phone });
+    if (idNumber) or.push({ idCard: idNumber });
+
+    const hit = await this.referralResumeModel
+      .findOne({ $or: or, status: { $nin: excludedStatuses } })
+      .select('_id phone idCard referrerName status assignedStaffId')
+      .lean()
+      .exec();
+
+    if (!hit) return;
+
+    const matchField = phone && (hit as any).phone === phone ? 'phone' : 'idCard';
+    const errorCode = matchField === 'phone' ? 'DUPLICATE_REFERRAL_PHONE' : 'DUPLICATE_REFERRAL_ID_NUMBER';
+    const referrerName = (hit as any).referrerName || '未知推荐人';
+
+    // 解析归属员工姓名
+    let assignedStaffName = '未知员工';
+    const assignedStaffId = (hit as any).assignedStaffId;
+    if (assignedStaffId && Types.ObjectId.isValid(assignedStaffId)) {
+      try {
+        const staff = await this.userModel
+          .findById(assignedStaffId)
+          .select('name username')
+          .lean()
+          .exec();
+        if (staff) assignedStaffName = (staff as any).name || (staff as any).username || assignedStaffName;
+      } catch { /* ignore, 保底文案 */ }
+    }
+
+    throw new ConflictException({
+      message: `该阿姨已被${assignedStaffName}的${referrerName}推荐，请联系该同学释放！`,
+      error: errorCode,
+      referralResumeId: (hit as any)._id?.toString(),
+      referrerName,
+      assignedStaffName,
+      referralStatus: (hit as any).status,
+    });
+  }
+
+  /**
+   * 释放流程专用：从一条 referral_resume 派生一条 resumes 记录。
+   * 调用前调用方（ReferralService.releaseToResumeLibrary）应已将该推荐记录状态置为 released，
+   * 这样 validateReferralUniqueness 会因排除 released 而放行。
+   */
+  async createMinimalFromReferral(data: {
+    name: string;
+    phone?: string;
+    idCard?: string;
+    jobType: string;
+    experience?: string;
+    remark?: string;
+    referrerName?: string;
+    operatorStaffId: string;
+  }): Promise<IResume> {
+    // 规范化手机号/身份证号
+    const normalizedPhone = data.phone ? data.phone.replace(/\D/g, '') : undefined;
+    const normalizedIdCard = data.idCard ? data.idCard.trim().toUpperCase() : undefined;
+
+    // 只做 resumes 集合本身的冲突检查；推荐库查重由 releaseToResumeLibrary 之前的状态切换保证
+    await this.validateUniqueness(normalizedPhone, normalizedIdCard);
+
+    const noteParts: string[] = [];
+    if (data.referrerName) noteParts.push(`推荐人：${data.referrerName}`);
+    if (data.experience)   noteParts.push(`经验：${data.experience}`);
+    if (data.remark)       noteParts.push(`推荐备注：${data.remark}`);
+
+    const doc: any = {
+      userId: Types.ObjectId.isValid(data.operatorStaffId) ? new Types.ObjectId(data.operatorStaffId) : undefined,
+      name: data.name,
+      jobType: data.jobType,
+      leadSource: 'referral-release',
+      status: 'pending',
+      isDraft: !normalizedPhone,
+      remarks: noteParts.join('\n') || undefined,
+    };
+    if (normalizedPhone)  doc.phone = normalizedPhone;
+    if (normalizedIdCard) doc.idNumber = normalizedIdCard;
+
+    try {
+      const saved = await new this.resumeModel(doc).save();
+      this.logger.log(`✅ 推荐释放创建简历成功: ${saved._id}, 推荐人: ${data.referrerName || '-'}`);
+      return saved;
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        const field = Object.keys(error.keyPattern || {})[0];
+        if (field === 'phone')    throw new ConflictException({ message: '该手机号已被使用', error: 'DUPLICATE_PHONE' });
+        if (field === 'idNumber') throw new ConflictException({ message: '该身份证号已被使用', error: 'DUPLICATE_ID_NUMBER' });
+        throw new ConflictException({ message: '数据重复', error: 'DUPLICATE_ERROR' });
+      }
+      throw new BadRequestException(`释放到简历库失败: ${error.message}`);
+    }
+  }
+
+  /**
    * 统一数据规范化处理
    * @param data 原始输入数据
    * @returns 规范化后的数据
@@ -1346,6 +1467,9 @@ export class ResumeService {
     // 3. 统一去重检查
     await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber);
 
+    // 3a. 反查推荐库（双向去重，保护推荐人权益）
+    await this.validateReferralUniqueness(normalizedData.phone, normalizedData.idNumber);
+
     // 3b. 草稿去重：无手机号时检查同名草稿字段重合率，≥80% 则删除旧草稿
     if (!normalizedData.phone && normalizedData.name) {
       await this.deduplicateDraft(normalizedData);
@@ -1411,8 +1535,16 @@ export class ResumeService {
     // 1. 数据规范化
     const normalizedData = this.normalizeData(data);
 
+    // 1b. 推荐人录入来源不允许修改（保护推荐记录与返费结算关联）
+    if ((currentResume as any).leadSource === 'referral-release' && 'leadSource' in normalizedData) {
+      delete normalizedData.leadSource;
+    }
+
     // 2. 统一去重检查（排除自身）
     await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber, id);
+
+    // 2b. 反查推荐库（双向去重，保护推荐人权益）
+    await this.validateReferralUniqueness(normalizedData.phone, normalizedData.idNumber);
 
     // 3. 构建更新数据
     const updateData: any = { ...normalizedData };
@@ -1576,8 +1708,17 @@ export class ResumeService {
     // 1. 数据规范化
     const normalizedData = this.normalizeData(updateResumeDto);
 
+    // 1b. 推荐人录入来源不允许修改（保护推荐记录与返费结算关联）
+    const existing = await this.resumeModel.findById(new Types.ObjectId(id)).select('leadSource').lean();
+    if ((existing as any)?.leadSource === 'referral-release' && 'leadSource' in normalizedData) {
+      delete normalizedData.leadSource;
+    }
+
     // 2. 统一去重检查（手机号 + 身份证号，排除自身）
     await this.validateUniqueness(normalizedData.phone, normalizedData.idNumber, id);
+
+    // 2b. 反查推荐库（双向去重，保护推荐人权益）
+    await this.validateReferralUniqueness(normalizedData.phone, normalizedData.idNumber);
 
     // 3. 检查简历是否存在，并保存原始数据用于日志对比
     const resume = await this.resumeModel.findById(new Types.ObjectId(id));

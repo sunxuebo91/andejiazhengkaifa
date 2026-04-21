@@ -332,12 +332,13 @@ const skillsMap: SkillsMapType = {
 // 线索来源映射
 const leadSourceMap: LeadSourceMapType = {
   referral: '转介绍',
+  'referral-release': '推荐人录入',
   'paid-lead': '付费线索',
   community: '社群线索',
   'door-to-door': '地推',
   'shared-order': '合单',
   'self-registration': '自助注册',
-  sales: '销售录入',  // ⭐ 新增：销售录入来源
+  sales: '销售录入',
   other: '其他'
 };
 

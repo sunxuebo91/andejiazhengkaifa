@@ -28,6 +28,8 @@ interface ContractStatusCardProps {
   onStatusChange?: (statusInfo: ContractStatusInfo | null) => void;
   showTitle?: boolean;
   title?: string;
+  // 🔥 订单类别：用于区分家政/职培合同的签署方角色标签
+  orderCategory?: 'housekeeping' | 'training';
 }
 
 export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
@@ -40,7 +42,8 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
   style,
   onStatusChange,
   showTitle = true,
-  title = '合同状态信息'
+  title = '合同状态信息',
+  orderCategory,
 }) => {
   const [contractStatus, setContractStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -99,7 +102,7 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
     
     try {
       // 调用后端API
-      const response = await esignService.getContractStatus(contractNo);
+      const response = await esignService.getContractStatus(contractNo, orderCategory);
       console.log('📦 API响应 (原始):', response);
       console.log('📦 响应类型:', typeof response);
       
@@ -312,7 +315,7 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
       // 初始查询（不显示消息）
       checkContractStatus(false);
     }
-  }, [contractNo]);
+  }, [contractNo, orderCategory]);
 
   // 自动刷新逻辑
   useEffect(() => {
@@ -460,8 +463,17 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
               <div style={{ marginTop: 16 }}>
                 <p><strong>详细签署状态：</strong></p>
                 <Row gutter={[12, 8]}>
-                  {renderSigner('甲方（客户）', contractStatus.detailedStatus.customer.name || '客户', contractStatus.detailedStatus.customerSigned)}
-                  {renderSigner('乙方（阿姨）', contractStatus.detailedStatus.worker.name || '阿姨', contractStatus.detailedStatus.workerSigned)}
+                  {orderCategory === 'training' ? (
+                    <>
+                      {renderSigner('甲方（企业）', contractStatus.detailedStatus.customer?.name || '北京安得家政有限公司', contractStatus.detailedStatus.customerSigned)}
+                      {renderSigner('乙方（学员）', contractStatus.detailedStatus.worker?.name || '学员', contractStatus.detailedStatus.workerSigned)}
+                    </>
+                  ) : (
+                    <>
+                      {renderSigner('甲方（客户）', contractStatus.detailedStatus.customer.name || '客户', contractStatus.detailedStatus.customerSigned)}
+                      {renderSigner('乙方（阿姨）', contractStatus.detailedStatus.worker.name || '阿姨', contractStatus.detailedStatus.workerSigned)}
+                    </>
+                  )}
                 </Row>
               </div>
             );

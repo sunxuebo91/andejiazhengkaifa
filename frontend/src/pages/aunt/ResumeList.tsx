@@ -676,9 +676,11 @@ const ResumeList = () => {
         <Space size={4} wrap>
           {record.fromReferral
             ? <Tag color="purple">推荐入库</Tag>
-            : record.userId
-              ? <Tag color="orange">员工创建</Tag>
-              : <Tag color="blue">自助注册</Tag>
+            : record.leadSource === 'referral-release'
+              ? <Tag color="magenta">推荐人录入</Tag>
+              : record.userId
+                ? <Tag color="orange">员工创建</Tag>
+                : <Tag color="blue">自助注册</Tag>
           }
           {record.fromReferral && (
             record.isHidden

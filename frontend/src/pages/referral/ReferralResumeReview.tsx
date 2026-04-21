@@ -4,7 +4,7 @@ import {
   Card, Table, Button, Space, Tag, Modal, Input, App, Tabs,
   Descriptions, Select, Tooltip, Badge, Spin, Divider,
 } from 'antd';
-import { CheckOutlined, CloseOutlined, EyeOutlined, SwapOutlined, SyncOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, EyeOutlined, SwapOutlined, SyncOutlined, ExportOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../../contexts/AuthContext';
 import * as referralService from '../../services/referralService';
@@ -183,6 +183,35 @@ const ReferralResumeReview: React.FC = () => {
     finally { setRewardLoading(false); }
   };
 
+  const handleRelease = (record: ReferralResume) => {
+    Modal.confirm({
+      title: '确认释放到简历库',
+      content: (
+        <span>
+          确认将 <strong>{record.name}</strong> 释放到简历库吗？<br />
+          释放后将自动在简历库创建一条记录（推荐人：{record.referrerName || '-'}），
+          <br />
+          后续签单/上户/返费流程仍通过本推荐记录跟踪，归属不变。
+        </span>
+      ),
+      okText: '确认释放',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const res = await referralService.releaseToResumeLibrary(user!.id, isAdmin, record._id);
+          if (res.success) {
+            message.success('已释放到简历库');
+            fetchList(tabToReviewStatus(activeTab) as string, page);
+          } else {
+            message.error((res as any).message || '释放失败');
+          }
+        } catch (e: any) {
+          message.error(e.response?.data?.message || '释放失败');
+        }
+      },
+    });
+  };
+
   const columns: ColumnsType<ReferralResume> = [
     {
       title: '阿姨姓名',
@@ -277,6 +306,9 @@ const ReferralResumeReview: React.FC = () => {
           {record.reviewStatus === 'approved' && ['following_up', 'contracted', 'onboarded'].includes(record.status) && (
             <Button size="small" icon={<SwapOutlined />}
               onClick={() => { setStatusModal({ open: true, id: record._id, current: record.status }); setNewStatus(''); }}>更新状态</Button>
+          )}
+          {['approved', 'following_up'].includes(record.status) && !record.linkedResumeId && (
+            <Button size="small" icon={<ExportOutlined />} onClick={() => handleRelease(record)}>释放</Button>
           )}
           {record.status === 'onboarded' && record.rewardStatus === 'pending' && (
             <Button size="small" type="link"

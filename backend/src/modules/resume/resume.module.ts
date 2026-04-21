@@ -16,6 +16,7 @@ import { User, UserSchema } from '../users/models/user.entity';
 import { DashubaoModule } from '../dashubao/dashubao.module';
 import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/background-check.model';
 import { AIModule } from '../ai/ai.module';
+import { ReferralResume, ReferralResumeSchema } from '../referral/models/referral-resume.model';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AIModule } from '../ai/ai.module';
       { name: User.name, schema: UserSchema },
       { name: BackgroundCheck.name, schema: BackgroundCheckSchema },
       { name: ResumeOperationLog.name, schema: ResumeOperationLogSchema },
+      { name: ReferralResume.name, schema: ReferralResumeSchema },
     ]),
     UploadModule,
     DashubaoModule,

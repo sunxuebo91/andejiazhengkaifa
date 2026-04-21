@@ -4,7 +4,7 @@ import {
   Card, Table, Button, Space, Tag, Modal, Input, App,
   Select, Form, Descriptions, Drawer, Timeline, Tooltip, Spin, Divider,
 } from 'antd';
-import { SwapOutlined, EyeOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined } from '@ant-design/icons';
+import { SwapOutlined, EyeOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, ExportOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../../contexts/AuthContext';
 import * as referralService from '../../services/referralService';
@@ -106,6 +106,36 @@ const ReferralManage: React.FC = () => {
     finally { setLogLoading(false); }
   };
 
+  const handleRelease = (record: ReferralResume) => {
+    Modal.confirm({
+      title: '确认释放到简历库',
+      content: (
+        <span>
+          确认将 <strong>{record.name}</strong> 释放到简历库吗？<br />
+          释放后将自动在简历库创建一条记录（推荐人：{record.referrerName || '-'}），
+          <br />
+          后续签单/上户/返费流程仍通过本推荐记录跟踪，归属不变。
+        </span>
+      ),
+      okText: '确认释放',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const isAdmin = (user as any)?.role === 'admin' || (user as any)?.isAdmin === true;
+          const res = await referralService.releaseToResumeLibrary(user!.id, isAdmin, record._id);
+          if (res.success) {
+            message.success('已释放到简历库');
+            fetchList(page);
+          } else {
+            message.error((res as any).message || '释放失败');
+          }
+        } catch (e: any) {
+          message.error(e.response?.data?.message || '释放失败');
+        }
+      },
+    });
+  };
+
   const handleDelete = (record: ReferralResume) => {
     Modal.confirm({
       title: '确认删除推荐记录',
@@ -154,6 +184,7 @@ const ReferralManage: React.FC = () => {
   const columns: ColumnsType<ReferralResume> = [
     { title: '阿姨姓名', dataIndex: 'name', width: 90, fixed: 'left' },
     { title: '阿姨工种', dataIndex: 'serviceType', width: 100, render: (v: string) => (JOB_TYPE_MAP as any)[v] || v },
+    { title: '阿姨电话', dataIndex: 'phone', width: 130, render: (v?: string) => v || <span style={{ color: '#bbb' }}>未填写</span> },
     { title: '推荐人姓名', dataIndex: 'referrerName', width: 100, render: (v?: string) => v || '-' },
     { title: '推荐人电话', dataIndex: 'referrerPhone', width: 130 },
     {
@@ -177,12 +208,17 @@ const ReferralManage: React.FC = () => {
     { title: '预计返费', dataIndex: 'rewardAmount', width: 90, render: (v?: number) => v != null ? `¥${v}` : '-' },
     { title: '提交时间', dataIndex: 'createdAt', width: 150, render: (v: string) => v ? new Date(v).toLocaleString('zh-CN') : '-' },
     {
-      title: '操作', width: 220, fixed: 'right',
+      title: '操作', width: 260, fixed: 'right',
       render: (_, record) => (
         <Space size="small" wrap>
           <Tooltip title="查看详情"><Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(record)} /></Tooltip>
           <Tooltip title="重新分配员工"><Button size="small" icon={<SwapOutlined />} onClick={() => { setReassignModal({ open: true, id: record._id, name: record.name }); reassignForm.resetFields(); }}>分配</Button></Tooltip>
           <Tooltip title="绑定变更日志"><Button size="small" icon={<HistoryOutlined />} onClick={() => handleViewLogs(record._id)} /></Tooltip>
+          {['approved', 'following_up'].includes(record.status) && !record.linkedResumeId && (
+            <Tooltip title="释放到简历库">
+              <Button size="small" icon={<ExportOutlined />} onClick={() => handleRelease(record)}>释放</Button>
+            </Tooltip>
+          )}
           {record.status === 'reward_pending' && <>
             <Tooltip title="审核通过，进入待打款">
               <Button size="small" type="primary" icon={<CheckCircleOutlined />}
@@ -239,7 +275,7 @@ const ReferralManage: React.FC = () => {
           columns={columns}
           dataSource={list}
           loading={loading}
-          scroll={{ x: 1100 }}
+          scroll={{ x: 1230 }}
           rowClassName={(record) =>
             ['reward_pending', 'reward_approved'].includes(record.status) ? 'referral-row-urgent' : ''
           }

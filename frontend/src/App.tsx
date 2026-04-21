@@ -62,6 +62,9 @@ const EditTrainingLead = React.lazy(() => import('./pages/training-leads/EditTra
 const TrainingLeadDetail = React.lazy(() => import('./pages/training-leads/TrainingLeadDetail'));
 const TrainingLeadPublicPool = React.lazy(() => import('./pages/training-leads/PublicPool'));
 const TrainingLeadTransferRules = React.lazy(() => import('./pages/training-leads/TrainingLeadTransferRules'));
+// 职培订单相关组件
+const CreateTrainingOrder = React.lazy(() => import('./pages/training-orders/CreateTrainingOrder'));
+const TrainingOrderList = React.lazy(() => import('./pages/training-orders/TrainingOrderList'));
 // 表单管理相关组件
 const FormList = React.lazy(() => import('./pages/forms/FormList'));
 const FormEditor = React.lazy(() => import('./pages/forms/FormEditor'));
@@ -307,6 +310,19 @@ export default function App({ children }: AppProps) {
                       path="submissions"
                       element={<AuthorizedRoute element={<FormSubmissionList />} />}
                     />
+                  </Route>
+
+                  {/* 职培订单模块 - 所有登录用户可访问 */}
+                  <Route path="training-orders">
+                    <Route
+                      path="create"
+                      element={<AuthorizedRoute element={<CreateTrainingOrder />} />}
+                    />
+                    <Route
+                      path="list"
+                      element={<AuthorizedRoute element={<TrainingOrderList />} />}
+                    />
+                    <Route index element={<Navigate to="list" replace />} />
                   </Route>
 
                   {/* 用户管理模块 - 需要管理员权限 */}

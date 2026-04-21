@@ -44,6 +44,7 @@ export interface TrainingLead {
   consultPosition?: string;
   phone?: string;
   wechatId?: string;
+  idCardNumber?: string;
   leadSource?: string;
   trainingType?: string;
   intendedCourses?: string[];
@@ -96,6 +97,7 @@ export interface CreateTrainingLeadDto {
   consultPosition?: string;
   phone?: string;
   wechatId?: string;
+  idCardNumber?: string;
   leadSource?: string;
   trainingType?: string;
   intendedCourses?: string[];

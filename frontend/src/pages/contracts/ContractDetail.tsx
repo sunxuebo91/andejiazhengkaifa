@@ -539,6 +539,7 @@ const ContractDetail: React.FC = () => {
                 style={{ marginBottom: 0 }}
                 onStatusChange={handleStatusChange}
                 title="电子合同状态信息"
+                orderCategory={contract.orderCategory}
               />
             </div>
           )}
@@ -1309,7 +1310,7 @@ const ContractDetail: React.FC = () => {
             >
               返回
             </Button>
-            <span>合同详情 - {contract.contractNumber}</span>
+            <span>{contract.orderCategory === 'training' ? '职培合同详情' : '合同详情'} - {contract.contractNumber}</span>
             <span style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
               收款：
               <Switch
@@ -1428,6 +1429,7 @@ const ContractDetail: React.FC = () => {
                 style={{ marginBottom: '16px' }}
                 onStatusChange={handleStatusChange}
                 title="电子合同状态信息"
+                orderCategory={contract.orderCategory}
               />
             </Col>
           )}

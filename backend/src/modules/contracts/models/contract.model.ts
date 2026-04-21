@@ -14,7 +14,19 @@ export enum ContractType {
   BAIBAN_YUER_SAO = '白班育儿嫂', // 🔥 新增：白班育儿嫂
   BAIBAN_BAOMU = '白班保姆',
   ZHUJIA_HULAO = '住家护老',
-  ERTONG_PEIBAN = '儿童陪伴师'
+  ERTONG_PEIBAN = '儿童陪伴师',
+  TRAINING = '职培'
+}
+
+// 订单类别：区分家政服务订单与职培订单，后者复用 Contract 模型但无 worker
+export enum OrderCategory {
+  HOUSEKEEPING = 'housekeeping',
+  TRAINING = 'training',
+}
+
+// 训练 / 职培订单判断辅助函数（用于 schema required 条件）
+function isHousekeeping(this: any) {
+  return this.orderCategory !== OrderCategory.TRAINING;
 }
 
 // 新增：合同状态枚举
@@ -45,43 +57,47 @@ export class Contract {
   @Prop({ required: true, unique: true })
   contractNumber: string; // 合同编号，自动生成
 
-  @Prop({ required: true })
-  customerName: string; // 客户姓名
+  // 订单类别：housekeeping（默认，家政订单）/ training（职培订单）
+  @Prop({ enum: OrderCategory, default: OrderCategory.HOUSEKEEPING, index: true })
+  orderCategory?: OrderCategory;
 
   @Prop({ required: true })
-  customerPhone: string; // 客户手机号
+  customerName: string; // 客户姓名 / 学员姓名
+
+  @Prop({ required: true })
+  customerPhone: string; // 客户手机号 / 学员手机号
 
   @Prop()
-  customerIdCard?: string; // 客户身份证号
+  customerIdCard?: string; // 客户身份证号 / 学员身份证号
 
   @Prop()
-  customerAddress?: string; // 客户服务地址
+  customerAddress?: string; // 客户服务地址 / 学员地址
 
-  @Prop({ required: true, enum: ContractType })
-  contractType: ContractType; // 合同类型
+  @Prop({ required: isHousekeeping, enum: ContractType })
+  contractType: ContractType; // 合同类型（职培订单可为空）
 
-  @Prop({ required: true })
+  @Prop({ required: isHousekeeping })
   startDate: Date; // 开始时间
 
-  @Prop({ required: true })
+  @Prop({ required: isHousekeeping })
   endDate: Date; // 结束时间
 
-  @Prop({ required: true })
-  workerName: string; // 劳动者姓名
+  @Prop({ required: isHousekeeping })
+  workerName: string; // 劳动者姓名（职培订单无）
 
-  @Prop({ required: true })
-  workerPhone: string; // 劳动者电话
+  @Prop({ required: isHousekeeping })
+  workerPhone: string; // 劳动者电话（职培订单无）
 
-  @Prop({ required: true })
-  workerIdCard: string; // 劳动者身份证号
+  @Prop({ required: isHousekeeping })
+  workerIdCard: string; // 劳动者身份证号（职培订单无）
 
   @Prop()
   workerAddress?: string; // 阿姨联系地址
 
-  @Prop({ required: true })
-  workerSalary: number; // 家政员工资
+  @Prop({ required: isHousekeeping })
+  workerSalary: number; // 家政员工资（职培订单无）
 
-  @Prop({ required: true })
+  @Prop({ required: isHousekeeping })
   customerServiceFee: number; // 客户服务费
 
   @Prop()
@@ -105,14 +121,30 @@ export class Contract {
   @Prop({ min: 1, max: 31 })
   monthlyWorkDays?: number; // 月工作天数（1-31）（选填）
 
-  @Prop({ type: Types.ObjectId, ref: 'Customer', required: true })
-  customerId: Types.ObjectId; // 关联客户ID
+  @Prop({ type: Types.ObjectId, ref: 'Customer', required: isHousekeeping })
+  customerId: Types.ObjectId; // 关联客户ID（职培订单可空）
 
-  @Prop({ type: Types.ObjectId, ref: 'Resume', required: true })
-  workerId: Types.ObjectId; // 关联简历ID
+  @Prop({ type: Types.ObjectId, ref: 'Resume', required: isHousekeeping })
+  workerId: Types.ObjectId; // 关联简历ID（职培订单无阿姨）
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId; // 创建人
+
+  // 职培订单专用字段
+  @Prop({ type: Types.ObjectId, ref: 'TrainingLead' })
+  trainingLeadId?: Types.ObjectId; // 关联学员线索ID
+
+  @Prop()
+  courseAmount?: number; // 报课金额
+
+  @Prop()
+  serviceFeeAmount?: number; // 培训服务费
+
+  @Prop({ type: [String], default: undefined })
+  intendedCourses?: string[]; // 意向课程
+
+  @Prop()
+  consultPosition?: string; // 咨询职位
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   lastUpdatedBy: Types.ObjectId; // 最后更新人

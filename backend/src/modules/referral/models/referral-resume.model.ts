@@ -14,7 +14,8 @@ export type ReferralStatus =
   | 'reward_approved'   // 返费待打款（员工审核通过，等待财务打款）
   | 'reward_paid'
   | 'invalid'
-  | 'activated';  // 简历已存在，推荐激活标记，无需审核
+  | 'activated'         // 简历已存在，推荐激活标记，无需审核
+  | 'released';         // 已手动释放到简历库（由 assignedStaff/管理员点击释放按钮触发）
 export type ReferralRewardStatus = 'pending' | 'reviewing' | 'approved' | 'paid' | 'rejected';
 
 /**
@@ -80,11 +81,17 @@ export class ReferralResume {
 
   @Prop({
     type: String,
-    enum: ['pending_review', 'rejected', 'following_up', 'contracted', 'onboarded', 'reward_pending', 'reward_approved', 'reward_paid', 'invalid', 'activated'],
+    enum: ['pending_review', 'rejected', 'following_up', 'contracted', 'onboarded', 'reward_pending', 'reward_approved', 'reward_paid', 'invalid', 'activated', 'released'],
     default: 'pending_review',
     index: true,
   })
   status: ReferralStatus;
+
+  @Prop()
+  releasedAt?: Date; // 手动释放到简历库的时间
+
+  @Prop()
+  releasedBy?: string; // 执行释放操作的员工ID
 
   @Prop()
   contractId?: string; // 关联合同ID（签单后CRM回填）

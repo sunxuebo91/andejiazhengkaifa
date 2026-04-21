@@ -380,10 +380,8 @@ export class ContractsMiniProgramController {
           details: {
             templateNo: createContractDto.templateNo ? '✅ 已提供' : '❌ 缺失',
             customerName: createContractDto.customerName ? '✅ 已提供' : '❌ 缺失',
-            customerPhone: createContractDto.customerPhone ? '✅ 已提供' : '❌ 缺失',
             customerIdCard: createContractDto.customerIdCard ? '✅ 已提供' : '❌ 缺失',
             workerName: createContractDto.workerName ? '✅ 已提供' : '❌ 缺失',
-            workerPhone: createContractDto.workerPhone ? '✅ 已提供' : '❌ 缺失',
             workerIdCard: createContractDto.workerIdCard ? '✅ 已提供' : '❌ 缺失',
           }
         };

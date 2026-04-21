@@ -12,21 +12,26 @@ import { ReferralService } from './referral.service';
 type AnyFn = (...args: any[]) => any;
 const noop = () => undefined;
 
-function makeService(overrides: { usersService: any }): ReferralService {
+function makeService(overrides: {
+  usersService: any;
+  referralResumeModel?: any;
+  resumeService?: any;
+}): ReferralService {
   const dummyModel = {} as any;
   const dummyService: Record<string, AnyFn> = new Proxy({}, { get: () => noop });
   return new ReferralService(
-    dummyModel,                 // referrerModel
-    dummyModel,                 // referralResumeModel
-    dummyModel,                 // bindingLogModel
-    dummyModel,                 // rewardModel
-    dummyModel,                 // mpUserModel
-    dummyModel,                 // contractModel
-    dummyService as any,        // resumeService
-    overrides.usersService,     // usersService（被测试）
-    dummyService as any,        // mpUserService
-    dummyService as any,        // notificationService
-    dummyService as any,        // wechatCloudService
+    dummyModel,                                     // referrerModel
+    overrides.referralResumeModel ?? dummyModel,    // referralResumeModel
+    dummyModel,                                     // bindingLogModel
+    dummyModel,                                     // rewardModel
+    dummyModel,                                     // mpUserModel
+    dummyModel,                                     // contractModel
+    (overrides.resumeService ?? dummyService) as any, // resumeService
+    overrides.usersService,                         // usersService
+    dummyService as any,                            // mpUserService
+    dummyService as any,                            // notificationService
+    dummyService as any,                            // notificationHelperService
+    dummyService as any,                            // wechatCloudService
   );
 }
 
@@ -233,5 +238,152 @@ describe('ReferralService.getStaffPublicInfo', () => {
     const result = await svc.getStaffPublicInfo('any_id');
 
     expect(result).toBeNull();
+  });
+});
+
+describe('ReferralService.releaseToResumeLibrary', () => {
+  /** 构造 mock referralResumeModel，findById 返回传入的 doc，updateOne 记录调用 */
+  function buildRefModel(doc: any) {
+    const updateCalls: any[] = [];
+    const model: any = {
+      findById: jest.fn().mockReturnValue({ exec: async () => doc }),
+      updateOne: jest.fn().mockImplementation((filter: any, update: any) => {
+        updateCalls.push({ filter, update });
+        return { exec: async () => ({ modifiedCount: 1 }) };
+      }),
+    };
+    return { model, updateCalls };
+  }
+
+  it('非 admin 且 assignedStaffId 不匹配 → 403 ForbiddenException', async () => {
+    const doc = { _id: 'ref_1', status: 'approved', assignedStaffId: 'staff_OWNER' };
+    const { model } = buildRefModel(doc);
+    const svc = makeService({
+      usersService: { findById: jest.fn(), findAdminUser: jest.fn() },
+      referralResumeModel: model,
+    });
+
+    await expect(
+      svc.releaseToResumeLibrary('staff_OTHER', false, 'ref_1'),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('状态不在 approved/following_up（如 contracted）→ 400 BadRequestException', async () => {
+    const doc = { _id: 'ref_2', status: 'contracted', assignedStaffId: 'staff_OWNER' };
+    const { model, updateCalls } = buildRefModel(doc);
+    const svc = makeService({
+      usersService: { findById: jest.fn(), findAdminUser: jest.fn() },
+      referralResumeModel: model,
+    });
+
+    await expect(
+      svc.releaseToResumeLibrary('staff_OWNER', false, 'ref_2'),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(updateCalls).toHaveLength(0); // 未触发任何状态变更
+  });
+
+  it('已存在 linkedResumeId → 400（防重）', async () => {
+    const doc = { _id: 'ref_3', status: 'approved', assignedStaffId: 'staff_OWNER', linkedResumeId: 'resume_EXIST' };
+    const { model } = buildRefModel(doc);
+    const svc = makeService({
+      usersService: { findById: jest.fn(), findAdminUser: jest.fn() },
+      referralResumeModel: model,
+    });
+
+    await expect(
+      svc.releaseToResumeLibrary('staff_OWNER', true, 'ref_3'),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('成功路径：assignedStaff 本人释放 → 状态置为 released 且回写 linkedResumeId', async () => {
+    const doc = {
+      _id: 'ref_4', status: 'following_up', assignedStaffId: 'staff_OWNER',
+      name: '张阿姨', phone: '13800000000', idCard: undefined,
+      serviceType: 'yuesao', experience: '三年月嫂', remark: '客户满意',
+      referrerName: '李推荐',
+    };
+    const { model, updateCalls } = buildRefModel(doc);
+    const resumeService = {
+      createMinimalFromReferral: jest.fn().mockResolvedValue({ _id: 'resume_NEW' }),
+      logOperation: jest.fn().mockResolvedValue(undefined),
+    };
+    const svc = makeService({
+      usersService: { findById: jest.fn().mockResolvedValue({ name: '归属员工A' }), findAdminUser: jest.fn() },
+      referralResumeModel: model,
+      resumeService,
+    });
+
+    const result = await svc.releaseToResumeLibrary('staff_OWNER', false, 'ref_4');
+
+    expect(result).toEqual({ resumeId: 'resume_NEW' });
+    // 第一次 updateOne：置 released + releasedAt/releasedBy
+    expect(updateCalls[0].update.$set).toMatchObject({ status: 'released', releasedBy: 'staff_OWNER' });
+    expect(updateCalls[0].update.$set.releasedAt).toBeInstanceOf(Date);
+    // 第二次 updateOne：回写 linkedResumeId
+    expect(updateCalls[1].update.$set).toEqual({ linkedResumeId: 'resume_NEW' });
+    // createMinimalFromReferral 透传推荐信息
+    expect(resumeService.createMinimalFromReferral).toHaveBeenCalledWith(expect.objectContaining({
+      name: '张阿姨', phone: '13800000000', jobType: 'yuesao',
+      referrerName: '李推荐', operatorStaffId: 'staff_OWNER',
+    }));
+    // 写简历操作日志
+    expect(resumeService.logOperation).toHaveBeenCalledWith(
+      'resume_NEW',
+      'staff_OWNER',
+      'release_from_referral',
+      '从推荐库释放',
+      expect.objectContaining({ relatedId: 'ref_4', relatedType: 'referral_resume' }),
+    );
+  });
+
+  it('成功路径：admin 释放他人名下记录 → 也能通过', async () => {
+    const doc = {
+      _id: 'ref_5', status: 'approved', assignedStaffId: 'staff_OTHER',
+      name: '王阿姨', phone: '13900000000', serviceType: 'baiban-baomu',
+      referrerName: '赵推荐',
+    };
+    const { model, updateCalls } = buildRefModel(doc);
+    const resumeService = {
+      createMinimalFromReferral: jest.fn().mockResolvedValue({ _id: 'resume_5' }),
+      logOperation: jest.fn().mockResolvedValue(undefined),
+    };
+    const svc = makeService({
+      usersService: { findById: jest.fn().mockResolvedValue({ name: 'X' }), findAdminUser: jest.fn() },
+      referralResumeModel: model,
+      resumeService,
+    });
+
+    const result = await svc.releaseToResumeLibrary('admin_1', true, 'ref_5');
+
+    expect(result).toEqual({ resumeId: 'resume_5' });
+    expect(updateCalls[0].update.$set.status).toBe('released');
+    expect(updateCalls[0].update.$set.releasedBy).toBe('admin_1');
+  });
+
+  it('createMinimalFromReferral 失败 → 回滚 status 到原状态', async () => {
+    const doc = {
+      _id: 'ref_6', status: 'approved', assignedStaffId: 'staff_OWNER',
+      name: '孙阿姨', phone: '13700000000', serviceType: 'yuesao',
+    };
+    const { model, updateCalls } = buildRefModel(doc);
+    const resumeService = {
+      createMinimalFromReferral: jest.fn().mockRejectedValue(new Error('手机号已被使用')),
+      logOperation: jest.fn().mockResolvedValue(undefined),
+    };
+    const svc = makeService({
+      usersService: { findById: jest.fn().mockResolvedValue(null), findAdminUser: jest.fn() },
+      referralResumeModel: model,
+      resumeService,
+    });
+
+    await expect(
+      svc.releaseToResumeLibrary('staff_OWNER', false, 'ref_6'),
+    ).rejects.toThrow('手机号已被使用');
+
+    // 两次 update：先置 released，再回滚
+    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls[0].update.$set.status).toBe('released');
+    expect(updateCalls[1].update.$set.status).toBe('approved');
+    expect(updateCalls[1].update.$unset).toEqual({ releasedAt: 1, releasedBy: 1 });
   });
 });

@@ -125,6 +125,7 @@ export class ContractsController {
     @Query('limit') limit: string = '10',
     @Query('search') search?: string,
     @Query('showAll') showAll?: string,
+    @Query('orderCategory') orderCategory?: string,
     @Request() req?,
   ) {
     try {
@@ -138,6 +139,7 @@ export class ContractsController {
         search,
         showAll === 'true',
         createdBy,
+        orderCategory,
       );
       return {
         success: true,

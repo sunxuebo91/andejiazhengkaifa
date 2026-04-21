@@ -541,11 +541,14 @@ export class ESignController {
    * 获取合同状态
    */
   @Get('contract-status/:contractNo')
-  async getContractStatus(@Param('contractNo') contractNo: string) {
-    this.logger.log('调用 contract-status 端点, contractNo:', contractNo);
-    
+  async getContractStatus(
+    @Param('contractNo') contractNo: string,
+    @Query('orderCategory') orderCategory?: 'housekeeping' | 'training',
+  ) {
+    this.logger.log('调用 contract-status 端点, contractNo:', contractNo, 'orderCategory:', orderCategory);
+
     try {
-      const result = await this.esignService.getContractStatus(contractNo);
+      const result = await this.esignService.getContractStatus(contractNo, orderCategory);
       
       this.logger.log('获取合同状态成功:', result);
       

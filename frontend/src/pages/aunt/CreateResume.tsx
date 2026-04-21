@@ -3399,9 +3399,14 @@ const CreateResume: React.FC = () => {
                   <Form.Item
                     label="线索来源"
                     name="leadSource"
+                    extra={editingResume?.leadSource === 'referral-release' ? '推荐人录入来源不可修改' : undefined}
                   >
-                    <Select placeholder="请选择线索来源">
+                    <Select
+                      placeholder="请选择线索来源"
+                      disabled={editingResume?.leadSource === 'referral-release'}
+                    >
                       <Option value="referral">转介绍</Option>
+                      <Option value="referral-release" disabled>推荐人录入（仅释放时由系统设置）</Option>
                       <Option value="paid-lead">付费线索</Option>
                       <Option value="community">社群线索</Option>
                       <Option value="door-to-door">地推</Option>

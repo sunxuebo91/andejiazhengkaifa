@@ -627,9 +627,13 @@ class ESignService {
   /**
    * 获取合同状态
    */
-  async getContractStatus(contractNo: string): Promise<ContractStatusResponse> {
+  async getContractStatus(
+    contractNo: string,
+    orderCategory?: 'housekeeping' | 'training',
+  ): Promise<ContractStatusResponse> {
     try {
-      const response = await api.get(`/api/esign/contract-status/${contractNo}`);
+      const qs = orderCategory ? `?orderCategory=${encodeURIComponent(orderCategory)}` : '';
+      const response = await api.get(`/api/esign/contract-status/${contractNo}${qs}`);
       
       // 按照官方文档处理合同状态响应
       console.log('🔍 合同状态API响应:', response);

@@ -29,16 +29,18 @@ export class ResumeOperationLog extends Document {
   @Prop({
     required: true,
     enum: [
-      'create',           // 创建简历
-      'update',           // 编辑简历信息
-      'delete',           // 删除简历
-      'assign',           // 分配负责人
-      'upload_file',      // 上传文件
-      'delete_file',      // 删除文件
-      'generate_uniform', // 生成工装照
-      'change_status',    // 变更状态
-      'import',           // 导入简历
-      'other'             // 其他操作
+      'create',                // 创建简历
+      'update',                // 编辑简历信息
+      'delete',                // 删除简历
+      'assign',                // 分配负责人
+      'upload_file',           // 上传文件
+      'delete_file',           // 删除文件
+      'generate_uniform',      // 生成工装照
+      'change_status',         // 变更状态
+      'import',                // 导入简历
+      'create_from_referral',  // 推荐审核通过自动入库
+      'release_from_referral', // 从推荐库手动释放到简历库
+      'other'                  // 其他操作
     ],
     index: true
   })

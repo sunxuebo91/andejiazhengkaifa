@@ -2265,16 +2265,18 @@ export class ESignService {
         let signKey: string;
 
         if (index === 0) {
-          // 第一个签署人：甲方（客户）
+          // 第一个签署人：甲方
           signKey = '甲方';
         } else if (index === 1) {
-          // 第二个签署人：乙方（阿姨）
+          // 第二个签署人：乙方
           signKey = '乙方';
         } else {
-          // 第三个及以后的签署人：丙方（企业）
+          // 第三个及以后的签署人：丙方
           signKey = '丙方';
+        }
 
-          // 为企业用户设置默认印章
+        // 为所有无感知签章（企业）签署人设置默认印章
+        if (signer.signType === 'auto') {
           try {
             this.logger.debug(`🔧 为企业用户 ${signer.account} 设置默认印章...`);
             await this.setDefaultSeal(signer.account, "5f0e3bd2fc744bd8b500576e60b17711");
@@ -2342,18 +2344,18 @@ export class ESignService {
           signMark: `${signer.name}_${Date.now()}`
         };
 
-        // 🔧 关键修复：只为甲方和乙方设置noticeMobile，企业用户不设置
-        if (index < 2 && signer.mobile) {
+        // 🔧 noticeMobile 只针对有感知签署人（手机号长度限制 11 位，企业客服号会超限）
+        if (signer.signType !== 'auto' && signer.mobile && signer.mobile.length <= 11) {
           signerData.noticeMobile = signer.mobile;
-          this.logger.debug(`📱 为${index === 0 ? '甲方' : '乙方'}设置通知手机号: ${signer.mobile}`);
-        } else if (index >= 2) {
-          this.logger.debug(`🏢 企业用户不设置noticeMobile字段，避免长度限制错误`);
+          this.logger.debug(`📱 为签署人${index + 1}(${signKey})设置通知手机号: ${signer.mobile}`);
+        } else {
+          this.logger.debug(`🏢 签署人${index + 1}(${signKey}, signType=${signer.signType}) 不设置noticeMobile`);
         }
 
-        // 🔧 关键修复：为丙方（企业）添加顶层sealNo参数，按照官方文档要求
-        if (index >= 2) {
+        // 🔧 无感知签章（企业）需要顶层 sealNo 参数
+        if (signer.signType === 'auto') {
           signerData.sealNo = "5f0e3bd2fc744bd8b500576e60b17711"; // 企业默认印章编号
-          this.logger.debug(`🏢 为企业签署人设置顶层sealNo参数: ${signerData.sealNo}`);
+          this.logger.debug(`🏢 为无感知签章签署人${index + 1}(${signKey})设置sealNo: ${signerData.sealNo}`);
         }
 
         return signerData;
@@ -2373,7 +2375,7 @@ export class ESignService {
    * API: /contract/status (根据官方文档)
    * 🔥 增强：同时获取签署方详细信息，用于前端显示签署状态
    */
-  async getContractStatus(contractNo: string): Promise<any> {
+  async getContractStatus(contractNo: string, orderCategory?: 'housekeeping' | 'training'): Promise<any> {
     try {
       this.logger.debug('🔄 步骤4：获取合同状态:', { data: contractNo });
 
@@ -2408,29 +2410,37 @@ export class ESignService {
             // 将签署方信息添加到响应中
             response.data.signUsers = signUsers.map((user: any, index: number) => {
               // 🔥 修复：使用多种方式判断角色
-              // 按照创建合同时的顺序：第1个是客户(甲方)，第2个是阿姨(乙方)，第3个是企业(丙方)
+              // 按照创建合同时的顺序：
+              //   housekeeping：第1个=客户(甲方)，第2个=阿姨(乙方)，第3个=企业(丙方)
+              //   training：    第1个=企业(甲方)，第2个=学员(乙方)
               let role = '签署方';
               const userName = user.name || '';
+              const userSignOrderLocal = user.signOrder || (index + 1);
 
-              // 🔥 方法1：根据名称关键词判断
-              if (userName.includes('企业') || userName.includes('公司') || userName.includes('安得') || userName.includes('家政')) {
-                role = '丙方（企业）';
-              } else if (userName.includes('客户') || userName.includes('甲方') || userName.includes('雇主')) {
-                role = '甲方（客户）';
-              } else if (userName.includes('阿姨') || userName.includes('乙方') || userName.includes('服务人员') || userName.includes('保姆') || userName.includes('育儿嫂')) {
-                role = '乙方（阿姨）';
-              }
-              // 🔥 方法2：如果名称没有关键词，根据 userType 判断（1=企业，0=个人）
-              else if (user.userType === 1) {
-                role = '丙方（企业）';
-              }
-              // 🔥 方法3：如果以上都不满足，根据索引判断
-              else if (index === 0) {
-                role = '甲方（客户）';
-              } else if (index === 1) {
-                role = '乙方（阿姨）';
-              } else if (index >= 2) {
-                role = '丙方（企业）';
+              if (orderCategory === 'training') {
+                // 培训订单：企业(auto) 甲方、学员(manual) 乙方
+                if (user.userType === 1 || userSignOrderLocal === 1 || index === 0) {
+                  role = '甲方（企业）';
+                } else {
+                  role = '乙方（学员）';
+                }
+              } else {
+                // 家政订单（默认）
+                if (userName.includes('企业') || userName.includes('公司') || userName.includes('安得') || userName.includes('家政')) {
+                  role = '丙方（企业）';
+                } else if (userName.includes('客户') || userName.includes('甲方') || userName.includes('雇主')) {
+                  role = '甲方（客户）';
+                } else if (userName.includes('阿姨') || userName.includes('乙方') || userName.includes('服务人员') || userName.includes('保姆') || userName.includes('育儿嫂')) {
+                  role = '乙方（阿姨）';
+                } else if (user.userType === 1) {
+                  role = '丙方（企业）';
+                } else if (index === 0) {
+                  role = '甲方（客户）';
+                } else if (index === 1) {
+                  role = '乙方（阿姨）';
+                } else if (index >= 2) {
+                  role = '丙方（企业）';
+                }
               }
 
               this.logger.debug(`🔍 签署方 ${index}: name=${user.name}, userType=${user.userType}, signOrder=${user.signOrder}, signStatus=${user.signStatus}, role=${role}`);

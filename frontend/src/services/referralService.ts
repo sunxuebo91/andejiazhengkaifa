@@ -60,6 +60,9 @@ export interface ReferralResume {
   bankCard?: string;
   bankName?: string;
   settlementAppliedAt?: string;
+  linkedResumeId?: string;     // 已释放或已激活时关联的 resumes._id
+  releasedAt?: string;         // 释放到简历库的时间
+  releasedBy?: string;         // 执行释放操作的员工ID
   createdAt: string;
   // 关联合同数据（通过 admin/referral-detail/:id 接口获取）
   contract?: {
@@ -132,6 +135,10 @@ export const updateReferralStatus = (staffId: string, isAdmin: boolean, id: stri
 
 export const processReward = (staffId: string, isAdmin: boolean, referralResumeId: string, action: string, remark?: string) =>
   apiService.post(`${BASE}/staff/process-reward`, { staffId, isAdmin, referralResumeId, action, remark });
+
+// 释放推荐记录到简历库（管理员 或 assignedStaffId）
+export const releaseToResumeLibrary = (staffId: string, isAdmin: boolean, referralResumeId: string) =>
+  apiService.post<{ resumeId: string }>(`${BASE}/staff/release-to-resume-library`, { staffId, isAdmin, referralResumeId });
 
 // ── 管理员：全量推荐管理 ───────────────────────────────────
 export const listAllReferrals = (params: { assignedStaffId?: string; status?: string; page?: number; pageSize?: number }) =>

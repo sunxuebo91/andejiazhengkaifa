@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined, AppstoreOutlined, PictureOutlined, BookOutlined, FormOutlined, SearchOutlined, GiftOutlined, AuditOutlined, ProfileOutlined, SolutionOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined, AppstoreOutlined, PictureOutlined, BookOutlined, FormOutlined, SearchOutlined, GiftOutlined, AuditOutlined, ProfileOutlined, SolutionOutlined, ShoppingOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps, Space } from 'antd';
 import { useMemo, useEffect } from 'react';
@@ -238,6 +238,26 @@ const BasicLayout = () => {
 
       baseMenus.push(trainingLeadMenu);
     }
+
+    // 职培订单菜单 - 所有登录用户可见
+    const trainingOrderMenu: MenuRoute = {
+      path: '/training-orders',
+      name: '职培订单',
+      icon: <ShoppingOutlined />,
+      routes: [
+        {
+          path: '/training-orders/create',
+          name: '创建订单',
+          icon: <FileAddOutlined />,
+        },
+        {
+          path: '/training-orders/list',
+          name: '订单列表',
+          icon: <UnorderedListOutlined />,
+        },
+      ],
+    };
+    baseMenus.push(trainingOrderMenu);
 
     // 视频面试菜单 - 所有用户可见
     const interviewMenu: MenuRoute = {

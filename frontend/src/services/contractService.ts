@@ -17,6 +17,7 @@ export const contractService = {
     status?: string;
     startDate?: string;
     endDate?: string;
+    orderCategory?: 'housekeeping' | 'training';
   } = {}): Promise<{
     contracts: Contract[];
     total: number;

@@ -10,6 +10,7 @@ export const RESUME_STATUS_MAP: Record<string, { color: string; label: string }>
   reward_paid:     { color: 'geekblue', label: '返费已打款' },
   invalid:        { color: 'default',  label: '未录用' },
   activated:      { color: 'volcano',  label: '已激活' },
+  released:       { color: 'lime',     label: '已释放' },
 };
 
 /** 推荐简历审核状态 */

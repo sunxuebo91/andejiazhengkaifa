@@ -72,6 +72,15 @@ export interface Contract {
   paymentAmount?: number;  // 实付金额（单位：分）
   paidAt?: string;  // 支付时间
   sqbSn?: string;  // 收钱吧订单号
+
+  // 订单类别：housekeeping（家政）/ training（职培）
+  orderCategory?: 'housekeeping' | 'training';
+  // 职培订单专用字段
+  trainingLeadId?: string;
+  courseAmount?: number;
+  serviceFeeAmount?: number;
+  intendedCourses?: string[];
+  consultPosition?: string;
 }
 
 export enum ContractType {
@@ -93,14 +102,14 @@ export interface CreateContractData {
   customerName: string;
   customerPhone: string;
   customerIdCard?: string;
-  contractType: ContractType;
-  startDate: string;
-  endDate: string;
-  workerName: string;
-  workerPhone: string;
-  workerIdCard: string;
-  workerSalary: number;
-  customerServiceFee: number;
+  contractType?: ContractType;
+  startDate?: string;
+  endDate?: string;
+  workerName?: string;
+  workerPhone?: string;
+  workerIdCard?: string;
+  workerSalary?: number;
+  customerServiceFee?: number;
   workerServiceFee?: number;
   deposit?: number;
   finalPayment?: number;
@@ -108,15 +117,23 @@ export interface CreateContractData {
   salaryPaymentDay?: number;
   remarks?: string;
   monthlyWorkDays?: number;
-  customerId: string;
-  workerId: string;
-  
+  customerId?: string;
+  workerId?: string;
+
   // 爱签相关字段
   esignContractNo?: string;
   esignStatus?: string;
   esignCreatedAt?: string;
   esignTemplateNo?: string;
   esignSignUrls?: string; // JSON字符串，存储真实的签署链接
+
+  // 订单类别与职培订单字段
+  orderCategory?: 'housekeeping' | 'training';
+  trainingLeadId?: string;
+  courseAmount?: number;
+  serviceFeeAmount?: number;
+  intendedCourses?: string[];
+  consultPosition?: string;
 }
 
 export interface Worker {

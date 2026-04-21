@@ -57,6 +57,12 @@ export class CreateTrainingLeadDto {
   @MaxLength(50, { message: '微信号不能超过50个字符' })
   wechatId?: string;
 
+  @ApiPropertyOptional({ description: '身份证号', example: '110101199001011234' })
+  @IsOptional()
+  @IsString()
+  @Matches(/(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/, { message: '身份证号格式不正确' })
+  idCardNumber?: string;
+
   @ApiPropertyOptional({
     description: '线索来源',
     enum: ['美团', '抖音', '快手', '小红书', '转介绍', '幼亲舒', '其他'],

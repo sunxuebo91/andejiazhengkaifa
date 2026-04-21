@@ -114,6 +114,7 @@ export enum Skill {
 
 export enum LeadSource {
   REFERRAL = 'referral',
+  REFERRAL_RELEASE = 'referral-release', // 推荐人录入（推荐库释放，不可编辑）
   PAID_LEAD = 'paid-lead',
   COMMUNITY = 'community',
   DOOR_TO_DOOR = 'door-to-door',

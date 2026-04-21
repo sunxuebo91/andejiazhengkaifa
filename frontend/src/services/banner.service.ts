@@ -26,7 +26,7 @@ export interface CreateBannerDto {
 const bannerService = {
   // 获取列表
   async getList(params?: { page?: number; pageSize?: number; status?: string }) {
-    const res = await api.get('/api/banners', { params });
+    const res = await api.get('/api/banners', params);
     // res已经是 { success, data: { list, total, ... }, message }
     return res;
   },

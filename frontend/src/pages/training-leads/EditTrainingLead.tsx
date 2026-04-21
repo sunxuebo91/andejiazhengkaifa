@@ -227,6 +227,18 @@ const EditTrainingLead: React.FC = () => {
                   </Select>
                 </Form.Item>
               </Col>
+
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item
+                  label="身份证号"
+                  name="idCardNumber"
+                  rules={[
+                    { pattern: /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/, message: '身份证号格式不正确' }
+                  ]}
+                >
+                  <Input placeholder="请输入身份证号" maxLength={18} />
+                </Form.Item>
+              </Col>
             </Row>
           </div>
 

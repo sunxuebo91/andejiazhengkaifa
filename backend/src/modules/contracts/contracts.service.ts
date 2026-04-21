@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Contract, ContractDocument, OnboardStatus, PaymentStatus } from './models/contract.model';
+import { Contract, ContractDocument, OnboardStatus, OrderCategory, PaymentStatus } from './models/contract.model';
 import { CustomerContractHistory, CustomerContractHistoryDocument } from './models/customer-contract-history.model';
 import { CustomerOperationLog } from '../customers/models/customer-operation-log.model';
 import { Customer, CustomerDocument } from '../customers/models/customer.model';
@@ -149,26 +149,23 @@ export class ContractsService {
       missingFields.push('模板编号(templateNo 或 esignTemplateNo)');
     }
 
-    // 检查客户信息
+    // 检查客户信息（customerPhone/workerPhone 若缺失将在 create() 阶段从客户资料 / 简历自动补全）
     if (!contractDto.customerName) {
       missingFields.push('客户姓名(customerName)');
-    }
-    if (!contractDto.customerPhone) {
-      missingFields.push('客户手机号(customerPhone)');
     }
     if (!contractDto.customerIdCard) {
       missingFields.push('客户身份证号(customerIdCard)');
     }
 
-    // 检查服务人员信息
-    if (!contractDto.workerName) {
-      missingFields.push('服务人员姓名(workerName)');
-    }
-    if (!contractDto.workerPhone) {
-      missingFields.push('服务人员手机号(workerPhone)');
-    }
-    if (!contractDto.workerIdCard) {
-      missingFields.push('服务人员身份证号(workerIdCard)');
+    // 职培订单无服务人员，仅校验甲乙双方核心字段
+    const isTraining = contractDto.orderCategory === OrderCategory.TRAINING;
+    if (!isTraining) {
+      if (!contractDto.workerName) {
+        missingFields.push('服务人员姓名(workerName)');
+      }
+      if (!contractDto.workerIdCard) {
+        missingFields.push('服务人员身份证号(workerIdCard)');
+      }
     }
 
     const valid = missingFields.length === 0;
@@ -272,15 +269,50 @@ export class ContractsService {
     options?: { autoInitiateEsign?: boolean }  // 🆕 新增选项：是否自动触发爱签流程
   ): Promise<Contract> {
     try {
+      const isTrainingOrder = createContractDto.orderCategory === OrderCategory.TRAINING;
+
       this.logger.info('contract.create.start', {
         customerId: createContractDto.customerId,
         customerName: createContractDto.customerName,
         customerPhone: createContractDto.customerPhone,
         contractType: createContractDto.contractType,
+        orderCategory: createContractDto.orderCategory,
       });
-      
-      // 🆕 检查是否需要进入换人模式
-      if (createContractDto.customerPhone) {
+
+      // 🆕 自动补全客户/服务人员手机号（小程序端不在合同表单里带这两个字段，后端从客户资料 / 简历补全）
+      if (!createContractDto.customerPhone && createContractDto.customerId && createContractDto.customerId !== 'temp') {
+        try {
+          const customer = await this.customerModel.findById(createContractDto.customerId).lean().exec();
+          if (customer?.phone) {
+            createContractDto.customerPhone = customer.phone;
+            this.logger.debug('contract.create.customer_phone_backfilled', {
+              customerId: String(createContractDto.customerId),
+            });
+          }
+        } catch (error) {
+          this.logger.warn('contract.create.customer_phone_backfill_failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      if (!createContractDto.workerPhone && createContractDto.workerId && createContractDto.workerId !== 'temp') {
+        try {
+          const resume = await this.resumeModel.findById(createContractDto.workerId).lean().exec();
+          if (resume?.phone) {
+            createContractDto.workerPhone = resume.phone;
+            this.logger.debug('contract.create.worker_phone_backfilled', {
+              workerId: String(createContractDto.workerId),
+            });
+          }
+        } catch (error) {
+          this.logger.warn('contract.create.worker_phone_backfill_failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // 🆕 检查是否需要进入换人模式（职培订单不走换人逻辑）
+      if (!isTrainingOrder && createContractDto.customerPhone) {
         const existingContractCheck = await this.checkCustomerExistingContract(createContractDto.customerPhone);
         
         // 如果客户有现有合同，自动进入换人合并模式
@@ -350,8 +382,8 @@ export class ContractsService {
         createContractDto.contractNumber = await this.generateContractNumber();
       }
 
-      // 🆕 自动从简历获取 workerAddress（如果未提供）
-      if (!createContractDto.workerAddress && createContractDto.workerPhone) {
+      // 🆕 自动从简历获取 workerAddress（如果未提供，职培订单跳过）
+      if (!isTrainingOrder && !createContractDto.workerAddress && createContractDto.workerPhone) {
         try {
           const resume = await this.resumeService.findByPhone(createContractDto.workerPhone);
           if (resume && resume.currentAddress) {
@@ -375,29 +407,31 @@ export class ContractsService {
         });
       }
 
-      // 🔥 修复：自动从中文字段"服务类型及方式"映射到 contractType
-      const validContractTypes = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班育儿嫂', '白班保姆', '住家护老', '儿童陪伴师'];
-      const dtoAny = createContractDto as any;
+      // 🔥 修复：自动从中文字段"服务类型及方式"映射到 contractType（职培订单跳过，保留为 undefined 或 '职培'）
+      if (!isTrainingOrder) {
+        const validContractTypes = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班育儿嫂', '白班保姆', '住家护老', '儿童陪伴师'];
+        const dtoAny = createContractDto as any;
 
-      // 如果 contractType 为空或不在有效枚举中，尝试从中文字段映射
-      if (!createContractDto.contractType || !validContractTypes.includes(createContractDto.contractType)) {
-        // 优先从 "服务类型及方式" 字段获取
-        const serviceType = dtoAny['服务类型及方式'] || dtoAny['服务类型'] || dtoAny['serviceType'];
-        if (serviceType && validContractTypes.includes(serviceType)) {
-          createContractDto.contractType = serviceType;
-          this.logger.info('contract.create.contract_type_mapped_from_chinese', {
-            originalValue: dtoAny.contractType,
-            mappedFrom: '服务类型及方式',
-            newValue: serviceType,
-          });
-        } else {
-          // 如果仍然无效，设置默认值
-          this.logger.warn('contract.create.contract_type_invalid', {
-            originalValue: createContractDto.contractType,
-            serviceType: serviceType,
-            defaultValue: '住家保姆',
-          });
-          createContractDto.contractType = '住家保姆' as any; // 设置默认值
+        // 如果 contractType 为空或不在有效枚举中，尝试从中文字段映射
+        if (!createContractDto.contractType || !validContractTypes.includes(createContractDto.contractType)) {
+          // 优先从 "服务类型及方式" 字段获取
+          const serviceType = dtoAny['服务类型及方式'] || dtoAny['服务类型'] || dtoAny['serviceType'];
+          if (serviceType && validContractTypes.includes(serviceType)) {
+            createContractDto.contractType = serviceType;
+            this.logger.info('contract.create.contract_type_mapped_from_chinese', {
+              originalValue: dtoAny.contractType,
+              mappedFrom: '服务类型及方式',
+              newValue: serviceType,
+            });
+          } else {
+            // 如果仍然无效，设置默认值
+            this.logger.warn('contract.create.contract_type_invalid', {
+              originalValue: createContractDto.contractType,
+              serviceType: serviceType,
+              defaultValue: '住家保姆',
+            });
+            createContractDto.contractType = '住家保姆' as any; // 设置默认值
+          }
         }
       }
 
@@ -495,7 +529,8 @@ export class ContractsService {
       }
 
       // 🆕 调用爱签API创建电子合同（仅当有必要字段且明确要求时）
-      const shouldAutoInitiate = options?.autoInitiateEsign !== false; // 默认为 true（向后兼容）
+      // 职培订单的爱签合同由前端分步创建，后端跳过自动发起，避免重复
+      const shouldAutoInitiate = options?.autoInitiateEsign !== false && !isTrainingOrder; // 默认为 true（向后兼容）
 
       if (shouldAutoInitiate && this.shouldInitiateEsignFlow(createContractDto)) {
         try {
@@ -587,7 +622,7 @@ export class ContractsService {
   }
 
   // 获取合同列表
-  async findAll(page: number = 1, limit: number = 10, search?: string, showAll: boolean = false, createdBy?: string): Promise<{
+  async findAll(page: number = 1, limit: number = 10, search?: string, showAll: boolean = false, createdBy?: string, orderCategory?: string): Promise<{
     contracts: Contract[];
     total: number;
     page: number;
@@ -597,6 +632,26 @@ export class ContractsService {
     try {
       const query: any = {};
       const andConditions: any[] = [];
+
+      // 订单类别过滤：显式指定时仅返回对应类别；未指定时默认仅返回家政订单（兼容旧数据：orderCategory 字段不存在）
+      if (orderCategory === OrderCategory.TRAINING) {
+        andConditions.push({ orderCategory: OrderCategory.TRAINING });
+      } else if (orderCategory === OrderCategory.HOUSEKEEPING) {
+        andConditions.push({
+          $or: [
+            { orderCategory: OrderCategory.HOUSEKEEPING },
+            { orderCategory: { $exists: false } },
+          ],
+        });
+      } else {
+        // 未指定：默认排除职培订单，保持家政合同列表旧行为
+        andConditions.push({
+          $or: [
+            { orderCategory: { $ne: OrderCategory.TRAINING } },
+            { orderCategory: { $exists: false } },
+          ],
+        });
+      }
 
       // 按创建人过滤（用于普通员工只看自己的合同）
       // 兼容 createdBy 可能是 ObjectId 或 string 类型
@@ -2258,6 +2313,9 @@ export class ContractsService {
   } | null> {
     // 1. 未进入爱签流程
     if (!contract.esignContractNo) return null;
+
+    // 1.5 职培订单不适用"甲（客户）/乙（阿姨）"精准状态，交由签署方列表回退渲染
+    if (contract.orderCategory === 'training') return null;
 
     // 2. 整体已签完（esignStatus=2），免调远程接口
     if (contract.esignStatus === '2') {

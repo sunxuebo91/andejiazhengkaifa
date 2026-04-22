@@ -90,7 +90,7 @@ export interface BindingLog {
 }
 
 // ── 管理员：推荐人列表（含统计） ──────────────────────────────
-export const listReferrers = (params?: { approvalStatus?: string; search?: string; page?: number; pageSize?: number }) =>
+export const listReferrers = (params?: { approvalStatus?: string; search?: string; sourceStaffId?: string; page?: number; pageSize?: number }) =>
   apiService.get<{ list: Referrer[]; total: number }>(`${BASE}/admin/referrers`, params);
 
 export const adminCreateReferrer = (adminStaffId: string, data: {
@@ -115,11 +115,11 @@ export const listPendingReferrers = (page = 1, pageSize = 20) =>
 export const listAllReferrers = (approvalStatus?: string, page = 1, pageSize = 20) =>
   apiService.get<{ list: Referrer[]; total: number }>(`${BASE}/admin/pending-referrers`, { approvalStatus, page, pageSize });
 
-export const approveReferrer = (adminStaffId: string, referrerId: string) =>
-  apiService.post(`${BASE}/admin/approve-referrer`, { adminStaffId, referrerId });
+export const approveReferrer = (callerStaffId: string, referrerId: string) =>
+  apiService.post(`${BASE}/admin/approve-referrer`, { callerStaffId, referrerId });
 
-export const rejectReferrer = (referrerId: string, reason: string) =>
-  apiService.post(`${BASE}/admin/reject-referrer`, { referrerId, reason });
+export const rejectReferrer = (callerStaffId: string, referrerId: string, reason: string) =>
+  apiService.post(`${BASE}/admin/reject-referrer`, { callerStaffId, referrerId, reason });
 
 // ── 员工/管理员：推荐简历审核 ─────────────────────────────
 // reviewStatus 支持特殊值：'processed'=已处理(approved+rejected)，'pending_review'=待审核，undefined=全部

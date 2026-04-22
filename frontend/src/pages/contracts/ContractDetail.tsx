@@ -1357,13 +1357,15 @@ const ContractDetail: React.FC = () => {
             >
               编辑合同
             </Button>
-            <Button
-              icon={<UserSwitchOutlined />}
-              onClick={() => navigate(`/contracts/create?mode=change&phone=${contract.customerPhone}&contractId=${contract._id}`)}
-              style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', color: '#fff' }}
-            >
-              为该客户换人
-            </Button>
+            {contract.orderCategory !== 'training' && (
+              <Button
+                icon={<UserSwitchOutlined />}
+                onClick={() => navigate(`/contracts/create?mode=change&phone=${contract.customerPhone}&contractId=${contract._id}`)}
+                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', color: '#fff' }}
+              >
+                为该客户换人
+              </Button>
+            )}
             <Button
               icon={<SyncOutlined />}
               onClick={handleSyncEsignStatus}
@@ -1374,26 +1376,30 @@ const ContractDetail: React.FC = () => {
             >
               同步签约状态
             </Button>
-            <Button
-              icon={<SafetyOutlined />}
-              onClick={handleSyncInsurance}
-              loading={syncInsuranceLoading}
-              type="default"
-              style={{
-                borderColor: '#52c41a',
-                color: '#52c41a',
-              }}
-            >
-              保险同步
-            </Button>
-            <Button
-              icon={<StopOutlined />}
-              onClick={handleWithdrawContract}
-              disabled={!contract.esignContractNo}
-              danger
-            >
-              撤销合同
-            </Button>
+            {contract.orderCategory !== 'training' && (
+              <Button
+                icon={<SafetyOutlined />}
+                onClick={handleSyncInsurance}
+                loading={syncInsuranceLoading}
+                type="default"
+                style={{
+                  borderColor: '#52c41a',
+                  color: '#52c41a',
+                }}
+              >
+                保险同步
+              </Button>
+            )}
+            {contract.orderCategory !== 'training' && (
+              <Button
+                icon={<StopOutlined />}
+                onClick={handleWithdrawContract}
+                disabled={!contract.esignContractNo}
+                danger
+              >
+                撤销合同
+              </Button>
+            )}
             {isAdmin && (
               <Button
                 icon={<CloseCircleOutlined />}
@@ -1555,7 +1561,7 @@ const ContractDetail: React.FC = () => {
           {/* 合同基本信息 */}
           <Col span={24}>
             <Card type="inner" title="合同基本信息" style={{ marginBottom: '16px' }}>
-              <Descriptions column={3} bordered>
+              <Descriptions column={contract.orderCategory === 'training' ? 2 : 3} bordered>
                 <Descriptions.Item label="合同编号" span={1}>
                   <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
                     {contract.contractNumber}
@@ -1563,9 +1569,13 @@ const ContractDetail: React.FC = () => {
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="合同类型" span={1}>
-                  <Tag color={getContractTypeColor(contract.contractType)}>
-                    {contract.contractType}
-                  </Tag>
+                  {contract.orderCategory === 'training' ? (
+                    <Tag color="blue">职培合同</Tag>
+                  ) : (
+                    <Tag color={getContractTypeColor(contract.contractType)}>
+                      {contract.contractType}
+                    </Tag>
+                  )}
                 </Descriptions.Item>
                 
                 <Descriptions.Item label="合同状态" span={1}>
@@ -1590,8 +1600,8 @@ const ContractDetail: React.FC = () => {
                   )}
                 </Descriptions.Item>
                 
-                {/* 上户状态：合同签约后才显示；not_started 时不展示 */}
-                {(contract.onboardStatus === 'pending' || contract.onboardStatus === 'confirmed') && (
+                {/* 上户状态：合同签约后才显示；not_started 时不展示；职培订单不展示 */}
+                {contract.orderCategory !== 'training' && (contract.onboardStatus === 'pending' || contract.onboardStatus === 'confirmed') && (
                   <Descriptions.Item label="上户状态" span={1}>
                     {contract.onboardStatus === 'confirmed' ? (
                       <Tooltip title={
@@ -1607,43 +1617,47 @@ const ContractDetail: React.FC = () => {
                   </Descriptions.Item>
                 )}
 
-                <Descriptions.Item label="服务开始日期" span={1}>
+                <Descriptions.Item label={contract.orderCategory === 'training' ? '合同签约日期' : '服务开始日期'} span={1}>
                   <span style={{ fontWeight: 'bold' }}>
                     {/* 优先使用 templateParams 中的合同时间（支持合并格式和分拆年月日格式） */}
                     {getContractStartDate(contract)}
                   </span>
                 </Descriptions.Item>
 
-                <Descriptions.Item label="服务结束日期" span={1}>
-                  <span style={{ fontWeight: 'bold' }}>
-                    {getContractEndDate(contract)}
-                  </span>
-                </Descriptions.Item>
+                {contract.orderCategory !== 'training' && (
+                  <Descriptions.Item label="服务结束日期" span={1}>
+                    <span style={{ fontWeight: 'bold' }}>
+                      {getContractEndDate(contract)}
+                    </span>
+                  </Descriptions.Item>
+                )}
 
-                <Descriptions.Item label="服务期限" span={1}>
-                  <span style={{ color: '#52c41a' }}>
-                    {(() => {
-                      // 优先从 templateParams 计算服务期限（支持分拆年月日字段）
-                      const startStr = getContractStartDate(contract);
-                      const endStr = getContractEndDate(contract);
-                      const start = dayjs(startStr, ['YYYY年MM月DD日', 'YYYY-MM-DD']);
-                      const end = dayjs(endStr, ['YYYY年MM月DD日', 'YYYY-MM-DD']);
-                      if (start.isValid() && end.isValid()) {
-                        return end.diff(start, 'day') + 1;
-                      }
-                      return dayjs(contract.endDate).diff(dayjs(contract.startDate), 'day') + 1;
-                    })()} 天
-                  </span>
-                </Descriptions.Item>
+                {contract.orderCategory !== 'training' && (
+                  <Descriptions.Item label="服务期限" span={1}>
+                    <span style={{ color: '#52c41a' }}>
+                      {(() => {
+                        // 优先从 templateParams 计算服务期限（支持分拆年月日字段）
+                        const startStr = getContractStartDate(contract);
+                        const endStr = getContractEndDate(contract);
+                        const start = dayjs(startStr, ['YYYY年MM月DD日', 'YYYY-MM-DD']);
+                        const end = dayjs(endStr, ['YYYY年MM月DD日', 'YYYY-MM-DD']);
+                        if (start.isValid() && end.isValid()) {
+                          return end.diff(start, 'day') + 1;
+                        }
+                        return dayjs(contract.endDate).diff(dayjs(contract.startDate), 'day') + 1;
+                      })()} 天
+                    </span>
+                  </Descriptions.Item>
+                )}
               </Descriptions>
             </Card>
           </Col>
 
-          {/* 客户信息 */}
-          <Col span={12}>
-            <Card type="inner" title="客户信息" style={{ marginBottom: '16px' }}>
-              <Descriptions column={1} bordered>
-                <Descriptions.Item label="客户姓名">
+          {/* 客户信息 / 学员信息 */}
+          <Col span={contract.orderCategory === 'training' ? 24 : 12}>
+            <Card type="inner" title={contract.orderCategory === 'training' ? '学员信息' : '客户信息'} style={{ marginBottom: '16px' }}>
+              <Descriptions column={contract.orderCategory === 'training' ? 2 : 1} bordered>
+                <Descriptions.Item label={contract.orderCategory === 'training' ? '学员姓名' : '客户姓名'}>
                   <span style={{ fontWeight: 'bold' }}>{contract.customerName}</span>
                 </Descriptions.Item>
 
@@ -1658,14 +1672,15 @@ const ContractDetail: React.FC = () => {
                   }
                 </Descriptions.Item>
 
-                <Descriptions.Item label="服务地址">
+                <Descriptions.Item label={contract.orderCategory === 'training' ? '联系地址' : '服务地址'}>
                   {customerAddress || (typeof contract.customerId === 'object' && contract.customerId?.address) || '未提供'}
                 </Descriptions.Item>
               </Descriptions>
             </Card>
           </Col>
 
-          {/* 服务人员信息 */}
+          {/* 服务人员信息（职培订单不展示） */}
+          {contract.orderCategory !== 'training' && (
           <Col span={12}>
             <Card type="inner" title="服务人员信息" style={{ marginBottom: '16px' }}>
               <Descriptions column={1} bordered>
@@ -1719,31 +1734,49 @@ const ContractDetail: React.FC = () => {
               </Descriptions>
             </Card>
           </Col>
+          )}
 
           {/* 费用信息 */}
           <Col span={24}>
             <Card type="inner" title="费用信息" style={{ marginBottom: '16px' }}>
               <Descriptions column={3} bordered>
-                <Descriptions.Item label="家政员工资" span={1}>
-                  <span style={{ fontWeight: 'bold', color: '#52c41a', fontSize: '16px' }}>
-                    ¥{contract.workerSalary?.toLocaleString()}
-                  </span>
-                </Descriptions.Item>
-                
-                <Descriptions.Item label="客户服务费" span={1}>
+                {contract.orderCategory !== 'training' && (
+                  <Descriptions.Item label="家政员工资" span={1}>
+                    <span style={{ fontWeight: 'bold', color: '#52c41a', fontSize: '16px' }}>
+                      ¥{contract.workerSalary?.toLocaleString()}
+                    </span>
+                  </Descriptions.Item>
+                )}
+
+                <Descriptions.Item label={contract.orderCategory === 'training' ? '学员培训费' : '客户服务费'} span={1}>
                   <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '16px' }}>
-                    ¥{contract.customerServiceFee?.toLocaleString()}
+                    ¥{contract.orderCategory === 'training'
+                        ? (contract.courseAmount ?? Number(contract.templateParams?.['报课金额'] || 0)).toLocaleString()
+                        : contract.customerServiceFee?.toLocaleString()}
                   </span>
                 </Descriptions.Item>
+
+                {contract.orderCategory === 'training' && (
+                  <Descriptions.Item label="劳动者服务费" span={1}>
+                    <span style={{ fontWeight: 'bold', color: '#722ed1', fontSize: '16px' }}>
+                      {(contract.serviceFeeAmount ?? Number(contract.templateParams?.['服务费'] || 0)) ?
+                        `¥${(contract.serviceFeeAmount ?? Number(contract.templateParams?.['服务费'] || 0)).toLocaleString()}` :
+                        '无'
+                      }
+                    </span>
+                  </Descriptions.Item>
+                )}
                 
-                <Descriptions.Item label="家政员服务费" span={1}>
-                  <span style={{ fontWeight: 'bold', color: '#722ed1', fontSize: '16px' }}>
-                    {contract.workerServiceFee ? 
-                      `¥${contract.workerServiceFee.toLocaleString()}` : 
-                      '无'
-                    }
-                  </span>
-                </Descriptions.Item>
+                {contract.orderCategory !== 'training' && (
+                  <Descriptions.Item label="家政员服务费" span={1}>
+                    <span style={{ fontWeight: 'bold', color: '#722ed1', fontSize: '16px' }}>
+                      {contract.workerServiceFee ?
+                        `¥${contract.workerServiceFee.toLocaleString()}` :
+                        '无'
+                      }
+                    </span>
+                  </Descriptions.Item>
+                )}
                 
                 {contract.deposit && (
                   <Descriptions.Item label="约定定金" span={1}>
@@ -1764,9 +1797,11 @@ const ContractDetail: React.FC = () => {
                 <Descriptions.Item label="费用总计" span={1}>
                   <span style={{ fontWeight: 'bold', color: '#f5222d', fontSize: '18px' }}>
                     ¥{(
-                      contract.workerSalary + 
-                      contract.customerServiceFee + 
-                      (contract.workerServiceFee || 0)
+                      (contract.orderCategory !== 'training' ? (contract.workerSalary || 0) : 0) +
+                      (contract.orderCategory === 'training'
+                        ? ((contract.courseAmount ?? Number(contract.templateParams?.['报课金额'] || 0)) + (contract.serviceFeeAmount ?? Number(contract.templateParams?.['服务费'] || 0)))
+                        : (contract.customerServiceFee || 0)) +
+                      (contract.orderCategory !== 'training' ? (contract.workerServiceFee || 0) : 0)
                     ).toLocaleString()}
                   </span>
                 </Descriptions.Item>
@@ -1828,7 +1863,8 @@ const ContractDetail: React.FC = () => {
             </Card>
           </Col>
 
-          {/* 保险信息 */}
+          {/* 保险信息（职培订单不展示） */}
+          {contract.orderCategory !== 'training' && (
           <Col span={24}>
             <Card
               type="inner"
@@ -1956,6 +1992,7 @@ const ContractDetail: React.FC = () => {
               )}
             </Card>
           </Col>
+          )}
 
           {/* 其他信息 */}
           <Col span={24}>
@@ -2042,8 +2079,8 @@ const ContractDetail: React.FC = () => {
             </Card>
           </Col>
 
-          {/* 客户合同历史记录 - 固定显示 */}
-          {contract && (
+          {/* 客户合同历史记录 - 固定显示（职培订单不展示） */}
+          {contract && contract.orderCategory !== 'training' && (
             <Col span={24}>
               <Card 
                 type="inner" 

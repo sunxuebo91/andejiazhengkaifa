@@ -326,28 +326,18 @@ const BasicLayout = () => {
       baseMenus.push(baobeiMenu);
     }
 
-    // 推荐返费系统菜单
+    // 推荐返费系统菜单（管理员/运营看全部，员工看自己名下）
     {
-      // 推荐简历审核 - 所有员工可见（含管理员）
       const referralMenu: MenuRoute = {
         path: '/referral',
         name: '推荐管理',
         icon: <GiftOutlined />,
         routes: [
-          {
-            path: '/referral/resume-review',
-            name: '推荐简历审核',
-            icon: <AuditOutlined />,
-          },
-        ],
-      };
-      // 管理员专属菜单项
-      if (hasRole('admin')) {
-        referralMenu.routes!.push(
+          { path: '/referral/resume-review', name: '推荐简历审核', icon: <AuditOutlined /> },
           { path: '/referral/referrers', name: '推荐人列表', icon: <SolutionOutlined /> },
           { path: '/referral/manage', name: '全量推荐管理', icon: <UnorderedListOutlined /> },
-        );
-      }
+        ],
+      };
       baseMenus.push(referralMenu);
     }
 

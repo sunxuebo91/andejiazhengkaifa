@@ -1127,16 +1127,25 @@ export class ReferralService {
     return { list, total, page, pageSize };
   }
 
-  /** 通过推荐人注册申请 */
-  async approveReferrer(adminStaffId: string, referrerId: string): Promise<void> {
+  /**
+   * 通过推荐人注册申请
+   * 权限：管理员 或 该推荐人的来源员工（sourceStaffId === callerStaffId）
+   */
+  async approveReferrer(callerStaffId: string, referrerId: string): Promise<void> {
     const referrer = await this.referrerModel.findById(referrerId).exec();
     if (!referrer) throw new NotFoundException('推荐人申请不存在');
     if (referrer.approvalStatus !== 'pending_approval') throw new BadRequestException('该申请已处理');
 
+    const caller = await this.usersService.findById(callerStaffId).catch(() => null);
+    const isAdmin = !!caller?.isAdmin;
+    if (!isAdmin && referrer.sourceStaffId !== callerStaffId) {
+      throw new ForbiddenException('您无权审批该推荐人，仅管理员或该推荐人的来源员工可操作');
+    }
+
     const now = new Date();
     await this.referrerModel.findByIdAndUpdate(referrerId, {
       approvalStatus: 'approved',
-      approvedBy: adminStaffId,
+      approvedBy: callerStaffId,
       approvedAt: now,
     }).exec();
 
@@ -1171,12 +1180,21 @@ export class ReferralService {
     } catch {}
   }
 
-  /** 拒绝推荐人注册申请 */
-  async rejectReferrer(referrerId: string, reason: string): Promise<void> {
+  /**
+   * 拒绝推荐人注册申请
+   * 权限：管理员 或 该推荐人的来源员工（sourceStaffId === callerStaffId）
+   */
+  async rejectReferrer(callerStaffId: string, referrerId: string, reason: string): Promise<void> {
     if (!reason) throw new BadRequestException('拒绝时必须填写原因');
     const referrer = await this.referrerModel.findById(referrerId).exec();
     if (!referrer) throw new NotFoundException('推荐人申请不存在');
     if (referrer.approvalStatus !== 'pending_approval') throw new BadRequestException('该申请已处理');
+
+    const caller = await this.usersService.findById(callerStaffId).catch(() => null);
+    const isAdmin = !!caller?.isAdmin;
+    if (!isAdmin && referrer.sourceStaffId !== callerStaffId) {
+      throw new ForbiddenException('您无权拒绝该推荐人，仅管理员或该推荐人的来源员工可操作');
+    }
 
     await this.referrerModel.findByIdAndUpdate(referrerId, {
       approvalStatus: 'rejected',
@@ -1789,14 +1807,16 @@ export class ReferralService {
   async listReferrers(params: {
     approvalStatus?: string;
     search?: string;
+    sourceStaffId?: string;
     page?: number;
     pageSize?: number;
   }): Promise<{ list: any[]; total: number }> {
-    const { approvalStatus, search, page = 1, pageSize = 20 } = params;
+    const { approvalStatus, search, sourceStaffId, page = 1, pageSize = 20 } = params;
     const skip = (page - 1) * pageSize;
 
     const match: any = {};
     if (approvalStatus) match.approvalStatus = approvalStatus;
+    if (sourceStaffId) match.sourceStaffId = sourceStaffId;
     if (search) {
       match.$or = [
         { name: { $regex: search, $options: 'i' } },

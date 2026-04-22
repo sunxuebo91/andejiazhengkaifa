@@ -346,16 +346,17 @@ export class ReferralController {
 
   @Public()
   @Get('admin/referrers')
-  @ApiOperation({ summary: '推荐人列表（管理员，含统计信息）' })
+  @ApiOperation({ summary: '推荐人列表（管理员/运营看全部；员工传 sourceStaffId 看自己）' })
   async listReferrers(
     @Query('approvalStatus') approvalStatus?: string,
     @Query('search') search?: string,
+    @Query('sourceStaffId') sourceStaffId?: string,
     @Query('page') page?: number,
     @Query('pageSize') pageSize?: number,
   ) {
     try {
       const result = await this.referralService.listReferrers({
-        approvalStatus, search,
+        approvalStatus, search, sourceStaffId,
         page: page ? +page : 1,
         pageSize: pageSize ? +pageSize : 20,
       });
@@ -434,10 +435,12 @@ export class ReferralController {
 
   @Public()
   @Post('admin/approve-referrer')
-  @ApiOperation({ summary: '通过推荐人注册申请（管理员）' })
-  async approveReferrer(@Body() body: { adminStaffId: string; referrerId: string }) {
+  @ApiOperation({ summary: '通过推荐人注册申请（管理员或该推荐人的来源员工）' })
+  async approveReferrer(@Body() body: { callerStaffId?: string; adminStaffId?: string; referrerId: string }) {
     try {
-      await this.referralService.approveReferrer(body.adminStaffId, body.referrerId);
+      const callerStaffId = body.callerStaffId || body.adminStaffId;
+      if (!callerStaffId) throw new HttpException({ success: false, message: '缺少 callerStaffId' }, HttpStatus.BAD_REQUEST);
+      await this.referralService.approveReferrer(callerStaffId, body.referrerId);
       return { success: true, message: '审批通过' };
     } catch (error) {
       throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);
@@ -446,10 +449,12 @@ export class ReferralController {
 
   @Public()
   @Post('admin/reject-referrer')
-  @ApiOperation({ summary: '拒绝推荐人注册申请（管理员）' })
-  async rejectReferrer(@Body() body: { referrerId: string; reason: string }) {
+  @ApiOperation({ summary: '拒绝推荐人注册申请（管理员或该推荐人的来源员工）' })
+  async rejectReferrer(@Body() body: { callerStaffId?: string; adminStaffId?: string; referrerId: string; reason: string }) {
     try {
-      await this.referralService.rejectReferrer(body.referrerId, body.reason);
+      const callerStaffId = body.callerStaffId || body.adminStaffId;
+      if (!callerStaffId) throw new HttpException({ success: false, message: '缺少 callerStaffId' }, HttpStatus.BAD_REQUEST);
+      await this.referralService.rejectReferrer(callerStaffId, body.referrerId, body.reason);
       return { success: true, message: '已拒绝' };
     } catch (error) {
       throw new HttpException({ success: false, message: error.message }, error.status || HttpStatus.BAD_REQUEST);

@@ -20,8 +20,11 @@ const { Option } = Select;
 interface Staff { _id: string; name: string; phone?: string; isActive?: boolean; }
 
 const ReferralManage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const { message } = App.useApp();
+  // 管理员/运营看全部推荐记录；普通员工只看自己名下（assignedStaffId = 自己）
+  const isAdmin = hasRole('admin');
+  const canSeeAll = isAdmin || hasRole('operator');
 
   const [list, setList] = useState<ReferralResume[]>([]);
   const [total, setTotal] = useState(0);
@@ -70,16 +73,19 @@ const ReferralManage: React.FC = () => {
   };
 
   const fetchList = async (p = 1) => {
+    if (!user?.id) return;
     setLoading(true);
     try {
-      const res = await referralService.listAllReferrals({ assignedStaffId: filterStaff, status: filterStatus, page: p, pageSize: 20 });
+      // 非管理员/运营强制按自己的 staffId 过滤，防止越权查看
+      const assignedStaffId = canSeeAll ? filterStaff : user.id;
+      const res = await referralService.listAllReferrals({ assignedStaffId, status: filterStatus, page: p, pageSize: 20 });
       if (res.success && res.data) { setList(res.data.list); setTotal(res.data.total); setPage(p); }
     } catch { message.error('获取列表失败'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchStaff(); fetchList(); }, []);
-  useEffect(() => { fetchList(1); }, [filterStatus, filterStaff]);
+  useEffect(() => { if (user?.id) { fetchStaff(); fetchList(); } }, [user?.id]);
+  useEffect(() => { if (user?.id) fetchList(1); }, [filterStatus, filterStaff]);
 
   const handleReassign = async () => {
     try {
@@ -208,18 +214,20 @@ const ReferralManage: React.FC = () => {
     { title: '预计返费', dataIndex: 'rewardAmount', width: 90, render: (v?: number) => v != null ? `¥${v}` : '-' },
     { title: '提交时间', dataIndex: 'createdAt', width: 150, render: (v: string) => v ? new Date(v).toLocaleString('zh-CN') : '-' },
     {
-      title: '操作', width: 260, fixed: 'right',
+      title: '操作', width: canSeeAll ? 260 : 120, fixed: 'right',
       render: (_, record) => (
         <Space size="small" wrap>
           <Tooltip title="查看详情"><Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(record)} /></Tooltip>
-          <Tooltip title="重新分配员工"><Button size="small" icon={<SwapOutlined />} onClick={() => { setReassignModal({ open: true, id: record._id, name: record.name }); reassignForm.resetFields(); }}>分配</Button></Tooltip>
+          {canSeeAll && (
+            <Tooltip title="重新分配员工"><Button size="small" icon={<SwapOutlined />} onClick={() => { setReassignModal({ open: true, id: record._id, name: record.name }); reassignForm.resetFields(); }}>分配</Button></Tooltip>
+          )}
           <Tooltip title="绑定变更日志"><Button size="small" icon={<HistoryOutlined />} onClick={() => handleViewLogs(record._id)} /></Tooltip>
-          {['approved', 'following_up'].includes(record.status) && !record.linkedResumeId && (
+          {canSeeAll && ['approved', 'following_up'].includes(record.status) && !record.linkedResumeId && (
             <Tooltip title="释放到简历库">
               <Button size="small" icon={<ExportOutlined />} onClick={() => handleRelease(record)}>释放</Button>
             </Tooltip>
           )}
-          {record.status === 'reward_pending' && <>
+          {canSeeAll && record.status === 'reward_pending' && <>
             <Tooltip title="审核通过，进入待打款">
               <Button size="small" type="primary" icon={<CheckCircleOutlined />}
                 onClick={() => { setRewardModal({ open: true, id: record._id, action: 'approve', resumeName: record.name, payeeName: record.payeeName, payeePhone: record.payeePhone, bankCard: record.bankCard, bankName: record.bankName, rewardAmount: record.rewardAmount }); setRewardRemark(''); }}>
@@ -233,7 +241,7 @@ const ReferralManage: React.FC = () => {
               </Button>
             </Tooltip>
           </>}
-          {record.status === 'reward_approved' && (
+          {canSeeAll && record.status === 'reward_approved' && (
             <Tooltip title="确认已完成转账">
               <Button size="small" type="primary" icon={<DollarOutlined />}
                 onClick={() => { setRewardModal({ open: true, id: record._id, action: 'markPaid', resumeName: record.name, payeeName: record.payeeName, payeePhone: record.payeePhone, bankCard: record.bankCard, bankName: record.bankName, rewardAmount: record.rewardAmount }); setRewardRemark(''); }}>
@@ -241,9 +249,11 @@ const ReferralManage: React.FC = () => {
               </Button>
             </Tooltip>
           )}
-          <Tooltip title="删除记录">
-            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
-          </Tooltip>
+          {isAdmin && (
+            <Tooltip title="删除记录">
+              <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+            </Tooltip>
+          )}
         </Space>
       ),
     },
@@ -252,7 +262,10 @@ const ReferralManage: React.FC = () => {
   const r = detailModal.record;
 
   return (
-    <PageContainer title="全量推荐管理" subTitle="查看并管理所有推荐记录（仅管理员）">
+    <PageContainer
+      title={canSeeAll ? '全量推荐管理' : '我的推荐记录'}
+      subTitle={canSeeAll ? '查看并管理所有推荐记录' : '查看我名下的推荐记录'}
+    >
       {/* 筛选栏 */}
       <Card style={{ marginBottom: 12 }}>
         <Space wrap>
@@ -260,10 +273,12 @@ const ReferralManage: React.FC = () => {
           <Select allowClear placeholder="全部状态" style={{ width: 140 }} value={filterStatus} onChange={setFilterStatus}>
             {Object.entries(STATUS_MAP).map(([k, v]) => <Option key={k} value={k}>{v.label}</Option>)}
           </Select>
-          <span>绑定员工：</span>
-          <Select allowClear placeholder="全部员工" style={{ width: 140 }} value={filterStaff} onChange={setFilterStaff} showSearch optionFilterProp="children">
-            {staffList.map(s => <Option key={s._id} value={s._id}>{s.name}</Option>)}
-          </Select>
+          {canSeeAll && <>
+            <span>绑定员工：</span>
+            <Select allowClear placeholder="全部员工" style={{ width: 140 }} value={filterStaff} onChange={setFilterStaff} showSearch optionFilterProp="children">
+              {staffList.map(s => <Option key={s._id} value={s._id}>{s.name}</Option>)}
+            </Select>
+          </>}
           <Button onClick={() => fetchList(1)}>刷新</Button>
         </Space>
       </Card>

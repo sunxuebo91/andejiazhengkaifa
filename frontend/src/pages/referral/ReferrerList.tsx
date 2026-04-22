@@ -18,6 +18,8 @@ const ReferrerList: React.FC = () => {
   const { message, modal } = App.useApp();
   const { user, hasRole } = useAuth();
   const isAdmin = hasRole('admin');
+  // 管理员/运营看全部推荐人；普通员工只看自己名下（sourceStaffId = 自己）
+  const canSeeAll = isAdmin || hasRole('operator');
 
   const [list, setList] = useState<Referrer[]>([]);
   const [total, setTotal] = useState(0);
@@ -47,7 +49,13 @@ const ReferrerList: React.FC = () => {
   const fetchList = async (p = 1, s = search, status = filterStatus) => {
     setLoading(true);
     try {
-      const res = await referralService.listReferrers({ search: s || undefined, approvalStatus: status, page: p, pageSize: 20 });
+      const res = await referralService.listReferrers({
+        search: s || undefined,
+        approvalStatus: status,
+        sourceStaffId: canSeeAll ? undefined : user?.id,
+        page: p,
+        pageSize: 20,
+      });
       if (res.success && res.data) {
         setList(res.data.list);
         setTotal(res.data.total);
@@ -57,7 +65,7 @@ const ReferrerList: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchList(); }, []);
+  useEffect(() => { if (user?.id) fetchList(); }, [user?.id]);
 
   const handleSearch = (val: string) => { setSearch(val); fetchList(1, val, filterStatus); };
   const handleStatusChange = (val: string) => { setFilterStatus(val); fetchList(1, search, val); };
@@ -132,7 +140,7 @@ const ReferrerList: React.FC = () => {
     if (!rejectReason.trim()) { message.error('请填写拒绝原因'); return; }
     setRejectLoading(true);
     try {
-      const res = await referralService.rejectReferrer(rejectModal.referrerId, rejectReason.trim());
+      const res = await referralService.rejectReferrer(user!.id, rejectModal.referrerId, rejectReason.trim());
       if (res.success) {
         message.success('已拒绝并通知申请人');
         setRejectModal({ open: false, referrerId: '', referrerName: '' });
@@ -192,17 +200,20 @@ const ReferrerList: React.FC = () => {
           <Tooltip title="查看详情">
             <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailModal({ open: true, record })} />
           </Tooltip>
-          <Tooltip title="编辑收款信息">
-            <Button
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => {
-                setEditModal({ open: true, record });
-                editForm.setFieldsValue({ idCard: record.idCard, bankCardNumber: record.bankCardNumber, bankName: record.bankName });
-              }}
-            />
-          </Tooltip>
-          {record.approvalStatus === 'pending_approval' && (
+          {canSeeAll && (
+            <Tooltip title="编辑收款信息">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setEditModal({ open: true, record });
+                  editForm.setFieldsValue({ idCard: record.idCard, bankCardNumber: record.bankCardNumber, bankName: record.bankName });
+                }}
+              />
+            </Tooltip>
+          )}
+          {/* 管理员/运营可审批任意推荐人；普通员工可审批自己名下（sourceStaffId=自己）的推荐人 */}
+          {(canSeeAll || record.sourceStaffId === user?.id) && record.approvalStatus === 'pending_approval' && (
             <>
               <Tooltip title="通过审批">
                 <Button type="primary" size="small" icon={<CheckOutlined />}
@@ -230,8 +241,8 @@ const ReferrerList: React.FC = () => {
   return (
     <PageContainer
       title="推荐人列表"
-      subTitle={`共 ${total} 名推荐人`}
-      extra={[
+      subTitle={canSeeAll ? `共 ${total} 名推荐人` : `我名下共 ${total} 名推荐人`}
+      extra={canSeeAll ? [
         <Button
           key="create"
           type="primary"
@@ -240,7 +251,7 @@ const ReferrerList: React.FC = () => {
         >
           创建推荐人
         </Button>,
-      ]}
+      ] : []}
     >
       {/* 筛选栏 */}
       <Card style={{ marginBottom: 12 }}>

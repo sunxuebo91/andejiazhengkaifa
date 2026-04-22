@@ -446,11 +446,11 @@ export default function App({ children }: AppProps) {
                     />
                   </Route>
 
-                  {/* 推荐返费系统 */}
+                  {/* 推荐返费系统（管理员/运营看全部，员工看自己名下） */}
                   <Route path="referral">
                     <Route
                       path="referrers"
-                      element={<AuthorizedRoute element={<ReferrerList />} role="admin" />}
+                      element={<AuthorizedRoute element={<ReferrerList />} />}
                     />
                     <Route
                       path="resume-review"
@@ -458,7 +458,7 @@ export default function App({ children }: AppProps) {
                     />
                     <Route
                       path="manage"
-                      element={<AuthorizedRoute element={<ReferralManage />} role="admin" />}
+                      element={<AuthorizedRoute element={<ReferralManage />} />}
                     />
                   </Route>
 

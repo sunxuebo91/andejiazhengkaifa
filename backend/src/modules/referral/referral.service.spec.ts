@@ -387,3 +387,174 @@ describe('ReferralService.releaseToResumeLibrary', () => {
     expect(updateCalls[1].update.$unset).toEqual({ releasedAt: 1, releasedBy: 1 });
   });
 });
+
+
+describe('ReferralService.resolveSourceStaffId', () => {
+  // 一个合法的 24 位 hex ObjectId 字符串，供 Types.ObjectId.isValid 通过
+  const VALID_OID = '68c919be2c0648781936c5f9';
+
+  it('优先级 1：sourceOpenid 命中 users.wechatOpenId → 直接使用真实 _id', async () => {
+    const usersService = {
+      findByWeChatOpenId: jest.fn().mockResolvedValue({ _id: { toString: () => 'staff_A' } }),
+      findByPhone: jest.fn(),
+      findById: jest.fn(),
+      findAdminUser: jest.fn(),
+      updateWeChatInfo: jest.fn(),
+    };
+    const svc = makeService({ usersService });
+
+    const result = await (svc as any).resolveSourceStaffId({
+      sourceOpenid: 'o-xxx',
+      sourcePhone: '13800000000',
+      sourceStaffId: VALID_OID,
+    });
+
+    expect(result).toBe('staff_A');
+    // 命中即停，不应继续往下查
+    expect(usersService.findByPhone).not.toHaveBeenCalled();
+    expect(usersService.findById).not.toHaveBeenCalled();
+    expect(usersService.findAdminUser).not.toHaveBeenCalled();
+  });
+
+  it('优先级 2：sourceOpenid 未命中，sourcePhone 命中 → 使用真实 _id，且 wechatOpenId 空时回填', async () => {
+    const usersService = {
+      findByWeChatOpenId: jest.fn().mockResolvedValue(null),
+      findByPhone: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'staff_B' },
+        wechatOpenId: undefined,
+      }),
+      findById: jest.fn(),
+      findAdminUser: jest.fn(),
+      updateWeChatInfo: jest.fn().mockResolvedValue(undefined),
+    };
+    const svc = makeService({ usersService });
+
+    const result = await (svc as any).resolveSourceStaffId({
+      sourceOpenid: 'o-new',
+      sourcePhone: '13900000000',
+      sourceStaffId: VALID_OID,
+    });
+
+    expect(result).toBe('staff_B');
+    expect(usersService.updateWeChatInfo).toHaveBeenCalledWith('staff_B', { openId: 'o-new' });
+    expect(usersService.findById).not.toHaveBeenCalled();
+  });
+
+  it('优先级 2：phone 命中但员工已有 wechatOpenId → 不重复回填', async () => {
+    const usersService = {
+      findByWeChatOpenId: jest.fn().mockResolvedValue(null),
+      findByPhone: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'staff_B' },
+        wechatOpenId: 'o-old',
+      }),
+      findById: jest.fn(),
+      findAdminUser: jest.fn(),
+      updateWeChatInfo: jest.fn(),
+    };
+    const svc = makeService({ usersService });
+
+    const result = await (svc as any).resolveSourceStaffId({
+      sourceOpenid: 'o-new',
+      sourcePhone: '13900000000',
+    });
+
+    expect(result).toBe('staff_B');
+    expect(usersService.updateWeChatInfo).not.toHaveBeenCalled();
+  });
+
+  it('优先级 3：openid/phone 均未命中，sourceStaffId 合法且查到 → 使用该 _id', async () => {
+    const usersService = {
+      findByWeChatOpenId: jest.fn().mockResolvedValue(null),
+      findByPhone: jest.fn().mockResolvedValue(null),
+      findById: jest.fn().mockResolvedValue({ _id: { toString: () => 'staff_C' } }),
+      findAdminUser: jest.fn(),
+      updateWeChatInfo: jest.fn(),
+    };
+    const svc = makeService({ usersService });
+
+    const result = await (svc as any).resolveSourceStaffId({
+      sourceOpenid: 'o-ghost',
+      sourcePhone: '13700000000',
+      sourceStaffId: VALID_OID,
+    });
+
+    expect(result).toBe('staff_C');
+    expect(usersService.findById).toHaveBeenCalledWith(VALID_OID);
+    expect(usersService.findAdminUser).not.toHaveBeenCalled();
+  });
+
+  it('sourceStaffId 非合法 ObjectId → 跳过 findById 直接兜底管理员', async () => {
+    const usersService = {
+      findByWeChatOpenId: jest.fn().mockResolvedValue(null),
+      findByPhone: jest.fn().mockResolvedValue(null),
+      findById: jest.fn(),
+      findAdminUser: jest.fn().mockResolvedValue({ _id: { toString: () => 'admin_1' } }),
+      updateWeChatInfo: jest.fn(),
+    };
+    const svc = makeService({ usersService });
+
+    const result = await (svc as any).resolveSourceStaffId({
+      sourceStaffId: 'not-an-objectid',
+    });
+
+    expect(result).toBe('admin_1');
+    expect(usersService.findById).not.toHaveBeenCalled();
+  });
+
+  it('三件套全部未命中 → 兜底管理员 _id', async () => {
+    const usersService = {
+      findByWeChatOpenId: jest.fn().mockResolvedValue(null),
+      findByPhone: jest.fn().mockResolvedValue(null),
+      findById: jest.fn().mockResolvedValue(null),
+      findAdminUser: jest.fn().mockResolvedValue({ _id: { toString: () => 'admin_1' } }),
+      updateWeChatInfo: jest.fn(),
+    };
+    const svc = makeService({ usersService });
+
+    const result = await (svc as any).resolveSourceStaffId({
+      sourceOpenid: 'o-ghost',
+      sourcePhone: '13700000000',
+      sourceStaffId: VALID_OID,
+    });
+
+    expect(result).toBe('admin_1');
+    expect(usersService.findAdminUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('三件套未命中且无管理员 → 抛 BadRequestException', async () => {
+    const usersService = {
+      findByWeChatOpenId: jest.fn().mockResolvedValue(null),
+      findByPhone: jest.fn().mockResolvedValue(null),
+      findById: jest.fn().mockResolvedValue(null),
+      findAdminUser: jest.fn().mockResolvedValue(null),
+      updateWeChatInfo: jest.fn(),
+    };
+    const svc = makeService({ usersService });
+
+    await expect(
+      (svc as any).resolveSourceStaffId({ sourceStaffId: VALID_OID }),
+    ).rejects.toThrow('未能定位到有效的来源员工');
+  });
+
+  it('phone 命中但 updateWeChatInfo 抛错 → 不影响主流程，仍返回真实 _id', async () => {
+    const usersService = {
+      findByWeChatOpenId: jest.fn().mockResolvedValue(null),
+      findByPhone: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'staff_B' },
+        wechatOpenId: null,
+      }),
+      findById: jest.fn(),
+      findAdminUser: jest.fn(),
+      updateWeChatInfo: jest.fn().mockRejectedValue(new Error('db write failed')),
+    };
+    const svc = makeService({ usersService });
+
+    const result = await (svc as any).resolveSourceStaffId({
+      sourceOpenid: 'o-new',
+      sourcePhone: '13900000000',
+    });
+
+    expect(result).toBe('staff_B');
+    expect(usersService.updateWeChatInfo).toHaveBeenCalled();
+  });
+});

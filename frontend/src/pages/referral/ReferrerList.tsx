@@ -147,6 +147,12 @@ const ReferrerList: React.FC = () => {
     { title: '姓名', dataIndex: 'name', width: 90, fixed: 'left' },
     { title: '手机号', dataIndex: 'phone', width: 130 },
     {
+      title: '推荐人归属', dataIndex: 'sourceStaffName', width: 110,
+      render: (v?: string | null) => v
+        ? <span>{v}</span>
+        : <span style={{ color: '#bbb' }}>-</span>,
+    },
+    {
       title: '身份证号', dataIndex: 'idCard', width: 180,
       render: (v?: string) => v || <span style={{ color: '#bbb' }}>未填写</span>,
     },
@@ -294,6 +300,9 @@ const ReferrerList: React.FC = () => {
             <Descriptions.Item label="微信号">{r.wechatId}</Descriptions.Item>
             <Descriptions.Item label="审批状态">
               <Tag color={APPROVAL_MAP[r.approvalStatus]?.color}>{APPROVAL_MAP[r.approvalStatus]?.label}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="推荐人归属" span={2}>
+              {r.sourceStaffName || <span style={{ color: '#bbb' }}>-</span>}
             </Descriptions.Item>
             <Descriptions.Item label="身份证号" span={2}>{r.idCard || '未填写'}</Descriptions.Item>
             <Descriptions.Item label="银行卡号" span={2}>{r.bankCardNumber || '未填写'}</Descriptions.Item>

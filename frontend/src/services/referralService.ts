@@ -12,6 +12,7 @@ export interface Referrer {
   bankCardNumber?: string;
   bankName?: string;
   sourceStaffId: string;
+  sourceStaffName?: string | null;  // 推荐人归属员工姓名（后端批量查询返回）
   approvalStatus: 'pending_approval' | 'approved' | 'rejected';
   rejectedReason?: string;
   approvedAt?: string;

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { JwtModule } from '@nestjs/jwt';
 import { ReferralController } from './referral.controller';
 import { ReferralService } from './referral.service';
 import { Referrer, ReferrerSchema } from './models/referrer.model';
@@ -31,6 +32,14 @@ import { WeixinModule } from '../weixin/weixin.module';
     MiniProgramNotificationModule,
     NotificationModule,
     WeixinModule,
+    // 用于从 Authorization: Bearer JWT 中解析 openid
+    JwtModule.registerAsync({
+      useFactory: () => {
+        const secret = process.env.JWT_SECRET;
+        if (!secret) throw new Error('JWT_SECRET environment variable is required');
+        return { secret, signOptions: { algorithm: 'HS256' } };
+      },
+    }),
   ],
   controllers: [ReferralController],
   providers: [ReferralService],

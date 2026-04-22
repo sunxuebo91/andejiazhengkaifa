@@ -6,12 +6,14 @@ import {
   Query,
   Param,
   Headers,
+  Req,
   UnauthorizedException,
   HttpException,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { JwtService } from '@nestjs/jwt';
 import { Public } from '../auth/decorators/public.decorator';
 import { ReferralService } from './referral.service';
 import { ConfigService } from '@nestjs/config';
@@ -32,7 +34,29 @@ export class ReferralController {
   constructor(
     private readonly referralService: ReferralService,
     private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
+
+  /**
+   * 从 Authorization: Bearer <JWT> 头解析 openid。
+   * - 优先读取 JWT 中的 openid（签名合法 + 未过期）
+   * - JWT 缺失/过期/非法时返回 undefined，由调用方决定是否回退到 body.openid
+   */
+  private extractOpenidFromJwt(req: any): string | undefined {
+    const authHeader: string | undefined = req?.headers?.authorization || req?.headers?.Authorization;
+    if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+      return undefined;
+    }
+    const token = authHeader.slice(7).trim();
+    if (!token) return undefined;
+    try {
+      const payload: any = this.jwtService.verify(token);
+      return typeof payload?.openid === 'string' && payload.openid ? payload.openid : undefined;
+    } catch (err) {
+      this.logger.warn(`JWT 校验失败，回退 body.openid: ${(err as any).message}`);
+      return undefined;
+    }
+  }
 
   // ================================================================
   // 推荐人注册相关（miniprogram 侧，Public）
@@ -41,20 +65,35 @@ export class ReferralController {
   @Public()
   @Post('miniprogram/register-referrer')
   @ApiOperation({ summary: '推荐人注册申请（小程序端）' })
-  async registerReferrer(@Body() body: {
-    openid: string;
-    name: string;
-    phone: string;
-    wechatId: string;
-    sourceStaffId: string;
-    sourceCustomerId?: string; // 可选：来源客户ID（扫客户海报时携带）
-  }) {
+  async registerReferrer(
+    @Req() req: any,
+    @Body() body: {
+      openid?: string; // 兼容旧客户端：新客户端从 Authorization: Bearer JWT 解
+      name: string;
+      phone: string;
+      wechatId: string;
+      sourceStaffId?: string; // 分享员工身份三件套之一（可能是脏 ID，由后端解析）
+      sourceOpenid?: string;  // 分享员工 openid（对应 users.wechatOpenId）
+      sourcePhone?: string;   // 分享员工手机号（对应 users.phone）
+      sourceCustomerId?: string; // 可选：来源客户ID（扫客户海报时携带）
+    },
+  ) {
+    // 鉴权：优先从 JWT 解 openid，缺失/非法时回退 body.openid（兼容旧客户端）
+    const openid = this.extractOpenidFromJwt(req) || body.openid;
+    if (!openid) {
+      throw new HttpException(
+        { success: false, message: '未获取到 openid，请重新登录' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
     try {
-      const referrer = await this.referralService.registerReferrer(body.openid, {
+      const referrer = await this.referralService.registerReferrer(openid, {
         name: body.name,
         phone: body.phone,
         wechatId: body.wechatId,
         sourceStaffId: body.sourceStaffId,
+        sourceOpenid: body.sourceOpenid,
+        sourcePhone: body.sourcePhone,
         sourceCustomerId: body.sourceCustomerId,
       });
       // 显式返回 id 字段（小程序存为 crmReferrerId 做后续关联）

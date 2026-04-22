@@ -115,14 +115,26 @@ export class ReferralService {
   /**
    * 注册为推荐人（提交申请）
    * approvalStatus = pending_approval，users.role 保持不变
+   *
+   * 来源员工身份三件套（sourceOpenid / sourcePhone / sourceStaffId）按优先级解析，
+   * 命中后用真实 users._id 写进 referrers.sourceStaffId，避免脏 ID 漏到库里。
    */
   async registerReferrer(openid: string, data: {
     name: string;
     phone: string;
     wechatId: string;
-    sourceStaffId: string;
+    sourceStaffId?: string;
+    sourceOpenid?: string;
+    sourcePhone?: string;
     sourceCustomerId?: string; // 可选：来源客户ID
   }): Promise<ReferrerDocument> {
+    // 解析真实的 sourceStaffId（openid → phone → staffId，均未命中兜底管理员）
+    const resolvedSourceStaffId = await this.resolveSourceStaffId({
+      sourceOpenid: data.sourceOpenid,
+      sourcePhone: data.sourcePhone,
+      sourceStaffId: data.sourceStaffId,
+    });
+
     // 检查是否已有申请记录
     const existing = await this.referrerModel.findOne({ openid }).exec();
     if (existing) {
@@ -136,7 +148,7 @@ export class ReferralService {
       existing.name = data.name;
       existing.phone = data.phone;
       existing.wechatId = data.wechatId;
-      existing.sourceStaffId = data.sourceStaffId;
+      existing.sourceStaffId = resolvedSourceStaffId;
       if (data.sourceCustomerId) existing.sourceCustomerId = data.sourceCustomerId;
       existing.approvalStatus = 'pending_approval';
       existing.rejectedReason = undefined;
@@ -153,7 +165,11 @@ export class ReferralService {
 
     const referrer = await this.referrerModel.create({
       openid,
-      ...data,
+      name: data.name,
+      phone: data.phone,
+      wechatId: data.wechatId,
+      sourceStaffId: resolvedSourceStaffId,
+      sourceCustomerId: data.sourceCustomerId,
       approvalStatus: 'pending_approval',
       totalReferrals: 0,
       totalRewardAmount: 0,
@@ -162,6 +178,59 @@ export class ReferralService {
 
     await this.notifyReferrerRegistration(referrer);
     return referrer;
+  }
+
+  /**
+   * 按 openid → phone → staffId 优先级解析来源员工真实 users._id。
+   * 若命中 phone 分支且该员工 wechatOpenId 为空，顺手回填 sourceOpenid。
+   * 三个都未命中时兜底到管理员 _id，保证 sourceStaffId 始终指向一个有效用户。
+   */
+  private async resolveSourceStaffId(input: {
+    sourceOpenid?: string;
+    sourcePhone?: string;
+    sourceStaffId?: string;
+  }): Promise<string> {
+    // 1) 优先用 openid 匹配 users.wechatOpenId
+    if (input.sourceOpenid) {
+      const staff = await this.usersService.findByWeChatOpenId(input.sourceOpenid);
+      if (staff?._id) return staff._id.toString();
+    }
+
+    // 2) 回落到 phone 匹配 users.phone；命中且 wechatOpenId 空 → 回填 sourceOpenid
+    if (input.sourcePhone) {
+      const staff = await this.usersService.findByPhone(input.sourcePhone);
+      if (staff?._id) {
+        const staffId = staff._id.toString();
+        if (input.sourceOpenid && !staff.wechatOpenId) {
+          try {
+            await this.usersService.updateWeChatInfo(staffId, { openId: input.sourceOpenid });
+            this.logger.log(
+              `[registerReferrer] 回填 users.wechatOpenId: userId=${staffId} openid=${input.sourceOpenid}`,
+            );
+          } catch (err) {
+            this.logger.warn(`[registerReferrer] 回填 wechatOpenId 失败: ${(err as any).message}`);
+          }
+        }
+        return staffId;
+      }
+    }
+
+    // 3) 最后回落到 sourceStaffId（必须是合法 ObjectId 且能查到用户）
+    if (input.sourceStaffId && Types.ObjectId.isValid(input.sourceStaffId)) {
+      const staff = await this.usersService.findById(input.sourceStaffId);
+      if (staff?._id) return staff._id.toString();
+    }
+
+    // 4) 三项全部未命中 → 兜底管理员，保证 sourceStaffId 永远落在合法用户上
+    const admin = await this.usersService.findAdminUser();
+    if (admin?._id) {
+      this.logger.warn(
+        `[registerReferrer] 无法解析来源员工，兜底至管理员: sourceOpenid=${input.sourceOpenid || ''} ` +
+        `sourcePhone=${input.sourcePhone || ''} sourceStaffId=${input.sourceStaffId || ''} admin=${admin._id}`,
+      );
+      return admin._id.toString();
+    }
+    throw new BadRequestException('未能定位到有效的来源员工');
   }
 
   /**
@@ -1781,9 +1850,18 @@ export class ReferralService {
       loginMap[u.openid] = u.lastLoginAt || null;
     }
 
+    // 批量查询推荐人归属员工姓名（sourceStaffId → users.name）
+    const sourceStaffIds = Array.from(new Set(
+      docs.map((d: any) => d.sourceStaffId).filter(Boolean) as string[],
+    ));
+    const staffNameMap = sourceStaffIds.length
+      ? await this.usersService.findNamesByIds(sourceStaffIds)
+      : {};
+
     const list = docs.map((d: any) => ({
       ...d,
       lastLoginAt: loginMap[d.openid] ?? null,
+      sourceStaffName: d.sourceStaffId ? (staffNameMap[d.sourceStaffId] ?? null) : null,
     }));
 
     return { list, total };

@@ -44,8 +44,12 @@ export interface Contract {
   createdAt: string;
   updatedAt: string;
 
-  // 合同状态
-  contractStatus?: 'draft' | 'signing' | 'active' | 'replaced' | 'cancelled';
+  // 合同状态（职培扩展：signed/graduated/refunded）
+  contractStatus?: 'draft' | 'signing' | 'signed' | 'active' | 'replaced' | 'cancelled' | 'graduated' | 'refunded';
+
+  // 职培终态时间戳
+  graduatedAt?: string;
+  refundedAt?: string;
 
   // 爱签相关字段
   esignContractNo?: string;

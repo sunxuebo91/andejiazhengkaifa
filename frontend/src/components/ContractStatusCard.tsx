@@ -4,6 +4,29 @@ import { SearchOutlined, ReloadOutlined, UserOutlined, TeamOutlined } from '@ant
 import esignService from '../services/esignService';
 import { DetailedContractStatus, EnhancedContractStatusResponse } from '../types/contract.types';
 
+// 基于签署方数据 + 订单类别动态推导角色标签（前端兜底，避免后端返回旧标签时 UI 错乱）
+const deriveSignerRole = (
+  signer: any,
+  orderCategory?: 'housekeeping' | 'training',
+  index: number = 0,
+): string => {
+  const name = typeof signer?.name === 'string' ? signer.name : '';
+  const isEnterprise =
+    signer?.userType === 1 ||
+    signer?.account === 'ASIGN91110111MACJMD2R5J' ||
+    name.includes('安得') ||
+    name.includes('公司') ||
+    name.includes('企业');
+
+  if (orderCategory === 'training') {
+    return isEnterprise ? '甲方（企业）' : '乙方（学员）';
+  }
+  if (isEnterprise) return '丙方（企业）';
+  if (signer?.signOrder === 1 || index === 0) return '甲方（客户）';
+  if (signer?.signOrder === 2 || index === 1) return '乙方（阿姨）';
+  return '丙方（企业）';
+};
+
 export interface ContractStatusInfo {
   contractNo: string;
   contractName?: string;
@@ -539,9 +562,9 @@ export const ContractStatusCard: React.FC<ContractStatusCardProps> = ({
                       }}>
                         <div style={{ marginBottom: '4px' }}>
                           <UserOutlined style={{ marginRight: '4px' }} />
-                          <strong>{signer.role || signer.name || `签署方${index + 1}`}</strong>
+                          <strong>{deriveSignerRole(signer, orderCategory, index)}</strong>
                         </div>
-                        {signer.name && signer.role && (
+                        {signer.name && (
                           <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>
                             {signer.name}
                           </div>

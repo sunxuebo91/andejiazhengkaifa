@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Contract, ContractDocument, OnboardStatus, OrderCategory, PaymentStatus } from './models/contract.model';
+import { Contract, ContractDocument, ContractStatus, OnboardStatus, OrderCategory, PaymentStatus } from './models/contract.model';
 import { CustomerContractHistory, CustomerContractHistoryDocument } from './models/customer-contract-history.model';
 import { CustomerOperationLog } from '../customers/models/customer-operation-log.model';
 import { Customer, CustomerDocument } from '../customers/models/customer.model';
@@ -2283,11 +2283,18 @@ export class ContractsService {
   // ==================== 客户订单中心（小程序云函数专用）====================
 
   /**
-   * 按客户手机号查询合同列表（供小程序云函数调用）
+   * 按客户手机号查询合同列表（供家政客户小程序云函数调用）
+   * 注意：仅返回家政订单，排除职培订单（职培订单由褓贝小程序走 /api/miniprogram/training-orders/baobei 访问）
    */
   async getContractsByPhone(phone: string): Promise<ContractDocument[]> {
     return this.contractModel
-      .find({ customerPhone: phone })
+      .find({
+        customerPhone: phone,
+        $or: [
+          { orderCategory: { $ne: OrderCategory.TRAINING } },
+          { orderCategory: { $exists: false } },
+        ],
+      })
       .select('-templateParams -esignSignUrls -workerIdCard -customerIdCard')
       .sort({ createdAt: -1 })
       .lean()
@@ -2377,6 +2384,10 @@ export class ContractsService {
     if (!contract) {
       throw new NotFoundException('合同不存在');
     }
+    // 家政客户小程序不可访问职培合同（职培走褓贝专属接口）
+    if (contract.orderCategory === OrderCategory.TRAINING) {
+      throw new NotFoundException('合同不存在');
+    }
     if (contract.customerPhone !== phone) {
       throw new ForbiddenException('无权访问该合同');
     }
@@ -2417,7 +2428,10 @@ export class ContractsService {
     let signingUrl: string | null = null;
     let alreadySigned = false;
     try {
-      const result = await this.esignService.getContractSignUrls(contract.esignContractNo);
+      const result = await this.esignService.getContractSignUrls(
+        contract.esignContractNo,
+        (contract as any).orderCategory,
+      );
       const signUrls: Array<{ name: string; mobile: string; account: string; signUrl: string; status: number; signOrder: number }> =
         result?.data?.signUrls || [];
 
@@ -2467,6 +2481,10 @@ export class ContractsService {
       throw new NotFoundException('合同不存在');
     }
     if (!contract) {
+      throw new NotFoundException('合同不存在');
+    }
+    // 家政客户小程序不可对职培合同确认上户
+    if (contract.orderCategory === OrderCategory.TRAINING) {
       throw new NotFoundException('合同不存在');
     }
     if (contract.customerPhone !== phone) {
@@ -2527,6 +2545,48 @@ export class ContractsService {
           paymentAmount: amount,
           paidAt: paidAt,
           sqbSn: sqbSn,
+          updatedAt: new Date(),
+        },
+        { new: true },
+      )
+      .select('-templateParams -esignSignUrls -workerIdCard -customerIdCard')
+      .lean()
+      .exec();
+    return updated as ContractDocument;
+  }
+
+  /**
+   * 标记合同退款（CRM 管理后台手动触发，仅限职培 active 合同，终态不可逆）
+   * - 校验 orderCategory=training、contractStatus=active
+   * - 同步写 contractStatus=refunded / paymentStatus=refunded / refundedAt=now
+   * - 幂等：已处于 refunded 直接返回当前合同
+   */
+  async markContractRefunded(id: string): Promise<ContractDocument> {
+    let contract: ContractDocument | null;
+    try {
+      contract = await this.contractModel.findById(id).exec();
+    } catch {
+      throw new NotFoundException('合同不存在');
+    }
+    if (!contract) {
+      throw new NotFoundException('合同不存在');
+    }
+    if ((contract as any).orderCategory !== OrderCategory.TRAINING) {
+      throw new BadRequestException('仅职培合同支持该操作');
+    }
+    if ((contract as any).contractStatus === ContractStatus.REFUNDED) {
+      return contract.toObject ? contract.toObject() : contract;
+    }
+    if ((contract as any).contractStatus !== ContractStatus.ACTIVE) {
+      throw new BadRequestException('仅"学习中"状态可标记退款');
+    }
+    const updated = await this.contractModel
+      .findByIdAndUpdate(
+        id,
+        {
+          contractStatus: ContractStatus.REFUNDED,
+          paymentStatus: PaymentStatus.REFUNDED,
+          refundedAt: new Date(),
           updatedAt: new Date(),
         },
         { new: true },

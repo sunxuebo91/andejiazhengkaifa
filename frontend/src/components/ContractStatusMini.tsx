@@ -4,11 +4,13 @@ import esignService from '../services/esignService';
 
 interface ContractStatusMiniProps {
   contractNo: string;
+  orderCategory?: 'housekeeping' | 'training';
   onStatusChange?: (status: number | null) => void;
 }
 
 export const ContractStatusMini: React.FC<ContractStatusMiniProps> = ({
   contractNo,
+  orderCategory,
   onStatusChange
 }) => {
   const [status, setStatus] = useState<number | null>(null);
@@ -60,7 +62,7 @@ export const ContractStatusMini: React.FC<ContractStatusMiniProps> = ({
 
     setLoading(true);
     try {
-      const response = await esignService.getContractStatus(contractNo);
+      const response = await esignService.getContractStatus(contractNo, orderCategory);
       
       let apiResult = response;
       if (typeof response === 'string') {
@@ -104,7 +106,7 @@ export const ContractStatusMini: React.FC<ContractStatusMiniProps> = ({
 
   useEffect(() => {
     checkContractStatus();
-  }, [contractNo]);
+  }, [contractNo, orderCategory]);
 
   if (loading) {
     return <Spin size="small" />;

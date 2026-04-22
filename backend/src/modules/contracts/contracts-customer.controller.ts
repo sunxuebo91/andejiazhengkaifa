@@ -10,9 +10,13 @@ import {
   UseGuards,
   Logger,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { ContractsService } from './contracts.service';
+import { Contract, ContractDocument, OrderCategory } from './models/contract.model';
 import { ServiceSecretGuard } from '../auth/guards/service-secret.guard';
 import { Public } from '../auth/decorators/public.decorator';
 import { MiniProgramNotificationService } from '../miniprogram-notification/miniprogram-notification.service';
@@ -34,7 +38,23 @@ export class ContractsCustomerController {
   constructor(
     private readonly contractsService: ContractsService,
     private readonly mpNotificationService: MiniProgramNotificationService,
+    @InjectModel(Contract.name) private readonly contractModel: Model<ContractDocument>,
   ) {}
+
+  /**
+   * 防御：家政客户小程序不可访问职培合同。调用任何按 id 的接口前做一次轻量校验。
+   */
+  private async assertNotTrainingContract(id: string): Promise<void> {
+    const doc = await this.contractModel
+      .findById(id)
+      .select('orderCategory')
+      .lean()
+      .exec();
+    if (!doc) throw new NotFoundException('合同不存在');
+    if (doc.orderCategory === OrderCategory.TRAINING) {
+      throw new NotFoundException('合同不存在');
+    }
+  }
 
   /**
    * 接口 1：获取客户合同列表
@@ -78,6 +98,7 @@ export class ContractsCustomerController {
       throw new BadRequestException('phone 参数不能为空');
     }
     this.logger.log(`[客户订单中心] 获取签约链接，id=${id}，phone=${phone}`);
+    await this.assertNotTrainingContract(id);
     const result = await this.contractsService.getCustomerSigningUrl(id, phone);
     return {
       success: true,
@@ -174,6 +195,7 @@ export class ContractsCustomerController {
       throw new BadRequestException('paidAt 不能为空');
     }
     this.logger.log(`[客户订单中心] 支付确认，id=${id}，phone=${phone}，amount=${amount}，sqb_sn=${sqb_sn}`);
+    await this.assertNotTrainingContract(id);
     const contract = await this.contractsService.confirmPayment(
       id,
       phone,

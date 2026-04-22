@@ -605,7 +605,10 @@ export class ContractsMiniProgramController {
             this.logger.log(`⏳ 等待 ${delay}ms 后获取签署链接 (尝试 ${attempt + 1}/${maxRetries})...`);
             await new Promise(resolve => setTimeout(resolve, delay));
 
-            const signUrlsResult = await this.esignService.getContractSignUrls(esignResult.contractNo);
+            const signUrlsResult = await this.esignService.getContractSignUrls(
+              esignResult.contractNo,
+              (contract as any).orderCategory,
+            );
             if (signUrlsResult.success && signUrlsResult.data?.signUrls && signUrlsResult.data.signUrls.length > 0) {
               // 检查是否获取到了短链接格式
               const firstUrl = signUrlsResult.data.signUrls[0]?.signUrl || '';
@@ -1139,7 +1142,10 @@ export class ContractsMiniProgramController {
         return { success: false, message: '该合同未关联爱签合同' };
       }
 
-      const result = await this.esignService.getContractSignUrls(contract.esignContractNo);
+      const result = await this.esignService.getContractSignUrls(
+        contract.esignContractNo,
+        (contract as any).orderCategory,
+      );
 
       if (result.success) {
         return { success: true, data: result.data, message: '获取签署链接成功' };

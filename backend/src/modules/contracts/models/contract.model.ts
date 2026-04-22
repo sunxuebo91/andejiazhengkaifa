@@ -33,9 +33,12 @@ function isHousekeeping(this: any) {
 export enum ContractStatus {
   DRAFT = 'draft',           // 草稿
   SIGNING = 'signing',       // 签约中
-  ACTIVE = 'active',         // 生效中
+  SIGNED = 'signed',         // 已签约（职培 C 端衍生态：爱签双方已签完、学员未付款）
+  ACTIVE = 'active',         // 生效中（家政=服务中；职培=学员已付款进入学习中）
   REPLACED = 'replaced',     // 已被替换
-  CANCELLED = 'cancelled'    // 已作废
+  CANCELLED = 'cancelled',   // 已作废
+  GRADUATED = 'graduated',   // 已毕业（职培终态，仅 CRM 管理后台手动标记）
+  REFUNDED = 'refunded',     // 已退款（职培终态，仅 CRM 管理后台手动标记）
 }
 
 // 支付状态枚举
@@ -224,6 +227,13 @@ export class Contract {
 
   @Prop()
   sqbSn?: string; // 收钱吧订单号
+
+  // 职培终态时间戳
+  @Prop()
+  graduatedAt?: Date; // 毕业时间（职培，已付款后学员申报证书触发）
+
+  @Prop()
+  refundedAt?: Date; // 退款时间（职培）
 
   // 保险同步相关字段
   @Prop({ default: false })

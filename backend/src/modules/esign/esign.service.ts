@@ -2417,28 +2417,31 @@ export class ESignService {
               const userName = user.name || '';
               const userSignOrderLocal = user.signOrder || (index + 1);
 
+              // 🔥 基于 userType / 账号 / 名称识别企业方（不依赖数组下标，避免爱签返回顺序变化导致错标）
+              const isEnterpriseUser =
+                user.userType === 1 ||
+                user.account === 'ASIGN91110111MACJMD2R5J' ||
+                userName.includes('安得') ||
+                userName.includes('公司') ||
+                userName.includes('企业') ||
+                userName.includes('家政');
+
               if (orderCategory === 'training') {
-                // 培训订单：企业(auto) 甲方、学员(manual) 乙方
-                if (user.userType === 1 || userSignOrderLocal === 1 || index === 0) {
-                  role = '甲方（企业）';
-                } else {
-                  role = '乙方（学员）';
-                }
+                // 培训订单：企业(auto)=甲方，学员(manual)=乙方
+                role = isEnterpriseUser ? '甲方（企业）' : '乙方（学员）';
               } else {
-                // 家政订单（默认）
-                if (userName.includes('企业') || userName.includes('公司') || userName.includes('安得') || userName.includes('家政')) {
+                // 家政订单：企业=丙方，客户=甲方，阿姨=乙方
+                if (isEnterpriseUser) {
                   role = '丙方（企业）';
                 } else if (userName.includes('客户') || userName.includes('甲方') || userName.includes('雇主')) {
                   role = '甲方（客户）';
                 } else if (userName.includes('阿姨') || userName.includes('乙方') || userName.includes('服务人员') || userName.includes('保姆') || userName.includes('育儿嫂')) {
                   role = '乙方（阿姨）';
-                } else if (user.userType === 1) {
-                  role = '丙方（企业）';
-                } else if (index === 0) {
+                } else if (userSignOrderLocal === 1 || index === 0) {
                   role = '甲方（客户）';
-                } else if (index === 1) {
+                } else if (userSignOrderLocal === 2 || index === 1) {
                   role = '乙方（阿姨）';
-                } else if (index >= 2) {
+                } else {
                   role = '丙方（企业）';
                 }
               }
@@ -2511,9 +2514,9 @@ export class ESignService {
    * 获取合同签署链接
    * 使用合同预览接口获取签署方信息和链接
    */
-  async getContractSignUrls(contractNo: string): Promise<any> {
+  async getContractSignUrls(contractNo: string, orderCategory?: 'housekeeping' | 'training'): Promise<any> {
     try {
-      this.logger.debug('🔄 获取合同签署链接:', { data: contractNo });
+      this.logger.debug('🔄 获取合同签署链接:', { data: contractNo, orderCategory });
 
       // 使用合同预览接口获取签署方信息（这个接口返回完整的signUser数据）
       const previewResult = await this.previewContractWithSignUrls(contractNo);
@@ -2531,21 +2534,34 @@ export class ESignService {
 
       // 构建签署链接数据
       const signUrls = signUsers.map((user: any, index: number) => {
-        // 根据签署顺序判断角色
+        // 🔥 基于 userType / 账号 判断是否为企业方（比索引更可靠）
+        const isEnterprise =
+          user.userType === 1 ||
+          user.account === 'ASIGN91110111MACJMD2R5J' ||
+          (typeof user.name === 'string' && (user.name.includes('安得') || user.name.includes('公司') || user.name.includes('企业')));
+
         let role = '签署方';
-        if (user.signOrder === 1 || index === 0) {
-          role = '甲方（客户）';
-        } else if (user.signOrder === 2 || index === 1) {
-          role = '乙方（服务人员）';
-        } else if (user.signOrder === 3 || index === 2) {
-          role = '丙方（企业）';
+        if (orderCategory === 'training') {
+          // 职培合同：甲方=企业，乙方=学员（2方）
+          role = isEnterprise ? '甲方（企业）' : '乙方（学员）';
+        } else {
+          // 家政合同：甲方=客户，乙方=阿姨，丙方=企业（3方）
+          if (isEnterprise) {
+            role = '丙方（企业）';
+          } else if (user.signOrder === 1 || index === 0) {
+            role = '甲方（客户）';
+          } else if (user.signOrder === 2 || index === 1) {
+            role = '乙方（服务人员）';
+          } else {
+            role = '丙方（企业）';
+          }
         }
 
-        this.logger.debug(`🔍 签署方 ${index + 1}: signOrder=${user.signOrder}, index=${index}, role=${role}, name=${user.name}, signUrl=${user.signUrl}`);
+        this.logger.debug(`🔍 签署方 ${index + 1}: signOrder=${user.signOrder}, userType=${user.userType}, account=${user.account}, role=${role}, name=${user.name}, signUrl=${user.signUrl}`);
 
         // 如果是企业签署方且没有签署链接，说明使用的是无感知签章（自动签章）
         let signUrl = user.signUrl;
-        if (!signUrl && (index >= 2 || role.includes('丙方'))) {
+        if (!signUrl && isEnterprise) {
           signUrl = '无需签署（企业自动签章）';
           this.logger.debug(`ℹ️ 企业签署方使用无感知签章，无需签署链接`);
         }
@@ -4224,6 +4240,8 @@ export class ESignService {
           signStatus: signStatus,
           statusText: this.getSignStatusText(signStatus),
           signTime: user.signTime,
+          signOrder: user.signOrder,
+          userType: user.userType, // 0=个人, 1=企业
           signUrl: user.signUrl // 🔥 这就是真实的签约链接！
         };
       }) || [];

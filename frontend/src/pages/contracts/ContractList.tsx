@@ -407,6 +407,7 @@ const ContractList: React.FC = () => {
           return (
             <ContractStatusMini
               contractNo={record.esignContractNo}
+              orderCategory={(record as any).orderCategory}
               onStatusChange={(status) => {
                 console.log(`合同 ${record.contractNumber} 状态更新:`, status);
               }}

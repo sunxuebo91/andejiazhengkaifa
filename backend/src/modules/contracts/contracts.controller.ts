@@ -281,9 +281,12 @@ export class ContractsController {
         };
       }
 
-      this.logger.debug(`爱签合同编号: ${contract.esignContractNo}`);
-      // 使用新的获取签署链接方法
-      const result = await this.esignService.getContractSignUrls(contract.esignContractNo);
+      this.logger.debug(`爱签合同编号: ${contract.esignContractNo}, 订单类别: ${(contract as any).orderCategory}`);
+      // 使用新的获取签署链接方法（传入 orderCategory 以正确区分职培/家政角色）
+      const result = await this.esignService.getContractSignUrls(
+        contract.esignContractNo,
+        (contract as any).orderCategory,
+      );
 
       this.logger.debug(`获取签署链接结果: success=${result.success}, signUrlsCount=${result.data?.signUrls?.length || 0}`);
 
@@ -482,6 +485,35 @@ export class ContractsController {
       return {
         success: false,
         message: error.message || '合同分配失败',
+      };
+    }
+  }
+
+  /**
+   * 标记合同退款（职培专用，终态不可逆）
+   * - 仅管理员/经理可操作
+   * - 仅职培（orderCategory=training）且 contractStatus=active 可触发
+   * - 同步写 contractStatus=refunded / paymentStatus=refunded / refundedAt=now
+   */
+  @Post(':id/mark-refunded')
+  @Permissions('contract:edit')
+  async markRefunded(@Param('id') id: string, @Request() req) {
+    try {
+      if (!this.isManagerOrAdmin(req.user)) {
+        throw new ForbiddenException('只有管理员或经理可以标记退款');
+      }
+      this.logger.log(`💰 ${req.user.name} 标记合同 ${id} 为已退款`);
+      const contract = await this.contractsService.markContractRefunded(id);
+      return {
+        success: true,
+        data: contract,
+        message: '已标记退款',
+      };
+    } catch (error) {
+      this.logger.error(`标记退款失败: ${error.message}`);
+      return {
+        success: false,
+        message: error.message || '标记退款失败',
       };
     }
   }

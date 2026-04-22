@@ -20,6 +20,7 @@ import {
   Empty,
   Collapse,
   Switch,
+  InputNumber,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -39,8 +40,11 @@ import {
   CloseOutlined,
   SyncOutlined,
   DollarOutlined,
+  AuditOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons';
 import { contractService } from '../../services/contractService';
+import { trainingOrderService } from '../../services/trainingOrderService';
 import { customerService } from '../../services/customerService';
 import { resumeService } from '../../services/resume.service';
 import { backgroundCheckService } from '../../services/backgroundCheckService';
@@ -51,7 +55,29 @@ import ContractStatusCard, { ContractStatusInfo } from '../../components/Contrac
 import { useAuth } from '../../contexts/AuthContext';
 import dayjs from 'dayjs';
 
+// 基于签署方数据 + 订单类别动态推导角色标签，避免信任数据库中旧的错误 role 字段
+const deriveSignerRole = (
+  signer: any,
+  orderCategory?: string,
+  index: number = 0,
+): string => {
+  const name = typeof signer?.name === 'string' ? signer.name : '';
+  const isEnterprise =
+    signer?.userType === 1 ||
+    signer?.account === 'ASIGN91110111MACJMD2R5J' ||
+    name.includes('安得') ||
+    name.includes('公司') ||
+    name.includes('企业');
 
+  if (orderCategory === 'training') {
+    return isEnterprise ? '甲方（企业）' : '乙方（学员）';
+  }
+  // 家政合同（默认 3 方）
+  if (isEnterprise) return '丙方（企业）';
+  if (signer?.signOrder === 1 || index === 0) return '甲方（客户）';
+  if (signer?.signOrder === 2 || index === 1) return '乙方（服务人员）';
+  return '丙方（企业）';
+};
 
 const ContractDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -98,6 +124,12 @@ const ContractDetail: React.FC = () => {
 
   // 收款开关切换状态
   const [paymentToggleLoading, setPaymentToggleLoading] = useState(false);
+
+  // 职培：证书申报 / 退款
+  const [graduateLoading, setGraduateLoading] = useState(false);
+  const [refundModalVisible, setRefundModalVisible] = useState(false);
+  const [refundAmount, setRefundAmount] = useState<number | null>(null);
+  const [refundLoading, setRefundLoading] = useState(false);
 
   // 最后更新人信息已在fetchContractDetail中直接处理
 
@@ -797,6 +829,64 @@ const ContractDetail: React.FC = () => {
     }
   };
 
+  // 职培订单：证书申报（标记已毕业）
+  const handleGraduate = () => {
+    if (!contract?._id) return;
+    modal.confirm({
+      title: '确认证书申报',
+      content: (
+        <div>
+          <p>确认为该学员申报证书并将订单标记为「已毕业」？</p>
+          <p><strong>合同编号：</strong>{contract.contractNumber}</p>
+          <p><strong>学员：</strong>{contract.customerName}</p>
+          <p style={{ color: '#faad14', marginTop: 8 }}>此状态将同步到小程序，且不可撤回。</p>
+        </div>
+      ),
+      okText: '确认申报',
+      cancelText: '取消',
+      onOk: async () => {
+        setGraduateLoading(true);
+        try {
+          await trainingOrderService.markGraduated(contract._id!);
+          messageApi.success('证书申报成功，订单已标记为已毕业');
+          fetchContractDetail();
+        } catch (error: any) {
+          messageApi.error(error?.response?.data?.message || '操作失败');
+        } finally {
+          setGraduateLoading(false);
+        }
+      },
+    });
+  };
+
+  // 职培订单：打开退款弹窗
+  const handleOpenRefund = () => {
+    if (!contract?._id) return;
+    setRefundAmount(null);
+    setRefundModalVisible(true);
+  };
+
+  // 职培订单：确认退款
+  const handleConfirmRefund = async () => {
+    if (!contract?._id) return;
+    if (refundAmount == null || refundAmount <= 0) {
+      messageApi.warning('请输入大于 0 的退款金额');
+      return;
+    }
+    setRefundLoading(true);
+    try {
+      await trainingOrderService.markRefunded(contract._id, refundAmount);
+      messageApi.success(`退款成功，报课金额已扣减 ¥${refundAmount}`);
+      setRefundModalVisible(false);
+      setRefundAmount(null);
+      fetchContractDetail();
+    } catch (error: any) {
+      messageApi.error(error?.response?.data?.message || '操作失败');
+    } finally {
+      setRefundLoading(false);
+    }
+  };
+
   const handleWithdrawContract = async () => {
     if (!contract?.esignContractNo) {
       messageApi.warning('该合同暂无爱签合同编号，无法撤销');
@@ -1080,7 +1170,7 @@ const ContractDetail: React.FC = () => {
                   title={
                     <Space>
                       <UserSwitchOutlined />
-                      <span>{signUrl.role}</span>
+                      <span>{deriveSignerRole(signUrl, (contract as any)?.orderCategory, index)}</span>
                       {signUrl.status === 2 && <Tag color="success">已签署</Tag>}
                       {signUrl.status === 1 && <Tag color="warning">待签署</Tag>}
                     </Space>
@@ -1335,6 +1425,36 @@ const ContractDetail: React.FC = () => {
         }
         extra={
           <Space>
+            {contract.orderCategory === 'training' && (
+              <>
+                <Button
+                  icon={<AuditOutlined />}
+                  onClick={handleGraduate}
+                  loading={graduateLoading}
+                  disabled={contract.contractStatus === 'graduated' || contract.contractStatus === 'refunded'}
+                  style={
+                    contract.contractStatus === 'graduated' || contract.contractStatus === 'refunded'
+                      ? undefined
+                      : { backgroundColor: '#52c41a', borderColor: '#52c41a', color: '#fff' }
+                  }
+                >
+                  {contract.contractStatus === 'graduated' ? '已毕业' : '证书申报'}
+                </Button>
+                <span style={{ fontSize: 14 }}>
+                  退款：
+                  <Switch
+                    checked={contract.contractStatus === 'refunded'}
+                    onChange={(checked) => {
+                      if (checked) handleOpenRefund();
+                    }}
+                    disabled={contract.contractStatus === 'refunded' || contract.contractStatus === 'graduated'}
+                    checkedChildren="开"
+                    unCheckedChildren="关"
+                    size="small"
+                  />
+                </span>
+              </>
+            )}
             <Button
               icon={<EyeOutlined />}
               onClick={handlePreviewContract}
@@ -1491,7 +1611,7 @@ const ContractDetail: React.FC = () => {
                                 title={
                                   <Space>
                                     <UserSwitchOutlined />
-                                    <span>{signUrl.role}</span>
+                                    <span>{deriveSignerRole(signUrl, (contract as any)?.orderCategory, index)}</span>
                                     {signUrl.status === 2 && <Tag color="success">已签署</Tag>}
                                     {signUrl.status === 1 && <Tag color="warning">待签署</Tag>}
                                   </Space>
@@ -2255,7 +2375,7 @@ const ContractDetail: React.FC = () => {
                     title={
                       <Space>
                         <FileTextOutlined />
-                        <Typography.Text strong>{signUrl.role}</Typography.Text>
+                        <Typography.Text strong>{deriveSignerRole(signUrl, (contract as any)?.orderCategory, index)}</Typography.Text>
                       </Space>
                     }
                     extra={
@@ -2343,6 +2463,69 @@ const ContractDetail: React.FC = () => {
           onSuccess={handleEditSuccess}
         />
       )}
+
+      {/* 职培订单：退款弹窗 */}
+      <Modal
+        title={
+          <Space>
+            <RollbackOutlined style={{ color: '#fa8c16' }} />
+            <span>职培订单退款</span>
+          </Space>
+        }
+        open={refundModalVisible}
+        onOk={handleConfirmRefund}
+        onCancel={() => {
+          setRefundModalVisible(false);
+          setRefundAmount(null);
+        }}
+        confirmLoading={refundLoading}
+        okText="确认退款"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        destroyOnClose
+      >
+        {contract && (
+          <div>
+            <p><strong>合同编号：</strong>{contract.contractNumber}</p>
+            <p><strong>学员：</strong>{contract.customerName}</p>
+            <p>
+              <strong>当前报课金额：</strong>
+              <span style={{ color: '#1890ff', fontWeight: 600 }}>
+                ¥{contract.courseAmount != null ? Number(contract.courseAmount).toLocaleString() : '-'}
+              </span>
+            </p>
+            <div style={{ marginTop: 16 }}>
+              <span style={{ marginRight: 8 }}>退款金额（元）：</span>
+              <InputNumber
+                min={0.01}
+                max={contract.courseAmount != null ? Number(contract.courseAmount) : undefined}
+                step={0.01}
+                precision={2}
+                value={refundAmount as any}
+                onChange={(v) => setRefundAmount(v as number | null)}
+                style={{ width: 200 }}
+                placeholder="请输入退款金额"
+              />
+            </div>
+            {refundAmount != null && refundAmount > 0 && contract.courseAmount != null && (
+              <Alert
+                style={{ marginTop: 16 }}
+                type="warning"
+                showIcon
+                message={
+                  <span>
+                    确认后报课金额将更新为
+                    <strong style={{ color: '#fa8c16', margin: '0 4px' }}>
+                      ¥{Math.max(0, Math.round((Number(contract.courseAmount) - refundAmount) * 100) / 100).toLocaleString()}
+                    </strong>
+                    ，订单状态将切换为「已退款」，该状态同步至小程序，不可撤回。
+                  </span>
+                }
+              />
+            )}
+          </div>
+        )}
+      </Modal>
 
     </div>
   );

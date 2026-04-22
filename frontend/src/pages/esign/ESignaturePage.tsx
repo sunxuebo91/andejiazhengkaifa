@@ -3444,19 +3444,27 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
                   signer: statusResult.data,
                   signUrl: statusResult.data.signUser?.[0]?.signUrl || ''
                 }));
-                
+
                 // 保存签署链接到本地数据库
                 if (stepData.localContractId) {
-                  const signUrls = statusResult.data.signUser.map((user: any, index: number) => ({
-                    name: user.name,
-                    mobile: user.account,
-                    role: isStudentMode
-                      ? (index === 0 ? '甲方（企业）' : '乙方（学员）')
-                      : (index === 0 ? '甲方（客户）' : index === 1 ? '乙方（服务人员）' : '丙方（企业）'),
-                    signUrl: user.signUrl,
-                    account: user.account,
-                    signOrder: user.signOrder
-                  }));
+                  const signUrls = statusResult.data.signUser.map((user: any, index: number) => {
+                    // 基于 userType / 账号识别企业方（不依赖数组下标顺序）
+                    const isEnterprise =
+                      user.userType === 1 ||
+                      user.account === 'ASIGN91110111MACJMD2R5J' ||
+                      (typeof user.name === 'string' && (user.name.includes('安得') || user.name.includes('公司') || user.name.includes('企业')));
+                    const role = isStudentMode
+                      ? (isEnterprise ? '甲方（企业）' : '乙方（学员）')
+                      : (isEnterprise ? '丙方（企业）' : (index === 0 ? '甲方（客户）' : '乙方（服务人员）'));
+                    return {
+                      name: user.name,
+                      mobile: user.account,
+                      role,
+                      signUrl: user.signUrl,
+                      account: user.account,
+                      signOrder: user.signOrder,
+                    };
+                  });
 
                   console.log('🔗 准备保存的签署链接数据:', signUrls);
 
@@ -3486,16 +3494,24 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
             // 保存签署链接到本地数据库
             if (stepData.localContractId && result.data?.signUser) {
               try {
-                const signUrls = result.data.signUser.map((user: any, index: number) => ({
-                  name: user.name,
-                  mobile: user.account,
-                  role: isStudentMode
-                    ? (index === 0 ? '甲方（企业）' : '乙方（学员）')
-                    : (index === 0 ? '甲方（客户）' : index === 1 ? '乙方（服务人员）' : '丙方（企业）'),
-                  signUrl: user.signUrl,
-                  account: user.account,
-                  signOrder: user.signOrder
-                }));
+                const signUrls = result.data.signUser.map((user: any, index: number) => {
+                  // 基于 userType / 账号识别企业方（不依赖数组下标顺序）
+                  const isEnterprise =
+                    user.userType === 1 ||
+                    user.account === 'ASIGN91110111MACJMD2R5J' ||
+                    (typeof user.name === 'string' && (user.name.includes('安得') || user.name.includes('公司') || user.name.includes('企业')));
+                  const role = isStudentMode
+                    ? (isEnterprise ? '甲方（企业）' : '乙方（学员）')
+                    : (isEnterprise ? '丙方（企业）' : (index === 0 ? '甲方（客户）' : '乙方（服务人员）'));
+                  return {
+                    name: user.name,
+                    mobile: user.account,
+                    role,
+                    signUrl: user.signUrl,
+                    account: user.account,
+                    signOrder: user.signOrder,
+                  };
+                });
 
                 console.log('🔗 准备保存的签署链接数据:', signUrls);
 
@@ -3645,16 +3661,31 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
 
         {signUrls.length > 0 ? (
           <div style={{ marginBottom: 24 }}>
-            {signUrls.map((signUser: any, index: number) => (
+            {signUrls.map((signUser: any, index: number) => {
+              // 基于 userType / 账号识别企业方（不依赖数组下标顺序）
+              // 原因：企业为无感知签章时，爱签返回的 signUser 数组可能只包含需要签署链接的学员，
+              // 若仍用 index===0 判定会把学员误标为"甲方（企业）"
+              const signerName = typeof signUser.name === 'string' ? signUser.name : '';
+              const isEnterprise =
+                signUser.userType === 1 ||
+                signUser.account === 'ASIGN91110111MACJMD2R5J' ||
+                signerName.includes('安得') ||
+                signerName.includes('公司') ||
+                signerName.includes('企业');
+              const roleLabel = isStudentMode
+                ? (isEnterprise ? '甲方（企业）' : '乙方（学员）')
+                : (isEnterprise ? '丙方' : (index === 0 ? '甲方' : '乙方'));
+              const bgColor = isStudentMode
+                ? (isEnterprise ? '#f6ffed' : '#fff7e6')
+                : (isEnterprise ? '#f0f9ff' : (index === 0 ? '#f6ffed' : '#fff7e6'));
+              return (
               <Card
                 key={index}
-                title={`${isStudentMode
-                  ? (index === 0 ? '甲方（企业）' : '乙方（学员）')
-                  : (index === 0 ? '甲方' : index === 1 ? '乙方' : '丙方')}签署链接`}
+                title={`${roleLabel}签署链接`}
                 size="small"
                 style={{
                   marginBottom: 16,
-                  background: index === 0 ? '#f6ffed' : index === 1 ? '#fff7e6' : '#f0f9ff'
+                  background: bgColor
                 }}
               >
                 <p><strong>签署人：</strong>{signUser.name}</p>
@@ -3694,7 +3725,8 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
                   </Text>
                 </div>
               </Card>
-            ))}
+              );
+            })}
 
             <Alert
               message="签署说明"

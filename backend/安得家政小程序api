@@ -294,7 +294,83 @@
 
 ---
 
-## 十七、云函数清单
+## 十七、职培订单模块（安得褓贝小程序专用）
+
+**调用位置**: 安得褓贝小程序云函数 / 订单详情页
+
+**业务隔离说明**: 职培订单与家政合同在 CRM 数据库中同为 `Contract` 集合，以 `orderCategory='training'` 区分。
+为防止跨小程序数据泄露，职培订单单独走 `/api/miniprogram/training-orders/baobei/*` 前缀，
+家政客户小程序的 `/api/miniprogram/contracts/*` 及 `/api/miniprogram/customer/*` 系列接口会强制排除 `orderCategory='training'` 的记录。
+
+**鉴权方式**: `X-Service-Secret` 共享密钥（云函数与后端之间）
+
+| 接口名称 | 调用方式 | URL/云函数名 | 功能说明 | 请求参数 | 返回内容 | 使用状态 |
+|----------|----------|--------------|----------|----------|----------|----------|
+| 获取我的职培订单 | HTTP请求 | `GET /api/miniprogram/training-orders/baobei/my-order` | 按学员手机号聚合返回学员信息 + 报课信息 + 金额 + 全部职培合同 | `{phone}` | `{success, data: {lead, courseInfo, amount, contracts: Array}}` | 新增 |
+| 获取签约链接 | HTTP请求 | `GET /api/miniprogram/training-orders/baobei/{id}/signing-url` | 实时获取爱签签署链接；已签署则返回 `alreadySigned=true` | `{id, phone}` | `{success, data: {signUrl, alreadySigned}}` | 新增 |
+| 支付确认 | HTTP请求 | `POST /api/miniprogram/training-orders/baobei/{id}/payment-confirm` | 收钱吧支付成功后的回调确认，更新合同支付状态 | `{id, phone, amount, sqb_sn, paidAt}` | `{success, data: 合同对象}` | 新增 |
+| 申报证书（毕业） | HTTP请求 | `POST /api/miniprogram/training-orders/baobei/{id}/apply-graduation` | 学员点击后合同进入"已毕业"终态（不可逆），仅 `contractStatus=active` 可触发 | `{id, phone}` | `{success, data: 合同对象}` | 新增 |
+
+**聚合字段说明**（`GET /my-order` 返回的 `data` 结构）：
+
+- `lead`：学员资料（TrainingLead），`null` 表示该手机号未建档
+- `courseInfo`：报课信息（consultPosition / intendedCourses / reportedCertificates / isOnlineCourse / expectedStartDate）
+- `amount`：金额汇总（元）
+  - 原字段：`courseAmount` / `serviceFeeAmount` / `budget`（保留兼容）
+  - 带后缀别名（**推荐**）：`courseAmountYuan` / `serviceFeeAmountYuan` / `budgetYuan`
+- `contracts[]`：该学员名下全部职培合同，单条字段：
+  - `id` / `contractNumber` / `contractStatus` / `contractFileUrl` / `createdAt`
+  - 签署相关：`esignStarted` / `esignCompleted`
+  - 支付开关：`paymentEnabled`（CRM 侧开关，true 才允许发起支付）/ `paymentStatus` / `paidAt` / `sqbSn`
+  - 终态时间戳：`graduatedAt` / `graduatedAtFmt`（YYYY-MM-DD）/ `refundedAt` / `refundedAtFmt`（YYYY-MM-DD），未到达终态时为 null
+  - **应付金额**（业务口径 = `courseAmount` 报课金额，与 CRM 职培订单列表"报课金额"列一致）：
+    - `payableAmountYuan`（元，**C 端推荐**）/ `payableAmountCents`（分）
+  - **实付金额**（支付回调写入，未支付为 null）：
+    - 原字段 `paymentAmount`（分，保留兼容）
+    - 带后缀别名：`paymentAmountCents`（分）/ `paymentAmountYuan`（元，**C 端推荐**）
+  - 职培字段：`courseAmount` / `courseAmountYuan`（元）/ `intendedCourses`
+  - 内部字段：`serviceFeeAmount` / `serviceFeeAmountYuan`（元）/ `consultPosition`
+
+**金额单位口径（重要）**：
+
+历史上 `paymentAmount` 按**分**存储，`courseAmount` / `serviceFeeAmount` / `budget` 按**元**存储，单位不统一由来已久。为避免错位，本次起聚合接口层额外输出一组显式带 `*Yuan` / `*Cents` 后缀的别名字段，**新接入方请统一使用带后缀的字段**，原字段仅保留兼容不再推荐直读。支付回调写入 `paymentAmount`（分）时，业务上应等于 `payableAmountCents`（= `courseAmount * 100`）；出现实付≠应付时以 `paymentAmountYuan` 为准展示，差额由对账侧处理。
+
+**C 端展示口径（褓贝小程序"职培订单"页，前端已按此收敛）**：
+
+页面仅保留 **学员档案** + **我的合同** 两块，"报课信息"整张卡片已从 C 端移除。接口返回**先不删字段**（管理后台 / 其他端仍在用），但以下字段属于"内部字段，不建议在 C 端展示"，新页面请勿直接引用：
+
+| 字段路径 | 性质 | 不展示原因 |
+|---|---|---|
+| `lead.status` | 内部字段 | 跟进状态（如"7天未跟进"），CRM 内部口径 |
+| `amount.*`（整块） | 内部字段 | 内部核算口径，C 端"费用汇总"已整块下线 |
+| `courseInfo.*`（consultPosition / intendedCourses / reportedCertificates / isOnlineCourse / expectedStartDate） | 内部字段 | "报课信息"卡片整块已下线，合同级别的 `contracts[].intendedCourses` 已覆盖 C 端需求 |
+| `contracts[].serviceFeeAmount` / `serviceFeeAmountYuan` | 内部字段 | 合同服务费分摊口径，C 端应读 `payableAmountYuan` 展示应付 |
+| `contracts[].consultPosition` | 内部字段 | 销售内部记录 |
+| `contracts[].paymentAmount`（原字段） | 不推荐 | 含义是"实付"非"应付"，且单位为分容易误用；C 端请读 `paymentAmountYuan` / `payableAmountYuan` |
+
+**字段展示文案约定**：`contracts[].intendedCourses` 在 C 端显示为 **"已报课程"**（因为进入"我的订单"已是签约后阶段，原"意向课程"语义不对）；接口字段名 `intendedCourses` 不变，CRM 后台沿用原叫法。
+
+**日期格式口径**：`courseInfo.expectedStartDate` 自本次起由服务端统一格式化为 `YYYY-MM-DD`（例如 `2026-04-09`），不再返回 ISO 带时区的原始串，避免各端各自 `new Date` 造成时区偏移。`graduatedAtFmt` / `refundedAtFmt` 同样按 `YYYY-MM-DD` 输出。
+
+**合同生命周期（职培）**：
+
+| `contractStatus` | C 端展示 | 触发方式 | 是否终态 |
+|---|---|---|---|
+| `signing` | 签约中 | 合同创建后默认（或爱签回调前） | 否 |
+| `active` | 学习中 | 爱签回调 `esignStatus=2` 时后端自动写入 | 否 |
+| `graduated` | 已毕业 | 学员在褓贝小程序点击"申报证书"，调 `apply-graduation` | **是**（不可逆） |
+| `refunded` | 已退款 | CRM 管理后台手动点击"标记退款"（仅管理员/经理），仅 `active` 可触发 | **是**（不可逆） |
+
+**状态机规则**：
+- `active → graduated`：学员自助触发，毕业后按钮消失，不能撤销
+- `active → refunded`：CRM 运营手动触发，退款后合同终止
+- `graduated` 之后**不可再退款**（毕业视为正常结课）
+- `refunded` 之后**不可再申报毕业**
+- 小程序端 `TRAINING_STATUS_MAP` 请按 `{signing:'签约中', active:'学习中', graduated:'已毕业', refunded:'已退款'}` 渲染
+
+---
+
+## 十八、云函数清单
 
 ### 存在的云函数（10个）
 

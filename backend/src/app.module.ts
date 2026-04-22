@@ -30,6 +30,7 @@ import { ArticleModule } from './modules/article/article.module';
 import { EmployeeEvaluationModule } from './modules/employee-evaluation/employee-evaluation.module';
 import { MiniProgramUserModule } from './modules/miniprogram-user/miniprogram-user.module';
 import { TrainingLeadsModule } from './modules/training-leads/training-leads.module';
+import { TrainingOrdersModule } from './modules/training-orders/training-orders.module';
 import { FormModule } from './modules/form/form.module';
 import { ShortUrlModule } from './modules/short-url/short-url.module';
 import { ContractApprovalsModule } from './modules/contract-approvals/contract-approvals.module';
@@ -86,6 +87,7 @@ import { MiniprogramLoggerMiddleware } from './common/middleware/miniprogram-log
     EmployeeEvaluationModule,
     MiniProgramUserModule,
     TrainingLeadsModule,
+    TrainingOrdersModule,
     FormModule,
     ShortUrlModule,
     ContractApprovalsModule,

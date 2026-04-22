@@ -122,6 +122,22 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);
 
+    // 初始化 Nest 路由，使后续注册的中间件位于路由之后（专门处理未匹配请求）
+    await app.init();
+
+    // 全局 404 兜底：所有未匹配到 Nest 控制器的请求以结构化 JSON 返回，
+    // 避免 Express 默认 "Cannot GET ..." 文本响应导致小程序端解析失败。
+    const httpAdapter = app.getHttpAdapter().getInstance();
+    httpAdapter.use((req: Request, res: any) => {
+      if (res.headersSent) return;
+      res.status(404).json({
+        success: false,
+        message: `接口不存在: ${req.method} ${req.originalUrl}`,
+        error: { code: 'HTTP_404' },
+        timestamp: Date.now(),
+      });
+    });
+
     // 启动服务器
     const port = process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3001);
     await app.listen(port, '0.0.0.0'); // 明确绑定到所有接口

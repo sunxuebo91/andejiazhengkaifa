@@ -37,51 +37,69 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
   const [loading, setLoading] = useState(false);
   const { message } = App.useApp();
 
+  const isTraining = contract?.orderCategory === 'training';
+
   useEffect(() => {
     if (visible && contract) {
-      // 预填充合同信息
-      form.setFieldsValue({
-        customerName: contract.customerName,
-        customerPhone: contract.customerPhone,
-        customerIdCard: contract.customerIdCard || '',
-        contractType: contract.contractType,
-        startDate: dayjs(contract.startDate),
-        endDate: dayjs(contract.endDate),
-        workerName: contract.workerName,
-        workerPhone: contract.workerPhone,
-        workerIdCard: contract.workerIdCard,
-        workerSalary: contract.workerSalary,
-        customerServiceFee: contract.customerServiceFee,
-        workerServiceFee: contract.workerServiceFee,
-        deposit: contract.deposit,
-        finalPayment: contract.finalPayment,
-        expectedDeliveryDate: contract.expectedDeliveryDate ? dayjs(contract.expectedDeliveryDate) : null,
-        salaryPaymentDay: contract.salaryPaymentDay,
-        monthlyWorkDays: contract.monthlyWorkDays,
-        remarks: contract.remarks,
-        onboardStatus: contract.onboardStatus || 'pending',
-      });
+      if (isTraining) {
+        // 职培订单预填充：只包含学员信息 + 培训相关字段
+        form.setFieldsValue({
+          customerName: contract.customerName,
+          customerPhone: contract.customerPhone,
+          customerIdCard: contract.customerIdCard || '',
+          courseAmount: contract.courseAmount,
+          serviceFeeAmount: contract.serviceFeeAmount,
+          consultPosition: contract.consultPosition,
+          intendedCourses: contract.intendedCourses,
+          remarks: contract.remarks,
+        });
+      } else {
+        // 家政合同预填充
+        form.setFieldsValue({
+          customerName: contract.customerName,
+          customerPhone: contract.customerPhone,
+          customerIdCard: contract.customerIdCard || '',
+          contractType: contract.contractType,
+          startDate: contract.startDate ? dayjs(contract.startDate) : null,
+          endDate: contract.endDate ? dayjs(contract.endDate) : null,
+          workerName: contract.workerName,
+          workerPhone: contract.workerPhone,
+          workerIdCard: contract.workerIdCard,
+          workerSalary: contract.workerSalary,
+          customerServiceFee: contract.customerServiceFee,
+          workerServiceFee: contract.workerServiceFee,
+          deposit: contract.deposit,
+          finalPayment: contract.finalPayment,
+          expectedDeliveryDate: contract.expectedDeliveryDate ? dayjs(contract.expectedDeliveryDate) : null,
+          salaryPaymentDay: contract.salaryPaymentDay,
+          monthlyWorkDays: contract.monthlyWorkDays,
+          remarks: contract.remarks,
+          onboardStatus: contract.onboardStatus || 'pending',
+        });
+      }
     }
-  }, [visible, contract, form]);
+  }, [visible, contract, form, isTraining]);
 
   const handleSubmit = async (values: any) => {
     setLoading(true);
     try {
-      const contractData: Partial<CreateContractData> = {
-        ...values,
-        startDate: values.startDate.format('YYYY-MM-DD'),
-        endDate: values.endDate.format('YYYY-MM-DD'),
-        expectedDeliveryDate: values.expectedDeliveryDate 
-          ? values.expectedDeliveryDate.format('YYYY-MM-DD') 
-          : undefined,
-      };
+      const contractData: Partial<CreateContractData> = isTraining
+        ? { ...values }
+        : {
+            ...values,
+            startDate: values.startDate ? values.startDate.format('YYYY-MM-DD') : undefined,
+            endDate: values.endDate ? values.endDate.format('YYYY-MM-DD') : undefined,
+            expectedDeliveryDate: values.expectedDeliveryDate
+              ? values.expectedDeliveryDate.format('YYYY-MM-DD')
+              : undefined,
+          };
 
       await contractService.updateContract(contract._id!, contractData);
-      message.success('合同更新成功！');
+      message.success(isTraining ? '订单更新成功！' : '合同更新成功！');
       onSuccess();
       handleCancel();
     } catch (error: any) {
-      message.error(error?.response?.data?.message || '合同更新失败');
+      message.error(error?.response?.data?.message || (isTraining ? '订单更新失败' : '合同更新失败'));
       console.error('合同更新失败:', error);
     } finally {
       setLoading(false);
@@ -95,7 +113,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
 
   return (
     <Modal
-      title="编辑合同"
+      title={isTraining ? '编辑职培订单' : '编辑合同'}
       open={visible}
       onCancel={handleCancel}
       footer={null}
@@ -108,235 +126,285 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
         onFinish={handleSubmit}
         autoComplete="off"
       >
-        {/* 客户信息 */}
-        <Divider orientation="left">客户信息</Divider>
+        {/* 客户/学员信息 */}
+        <Divider orientation="left">{isTraining ? '学员信息' : '客户信息'}</Divider>
         <Row gutter={16}>
           <Col span={8}>
             <Form.Item
-              label="客户姓名"
+              label={isTraining ? '学员姓名' : '客户姓名'}
               name="customerName"
-              rules={[{ required: true, message: '请输入客户姓名' }]}
+              rules={[{ required: true, message: isTraining ? '请输入学员姓名' : '请输入客户姓名' }]}
             >
-              <Input placeholder="客户姓名" />
+              <Input placeholder={isTraining ? '学员姓名' : '客户姓名'} />
             </Form.Item>
           </Col>
           <Col span={8}>
             <Form.Item
-              label="客户手机号"
+              label={isTraining ? '学员手机号' : '客户手机号'}
               name="customerPhone"
-              rules={[{ required: true, message: '请输入客户手机号' }]}
+              rules={[{ required: true, message: isTraining ? '请输入学员手机号' : '请输入客户手机号' }]}
             >
-              <Input placeholder="客户手机号" />
+              <Input placeholder={isTraining ? '学员手机号' : '客户手机号'} />
             </Form.Item>
           </Col>
           <Col span={8}>
             <Form.Item
-              label="客户身份证号"
+              label={isTraining ? '学员身份证号' : '客户身份证号'}
               name="customerIdCard"
             >
-              <Input placeholder="客户身份证号" />
+              <Input placeholder={isTraining ? '学员身份证号' : '客户身份证号'} />
             </Form.Item>
           </Col>
         </Row>
 
-        {/* 合同信息 */}
-        <Divider orientation="left">合同信息</Divider>
-        <Row gutter={16}>
-          <Col span={8}>
-            <Form.Item
-              label="合同类型"
-              name="contractType"
-              rules={[{ required: true, message: '请选择合同类型' }]}
-            >
-              <Select placeholder="请选择合同类型">
-                {CONTRACT_TYPES.map(type => (
-                  <Option key={type} value={type}>{type}</Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="开始时间"
-              name="startDate"
-              rules={[{ required: true, message: '请选择开始时间' }]}
-            >
-              <DatePicker style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="结束时间"
-              name="endDate"
-              rules={[{ required: true, message: '请选择结束时间' }]}
-            >
-              <DatePicker style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-        </Row>
+        {!isTraining && (
+          <>
+            {/* 合同信息 */}
+            <Divider orientation="left">合同信息</Divider>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  label="合同类型"
+                  name="contractType"
+                  rules={[{ required: true, message: '请选择合同类型' }]}
+                >
+                  <Select placeholder="请选择合同类型">
+                    {CONTRACT_TYPES.map(type => (
+                      <Option key={type} value={type}>{type}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="开始时间"
+                  name="startDate"
+                  rules={[{ required: true, message: '请选择开始时间' }]}
+                >
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="结束时间"
+                  name="endDate"
+                  rules={[{ required: true, message: '请选择结束时间' }]}
+                >
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
 
-        {/* 服务人员信息 */}
-        <Divider orientation="left">服务人员信息</Divider>
-        <Row gutter={16}>
-          <Col span={8}>
-            <Form.Item
-              label="劳动者姓名"
-              name="workerName"
-              rules={[{ required: true, message: '请输入劳动者姓名' }]}
-            >
-              <Input placeholder="劳动者姓名" />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="劳动者电话"
-              name="workerPhone"
-              rules={[{ required: true, message: '请输入劳动者电话' }]}
-            >
-              <Input placeholder="劳动者电话" />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="劳动者身份证号"
-              name="workerIdCard"
-              rules={[{ required: true, message: '请输入劳动者身份证号' }]}
-            >
-              <Input placeholder="劳动者身份证号" />
-            </Form.Item>
-          </Col>
-        </Row>
+            {/* 服务人员信息 */}
+            <Divider orientation="left">服务人员信息</Divider>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  label="劳动者姓名"
+                  name="workerName"
+                  rules={[{ required: true, message: '请输入劳动者姓名' }]}
+                >
+                  <Input placeholder="劳动者姓名" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="劳动者电话"
+                  name="workerPhone"
+                  rules={[{ required: true, message: '请输入劳动者电话' }]}
+                >
+                  <Input placeholder="劳动者电话" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="劳动者身份证号"
+                  name="workerIdCard"
+                  rules={[{ required: true, message: '请输入劳动者身份证号' }]}
+                >
+                  <Input placeholder="劳动者身份证号" />
+                </Form.Item>
+              </Col>
+            </Row>
 
-        {/* 费用信息 */}
-        <Divider orientation="left">费用信息</Divider>
-        <Row gutter={16}>
-          <Col span={8}>
-            <Form.Item
-              label="家政员工资"
-              name="workerSalary"
-              rules={[{ required: true, message: '请输入家政员工资' }]}
-            >
-              <InputNumber
-                placeholder="家政员工资"
-                style={{ width: '100%' }}
-                min={0}
-                formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="客户服务费"
-              name="customerServiceFee"
-              rules={[{ required: true, message: '请输入客户服务费' }]}
-            >
-              <InputNumber
-                placeholder="客户服务费"
-                style={{ width: '100%' }}
-                min={0}
-                formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="家政员服务费（选填）"
-              name="workerServiceFee"
-            >
-              <InputNumber
-                placeholder="家政员服务费"
-                style={{ width: '100%' }}
-                min={0}
-                formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
-              />
-            </Form.Item>
-          </Col>
-        </Row>
+            {/* 费用信息 */}
+            <Divider orientation="left">费用信息</Divider>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  label="家政员工资"
+                  name="workerSalary"
+                  rules={[{ required: true, message: '请输入家政员工资' }]}
+                >
+                  <InputNumber
+                    placeholder="家政员工资"
+                    style={{ width: '100%' }}
+                    min={0}
+                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="客户服务费"
+                  name="customerServiceFee"
+                  rules={[{ required: true, message: '请输入客户服务费' }]}
+                >
+                  <InputNumber
+                    placeholder="客户服务费"
+                    style={{ width: '100%' }}
+                    min={0}
+                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="家政员服务费（选填）"
+                  name="workerServiceFee"
+                >
+                  <InputNumber
+                    placeholder="家政员服务费"
+                    style={{ width: '100%' }}
+                    min={0}
+                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
 
-        <Row gutter={16}>
-          <Col span={8}>
-            <Form.Item
-              label="约定定金（选填）"
-              name="deposit"
-            >
-              <InputNumber
-                placeholder="约定定金"
-                style={{ width: '100%' }}
-                min={0}
-                formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="约定尾款（选填）"
-              name="finalPayment"
-            >
-              <InputNumber
-                placeholder="约定尾款"
-                style={{ width: '100%' }}
-                min={0}
-                formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="预产期（选填）"
-              name="expectedDeliveryDate"
-            >
-              <DatePicker style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-        </Row>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  label="约定定金（选填）"
+                  name="deposit"
+                >
+                  <InputNumber
+                    placeholder="约定定金"
+                    style={{ width: '100%' }}
+                    min={0}
+                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="约定尾款（选填）"
+                  name="finalPayment"
+                >
+                  <InputNumber
+                    placeholder="约定尾款"
+                    style={{ width: '100%' }}
+                    min={0}
+                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="预产期（选填）"
+                  name="expectedDeliveryDate"
+                >
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
 
-        {/* 其他信息 */}
-        <Divider orientation="left">其他信息</Divider>
-        <Row gutter={16}>
-          <Col span={8}>
-            <Form.Item
-              label="上户状态"
-              name="onboardStatus"
-            >
-              <Select placeholder="请选择上户状态">
-                <Option value="not_started">未开始（合同未签约）</Option>
-                <Option value="pending">待上户（合同已签约）</Option>
-                <Option value="confirmed">已上户（客户已确认）</Option>
-              </Select>
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="工资发放日（选填）"
-              name="salaryPaymentDay"
-            >
-              <InputNumber
-                placeholder="工资发放日"
-                style={{ width: '100%' }}
-                min={1}
-                max={31}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              label="月工作天数（选填）"
-              name="monthlyWorkDays"
-            >
-              <InputNumber
-                placeholder="月工作天数"
-                style={{ width: '100%' }}
-                min={1}
-                max={31}
-              />
-            </Form.Item>
-          </Col>
-        </Row>
+            {/* 其他信息 */}
+            <Divider orientation="left">其他信息</Divider>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  label="上户状态"
+                  name="onboardStatus"
+                >
+                  <Select placeholder="请选择上户状态">
+                    <Option value="not_started">未开始（合同未签约）</Option>
+                    <Option value="pending">待上户（合同已签约）</Option>
+                    <Option value="confirmed">已上户（客户已确认）</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="工资发放日（选填）"
+                  name="salaryPaymentDay"
+                >
+                  <InputNumber
+                    placeholder="工资发放日"
+                    style={{ width: '100%' }}
+                    min={1}
+                    max={31}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="月工作天数（选填）"
+                  name="monthlyWorkDays"
+                >
+                  <InputNumber
+                    placeholder="月工作天数"
+                    style={{ width: '100%' }}
+                    min={1}
+                    max={31}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </>
+        )}
+
+        {isTraining && (
+          <>
+            {/* 培训费用信息 */}
+            <Divider orientation="left">费用信息</Divider>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  label="报课金额"
+                  name="courseAmount"
+                  rules={[{ required: true, message: '请输入报课金额' }]}
+                >
+                  <InputNumber
+                    placeholder="报课金额"
+                    style={{ width: '100%' }}
+                    min={0}
+                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="培训服务费（选填）"
+                  name="serviceFeeAmount"
+                >
+                  <InputNumber
+                    placeholder="培训服务费"
+                    style={{ width: '100%' }}
+                    min={0}
+                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value: any) => parseFloat(value?.replace(/¥\s?|(,*)/g, '') || '0') || 0}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  label="咨询职位（选填）"
+                  name="consultPosition"
+                >
+                  <Input placeholder="咨询职位" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </>
+        )}
 
         <Row gutter={16}>
           <Col span={24}>
@@ -361,7 +429,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({
               取消
             </Button>
             <Button type="primary" htmlType="submit" loading={loading}>
-              更新合同
+              {isTraining ? '更新订单' : '更新合同'}
             </Button>
           </Space>
         </Row>

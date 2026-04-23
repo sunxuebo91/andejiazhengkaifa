@@ -127,14 +127,25 @@ const TrainingOrderList: React.FC = () => {
     });
   };
 
-  // 解析报名课程：优先取 templateParams['多选1']（步骤2实际勾选），回退到 intendedCourses
+  // 解析报名课程（口径与 ContractDetail.getEnrolledCourses / 后端 shapeMiniProgramListItem 一致）：
+  //   templateParams['课程列表']  → 职培模板签约时实际勾选
+  //   templateParams['多选1']     → 部分其他模板的多选字段兼容位
+  //   intendedCourses            → 最后兜底（意向课程，可能与实际签约不一致）
   const resolveEnrolledCourses = (record: Contract): string[] => {
-    const raw = record.templateParams?.['多选1'];
-    if (Array.isArray(raw)) return raw.filter(Boolean);
-    if (typeof raw === 'string' && raw.trim()) {
-      return raw.split(/[；;,，]/).map(s => s.trim()).filter(Boolean);
-    }
-    return Array.isArray(record.intendedCourses) ? record.intendedCourses : [];
+    const tp: any = record.templateParams || {};
+    const parse = (raw: any): string[] | null => {
+      if (Array.isArray(raw)) {
+        const arr = raw.filter((s: any) => typeof s === 'string' && s.trim()).map((s: string) => s.trim());
+        return arr.length ? arr : null;
+      }
+      if (typeof raw === 'string' && raw.trim()) {
+        return raw.split(/[；;,，]/).map(s => s.trim()).filter(Boolean);
+      }
+      return null;
+    };
+    return parse(tp['课程列表'])
+      ?? parse(tp['多选1'])
+      ?? (Array.isArray(record.intendedCourses) ? record.intendedCourses : []);
   };
 
   const renderCourses = (courses: string[]) => {

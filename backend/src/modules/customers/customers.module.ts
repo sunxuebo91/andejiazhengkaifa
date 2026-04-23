@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CustomersService } from './customers.service';
 import { CustomersController } from './customers.controller';
@@ -23,6 +23,7 @@ import { LeadTransferRecordService } from './services/lead-transfer-record.servi
 import { CustomerFollowUpStatusService } from './services/customer-follow-up-status.service';
 import { CustomerQueryService } from './services/customer-query.service';
 import { CustomerReadService } from './services/customer-read.service';
+import { ContractsModule } from '../contracts/contracts.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CustomerReadService } from './services/customer-read.service';
     WeixinModule,
     UsersModule,
     NotificationModule,
+    forwardRef(() => ContractsModule),
   ],
   controllers: [CustomersController, LeadTransferController, CustomersBaobeiController],
   providers: [

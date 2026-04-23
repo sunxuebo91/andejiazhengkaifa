@@ -5,11 +5,13 @@ import { ContractsMiniProgramController } from './contracts-miniprogram.controll
 import { ContractsCustomerController } from './contracts-customer.controller';
 import { ContractsQueryService } from './contracts-query.service';
 import { ContractsService } from './contracts.service';
+import { ContractConsistencyService } from './contract-consistency.service';
 import { Contract, ContractSchema } from './models/contract.model';
 import { CustomerContractHistory, CustomerContractHistorySchema } from './models/customer-contract-history.model';
 import { CustomerOperationLog, CustomerOperationLogSchema } from '../customers/models/customer-operation-log.model';
 import { Customer, CustomerSchema } from '../customers/models/customer.model';
 import { Resume, ResumeSchema } from '../resume/models/resume.entity';
+import { ResumeOperationLog, ResumeOperationLogSchema } from '../resume/models/resume-operation-log.model';
 import { User, UserSchema } from '../users/models/user.entity';
 import { ESignModule } from '../esign/esign.module';
 import { ResumeModule } from '../resume/resume.module';
@@ -27,6 +29,7 @@ import { MiniProgramNotificationModule } from '../miniprogram-notification/minip
       { name: CustomerOperationLog.name, schema: CustomerOperationLogSchema },
       { name: Customer.name, schema: CustomerSchema },
       { name: Resume.name, schema: ResumeSchema },
+      { name: ResumeOperationLog.name, schema: ResumeOperationLogSchema },
       { name: User.name, schema: UserSchema },
       { name: BackgroundCheck.name, schema: BackgroundCheckSchema },
       { name: InsurancePolicy.name, schema: InsurancePolicySchema },
@@ -38,7 +41,7 @@ import { MiniProgramNotificationModule } from '../miniprogram-notification/minip
     MiniProgramNotificationModule,
   ],
   controllers: [ContractsController, ContractsMiniProgramController, ContractsCustomerController],
-  providers: [ContractsService, ContractsQueryService],
-  exports: [ContractsService],
+  providers: [ContractsService, ContractsQueryService, ContractConsistencyService],
+  exports: [ContractsService, ContractConsistencyService],
 })
 export class ContractsModule {}

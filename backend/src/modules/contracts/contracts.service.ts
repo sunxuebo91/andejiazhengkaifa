@@ -18,6 +18,7 @@ import { InsurancePolicy } from '../dashubao/models/insurance-policy.model';
 import { AppLogger } from '../../common/logging/app-logger';
 import { RequestContextStore } from '../../common/logging/request-context';
 import { ContractsQueryService } from './contracts-query.service';
+import { ContractConsistencyService } from './contract-consistency.service';
 import { MiniProgramNotificationService } from '../miniprogram-notification/miniprogram-notification.service';
 
 @Injectable()
@@ -38,6 +39,7 @@ export class ContractsService {
     private dashubaoService: DashubaoService,
     private esignService: ESignService,
     private contractsQueryService: ContractsQueryService,
+    private readonly consistencyService: ContractConsistencyService,
     private mpNotificationService: MiniProgramNotificationService,
   ) {}
 
@@ -1080,12 +1082,31 @@ export class ContractsService {
   }
 
   async updateContractStatusDirectly(id: string, updateData: Partial<Contract>): Promise<void> {
+    const before = await this.contractModel.findById(id).select('contractStatus').lean().exec();
     const updated = await this.contractModel
       .findByIdAndUpdate(id, updateData, { new: true })
       .exec();
 
     if (!updated) {
       throw new NotFoundException('合同不存在');
+    }
+
+    // 状态发生变更且进入终态时，触发阿姨接单状态回退
+    const terminalStatuses: Record<string, 'replaced' | 'cancelled' | 'refunded' | 'graduated'> = {
+      replaced: 'replaced',
+      cancelled: 'cancelled',
+      refunded: 'refunded',
+      graduated: 'graduated',
+    };
+    const nextStatus = (updateData as any)?.contractStatus;
+    if (
+      nextStatus &&
+      before?.contractStatus !== nextStatus &&
+      terminalStatuses[nextStatus]
+    ) {
+      this.consistencyService
+        .onContractTerminated(id, terminalStatuses[nextStatus])
+        .catch(err => this.logger.error(`合同终态同步失败（异步） contractId=${id}:`, err));
     }
   }
 
@@ -1095,34 +1116,8 @@ export class ContractsService {
    */
   async syncCustomerOnContractActive(contractId: string): Promise<void> {
     try {
-      const contract = await this.contractModel.findById(contractId).exec();
-      if (!contract) return;
-
-      // 按 customerId 或 customerPhone 查找客户
-      let customer: CustomerDocument | null = null;
-      if (contract.customerId) {
-        customer = await this.customerModel.findById(contract.customerId).exec();
-      }
-      if (!customer && contract.customerPhone) {
-        customer = await this.customerModel.findOne({ phone: contract.customerPhone }).exec();
-      }
-      if (!customer) {
-        this.logger.warn(`syncCustomerOnContractActive: 未找到对应客户, contractId=${contractId}`);
-        return;
-      }
-
-      // 已经同步过则跳过
-      if (customer.contractStatus === '已签约' && customer.leadLevel === 'O类') {
-        this.logger.log(`syncCustomerOnContractActive: 客户已是已签约/O类，跳过 customerId=${customer._id}`);
-        return;
-      }
-
-      const updateData: any = { lastActivityAt: new Date() };
-      if (customer.contractStatus !== '已签约') updateData.contractStatus = '已签约';
-      if (customer.leadLevel !== 'O类') updateData.leadLevel = 'O类';
-
-      await this.customerModel.findByIdAndUpdate(customer._id, updateData).exec();
-      this.logger.log(`✅ 客户状态已同步为已签约/O类: ${customer.name} (${customer._id})`);
+      // 统一走一致性服务：客户档案 + 阿姨简历 一次性同步（参见 ContractConsistencyService）
+      await this.consistencyService.onContractActivated(contractId);
     } catch (error) {
       this.logger.error(`syncCustomerOnContractActive 失败: contractId=${contractId}`, error);
     }
@@ -1277,6 +1272,19 @@ export class ContractsService {
       this.syncCustomerOnContractSigning(contract._id.toString()).catch(error => {
         this.logger.error(`客户签约中同步失败（异步）:`, error);
       });
+    }
+
+    // 进入终态 → 触发阿姨接单状态回退（一致性服务负责幂等判断）
+    const terminalStatuses: Record<string, 'replaced' | 'cancelled' | 'refunded' | 'graduated'> = {
+      replaced: 'replaced',
+      cancelled: 'cancelled',
+      refunded: 'refunded',
+      graduated: 'graduated',
+    };
+    if (statusChanged && terminalStatuses[contract.contractStatus]) {
+      this.consistencyService
+        .onContractTerminated(contract._id.toString(), terminalStatuses[contract.contractStatus])
+        .catch(error => this.logger.error(`合同终态同步失败（异步）:`, error));
     }
 
     return contract;
@@ -1527,10 +1535,20 @@ export class ContractsService {
         throw new NotFoundException('原合同不存在');
       }
 
+      // 职培订单不支持换人流程（无阿姨、无服务周期）
+      if (originalContract.orderCategory === OrderCategory.TRAINING) {
+        throw new BadRequestException('原合同为职培订单，不支持换人操作');
+      }
+
       // 计算服务时间
       const currentDate = new Date();
       const originalStartDate = new Date(originalContract.startDate);
       const originalEndDate = new Date(originalContract.endDate);
+
+      // 防御：原合同日期缺失或非法时，直接抛出业务错误，避免 toISOString() 报 "Invalid time value"
+      if (isNaN(originalStartDate.getTime()) || isNaN(originalEndDate.getTime())) {
+        throw new BadRequestException('原合同开始/结束时间缺失或非法，无法发起换人，请先在 CRM 补全原合同日期');
+      }
       
       // 计算已服务天数
       const serviceDays = Math.floor(
@@ -1760,6 +1778,16 @@ export class ContractsService {
       const newContract = await contract.save();
 
       // 批量标记该客户所有旧合同为已替换（原合同 + 历史合同一次性处理）
+      const replacedCandidates = await this.contractModel
+        .find({
+          customerPhone: originalContract.customerPhone,
+          _id: { $ne: newContract._id },
+          contractStatus: { $in: ['signed', 'active'] },
+        })
+        .select('_id workerId')
+        .lean()
+        .exec();
+
       await this.contractModel.updateMany(
         {
           customerPhone: originalContract.customerPhone,
@@ -1772,6 +1800,17 @@ export class ContractsService {
       await this.contractModel.findByIdAndUpdate(originalContractId, {
         $set: { replacedByContractId: (newContract as any)._id, serviceDays },
       });
+
+      // 新合同已 save 为 ACTIVE（见 mergedContractData），先触发新合同一致性同步，
+      // 再对旧合同触发终态回退，保证旧阿姨若还有其他在服合同时不会被误回退。
+      this.consistencyService
+        .onContractActivated((newContract as any)._id.toString())
+        .catch(err => this.logger.error('换人后新合同一致性同步失败（异步）:', err));
+      for (const old of replacedCandidates) {
+        this.consistencyService
+          .onContractTerminated(old._id.toString(), 'replaced')
+          .catch(err => this.logger.error(`换人后旧合同终态同步失败（异步） contractId=${old._id}:`, err));
+      }
 
       this.logger.debug('✅ 换人合并完成，新合同ID:', { data: (newContract as any)._id });
       this.logger.debug('📋 客户合同已自动合并，换人历史已记录');
@@ -2642,6 +2681,10 @@ export class ContractsService {
       .select('-templateParams -esignSignUrls -workerIdCard -customerIdCard')
       .lean()
       .exec();
+    // 职培合同通常无 workerId，但统一走一次终态同步，便于未来扩展与审计口径一致
+    this.consistencyService
+      .onContractTerminated(id, 'refunded')
+      .catch(err => this.logger.error(`合同终态同步失败（异步） contractId=${id}:`, err));
     return updated as ContractDocument;
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Resume, IResume } from './models/resume.entity';
@@ -22,6 +22,7 @@ import { DashubaoService } from '../dashubao/dashubao.service';
 import { BackgroundCheck, BackgroundCheckDocument } from '../zmdb/models/background-check.model';
 import { QwenAIService } from '../ai/qwen-ai.service';
 import { ReferralResume, ReferralResumeDocument } from '../referral/models/referral-resume.model';
+import { ContractConsistencyService } from '../contracts/contract-consistency.service';
 
 /** 状态中文 label（推荐冲突提示用） */
 const REFERRAL_STATUS_LABEL: Record<string, string> = {
@@ -61,6 +62,8 @@ export class ResumeService {
     private readonly qwenAIService: QwenAIService,
     @InjectModel(ReferralResume.name)
     private readonly referralResumeModel: Model<ReferralResumeDocument>,
+    @Inject(forwardRef(() => ContractConsistencyService))
+    private readonly consistencyService: ContractConsistencyService,
   ) {}
 
   // 🆕 系统操作人ID（用于系统自动操作）
@@ -1621,6 +1624,21 @@ export class ResumeService {
       }
     }
 
+    // 一致性回灌：简历变更 → 该阿姨名下所有"已签约 + 最新"合同
+    const beforeSnapshot = {
+      name: (currentResume as any).name,
+      phone: (currentResume as any).phone,
+      idNumber: (currentResume as any).idNumber,
+    };
+    const afterSnapshot = {
+      name: (resume as any).name,
+      phone: (resume as any).phone,
+      idNumber: (resume as any).idNumber,
+    };
+    this.consistencyService
+      .onResumeUpdated(id, beforeSnapshot, afterSnapshot, options.userId)
+      .catch(err => this.logger.error(`resume.update.consistency_sync_failed resumeId=${id}: ${(err as Error)?.message}`));
+
     this.logger.log(`✅ 核心更新成功: ${id}`);
     return resume;
   }
@@ -1815,6 +1833,21 @@ export class ResumeService {
         this.logger.log(`📝 操作日志已记录: 修改了 ${changedFieldsInChinese.join('、')}`);
       }
     }
+
+    // 一致性回灌：简历变更 → 该阿姨名下所有"已签约 + 最新"合同
+    const beforeSnapshotU = {
+      name: (originalResumeData as any).name,
+      phone: (originalResumeData as any).phone,
+      idNumber: (originalResumeData as any).idNumber,
+    };
+    const afterSnapshotU = {
+      name: (savedResume as any).name,
+      phone: (savedResume as any).phone,
+      idNumber: (savedResume as any).idNumber,
+    };
+    this.consistencyService
+      .onResumeUpdated(id, beforeSnapshotU, afterSnapshotU, userId)
+      .catch(err => this.logger.error(`resume.updateWithFiles.consistency_sync_failed resumeId=${id}: ${(err as Error)?.message}`));
 
     return {
       success: true,

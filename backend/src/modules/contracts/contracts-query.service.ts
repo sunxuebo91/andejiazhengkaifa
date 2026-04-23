@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Contract, ContractDocument } from './models/contract.model';
+import { Contract, ContractDocument, OrderCategory } from './models/contract.model';
 import { AppLogger } from '../../common/logging/app-logger';
 
 interface CustomerContractCheckResult {
@@ -111,8 +111,15 @@ export class ContractsQueryService {
 
   async checkCustomerExistingContract(customerPhone: string): Promise<CustomerContractCheckResult> {
     try {
+      // 换人判定仅针对家政订单：排除职培订单（职培订单复用同一集合，但无 startDate/endDate/workerName，不适用换人流程）
       const contracts = await this.contractModel
-        .find({ customerPhone })
+        .find({
+          customerPhone,
+          $or: [
+            { orderCategory: { $ne: OrderCategory.TRAINING } },
+            { orderCategory: { $exists: false } },
+          ],
+        })
         .populate('customerId', 'name phone customerId')
         .populate('workerId', 'name phone')
         .populate('createdBy', 'name username')

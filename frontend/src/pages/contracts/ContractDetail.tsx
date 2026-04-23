@@ -1268,6 +1268,8 @@ const ContractDetail: React.FC = () => {
   };
 
   // 从 templateParams 中获取合同开始日期（支持合并字段和分拆年月日字段）
+  // 职培合同：templateParams 一般不含日期字段、startDate 也经常为空，依次回退到
+  // esignSignedAt（爱签实际签署完成）/ esignCreatedAt（发起爱签）/ createdAt（合同创建）
   const getContractStartDate = (c: typeof contract) => {
     const tp = c?.templateParams;
     if (tp?.['合同开始时间']) return tp['合同开始时间'];
@@ -1276,7 +1278,35 @@ const ContractDetail: React.FC = () => {
     if (tp?.['开始年'] && tp?.['开始月'] && tp?.['开始日']) {
       return `${tp['开始年']}年${String(tp['开始月']).padStart(2, '0')}月${String(tp['开始日']).padStart(2, '0')}日`;
     }
-    return c?.startDate ? formatDate(c.startDate) : '-';
+    if (c?.startDate) return formatDate(c.startDate);
+    if (c?.orderCategory === 'training') {
+      const trainingFallback = (c as any).esignSignedAt || (c as any).esignCreatedAt || c.createdAt;
+      if (trainingFallback) return formatDate(trainingFallback);
+    }
+    return '-';
+  };
+
+  // 职培合同：解析已报课程
+  // 数据优先级（与后端 shapeMiniProgramListItem / getMiniProgramDetail 一致）：
+  //   templateParams['课程列表']  → 职培模板签约时实际勾选（字符串或数组）
+  //   templateParams['多选1']     → 部分其他模板的多选字段兼容位
+  //   intendedCourses            → 最后兜底（来自学员线索的意向课程，可能与实际签约不一致）
+  const getEnrolledCourses = (c: typeof contract): string[] => {
+    if (!c) return [];
+    const tp: any = (c as any)?.templateParams || {};
+    const parse = (raw: any): string[] | null => {
+      if (Array.isArray(raw)) {
+        const arr = raw.filter((s: any) => typeof s === 'string' && s.trim()).map((s: string) => s.trim());
+        return arr.length ? arr : null;
+      }
+      if (typeof raw === 'string' && raw.trim()) {
+        return raw.split(/[；;,，]/).map((s: string) => s.trim()).filter(Boolean);
+      }
+      return null;
+    };
+    return parse(tp['课程列表'])
+      ?? parse(tp['多选1'])
+      ?? (Array.isArray((c as any).intendedCourses) ? ((c as any).intendedCourses as string[]) : []);
   };
 
   // 从 templateParams 中获取合同结束日期（支持合并字段和分拆年月日字段）
@@ -1767,6 +1797,24 @@ const ContractDetail: React.FC = () => {
                         return dayjs(contract.endDate).diff(dayjs(contract.startDate), 'day') + 1;
                       })()} 天
                     </span>
+                  </Descriptions.Item>
+                )}
+
+                {contract.orderCategory === 'training' && (
+                  <Descriptions.Item label="已报课程" span={2}>
+                    {(() => {
+                      const courses = getEnrolledCourses(contract);
+                      if (!courses || courses.length === 0) {
+                        return <span style={{ color: '#bfbfbf' }}>-</span>;
+                      }
+                      return (
+                        <Space size={4} wrap>
+                          {courses.map(c => (
+                            <Tag key={c} color="blue">{c}</Tag>
+                          ))}
+                        </Space>
+                      );
+                    })()}
                   </Descriptions.Item>
                 )}
               </Descriptions>

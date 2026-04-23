@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
 
@@ -17,6 +17,7 @@ import { DashubaoModule } from '../dashubao/dashubao.module';
 import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/background-check.model';
 import { AIModule } from '../ai/ai.module';
 import { ReferralResume, ReferralResumeSchema } from '../referral/models/referral-resume.model';
+import { ContractsModule } from '../contracts/contracts.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ReferralResume, ReferralResumeSchema } from '../referral/models/referra
     UploadModule,
     DashubaoModule,
     AIModule,
+    forwardRef(() => ContractsModule),
     // 为分享令牌签发/验证提供 JwtService
     JwtModule.registerAsync({
       useFactory: () => {

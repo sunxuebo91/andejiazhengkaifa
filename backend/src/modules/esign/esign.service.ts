@@ -2431,6 +2431,28 @@ export class ESignService {
             );
             const firstUnsignedOrder = sortedByOrder.find((u: any) => u.signStatus !== 2)?.signOrder ?? 999;
 
+            // 🔥 判定企业方（不依赖数组下标/signOrder，避免爱签返回顺序变化或非顺序签约时 signOrder 全相同导致错标）
+            const isEnterpriseSigner = (u: any): boolean => {
+              const n = u?.name || '';
+              return (
+                u?.userType === 1 ||
+                u?.account === 'ASIGN91110111MACJMD2R5J' ||
+                n.includes('安得') ||
+                n.includes('公司') ||
+                n.includes('企业') ||
+                n.includes('家政')
+              );
+            };
+            // 个人签署方在数组中的位置（0=甲方，1=乙方），在 signOrder 全为 1（非顺序签约）时作为兜底依据
+            const personalPositionMap = new Map<number, number>();
+            let personalCounter = 0;
+            signUsers.forEach((u: any, i: number) => {
+              if (!isEnterpriseSigner(u)) {
+                personalPositionMap.set(i, personalCounter);
+                personalCounter += 1;
+              }
+            });
+
             // 将签署方信息添加到响应中
             response.data.signUsers = signUsers.map((user: any, index: number) => {
               // 🔥 修复：使用多种方式判断角色
@@ -2439,16 +2461,8 @@ export class ESignService {
               //   training：    第1个=企业(甲方)，第2个=学员(乙方)
               let role = '签署方';
               const userName = user.name || '';
-              const userSignOrderLocal = user.signOrder || (index + 1);
-
-              // 🔥 基于 userType / 账号 / 名称识别企业方（不依赖数组下标，避免爱签返回顺序变化导致错标）
-              const isEnterpriseUser =
-                user.userType === 1 ||
-                user.account === 'ASIGN91110111MACJMD2R5J' ||
-                userName.includes('安得') ||
-                userName.includes('公司') ||
-                userName.includes('企业') ||
-                userName.includes('家政');
+              const isEnterpriseUser = isEnterpriseSigner(user);
+              const personalPos = personalPositionMap.get(index); // 仅个人签署方有值
 
               if (orderCategory === 'training') {
                 // 培训订单：企业(auto)=甲方，学员(manual)=乙方
@@ -2461,9 +2475,9 @@ export class ESignService {
                   role = '甲方（客户）';
                 } else if (userName.includes('阿姨') || userName.includes('乙方') || userName.includes('服务人员') || userName.includes('保姆') || userName.includes('育儿嫂')) {
                   role = '乙方（阿姨）';
-                } else if (userSignOrderLocal === 1 || index === 0) {
+                } else if (personalPos === 0) {
                   role = '甲方（客户）';
-                } else if (userSignOrderLocal === 2 || index === 1) {
+                } else if (personalPos === 1) {
                   role = '乙方（阿姨）';
                 } else {
                   role = '丙方（企业）';

@@ -87,11 +87,11 @@ export class TrainingOrdersMiniProgramController {
 
   @Get('detail/:id')
   @Permissions('training-order:view')
-  @ApiOperation({ summary: '【小程序】获取职培订单详情（含学员信息）' })
+  @ApiOperation({ summary: '【小程序】获取职培订单详情（已按 CRM 详情页展示块预整形，附 contract/lead 原始字段兼容）' })
   @ApiParam({ name: 'id', description: '订单 ID' })
   async detail(@Param('id') id: string) {
     try {
-      const data = await this.trainingOrdersService.findOneWithLead(id);
+      const data = await this.trainingOrdersService.getMiniProgramDetail(id);
       return { success: true, data, message: '获取职培订单详情成功' };
     } catch (error: any) {
       this.logger.error(`获取职培订单详情失败: ${error.message}`, error.stack);

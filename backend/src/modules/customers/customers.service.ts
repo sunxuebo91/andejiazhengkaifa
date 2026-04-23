@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from './models/customer.model';
@@ -24,6 +24,7 @@ import { ContractDocument } from '../contracts/models/contract.model';
 import { CustomerFollowUpStatusService } from './services/customer-follow-up-status.service';
 import { CustomerQueryService } from './services/customer-query.service';
 import { CustomerReadService } from './services/customer-read.service';
+import { ContractConsistencyService } from '../contracts/contract-consistency.service';
 
 
 @Injectable()
@@ -46,6 +47,8 @@ export class CustomersService {
     private customerFollowUpStatusService: CustomerFollowUpStatusService,
     private customerQueryService: CustomerQueryService,
     private customerReadService: CustomerReadService,
+    @Inject(forwardRef(() => ContractConsistencyService))
+    private readonly consistencyService: ContractConsistencyService,
   ) {}
 
   /**
@@ -470,6 +473,25 @@ export class CustomersService {
         );
       }
     }
+
+    // 一致性回灌：客户档案变更 → 该客户名下所有"已签约 + 最新"合同
+    const beforeSnapshot = {
+      name: currentCustomer.name,
+      phone: currentCustomer.phone,
+      idCardNumber: currentCustomer.idCardNumber,
+      address: currentCustomer.address,
+      serviceAddress: (currentCustomer as any).serviceAddress,
+    };
+    const afterSnapshot = {
+      name: customer.name,
+      phone: customer.phone,
+      idCardNumber: customer.idCardNumber,
+      address: customer.address,
+      serviceAddress: (customer as any).serviceAddress,
+    };
+    this.consistencyService
+      .onCustomerUpdated(id, beforeSnapshot, afterSnapshot, userId)
+      .catch(err => this.logger.error('customer.update.consistency_sync_failed', err as any, { customerId: id }));
 
     return customer;
   }

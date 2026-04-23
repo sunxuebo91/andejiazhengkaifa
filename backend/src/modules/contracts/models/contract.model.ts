@@ -248,6 +248,13 @@ export class Contract {
   @Prop()
   insuranceSyncedAt?: Date; // 保险同步完成时间
 
+  // 订单为中心的数据一致性同步审计字段
+  @Prop()
+  lastProfileSyncedAt?: Date; // 最近一次客户/阿姨资料回灌到合同的时间
+
+  @Prop({ enum: ['contract_signed', 'contract_terminated', 'customer_update', 'resume_update'] })
+  lastProfileSyncSource?: string; // 最近一次同步的触发来源
+
   @Prop({ default: Date.now })
   createdAt: Date; // 录入时间，自动生成
 

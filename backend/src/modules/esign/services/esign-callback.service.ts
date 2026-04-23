@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { Contract, ContractDocument, OnboardStatus } from '../../contracts/models/contract.model';
 import { Customer, CustomerDocument } from '../../customers/models/customer.model';
 import { CustomersService } from '../../customers/customers.service';
+import { ContractConsistencyService } from '../../contracts/contract-consistency.service';
 import { NotificationGateway } from '../../notification/notification.gateway';
 import { AppLogger } from '../../../common/logging/app-logger';
 import { RequestContextStore } from '../../../common/logging/request-context';
@@ -21,6 +22,8 @@ export class ESignCallbackService {
     @InjectModel(Contract.name) private contractModel: Model<ContractDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private readonly customersService: CustomersService,
+    @Inject(forwardRef(() => ContractConsistencyService))
+    private readonly consistencyService: ContractConsistencyService,
     @Inject(forwardRef(() => NotificationGateway))
     private notificationGateway: NotificationGateway,
     private readonly mpNotificationService: MiniProgramNotificationService,
@@ -218,7 +221,8 @@ export class ESignCallbackService {
             contract.contractNumber || contractNo,
           ).catch(err => this.logger.error('esign.callback.mp_notification_failed', err));
         }
-        const profileSyncResult = await this.customersService.syncCustomerSignedStateFromContract(contract);
+        // 一致性同步：合同 → 客户档案 + 阿姨简历（身份证/手机/地址、客户状态、阿姨接单状态）
+        const profileSyncResult = await this.consistencyService.onContractActivated(contract._id.toString());
 
         // 🆕 更新客户状态为"已签约"和线索等级为"O类"
         if (profileSyncResult?.customerId) {
@@ -236,7 +240,8 @@ export class ESignCallbackService {
                 this.logger.info('esign.callback.customer_synced', {
                   customerId,
                   contractId: contract._id.toString(),
-                  profileChangedFields: Object.keys(profileSyncResult.changedFields || {}),
+                  profileChangedFields: Object.keys(profileSyncResult.customerChangedFields || {}),
+                  resumeChangedFields: Object.keys(profileSyncResult.resumeChangedFields || {}),
                 });
 
                 // 🔔 广播刷新事件，通知前端更新客户列表

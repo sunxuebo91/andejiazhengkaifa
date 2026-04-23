@@ -295,6 +295,9 @@ export class TrainingOrdersService {
    * 小程序：分页查询职培订单列表
    * - 强制 orderCategory=training
    * - 非全局角色（admin/manager/operator 之外）只看自己创建的
+   * - items 附带 CRM 职培订单列表列所需的派生字段（enrolledCourses / isGraduated /
+   *   leadSource / createdByName / courseAmountYuan / displayStatus /
+   *   displayStatusCode），原始字段同时保留以向前兼容
    */
   async findForMiniProgram(
     page: number,
@@ -326,7 +329,339 @@ export class TrainingOrdersService {
         .exec(),
       this.contractModel.countDocuments(query).exec(),
     ]);
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const shaped = items.map((c: any) => this.shapeMiniProgramListItem(c));
+    return { items: shaped, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  /**
+   * 报名课程解析（共享口径）：
+   *   templateParams['课程列表'] → templateParams['多选1'] → intendedCourses
+   * 与 CRM ContractDetail.getEnrolledCourses / TrainingOrderList.resolveEnrolledCourses 保持一致。
+   */
+  private resolveEnrolledCourses(c: any): string[] {
+    const tp = c?.templateParams || {};
+    const parse = (raw: any): string[] | null => {
+      if (Array.isArray(raw)) {
+        const arr = raw
+          .filter((s: any) => typeof s === 'string' && s.trim())
+          .map((s: string) => s.trim());
+        return arr.length ? arr : null;
+      }
+      if (typeof raw === 'string' && raw.trim()) {
+        return raw.split(/[；;,，]/).map((s: string) => s.trim()).filter(Boolean);
+      }
+      return null;
+    };
+    return (
+      parse(tp['课程列表']) ||
+      parse(tp['多选1']) ||
+      (Array.isArray(c?.intendedCourses) ? c.intendedCourses : [])
+    );
+  }
+
+  /**
+   * 小程序职培订单列表项整形：与 CRM 前端 TrainingOrderList 列严格对齐，
+   * 返回值 = 原始 lean 文档 + 若干派生字段；原始字段保留以免破坏已接入方。
+   *
+   * 派生字段说明：
+   *   - enrolledCourses   报名课程，数据优先级：
+   *                       templateParams['课程列表'] → templateParams['多选1'] → intendedCourses
+   *                       （与 CRM ContractDetail.getEnrolledCourses / TrainingOrderList.resolveEnrolledCourses 一致）
+   *   - isGraduated       证书申报列，contractStatus === 'graduated' 或已有 graduatedAt 即 true
+   *   - leadSource        线索来源，自 trainingLeadId.leadSource 提取；未建档则为 null
+   *   - createdByName     创建人显示名，creator.name || creator.username
+   *   - courseAmountYuan  报课金额（元），courseAmount 的显式单位别名
+   *   - displayStatusCode signing / signed / active / graduated / refunded 之一
+   *   - displayStatus     displayStatusCode 的中文映射（签约中/已签约/学习中/已毕业/已退款）
+   */
+  private shapeMiniProgramListItem(c: any): any {
+    const enrolledCourses: string[] = this.resolveEnrolledCourses(c);
+
+    const lead = c?.trainingLeadId;
+    const leadSource = lead && typeof lead === 'object' ? lead.leadSource || null : null;
+
+    const creator = c?.createdBy;
+    let createdByName: string | null = null;
+    if (creator && typeof creator === 'object') {
+      createdByName = creator.name || creator.username || null;
+    } else if (typeof creator === 'string' && !/^[a-fA-F0-9]{24}$/.test(creator) && creator !== 'temp') {
+      createdByName = creator;
+    }
+
+    const isGraduated = c?.contractStatus === ContractStatus.GRADUATED || !!c?.graduatedAt;
+
+    const displayStatusCode = this.normalizeTrainingContractStatus(
+      c?.contractStatus,
+      c?.esignStatus,
+      c?.paymentStatus,
+    );
+    const displayStatusTextMap: Record<string, string> = {
+      signing: '签约中',
+      signed: '已签约',
+      active: '学习中',
+      graduated: '已毕业',
+      refunded: '已退款',
+    };
+    const displayStatus = displayStatusTextMap[displayStatusCode] || '签约中';
+
+    return {
+      ...c,
+      id: String(c?._id ?? ''),
+      enrolledCourses,
+      leadSource,
+      createdByName,
+      isGraduated,
+      courseAmountYuan: c?.courseAmount ?? null,
+      displayStatusCode,
+      displayStatus,
+    };
+  }
+
+  /**
+   * 安得家政小程序：职培订单详情（详情页专用整形）
+   *
+   * 与列表 shapeMiniProgramListItem 配对使用：列表返回概要，详情把 CRM
+   * ContractDetail.tsx 职培分支的展示块全部预整形好（header / basicInfo /
+   * studentInfo / costInfo / enrolledCourses / esign / terminal / lead /
+   * actions），小程序直接按块渲染，不必再自己推导状态 / 费用总计 / 签约日期 /
+   * 签署方状态 / 按钮可用性。
+   *
+   * 兼容性：顶层仍返回 `contract` / `lead` 原始 lean 文档，已接入方无需改动；
+   * 新接入方优先读 `view` 块。
+   */
+  async getMiniProgramDetail(id: string): Promise<{
+    contract: ContractDocument;
+    lead: TrainingLead | null;
+    view: any;
+  }> {
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException('订单不存在');
+    const raw = await this.contractModel
+      .findById(id)
+      .populate('createdBy', 'name username')
+      .populate('trainingLeadId', 'leadSource studentId')
+      .lean()
+      .exec();
+    if (!raw) throw new NotFoundException('订单不存在');
+    if ((raw as any).orderCategory !== OrderCategory.TRAINING) {
+      throw new NotFoundException('订单不存在');
+    }
+    const contract: any = raw;
+
+    const leadRef: any = contract.trainingLeadId;
+    const leadRefId = leadRef && typeof leadRef === 'object' ? leadRef._id : leadRef;
+    const leadDoc = leadRefId
+      ? await this.trainingLeadModel.findById(leadRefId).lean().exec()
+      : null;
+
+    const displayStatusTextMap: Record<string, string> = {
+      signing: '签约中',
+      signed: '已签约',
+      active: '学习中',
+      graduated: '已毕业',
+      refunded: '已退款',
+    };
+    let displayStatusCode = this.normalizeTrainingContractStatus(
+      contract.contractStatus,
+      contract.esignStatus,
+      contract.paymentStatus,
+    );
+
+    // 报名课程（共享 helper，口径与列表 / CRM 前端一致）：
+    //   templateParams['课程列表'] → templateParams['多选1'] → intendedCourses
+    const enrolledCourses: string[] = this.resolveEnrolledCourses(contract);
+
+    // 合同签约日期：
+    //   templateParams['合同开始时间' / '服务开始时间' / '开始年月日']
+    //   → contract.startDate
+    //   → 职培专属回退：esignSignedAt（实际签署完成）→ esignCreatedAt（发起爱签）→ createdAt
+    // 职培模板一般不含日期字段、startDate 也经常为空，补上爱签时间回退避免显示 '-'
+    const tp: any = contract.templateParams || {};
+    let signDate: string | null = null;
+    if (tp['合同开始时间']) signDate = String(tp['合同开始时间']);
+    else if (tp['服务开始时间']) signDate = String(tp['服务开始时间']);
+    else if (tp['开始年'] && tp['开始月'] && tp['开始日']) {
+      signDate = `${tp['开始年']}年${String(tp['开始月']).padStart(2, '0')}月${String(tp['开始日']).padStart(2, '0')}日`;
+    } else if (contract.startDate) {
+      signDate = this.formatDateYMD(contract.startDate);
+    } else {
+      const trainingFallback = (contract as any).esignSignedAt
+        || (contract as any).esignCreatedAt
+        || (contract as any).createdAt;
+      if (trainingFallback) signDate = this.formatDateYMD(trainingFallback);
+    }
+
+    // 签署方：解析 esignSignUrls + 并发实时查爱签取签署状态（失败降级为 null）
+    let signUrls: any[] = [];
+    if (typeof contract.esignSignUrls === 'string' && contract.esignSignUrls) {
+      try {
+        const parsed = JSON.parse(contract.esignSignUrls);
+        if (Array.isArray(parsed)) signUrls = parsed;
+      } catch {
+        signUrls = [];
+      }
+    }
+    let signerStatuses: any = null;
+    try {
+      signerStatuses = await this.buildTrainingSignerStatuses(contract);
+    } catch (e: any) {
+      this.logger.warn(
+        `[职培订单-小程序详情] 获取签署方状态失败，降级返回 null id=${id} err=${e?.message || e}`,
+      );
+      signerStatuses = null;
+    }
+
+    // 若爱签实时显示学员未签，把展示态退回 signing（与 baobei 路径对齐，防 DB 污染误判）
+    let esignCompleted = contract.esignStatus === '2';
+    if (
+      signerStatuses && signerStatuses.studentSigned === false &&
+      displayStatusCode !== ContractStatus.GRADUATED &&
+      displayStatusCode !== ContractStatus.REFUNDED
+    ) {
+      displayStatusCode = ContractStatus.SIGNING;
+      esignCompleted = false;
+    }
+    const displayStatus = displayStatusTextMap[displayStatusCode] || '签约中';
+
+    const courseAmountYuan = contract.courseAmount ?? null;
+    const serviceFeeAmountYuan = contract.serviceFeeAmount ?? null;
+    const totalYuan =
+      (courseAmountYuan != null ? Number(courseAmountYuan) : 0) +
+      (serviceFeeAmountYuan != null ? Number(serviceFeeAmountYuan) : 0);
+    const paymentAmountCents = contract.paymentAmount ?? null;
+    const paymentAmountYuan = paymentAmountCents != null ? this.centsToYuan(paymentAmountCents) : null;
+    const payableAmountCents = courseAmountYuan != null ? this.yuanToCents(courseAmountYuan) : null;
+
+    // 渲染就绪字段：小程序直接展示，避免各端自行推导造成单位/状态错位
+    // （例：历史上出现过把 paymentAmount 分当元展示、把 refunded 渲染成"已付款"、
+    //  把 courseAmount=0.5 四舍五入成 1 的问题）
+    const paymentStatusRaw = contract.paymentStatus || PaymentStatus.UNPAID;
+    const paymentStatusTextMap: Record<string, string> = {
+      paid: '已支付',
+      refunded: '已退款',
+      unpaid: '未支付',
+    };
+    const paymentStatusText = paymentStatusTextMap[paymentStatusRaw] || '未支付';
+    const showPaymentAmount = paymentStatusRaw === PaymentStatus.PAID;
+    const showRefundInfo = paymentStatusRaw === PaymentStatus.REFUNDED;
+    const courseAmountText = this.formatYuanText(courseAmountYuan);
+    const serviceFeeAmountText = this.formatYuanText(serviceFeeAmountYuan);
+    const totalText = this.formatYuanText(totalYuan);
+    const payableAmountText = this.formatYuanText(courseAmountYuan);
+    const paymentAmountText = this.formatYuanText(paymentAmountYuan);
+
+    const creator: any = contract.createdBy;
+    const createdBy = creator && typeof creator === 'object'
+      ? { id: String(creator._id || ''), name: creator.name || creator.username || null }
+      : { id: typeof creator === 'string' ? creator : null, name: null };
+
+    const leadSource = leadRef && typeof leadRef === 'object'
+      ? (leadRef.leadSource ?? null)
+      : ((leadDoc as any)?.leadSource ?? null);
+
+    const shapedLead = leadDoc
+      ? {
+          _id: String((leadDoc as any)._id),
+          studentId: (leadDoc as any).studentId || null,
+          name: (leadDoc as any).name,
+          phone: (leadDoc as any).phone,
+          consultPosition: (leadDoc as any).consultPosition || null,
+          leadSource: (leadDoc as any).leadSource || null,
+          intendedCourses: (leadDoc as any).intendedCourses || [],
+          reportedCertificates: (leadDoc as any).reportedCertificates || [],
+          isOnlineCourse: !!(leadDoc as any).isOnlineCourse,
+          expectedStartDate: this.formatDateYMD((leadDoc as any).expectedStartDate),
+          courseAmountYuan: (leadDoc as any).courseAmount ?? null,
+          serviceFeeAmountYuan: (leadDoc as any).serviceFeeAmount ?? null,
+          budgetYuan: (leadDoc as any).budget ?? null,
+        }
+      : null;
+
+    const isTerminal =
+      displayStatusCode === ContractStatus.GRADUATED ||
+      displayStatusCode === ContractStatus.REFUNDED;
+
+    const view = {
+      id: String(contract._id),
+      contractNumber: contract.contractNumber,
+      header: {
+        title: `职培合同详情 - ${contract.contractNumber}`,
+        displayStatusCode,
+        displayStatus,
+        paymentEnabled: !!contract.paymentEnabled,
+      },
+      basicInfo: {
+        contractNumber: contract.contractNumber,
+        contractType: '职培合同',
+        contractStatus: contract.contractStatus || null,
+        displayStatusCode,
+        displayStatus,
+        signDate,
+        createdAt: contract.createdAt || null,
+      },
+      studentInfo: {
+        customerName: contract.customerName,
+        customerPhone: contract.customerPhone,
+        customerIdCard: contract.customerIdCard || null,
+        customerAddress: contract.customerAddress || null,
+        consultPosition: contract.consultPosition || (leadDoc as any)?.consultPosition || null,
+      },
+      costInfo: {
+        courseAmountYuan,
+        serviceFeeAmountYuan,
+        totalYuan,
+        payableAmountYuan: courseAmountYuan,
+        payableAmountCents,
+        paymentStatus: paymentStatusRaw,
+        paymentStatusText,
+        paymentAmountYuan,
+        paymentAmountCents,
+        paidAt: contract.paidAt || null,
+        sqbSn: contract.sqbSn || null,
+        // 渲染就绪字段：小程序直接读即可，无需换算、无需状态映射
+        courseAmountText,
+        serviceFeeAmountText,
+        totalText,
+        payableAmountText,
+        paymentAmountText,
+        showPaymentAmount,
+        showRefundInfo,
+        refundedAt: contract.refundedAt || null,
+        refundedAtFmt: this.formatDateYMD(contract.refundedAt),
+      },
+      enrolledCourses,
+      intendedCourses: contract.intendedCourses || [],
+      esign: {
+        esignContractNo: contract.esignContractNo || null,
+        esignStatus: contract.esignStatus || null,
+        esignStarted: !!contract.esignContractNo,
+        esignCompleted,
+        esignTemplateNo: contract.esignTemplateNo || (contract as any).templateNo || null,
+        signUrls,
+        signerStatuses,
+        contractFileUrl: contract.contractFileUrl || null,
+      },
+      terminal: {
+        graduatedAt: contract.graduatedAt || null,
+        graduatedAtFmt: this.formatDateYMD(contract.graduatedAt),
+        refundedAt: contract.refundedAt || null,
+        refundedAtFmt: this.formatDateYMD(contract.refundedAt),
+      },
+      createdBy,
+      leadSource,
+      lead: shapedLead,
+      actions: {
+        canInitiateSigning: !contract.esignContractNo,
+        canSyncEsign: !!contract.esignContractNo && !isTerminal,
+        canGraduate: displayStatusCode === ContractStatus.ACTIVE,
+        canRefund:
+          (displayStatusCode === ContractStatus.ACTIVE ||
+            displayStatusCode === ContractStatus.SIGNED) &&
+          !isTerminal,
+        canEdit: !isTerminal,
+      },
+    };
+
+    return { contract: contract as ContractDocument, lead: leadDoc as TrainingLead | null, view };
   }
 
   /** 小程序：按手机号预查学员线索，返回 null 表示新学员（允许放行，后端 create 会直接使用 dto 里的学员信息） */
@@ -666,5 +1001,17 @@ export class TrainingOrdersService {
   /** 元 → 分（四舍五入到整数） */
   private yuanToCents(yuan: number): number {
     return Math.round(yuan * 100);
+  }
+
+  /**
+   * 数值（元）→ 展示文案（带 ¥ 与千分位，保留 2 位小数）
+   * null / undefined / NaN → null（由前端决定是否显示 "-"）
+   * 例：0.5 → "¥0.50"；8000 → "¥8,000.00"
+   */
+  private formatYuanText(yuan: number | null | undefined): string | null {
+    if (yuan == null) return null;
+    const n = Number(yuan);
+    if (!Number.isFinite(n)) return null;
+    return '¥' + n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 }

@@ -397,8 +397,8 @@
 | 接口名称 | 调用方式 | URL | 功能说明 | 请求参数 | 返回内容 | 所需权限 |
 |---|---|---|---|---|---|---|
 | 获取爱签模板列表 | HTTP请求 | `GET /api/training-orders/miniprogram/templates` | 返回爱签在用模板全量列表（供下单时选择） | 无 | `{success, data: Array<{templateNo, templateName, ...}>}` | `training-order:create` |
-| 获取订单列表 | HTTP请求 | `GET /api/training-orders/miniprogram/list` | 分页查询职培订单；非全局角色只见己方创建 | `{page, limit, search}`（query） | `{success, data: {items, total, page, limit, totalPages}}` | `training-order:view` |
-| 获取订单详情 | HTTP请求 | `GET /api/training-orders/miniprogram/detail/{id}` | 按 id 获取单条订单详情，附带关联 `trainingLead` | `{id}`（path） | `{success, data: {contract, lead, ...}}` | `training-order:view` |
+| 获取订单列表 | HTTP请求 | `GET /api/training-orders/miniprogram/list` | 分页查询职培订单；非全局角色只见己方创建；items 已按 CRM 职培订单列表列整形 | `{page, limit, search}`（query） | `{success, data: {items, total, page, limit, totalPages}}`，见下方「列表 items 字段」 | `training-order:view` |
+| 获取订单详情 | HTTP请求 | `GET /api/training-orders/miniprogram/detail/{id}` | 按 id 获取单条订单详情，已按 CRM 职培订单详情页展示块预整形（`view`），同时附原始 `contract` / `lead` 兼容 | `{id}`（path） | `{success, data: {contract, lead, view}}`，见下方「详情 view 字段」 | `training-order:view` |
 | 按手机号预查学员 | HTTP请求 | `POST /api/training-orders/miniprogram/validate-student` | 下单前用手机号预填学员信息；查不到也放行（允许为新学员下单） | `{phone}` | `{success, data: {exists, lead\|null}}` | `training-order:create` |
 | 创建订单（仅落库） | HTTP请求 | `POST /api/training-orders/miniprogram/create` | CRM 本地落库一条 `Contract(orderCategory='training')`；不触发爱签 | 合同 DTO（见下表） | `{success, data: {_id, contractNumber, contractStatus, ...}, nextStep: {action, endpoint}}` | `training-order:create` |
 | 发起签约 | HTTP请求 | `POST /api/training-orders/miniprogram/initiate-signing/{id}` | 编排爱签 addStranger → createContract → addSigners，回写 `esignContractNo` / `esignSignUrls` | `{id}`（path） | `{success, data: {contractId, esignContractNo, signUrls: Array, alreadyInitiated}}` | `training-order:create` |
@@ -444,6 +444,73 @@
 **状态字段映射（C 端展示沿用"十七"章节口径）**：下单端除 `signing` / `active` / `graduated` / `refunded` 之外，创建后未发起签署时 `contractStatus='draft'`（仅本端可见），前端可显示为"待发起签约"。
 
 **相关 CRM 前端原型**: `frontend/src/pages/training-orders/CreateTrainingOrder.tsx` → `ESignaturePage mode='student'`，两端创单字段结构一致，便于 CRM 与小程序后续联动维护。
+
+### 列表 items 字段（`GET /list` 返回 `data.items[]`）
+
+服务端已按 CRM 职培订单列表（`frontend/src/pages/training-orders/TrainingOrderList.tsx`）列做整形，小程序可直接按下表渲染，不用再自己推导报名课程 / 证书申报 / 状态文案。
+
+| 字段 | 类型 | 对应 CRM 列 | 说明 |
+|---|---|---|---|
+| `_id` / `id` | string | - | 订单 ID；`id` 是字符串化的别名 |
+| `contractNumber` | string | 订单编号 | 合同编号 |
+| `customerName` | string | 学员信息（姓名） | 学员姓名 |
+| `customerPhone` | string | 学员信息（手机号） | 学员手机号 |
+| `leadSource` | string \| null | 线索来源 | 取自 `trainingLeadId.leadSource`，未建档为 `null` |
+| `enrolledCourses` | string[] | 报名课程 | 优先取 `templateParams['多选1']`（步骤 2 实际勾选），回退到 `intendedCourses`；与 CRM 口径一致 |
+| `isGraduated` | boolean | 证书申报 | `contractStatus === 'graduated'` 或已有 `graduatedAt` 即 `true` |
+| `courseAmount` / `courseAmountYuan` | number \| null | 报课金额 | 单位为**元**；`courseAmountYuan` 为显式单位别名，推荐小程序读这一个 |
+| `createdByName` | string \| null | 创建人 | 已按 `creator.name \|\| creator.username` 解析；过滤了历史的 `temp` / 24 位裸 ObjectId 脏值 |
+| `createdBy` | object \| string | - | 原始 populate 结果 `{ _id, name, username }`，保留兼容 |
+| `displayStatusCode` | string | 状态 | 枚举：`signing / signed / active / graduated / refunded`（已叠加 `esignStatus` 与 `paymentStatus` 归一化）|
+| `displayStatus` | string | 状态 | `displayStatusCode` 的中文映射：签约中 / 已签约 / 学习中 / 已毕业 / 已退款 |
+| `esignContractNo` | string \| null | - | 爱签合同号；非空时小程序可调 `/contracts/miniprogram/signers-status/:id` 查实时签署方状态 |
+| `createdAt` | string | 创建时间 | ISO 时间串，前端自行格式化 |
+| `trainingLeadId` | object \| string \| null | - | populate 结果 `{ _id, leadSource, studentId }`；未建档为 `null` |
+| `graduatedAt` / `refundedAt` | string \| null | - | 终态时间戳；未到达终态为 `null` |
+
+**兼容字段**：返回对象除上表派生字段外，**原始 Contract lean 文档全部字段仍保留**（包括 `templateParams` / `intendedCourses` / `contractStatus` / `esignStatus` / `paymentStatus` / `paymentEnabled` 等），已接入方按原字段读取不受影响；新接入方**建议优先使用派生字段**以确保与 CRM 列表显示一致。
+
+### 详情 view 字段（`GET /detail/{id}` 返回 `data.view`）
+
+服务端已按 CRM 职培订单详情页（`frontend/src/pages/contracts/ContractDetail.tsx` 中 `orderCategory === 'training'` 分支）的展示块做整形，小程序可直接按块渲染，不必再自己推导状态 / 费用总计 / 签约日期 / 签署方状态 / 按钮可用性。顶层仍保留 `contract` / `lead` 原始 lean 文档，兼容既有读法。
+
+| 块 | 字段 | 类型 | 对应 CRM 详情页区块 | 说明 |
+|---|---|---|---|---|
+| 顶层 | `id` | string | - | 订单 ID（字符串） |
+| 顶层 | `contractNumber` | string | 页头 | 合同编号 |
+| `header` | `title` | string | 页头标题 | `职培合同详情 - {contractNumber}` |
+| `header` | `displayStatusCode` | string | 状态 Tag | `signing / signed / active / graduated / refunded`，已叠加 `esignStatus + paymentStatus` 归一化，并用爱签实时签署方状态再次校正（学员未签则退回 `signing`） |
+| `header` | `displayStatus` | string | 状态 Tag | 中文映射：签约中 / 已签约 / 学习中 / 已毕业 / 已退款 |
+| `header` | `paymentEnabled` | boolean | 页头「收款」开关 | CRM 侧开关 |
+| `basicInfo` | `contractNumber` / `contractType` / `contractStatus` / `displayStatusCode` / `displayStatus` / `signDate` / `createdAt` | - | 合同基本信息卡片 | `contractType` 固定 `职培合同`；`signDate` 优先取 `templateParams['合同开始时间' / '服务开始时间' / '开始年/月/日']`，缺省回退 `startDate`（格式 `YYYY-MM-DD`） |
+| `studentInfo` | `customerName` / `customerPhone` / `customerIdCard` / `customerAddress` / `consultPosition` | string \| null | 学员信息卡片 | `consultPosition` 优先用合同自身字段，回退到关联 `trainingLead.consultPosition` |
+| `costInfo` | `courseAmountYuan` / `serviceFeeAmountYuan` / `totalYuan` | number \| null | 费用信息卡片 | 学员培训费 / 劳动者服务费 / 费用总计，**单位：元** |
+| `costInfo` | `payableAmountYuan` / `payableAmountCents` | number \| null | - | 应付金额（业务口径 = `courseAmount`），与褓贝端口径一致 |
+| `costInfo` | `paymentStatus` | string | 费用信息卡片 | 枚举：`paid / unpaid / refunded` |
+| `costInfo` | `paymentStatusText` | string | 费用信息卡片「支付状态」标签 | **渲染就绪**，中文：`已支付 / 未支付 / 已退款`；小程序直接显示，不要自己映射（历史出现过把 `refunded` 错渲染成"已付款"） |
+| `costInfo` | `paymentAmountYuan` / `paymentAmountCents` | number \| null | 费用信息卡片 | 实付金额（`Cents` = DB 原值；`Yuan` = `Cents/100`，**小程序读 `Yuan`**） |
+| `costInfo` | `courseAmountText` / `serviceFeeAmountText` / `totalText` / `payableAmountText` / `paymentAmountText` | string \| null | 费用信息卡片 | **渲染就绪**，已带 `¥` 和千分位、保留 2 位小数（如 `¥0.50` / `¥8,000.00`）；小程序直接 `{{}}` 渲染，**禁止再自行 `toFixed` / 四舍五入**（避免 `0.5` 被渲染成 `1` 的 Bug）；为 null 时建议显示 `-` |
+| `costInfo` | `showPaymentAmount` | boolean | 费用信息卡片「实付金额」行可见性 | 仅 `paymentStatus === 'paid'` 时为 `true`，与 CRM ContractDetail 口径一致；`refunded` / `unpaid` 不展示实付金额，避免"已退款但显示已付款"的误导 |
+| `costInfo` | `showRefundInfo` | boolean | 费用信息卡片「退款信息」行可见性 | 仅 `paymentStatus === 'refunded'` 时为 `true` |
+| `costInfo` | `refundedAt` / `refundedAtFmt` | string \| null | 退款时间 | `refundedAtFmt` 为 `YYYY-MM-DD`；与 `view.terminal.refundedAt*` 同值，便于直接在费用卡片内展示 |
+| `costInfo` | `paidAt` / `sqbSn` | string \| null | 费用信息卡片 | 支付时间 / 收钱吧订单号 |
+| `enrolledCourses` | - | string[] | 报名课程 | 优先 `templateParams['多选1']`，回退 `intendedCourses`；与列表 `enrolledCourses` 口径一致 |
+| `intendedCourses` | - | string[] | - | 订单 DB 内的意向课程原值（非报名课程，若与 `enrolledCourses` 不同以后者为准展示） |
+| `esign` | `esignContractNo` / `esignStatus` / `esignStarted` / `esignCompleted` / `esignTemplateNo` | - | 电子合同状态卡片 | `esignStarted = !!esignContractNo`；`esignCompleted` 受爱签实时签署方状态回写 |
+| `esign` | `signUrls` | array | 签署方信息 | 解析自 `esignSignUrls` JSON；元素含 `name / mobile / signUrl / status` |
+| `esign` | `signerStatuses` | object \| null | 签署方状态 | 实时爱签字段：`{ companySigned, studentSigned, companySignedAt, studentSignedAt }`；爱签抖动失败时降级为 null（不阻断主接口） |
+| `esign` | `contractFileUrl` | string \| null | 合同 PDF 下载 | - |
+| `terminal` | `graduatedAt` / `graduatedAtFmt` / `refundedAt` / `refundedAtFmt` | - | 终态时间戳 | `*Fmt` 统一 `YYYY-MM-DD`；未到达终态为 `null` |
+| `createdBy` | `{ id, name }` | object | 创建人 | `name = creator.name \|\| creator.username`；已过滤历史脏值 |
+| `leadSource` | - | string \| null | 线索来源 | 未建档为 `null` |
+| `lead` | `_id / studentId / name / phone / consultPosition / leadSource / intendedCourses / reportedCertificates / isOnlineCourse / expectedStartDate / courseAmountYuan / serviceFeeAmountYuan / budgetYuan` | object \| null | 学员档案卡片 | 全部金额字段用 `*Yuan` 后缀别名（元）；`expectedStartDate` 为 `YYYY-MM-DD` |
+| `actions` | `canInitiateSigning` | boolean | 「发起签约」按钮 | `!esignContractNo` 时为 true |
+| `actions` | `canSyncEsign` | boolean | 「同步签约状态」按钮 | 已有 `esignContractNo` 且未到终态 |
+| `actions` | `canGraduate` | boolean | 「证书申报」按钮 | `displayStatusCode === 'active'` 才可触发 |
+| `actions` | `canRefund` | boolean | 「退款」按钮 | `active / signed` 且未到终态 |
+| `actions` | `canEdit` | boolean | 「编辑合同」按钮 | 未到终态 |
+
+**字段读取建议**：小程序详情页 UI 直接按 `view.header` / `view.basicInfo` / `view.studentInfo` / `view.costInfo` / `view.esign` / `view.terminal` / `view.lead` / `view.actions` 分块渲染；`contract` / `lead` 原字段仅用于兼容或查询 `view` 未暴露的内部字段，不建议在新页面直接读。
 
 ---
 

@@ -19,6 +19,8 @@ import {
   TrainingLeadDocument,
 } from '../training-leads/models/training-lead.model';
 import { ContractsService } from '../contracts/contracts.service';
+import { ESignService, isRealAisignSignUrl } from '../esign/esign.service';
+import { CreateContractDto } from '../contracts/dto/create-contract.dto';
 
 /**
  * 职培订单服务
@@ -33,6 +35,7 @@ export class TrainingOrdersService {
     @InjectModel(Contract.name) private readonly contractModel: Model<ContractDocument>,
     @InjectModel(TrainingLead.name) private readonly trainingLeadModel: Model<TrainingLeadDocument>,
     private readonly contractsService: ContractsService,
+    private readonly esignService: ESignService,
   ) {}
 
   /** CRM 端：分页查询职培订单列表 */
@@ -128,11 +131,29 @@ export class TrainingOrdersService {
         }
       : null;
 
+    const shaped: any[] = contracts.map((c: any) => this.shapeBaobeiContract(c));
+
+    // 实时并发补齐 signerStatuses：失败/超时走 buildTrainingSignerStatuses 内部降级，
+    // 外层 allSettled 再兜一层，保证列表主体接口不被爱签抖动拖垮。
+    const signerStatusesList = await Promise.allSettled(
+      contracts.map((c: any) => this.buildTrainingSignerStatuses(c)),
+    );
+    signerStatusesList.forEach((res, i) => {
+      const s = res.status === 'fulfilled' ? res.value : null;
+      shaped[i].signerStatuses = s;
+      // 爱签实时显示学员未签时，强制把展示态退回 signing 并同步 esignCompleted=false，
+      // 覆盖 DB esignStatus 被历史回调污染为 '2' 的场景，确保小程序"去签约"按钮不被误收起。
+      if (s && s.studentSigned === false) {
+        shaped[i].contractStatus = ContractStatus.SIGNING;
+        shaped[i].esignCompleted = false;
+      }
+    });
+
     return {
       lead,
       courseInfo,
       amount,
-      contracts: contracts.map((c: any) => this.shapeBaobeiContract(c)),
+      contracts: shaped,
     };
   }
 
@@ -232,25 +253,312 @@ export class TrainingOrdersService {
     esignCompleted: boolean;
     paymentStatus: string;
     paymentEnabled: boolean;
+    signerStatuses: {
+      companySigned: boolean;
+      studentSigned: boolean;
+      companySignedAt: string | null;
+      studentSignedAt: string | null;
+    } | null;
   }> {
     const contract = await this.fetchTrainingContractByIdAndPhone(id, phone);
+    const signerStatuses = await this.buildTrainingSignerStatuses(contract);
+
+    // 同 getBaobeiDetailByPhone：爱签实时显示学员未签时，以爱签为准把展示态退回 signing，
+    // 防止 DB esignStatus 被污染导致小程序误判"已签约"。
+    let contractStatus = this.normalizeTrainingContractStatus(
+      contract.contractStatus,
+      contract.esignStatus,
+      contract.paymentStatus,
+    );
+    let esignCompleted = contract.esignStatus === '2';
+    if (signerStatuses && signerStatuses.studentSigned === false) {
+      contractStatus = ContractStatus.SIGNING;
+      esignCompleted = false;
+    }
+
     return {
       id: String(contract._id),
-      contractStatus: this.normalizeTrainingContractStatus(
-        contract.contractStatus,
-        contract.esignStatus,
-        contract.paymentStatus,
-      ),
+      contractStatus,
       esignStatus: contract.esignStatus || null,
-      esignCompleted: contract.esignStatus === '2',
+      esignCompleted,
       paymentStatus: contract.paymentStatus || PaymentStatus.UNPAID,
       paymentEnabled: !!contract.paymentEnabled,
+      signerStatuses,
     };
   }
 
 
 
+  // ── 小程序端（/api/training-orders/miniprogram）──────────────────────────
+
+  /**
+   * 小程序：分页查询职培订单列表
+   * - 强制 orderCategory=training
+   * - 非全局角色（admin/manager/operator 之外）只看自己创建的
+   */
+  async findForMiniProgram(
+    page: number,
+    limit: number,
+    search: string | undefined,
+    createdByFilter: string | undefined,
+  ): Promise<{ items: any[]; total: number; page: number; limit: number; totalPages: number }> {
+    const query: any = { orderCategory: OrderCategory.TRAINING };
+    if (search) {
+      query.$or = [
+        { contractNumber: { $regex: search, $options: 'i' } },
+        { customerName: { $regex: search, $options: 'i' } },
+        { customerPhone: { $regex: search, $options: 'i' } },
+      ];
+    }
+    if (createdByFilter) {
+      query.createdBy = new Types.ObjectId(createdByFilter);
+    }
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.contractModel
+        .find(query)
+        .populate('createdBy', 'name username')
+        .populate('trainingLeadId', 'leadSource studentId')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.contractModel.countDocuments(query).exec(),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  /** 小程序：按手机号预查学员线索，返回 null 表示新学员（允许放行，后端 create 会直接使用 dto 里的学员信息） */
+  async findStudentByPhone(phone: string): Promise<TrainingLead | null> {
+    if (!phone) throw new BadRequestException('phone 参数不能为空');
+    return this.trainingLeadModel.findOne({ phone }).lean().exec();
+  }
+
+  /**
+   * 小程序：准备 create 入参
+   * - 强制 orderCategory=training
+   * - 若数据库有匹配手机号的学员线索，自动填入 trainingLeadId、intendedCourses、consultPosition、serviceFeeAmount、courseAmount（仅在 dto 未提供时兜底）
+   */
+  async prepareCreateDtoForMiniProgram(dto: CreateContractDto): Promise<CreateContractDto> {
+    const prepared: any = { ...dto, orderCategory: OrderCategory.TRAINING };
+    if (!prepared.trainingLeadId && prepared.customerPhone) {
+      const lead = await this.trainingLeadModel.findOne({ phone: prepared.customerPhone }).lean().exec();
+      if (lead) {
+        prepared.trainingLeadId = String(lead._id);
+        if (prepared.intendedCourses == null) prepared.intendedCourses = lead.intendedCourses || [];
+        if (prepared.consultPosition == null) prepared.consultPosition = lead.consultPosition || undefined;
+        if (prepared.courseAmount == null && lead.courseAmount != null) prepared.courseAmount = lead.courseAmount;
+        if (prepared.serviceFeeAmount == null && lead.serviceFeeAmount != null) prepared.serviceFeeAmount = lead.serviceFeeAmount;
+      }
+    }
+    return prepared as CreateContractDto;
+  }
+
+  /**
+   * 小程序：发起职培订单签署
+   * - 强制校验 orderCategory=training
+   * - 签署方：甲方=北京安得家政有限公司（企业自动签章）+ 乙方=学员（有感知签章）
+   * - 复用 ESignService.createCompleteContractFlow（内部完成 addStranger → createContract → addSigners → 取短链接）
+   * - 成功后回写 esignContractNo / esignSignUrls / esignCreatedAt / contractStatus='signing'
+   */
+  async initiateSigningForMiniProgram(id: string, userId: string): Promise<any> {
+    const contract = await this.fetchTrainingContract(id);
+    if (contract.esignContractNo && contract.esignSignUrls) {
+      // 幂等：仅当已存链接为合法 http(s) 短链时才直接返回；
+      // 历史脏数据（拼接的 hxcx.asign.cn/sign/{contractNo}?account=... 假链接）将被视为"未初始化"，重新发起签署
+      let cachedSignUrls: any[] = [];
+      try {
+        const parsed = JSON.parse(contract.esignSignUrls);
+        if (Array.isArray(parsed)) cachedSignUrls = parsed;
+      } catch {
+        cachedSignUrls = [];
+      }
+      const cachedValid = cachedSignUrls.some((u: any) => u && isRealAisignSignUrl(u.signUrl));
+      if (cachedValid) {
+        return {
+          contractId: String(contract._id),
+          contractNumber: contract.contractNumber,
+          esignContractNo: contract.esignContractNo,
+          contractStatus: contract.contractStatus,
+          signUrls: cachedSignUrls,
+          alreadyInitiated: true,
+        };
+      }
+      // 历史脏数据修复：爱签合同已创建但库里存的是无效链接，直接从爱签侧抓真实短链回写，
+      // 不再走 createCompleteContractFlow（避免对同一 contractNo 重复 addStranger/createContract）
+      this.logger.warn(
+        `[职培订单-小程序] 幂等命中但缓存的 signUrls 无合法短链，尝试从爱签侧重新抓取 id=${id} esignContractNo=${contract.esignContractNo}`,
+      );
+      try {
+        const refetch = await this.esignService.getContractSignUrls(contract.esignContractNo, 'training');
+        const refetched: any[] = refetch?.success && Array.isArray(refetch.data?.signUrls) ? refetch.data.signUrls : [];
+        const refetchedValid = refetched.some((u: any) => u && isRealAisignSignUrl(u.signUrl));
+        if (refetchedValid) {
+          await this.contractsService.update(
+            String(contract._id),
+            { esignSignUrls: JSON.stringify(refetched) } as any,
+            userId,
+          );
+          return {
+            contractId: String(contract._id),
+            contractNumber: contract.contractNumber,
+            esignContractNo: contract.esignContractNo,
+            contractStatus: contract.contractStatus,
+            signUrls: refetched,
+            alreadyInitiated: true,
+          };
+        }
+      } catch (e: any) {
+        this.logger.error(`[职培订单-小程序] 历史脏数据修复时 getContractSignUrls 失败: ${e?.message || e}`);
+      }
+      throw new BadRequestException('该订单已向爱签发起过签署但签署链接不可用，请联系管理员撤销后重试');
+    }
+
+    const validation = this.contractsService.validateEsignFields(contract as any);
+    if (!validation.valid) {
+      throw new BadRequestException(`数据验证失败：${validation.message}`);
+    }
+
+    const templateParams = this.contractsService.extractTemplateParamsPublic(contract as any);
+    const templateNo = (contract as any).templateNo || contract.esignTemplateNo;
+    if (!templateNo) {
+      throw new BadRequestException('订单缺少爱签模板编号(templateNo/esignTemplateNo)');
+    }
+
+    this.logger.log(`[职培订单-小程序] 发起签署 id=${id} contractNumber=${contract.contractNumber}`);
+
+    const esignResult = await this.esignService.createCompleteContractFlow({
+      contractNo: contract.contractNumber,
+      contractName: '安得家政职业培训咨询协议',
+      templateNo,
+      templateParams,
+      signers: [
+        {
+          name: '北京安得家政有限公司',
+          mobile: '400-000-0000',
+          idCard: '91110111MACJMD2R5J',
+          signType: 'auto',
+          validateType: 'sms',
+        },
+        {
+          name: contract.customerName,
+          mobile: contract.customerPhone,
+          idCard: contract.customerIdCard,
+          signType: 'manual',
+          validateType: 'sms',
+        },
+      ],
+      validityTime: 30,
+      signOrder: 2,
+    });
+
+    if (!esignResult.success) {
+      throw new BadRequestException(`爱签发起签署失败：${esignResult.message || '未知错误'}`);
+    }
+
+    // createCompleteContractFlow 内部已做 5 次重试取真实短链；若仍为空，再调 getContractSignUrls 兜底一次
+    // （与家政小程序路径对齐：contracts-miniprogram.controller.ts 也是这种两段式）
+    let signUrls: any[] = Array.isArray(esignResult.signUrls) ? esignResult.signUrls : [];
+    const hasValidSignUrl = (list: any[]) => list.some((u: any) => u && isRealAisignSignUrl(u.signUrl));
+
+    if (!hasValidSignUrl(signUrls)) {
+      this.logger.warn(
+        `[职培订单-小程序] createCompleteContractFlow 未返回有效 signUrls，尝试 getContractSignUrls 兜底 contractNo=${esignResult.contractNo}`,
+      );
+      try {
+        const fallback = await this.esignService.getContractSignUrls(esignResult.contractNo, 'training');
+        if (fallback?.success && Array.isArray(fallback.data?.signUrls)) {
+          signUrls = fallback.data.signUrls;
+        }
+      } catch (e: any) {
+        this.logger.error(`[职培订单-小程序] getContractSignUrls 兜底失败: ${e?.message || e}`);
+      }
+    }
+
+    if (!hasValidSignUrl(signUrls)) {
+      // 仍未拿到真实短链——不把无效链接写库误导小程序，直接抛错让前端稍后重试发起签署（该接口已有幂等保护）
+      throw new BadRequestException('爱签签署链接生成超时，请稍后重试');
+    }
+
+    await this.contractsService.update(
+      String(contract._id),
+      {
+        esignContractNo: esignResult.contractNo,
+        esignSignUrls: JSON.stringify(signUrls),
+        esignCreatedAt: new Date(),
+        contractStatus: 'signing',
+      } as any,
+      userId,
+    );
+
+    return {
+      contractId: String(contract._id),
+      contractNumber: contract.contractNumber,
+      esignContractNo: esignResult.contractNo,
+      contractStatus: 'signing',
+      signUrls,
+      alreadyInitiated: false,
+    };
+  }
+
   // ── 内部辅助 ──────────────────────────────────────────────────────────────
+
+  /**
+   * 职培订单：实时查询爱签，构建 companySigned / studentSigned 明细。
+   *
+   * 设计要点：
+   *   - 数据源只取爱签实时接口，不读 DB esignStatus（历史上存在企业方回调早于
+   *     initiate-signing 写库、导致 DB 被整体置为 '2' 的污染案例）；
+   *   - 企业方：userType === 1（爱签企业自动签账号 ASIGN…）；
+   *   - 学员方：userType !== 1，按 mobile/account=customerPhone 或 signOrder=2 定位；
+   *   - 爱签抖动失败时按 DB esignStatus 粗略兜底，避免前端拿到 500 级错误。
+   */
+  private async buildTrainingSignerStatuses(contract: any): Promise<{
+    companySigned: boolean;
+    studentSigned: boolean;
+    companySignedAt: string | null;
+    studentSignedAt: string | null;
+  } | null> {
+    if (!contract?.esignContractNo) return null;
+
+    const toIso = (t: any): string | null => {
+      if (!t) return null;
+      return typeof t === 'number' ? new Date(t).toISOString() : String(t);
+    };
+
+    try {
+      const result = await this.esignService.getContractInfo(contract.esignContractNo);
+      const signUsers: any[] = result?.data?.signUser || [];
+
+      const company = signUsers.find(u => u.userType === 1);
+      const student = signUsers.find(u =>
+        u.userType !== 1 && (
+          String(u.mobile || '') === contract.customerPhone ||
+          String(u.account || '') === contract.customerPhone ||
+          u.signOrder === 2
+        ),
+      );
+
+      return {
+        companySigned: company?.signStatus === 2,
+        studentSigned: student?.signStatus === 2,
+        companySignedAt: company?.signStatus === 2 ? toIso(company.signTime) : null,
+        studentSignedAt: student?.signStatus === 2 ? toIso(student.signTime) : null,
+      };
+    } catch (err: any) {
+      this.logger.warn(
+        `[buildTrainingSignerStatuses] 爱签查询失败，降级按 DB 推断: contractNo=${contract.esignContractNo} err=${err?.message || err}`,
+      );
+      const allSigned = contract.esignStatus === '2';
+      return {
+        companySigned: allSigned,
+        studentSigned: allSigned,
+        companySignedAt: null,
+        studentSignedAt: null,
+      };
+    }
+  }
 
   private async fetchTrainingContract(id: string): Promise<ContractDocument> {
     if (!Types.ObjectId.isValid(id)) throw new NotFoundException('订单不存在');

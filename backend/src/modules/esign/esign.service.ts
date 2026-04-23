@@ -14,6 +14,24 @@ import { ESignApiService, ESignResponse } from './services/esign-api.service';
 import { ESignUserSealService } from './services/esign-user-seal.service';
 import { ESignCallbackService } from './services/esign-callback.service';
 
+/**
+ * 判定一条 signUrl 是否是爱签返回的真实签署短链。
+ * - 必须为合法 http(s) URL；
+ * - 排除后端历史拼接的伪链接（形如 `https://hxcx.asign.cn/sign/CON1234567890?account=...`）：
+ *   爱签真实短链从不把业务系统的合同编号（`CON\d+`）放到 path 里，因此 `/sign/CON\d+` 一定是伪造；
+ * - 排除 mock 环境占位链接。
+ *
+ * 爱签真实短链已知特征：`hxcx.asign.cn/web/short/xxx` / `hzuul.asign.cn/xxx`，
+ * 为避免爱签未来换域名后误杀，此处采用"反向黑名单"策略，而非白名单域名匹配。
+ */
+export function isRealAisignSignUrl(v: any): boolean {
+  if (typeof v !== 'string') return false;
+  if (!/^https?:\/\//i.test(v)) return false;
+  if (v.includes('mock-esign.com')) return false;
+  if (/\/sign\/CON\d+/i.test(v)) return false;
+  return true;
+}
+
 // 签署参数接口
 interface SignRequest {
   contractId: string;
@@ -93,9 +111,15 @@ export class ESignService {
   }
 
   async findContractForCallback(contractNo: string) {
+    // 兼容竞态：回调偶发早于 esignContractNo 落库，此时可按 contractNumber 兜底命中
+    // （绝大多数场景两者相等；即使爱签对重号重新生成 contractNo，回调后 ESignCallbackService
+    //  已完成 esignContractNo 回填，此处优先分支仍能命中。）
     return this.contractModel.findOne({
-      esignContractNo: contractNo,
-    }).populate('createdBy', '_id name').exec();
+      $or: [
+        { esignContractNo: contractNo },
+        { contractNumber: contractNo },
+      ],
+    } as any).populate('createdBy', '_id name').exec();
   }
 
   /**
@@ -2575,7 +2599,9 @@ export class ESignService {
           signOrder: user.signOrder || (index + 1),
           status: user.signStatus || 1, // 1=待签署, 2=已签署
           statusText: user.statusText || '待签署',
-          userType: user.userType || 0, // 0=个人, 1=企业
+          // 官方预览接口不回传 userType，靠 isEnterprise 的多维兜底识别后再归一化，
+          // 下游匹配逻辑（如 getCustomerSigningUrl 按 userType !== 1 排除企业方）才会稳定生效。
+          userType: isEnterprise ? 1 : (user.userType || 0),
         };
       });
 
@@ -2892,15 +2918,17 @@ export class ESignService {
 
           const contractInfoResult = await this.getContractInfo(params.contractNo);
           if (contractInfoResult.success && contractInfoResult.data?.signUser?.length > 0) {
-            // 检查是否有真实的签署链接
+            // 检查是否有真实的签署链接：
+            // - 企业 auto 签章方不会有 signUrl，这是正常的，不算"未就绪"
+            // - 判定"真实短链"使用 isRealAisignSignUrl（见文件顶部定义）：要求合法 http(s) 且非 /sign/CON\d+ 伪拼接
             const signUsers = contractInfoResult.data.signUser;
-            const hasRealSignUrls = signUsers.some((user: any) => user.signUrl && user.signUrl.includes('hzuul.asign.cn'));
+            const hasRealSignUrls = signUsers.some((user: any) => isRealAisignSignUrl(user.signUrl));
 
             if (hasRealSignUrls) {
               realSignUrls = signUsers.map((user: any, index: number) => ({
                 name: user.name || signerAccounts[index]?.name,
                 mobile: user.mobile || signerAccounts[index]?.mobile,
-                signUrl: user.signUrl, // 🔥 这是爱签返回的真正短链接！
+                signUrl: user.signUrl, // 🔥 爱签返回的真实签署链接（企业 auto 签章方为空，属正常）
                 account: user.account || signerAccounts[index]?.account,
                 signOrder: index + 1,
                 role: index === 0 ? '甲方（客户）' : (index === 1 ? '乙方（服务人员）' : '丙方（企业）')
@@ -2941,37 +2969,29 @@ export class ESignService {
         }
       }
 
-      // 🔥 备用方案：使用拼接的小程序链接
-      this.logger.debug('⚠️ 使用拼接的备用签署链接');
-      if (signersData.length === 1) {
-        const signUrl = signerResult?.signUrl || `${miniProgramSignHost}/sign/${params.contractNo}`;
-        this.logger.debug('✅ 完整流程执行成功，签署链接(备用):', { data: signUrl });
+      // 🔥 兜底：5 次重试仍未拿到真实短链时，返回空 signUrls 交由调用方重试
+      // 不再拼接 `${miniProgramSignHost}/sign/${contractNo}?account=...` 这类伪链接——
+      // 该 URL 格式爱签从未承诺支持，打开页面无效（见 TrainingOrders 小程序签约链接打不开的回归）。
+      // 调用方（contracts / training-orders）应当在 signUrls 为空时调用 getContractSignUrls 再做一轮短链抓取，
+      // 若仍失败则向用户抛错，而不是落库一条打不开的链接。
+      this.logger.warn('⚠️ createCompleteContractFlow: 5 次重试后仍未拿到真实签署短链，返回空 signUrls 交由调用方重试');
 
+      if (signersData.length === 1 && signerResult?.signUrl) {
+        // 单签署人且 addSigners 直接返回过 signUrl 时沿用（通常为爱签直返的合法短链）
         return {
           success: true,
           contractNo: params.contractNo,
-          signUrl: signUrl,
+          signUrl: signerResult.signUrl,
           message: '合同创建成功，签署链接已生成'
         };
-      } else {
-        const signUrls = signerAccounts.map((signerAccount, index) => ({
-          name: signerAccount.name,
-          mobile: signerAccount.mobile,
-          signUrl: `${miniProgramSignHost}/sign/${params.contractNo}?account=${signerAccount.account}`,
-          account: signerAccount.account,
-          signOrder: index + 1,
-          role: index === 0 ? '甲方（客户）' : '乙方（服务人员）'
-        }));
-
-        this.logger.debug('✅ 完整流程执行成功，多个签署链接(备用):', { data: signUrls });
-
-        return {
-          success: true,
-          contractNo: params.contractNo,
-          signUrls: signUrls,
-          message: `合同创建成功，已为${signersData.length}个签署人生成签署链接`
-        };
       }
+
+      return {
+        success: true,
+        contractNo: params.contractNo,
+        signUrls: [],
+        message: '合同创建成功，但签署链接尚未就绪，请稍后调用 getContractSignUrls 重试'
+      };
 
     } catch (error) {
       this.logger.error('❌ 完整流程执行失败:', error);

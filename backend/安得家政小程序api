@@ -370,7 +370,263 @@
 
 ---
 
-## 十八、云函数清单
+## 十八、职培订单模块（安得家政小程序专用：招生/运营下单端）
+
+**调用位置**: 安得家政小程序「职培订单创建」相关页面（招生老师 / 运营使用）
+
+**与"十七、职培订单模块（安得褓贝小程序专用）"的区别**:
+
+| 维度 | 十七（褓贝 C 端） | 十八（安得家政 B 端） |
+|---|---|---|
+| 使用角色 | 学员本人 | 招生老师 / 运营 / 系统管理员 |
+| 鉴权方式 | `X-Service-Secret` 共享密钥（云函数中转） | `Authorization: Bearer <access_token>`（小程序直接调 CRM 后端） |
+| 路由前缀 | `/api/miniprogram/training-orders/baobei/*` | `/api/training-orders/miniprogram/*` |
+| 功能定位 | 查询自己的订单 / 支付 / 申报毕业 | 创建职培订单 / 发起签约 / 查看下属订单 |
+| 允许的操作 | 只读 + 付款/毕业 | 读 + 创建订单 + 发起爱签签署 |
+
+**鉴权方式**: 走 `POST /auth/miniprogram-login` 登录后拿到的 `access_token`，后续请求携带 `Authorization: Bearer <access_token>`。
+后端对每个端点做 `JwtAuthGuard + PermissionsGuard` 双层校验；权限位 `training-order:view` / `training-order:create` 默认分配给 `admin` / `admissions`（招生老师）/ `operator`（运营）三类角色，其他角色访问返回 `403`。
+
+**业务规则要点**:
+- 数据域固定为 `orderCategory='training'`，服务层强制注入，小程序端无需也不可改；
+- **复购不拦**：同一学员手机号可以多次下单，不校验是否已有未终态订单；
+- **两步式创单**：先 `POST /create` 只落库 CRM 本地 Contract（不触发爱签），再由用户在小程序点击"发起签约"触发 `POST /initiate-signing/:id`，对应爱签的 `addStranger` → `createContract` → `addSigners` 三步，与 CRM Web 端 `ESignaturePage` 行为一致；
+- **签署方策略**：甲方固定为"北京安得家政有限公司"（`idCard='91110111MACJMD2R5J'`，`signType='auto'` 自动签章），乙方为学员本人（`signType='manual'` 有感知手动签），无"工人"方；
+- **列表可见范围**：`admin` / `manager` / `operator` 可见全量职培订单；其他角色（含 `admissions`）仅能看到自己 `createdBy` 名下的订单（后端在 service 层按 `req.user.userId` 过滤）。
+
+| 接口名称 | 调用方式 | URL | 功能说明 | 请求参数 | 返回内容 | 所需权限 |
+|---|---|---|---|---|---|---|
+| 获取爱签模板列表 | HTTP请求 | `GET /api/training-orders/miniprogram/templates` | 返回爱签在用模板全量列表（供下单时选择） | 无 | `{success, data: Array<{templateNo, templateName, ...}>}` | `training-order:create` |
+| 获取订单列表 | HTTP请求 | `GET /api/training-orders/miniprogram/list` | 分页查询职培订单；非全局角色只见己方创建 | `{page, limit, search}`（query） | `{success, data: {items, total, page, limit, totalPages}}` | `training-order:view` |
+| 获取订单详情 | HTTP请求 | `GET /api/training-orders/miniprogram/detail/{id}` | 按 id 获取单条订单详情，附带关联 `trainingLead` | `{id}`（path） | `{success, data: {contract, lead, ...}}` | `training-order:view` |
+| 按手机号预查学员 | HTTP请求 | `POST /api/training-orders/miniprogram/validate-student` | 下单前用手机号预填学员信息；查不到也放行（允许为新学员下单） | `{phone}` | `{success, data: {exists, lead\|null}}` | `training-order:create` |
+| 创建订单（仅落库） | HTTP请求 | `POST /api/training-orders/miniprogram/create` | CRM 本地落库一条 `Contract(orderCategory='training')`；不触发爱签 | 合同 DTO（见下表） | `{success, data: {_id, contractNumber, contractStatus, ...}, nextStep: {action, endpoint}}` | `training-order:create` |
+| 发起签约 | HTTP请求 | `POST /api/training-orders/miniprogram/initiate-signing/{id}` | 编排爱签 addStranger → createContract → addSigners，回写 `esignContractNo` / `esignSignUrls` | `{id}`（path） | `{success, data: {contractId, esignContractNo, signUrls: Array, alreadyInitiated}}` | `training-order:create` |
+
+**`POST /create` 入参要点**（与 CRM Web 端 `ESignaturePage` 学员模式的"发起签约"表单字段对齐，`orderCategory` 服务端强制置为 `training`，传入亦无效）：
+
+小程序"发起签约"表单**只收集**以下 6 个字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `customerName` | string | 是 | 学员姓名 |
+| `customerPhone` | string | 是 | 学员手机号（用于 e 签宝短信验证 + 自动关联 TrainingLead） |
+| `customerIdCard` | string | 是 | 学员身份证号（e 签宝短信验证必填） |
+| `templateNo` / `esignTemplateNo` | string | 是 | 爱签模板编号（取自 `GET /templates`） |
+| `templateParams` | object | 是 | 模板渲染字段（与所选模板字段列表一致，CRM 端 `ESignaturePage` 同构） |
+| `courseAmount` | number | 是 | 报课金额（元） |
+
+**小程序下单表单不应收集以下字段**（CRM Web 端"发起签约"同样不收集，它们属于"学员线索档案"字段，归建档/跟进阶段维护；小程序端保留任何输入框都会与 CRM 口径不一致）：
+
+| 字段 | 为什么不收集 |
+|---|---|
+| `serviceFeeAmount`（服务费） | 属于 TrainingLead 档案字段；后端在 `create` 时按手机号命中 TrainingLead 自动兜底回填，无需前端传 |
+| `consultPosition`（咨询职位） | 同上：销售内部记录，建档阶段已填写 |
+| `intendedCourses`（意向课程） | 同上：建档阶段已选择，订单用的是"已报课程"口径从 TrainingLead 带入 |
+
+后端**兼容接收**这三个字段（若前端传了也会被落库），但**小程序 UI 不要出现这三个输入框**，避免招生老师在两个地方重复录入、数据口径分裂。
+
+**其它兼容字段**（前端均不收集，后端自动处理）：
+
+| 字段 | 行为 |
+|---|---|
+| `trainingLeadId` | 后端按 `customerPhone` 反查 TrainingLead 自动回填 |
+| `orderCategory` | 后端强制置为 `training`，传入无效 |
+
+**`POST /initiate-signing/{id}` 幂等性**：
+- 若该订单 `esignContractNo` 与 `esignSignUrls` 均已存在，不重复调爱签，直接返回已缓存的 `signUrls` 并携带 `alreadyInitiated=true`；
+- 任一字段缺失则进入完整编排；若模板参数缺字段，返回 `400` 并提示缺失字段名。
+
+**失败处理与对账口径**：
+- `addStranger`/`createContract` 任一失败抛错，**无本地合同污染**（因 `create` 与 `initiate-signing` 已经解耦，本地合同已存在的情况下不会重复建）；
+- `addSigners` 失败：爱签侧合同已创建但无签署方，记 `esignContractNo` 告警日志，人工对账；小程序端可重调 `initiate-signing` 重新挂签署方（后端会走新流程，**非幂等**于爱签侧，需要业务/运维人工介入）。
+
+**状态字段映射（C 端展示沿用"十七"章节口径）**：下单端除 `signing` / `active` / `graduated` / `refunded` 之外，创建后未发起签署时 `contractStatus='draft'`（仅本端可见），前端可显示为"待发起签约"。
+
+**相关 CRM 前端原型**: `frontend/src/pages/training-orders/CreateTrainingOrder.tsx` → `ESignaturePage mode='student'`，两端创单字段结构一致，便于 CRM 与小程序后续联动维护。
+
+---
+
+## 十九、学员线索管理模块（安得家政小程序专用：创建页 / 编辑页 / 详情页）
+
+**调用位置**: 安得家政小程序「学员线索」创建页 / 编辑页 / 详情页（招生老师、运营、管理员使用）
+
+**路由前缀**: `/api/training-leads/miniprogram`
+
+**鉴权**：沿用 `POST /auth/miniprogram-login` 返回的 `access_token`，每次请求 `Authorization: Bearer <token>`。
+
+**数据可见范围**（后端自动注入，小程序**不要传 createdBy**）：
+- `admin` / `manager`（系统管理员 / 经理）：全部线索可见
+- 其他角色：仅看 `studentOwner / assignedTo / createdBy` 命中自己的线索；一旦线索被分配给他人，创建者即失去可见性，避免数据泄露
+
+**权限位**：
+
+| 权限位 | 覆盖端点 |
+|---|---|
+| `training-lead:view` | `/list`、`/detail/:id`、`/:id/follow-ups`(GET)、`/statistics`、`/options` |
+| `training-lead:create` | `/create` |
+| `training-lead:edit` | `/update/:id`、`/:id/follow-ups`(POST)、`/:id/assign`、`/:id/update-status` |
+| `training-lead:delete` | `/:id/delete` |
+
+### 端点清单
+
+返回统一结构：`{ success, data?, message? }`。
+
+| 接口名称 | 调用方式 | URL | 功能说明 | 请求参数 | 返回内容 | 权限 |
+|----------|----------|-----|----------|----------|----------|------|
+| 获取线索列表 | HTTP请求 | `GET /api/training-leads/miniprogram/list` | 分页 + 多维筛选；非 admin/manager 仅见己方 | `{page, limit, status, leadSource, trainingType, intentionLevel, keyword, lastFollowUpResult, statFilter}` | `{success, data: {items, total, page, pageSize}}` | `training-lead:view` |
+| 获取线索详情 | HTTP请求 | `GET /api/training-leads/miniprogram/detail/{id}` | 单条线索 + 全部跟进记录 | `{id}`（path） | `{success, data: {lead, followUps}}` | `training-lead:view` |
+| 创建学员线索 | HTTP请求 | `POST /api/training-leads/miniprogram/create` | 新建 TrainingLead（`studentId` 服务端自增生成） | 见"创建页字段表" | `{success, data: TrainingLead}` | `training-lead:create` |
+| 更新学员线索 | HTTP请求 | `PUT /api/training-leads/miniprogram/update/{id}` | 编辑线索资料；任一字段都可选 | 见"编辑页字段表" | `{success, data: TrainingLead}` | `training-lead:edit` |
+| 获取跟进记录 | HTTP请求 | `GET /api/training-leads/miniprogram/{id}/follow-ups` | 某条线索的全部跟进时间线 | `{id}`（path） | `{success, data: Array<TrainingLeadFollowUp>}` | `training-lead:view` |
+| 添加跟进记录 | HTTP请求 | `POST /api/training-leads/miniprogram/{id}/follow-ups` | 新增一条跟进记录，同步 `lastFollowUpAt / lastActivityAt` | `{type, followUpResult, content, nextFollowUpDate?}` | `{success, data: TrainingLeadFollowUp}` | `training-lead:edit` |
+| 分配线索 | HTTP请求 | `POST /api/training-leads/miniprogram/{id}/assign` | 指定跟进人（默认同时设为 studentOwner） | `{assignedTo, studentOwner?}` | `{success, data: TrainingLead}` | `training-lead:edit` |
+| 更新线索状态 | HTTP请求 | `POST /api/training-leads/miniprogram/{id}/update-status` | 直接修改 `status`（如改"无效线索"） | `{status}` | `{success, data: TrainingLead}` | `training-lead:edit` |
+| 删除线索 | HTTP请求 | `POST /api/training-leads/miniprogram/{id}/delete` | 软删除前留操作日志 | `{id}`（path） | `{success}` | `training-lead:delete` |
+| 获取统计数据 | HTTP请求 | `GET /api/training-leads/miniprogram/statistics` | 看板统计：总数/各状态/来源/跟进数 | 无 | 见"统计返回结构" | `training-lead:view` |
+| 获取表单枚举 | HTTP请求 | `GET /api/training-leads/miniprogram/options` | 所有下拉枚举（性别 / 来源 / 职位 / 等级 / 状态 / 跟进方式与结果 / 意向课程） | 无 | `{success, data: { genderOptions, leadSourceOptions, consultPositionOptions, intentionLevelOptions, leadGradeOptions, statusOptions, followUpTypeOptions, followUpResultOptions, intendedCoursesOptions }}` | `training-lead:view` |
+
+### 创建页字段表（`POST /create`）
+
+**必填**：仅 `name` + `phone`（其余字段均可选；不传 `phone` 时必须传 `wechatId`——服务端校验"手机号和微信号至少填写一个"）。
+
+| 字段 | 类型 | 必填 | 校验 / 枚举 | 说明 |
+|---|---|---|---|---|
+| `name` | string | ✅ | 长度 ≤ 50 | 学员姓名 |
+| `phone` | string | 与 `wechatId` 二选一 | `^1[3-9]\d{9}$` | 手机号，**全库唯一**（稀疏索引），命中重复返回 400 |
+| `wechatId` | string | 与 `phone` 二选一 | 长度 ≤ 50 | 微信号 |
+| `gender` | string | ❌ | `男 / 女 / 其他` | 性别 |
+| `age` | number | ❌ | ≥ 0 | 年龄 |
+| `consultPosition` | string | ❌ | `育婴师 / 母婴护理师 / 养老护理员 / 住家保姆 / 其他` | ⚠️ **DTO 只接受这 5 个值**；`/options` 接口会额外返回 `月嫂 / 育儿嫂 / 保姆 / 护老 / 师资` 共 10 项做展示，但创建时若传这 5 项以外的值会被 400 拒绝 |
+| `idCardNumber` | string | ❌ | 15/17+X/18 位 | 身份证号（报课签约才强制，建档阶段可空） |
+| `leadSource` | string | ❌ | `美团 / 抖音 / 快手 / 小红书 / 转介绍 / 幼亲舒 / BOSS / BOSS直聘 / 其他` | 线索来源 |
+| `trainingType` | string | ❌ | 无枚举约束 | ⚠️ **已废弃**，保留仅为兼容旧单；新单请用 `consultPosition` |
+| `intendedCourses` | string[] | ❌ | 枚举：10 个课程名 | 意向课程（多选）。枚举见 `/options.intendedCoursesOptions` |
+| `reportedCertificates` | string[] | ❌ | 同 `intendedCourses` 枚举 | 已报证书（多选） |
+| `intentionLevel` | string | ❌ | `高 / 中 / 低` | 意向程度 |
+| `leadGrade` | string | ❌ | `A / B / C / D / O` | 线索等级 |
+| `expectedStartDate` | string | ❌ | ISO 日期 `YYYY-MM-DD` | 期望开课时间 |
+| `budget` | number | ❌ | ≥ 0 | 预算金额（元） |
+| `courseAmount` | number | ❌ | ≥ 0 | 报课金额（元），职培订单创建时会按 `phone` 自动兜底到合同 |
+| `serviceFeeAmount` | number | ❌ | ≥ 0 | 服务费金额（元），归属于档案，**不在订单页录入** |
+| `isOnlineCourse` | boolean | ❌ | - | 是否网课 |
+| `address` | string | ❌ | 长度 ≤ 100 | 所在地区 |
+| `isReported` | boolean | ❌ | - | 是否报征 |
+| `studentOwner` | string(ObjectId) | ❌ | `IsMongoId` | 学员归属（负责该学员的人员 ID）；不传则后端走默认逻辑 |
+| `assignedTo` | string | ❌ | - | 跟进人 ID |
+| `remarks` | string | ❌ | 长度 ≤ 500 | 备注 |
+
+**创建时服务端自动处理**（前端不要传，传了也会被忽略或覆盖）：
+- `studentId`：按 `XYxxxxxx` 递增规则自增生成
+- `createdBy`：取当前登录用户
+- `status`：默认 `跟进中`（若未传 `assignedTo` 且无首条跟进记录，后端会在后续跑批里根据规则改为 `新客未跟进 / 7天未跟进 / 15天未跟进`，前端不要自己设置）
+- `lastActivityAt`：创建时间
+- `inPublicPool`：`false`（新建线索默认不进公海池）
+- `transferCount`：`0`
+
+### 编辑页字段表（`PUT /update/{id}`）
+
+**入参结构**：`UpdateTrainingLeadDto = PartialType(CreateTrainingLeadDto) + { status? }`。
+
+- **全部字段都变为可选**，前端按需传修改的 subset 即可（`PATCH` 语义，后端走 `$set`）。
+- **多出一个 `status` 字段**：`跟进中 / 已报名 / 已结业 / 新客未跟进 / 流转未跟进 / 未跟进 / 7天未跟进 / 15天未跟进 / 已到店 / 无效线索`。一般只用 `/update-status` 专用端点改，这里传入也会生效。
+- **手机号唯一性**：更新 `phone` 时后端会校验全库唯一，冲突 400。
+- **操作日志**：update 会写 `training_lead_operation_logs` 集合，前端无需关心。
+
+### 详情页返回结构（`GET /detail/{id}`）
+
+```json
+{
+  "success": true,
+  "data": {
+    "lead": { /* TrainingLead 完整字段（含 studentId, 所有档案字段, 公海池字段 inPublicPool/publicPoolAt/publicPoolReason, 流转字段 transferCount/lastTransferredAt/autoTransferEnabled） */ },
+    "followUps": [
+      {
+        "_id": "...",
+        "leadId": "...",
+        "type": "电话 | 微信 | 到店 | 其他",
+        "followUpResult": "已接通 | 未接通 | 已回复 | ...",
+        "contactSuccess": true,                // 后端根据 followUpResult 自动计算
+        "content": "沟通内容（1~1000 字）",
+        "nextFollowUpDate": "2026-05-01T00:00:00.000Z",
+        "createdBy": { "_id": "...", "name": "...", "username": "..." },
+        "createdAt": "...",
+        "updatedAt": "..."
+      }
+    ]
+  }
+}
+```
+
+**详情页展示建议**：
+- 顶部「学员档案卡」：`studentId / name / phone / gender / age / consultPosition / leadSource / intentionLevel / leadGrade`
+- 中部「报课信息」：`intendedCourses / reportedCertificates / expectedStartDate / courseAmount / serviceFeeAmount / budget / isOnlineCourse`
+- 底部「跟进时间线」：从 `followUps` 渲染（新到旧，已由后端按 `createdAt desc` 排序）
+- 右上角「状态徽章」：优先用列表接口回传的 `leadStatus`（合并计算值）；详情接口未计算 `leadStatus`，可自行取 `lead.status` 并叠加 `lead.inPublicPool` 展示公海池标记
+
+### 跟进记录（`POST /{id}/follow-ups`）
+
+| 字段 | 类型 | 必填 | 枚举 |
+|---|---|---|---|
+| `type` | string | ✅ | `电话 / 微信 / 到店 / 其他` |
+| `followUpResult` | string | ✅ | 随 `type` 联动，见 `/options.followUpResultOptions` |
+| `content` | string | ✅ | 1 ~ 1000 字 |
+| `nextFollowUpDate` | string | ❌ | ISO 日期 |
+
+后端在 `POST` 后会同步更新线索的 `lastFollowUpAt` 与 `lastActivityAt`，`contactSuccess` 由 `followUpResult` 自动推断（接通/回复/到店/成功 → `true`）。
+
+### 统计返回结构（`GET /statistics`）
+
+```json
+{
+  "total": 120,
+  "byStatus": { "跟进中": 30, "已报名": 20, "新客未跟进": 15, ... },
+  "followingUp": 30,             // 非终态 + 有跟进记录
+  "notFollowedCount": 45,        // 非终态 + 无跟进记录
+  "enrolled": 20,
+  "graduated": 5,
+  "newNotFollowedUp": 15,
+  "transferNotFollowedUp": 3,
+  "notFollowedUp": 10,
+  "notFollowedUp7Days": 8,
+  "notFollowedUp15Days": 9,
+  "invalid": 4,
+  "bySource": [{ "source": "美团", "count": 40 }, ...],
+  "byTrainingType": [{ "type": "月嫂", "count": 22 }, ...],
+  "totalFollowUps": 350
+}
+```
+
+admin/manager 看全量；其他角色看 `createdBy / assignedTo / studentOwner` 命中自己的子集。
+
+### 本轮"小程序内容还是之前的"要同步的关键变更
+
+| 变更点 | 旧 | 新（当前后端） | 小程序需要做 |
+|---|---|---|---|
+| 列表页状态筛选 | 只有 status 单值 | 新增 `statFilter=notFollowed / followingUp / enrolled` | 列表 Tab 可直接对接 `statFilter`，与看板统计数字严格一致（看板用同一逻辑算出来） |
+| 列表返回字段 | 无 `leadStatus / followUpStatus / lastFollowUpResult` | 每条 item 都由后端合并计算好 `leadStatus / followUpStatus / lastFollowUpResult` | 列表徽章直接读 `leadStatus`，不要再自己根据 `status + 跟进记录` 推 |
+| 创建表单 | 旧版允许 `consultPosition` 任意字符串 | DTO 严格枚举为 5 项 | 创建页下拉只能给这 5 项（或交由 `/options` 兜底；传其它值 400） |
+| 创建表单 | 旧版用 `trainingType` 作为主岗位字段 | `trainingType` 已废弃，保留仅为兼容 | 创建页移除 `trainingType` 输入框，岗位统一走 `consultPosition` |
+| 分配逻辑 | 旧版仅 `assignedTo` | 新增 `studentOwner`（学员归属），可见性以 `studentOwner / assignedTo / createdBy` 三重匹配 | 分配弹层按需同时选择「跟进人」和「归属人」；不选 `studentOwner` 则后端默认 = `assignedTo` |
+| 可见范围 | 旧版按 `createdBy` | 新版：线索分配他人后创建者失去可见性 | 列表顶部"我的线索"概念：后端自动过滤，前端**不要**再手动过滤 |
+| 公海池 | 旧版无 | 新增 `inPublicPool / publicPoolAt / publicPoolReason` 三个字段 | 列表可按 `inPublicPool=true` 拉取公海池；详情徽章显示公海池标记；领取/释放动作暂未开放小程序端（走 CRM Web） |
+| 自动流转 | 旧版无 | 新增 `transferCount / lastTransferredAt / autoTransferEnabled` | 详情页可只读展示"已流转 N 次 / 上次流转时间"；`autoTransferEnabled=false` 的线索（如转介绍）不会进自动流转任务 |
+| 跟进结果枚举 | 旧版扁平 20 项 | 新版按 `type → results` 级联 | 跟进页结果下拉需按所选 `type` 联动过滤，数据源走 `/options.followUpResultOptions[type]` |
+| 状态列表 | 旧版缺 `已到店 / 7天未跟进 / 15天未跟进` | 新增这 3 项 | 状态筛选 / 展示补齐这 3 项；`/options.statusOptions` 已包含 |
+| 身份证号 | 旧版必填 | 新版建档阶段**非必填**（签约时才必填） | 创建页"身份证号"从必填降为选填；但进入职培订单创单页仍然必填 |
+
+### 相关 CRM 前端原型
+
+- `frontend/src/pages/training-leads/CreateTrainingLead.tsx`
+- `frontend/src/pages/training-leads/EditTrainingLead.tsx`
+- `frontend/src/pages/training-leads/TrainingLeadDetail.tsx`
+- `frontend/src/pages/training-leads/TrainingLeadList.tsx`
+
+CRM Web 端 create/edit 表单字段与本节"创建页字段表"完全一致，小程序对齐即可；状态徽章、公海池标记、流转计数的展示也可直接参考 `TrainingLeadList.tsx` / `TrainingLeadDetail.tsx` 的渲染策略。
+
+---
+
+## 二十、云函数清单
 
 ### 存在的云函数（10个）
 

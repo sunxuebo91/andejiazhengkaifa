@@ -271,6 +271,11 @@ export class ContractsService {
     try {
       const isTrainingOrder = createContractDto.orderCategory === OrderCategory.TRAINING;
 
+      // 职培订单默认开启收款（调用方未显式指定时）：发起即可在小程序支付
+      if (isTrainingOrder && createContractDto.paymentEnabled === undefined) {
+        createContractDto.paymentEnabled = true;
+      }
+
       this.logger.info('contract.create.start', {
         customerId: createContractDto.customerId,
         customerName: createContractDto.customerName,
@@ -2419,8 +2424,10 @@ export class ContractsService {
       throw new BadRequestException('该合同尚未发起签约，暂无签约链接');
     }
 
-    // 3. 如果已全部签约完成，提示已签完
-    if (contract.esignStatus === '2') {
+    // 3. 职培订单存在"DB esignStatus 被早到的企业方回调污染为 '2'、
+    //    但学员本人实际未签"的历史案例，因此职培路径不信任 DB，一律以爱签实时查询为准。
+    //    家政侧 DB 可信度高，保留原短路语义不变。
+    if ((contract as any).orderCategory !== OrderCategory.TRAINING && contract.esignStatus === '2') {
       throw new BadRequestException('合同已签约完成，无需再次签署');
     }
 
@@ -2432,19 +2439,54 @@ export class ContractsService {
         contract.esignContractNo,
         (contract as any).orderCategory,
       );
-      const signUrls: Array<{ name: string; mobile: string; account: string; signUrl: string; status: number; signOrder: number }> =
+      const signUrls: Array<{ name: string; mobile: string; account: string; signUrl: string; status: number; signOrder: number; userType?: number }> =
         result?.data?.signUrls || [];
 
-      // 按手机号匹配（mobile 或 account 字段，任一匹配）
-      const matched = signUrls.find(
-        u => u.mobile === phone || u.account === phone,
-      ) || signUrls.find(u => u.signOrder === 1); // 保底：取甲方（第一签署方）
+      // 匹配"当前客户本人"签署方：统一排除企业方（userType===1），
+      // 规避爱签注册企业签章时以客户手机号作为通知手机号 → 第一步按 mobile 命中企业方、
+      // 其 status=2 → 误报"已完成签署"的陷阱（职培场景已多次复现）。
+      const matched =
+        signUrls.find(u => u.userType !== 1 && (u.mobile === phone || u.account === phone)) ||
+        signUrls.find(u => u.userType !== 1 && u.signOrder === 1) ||
+        signUrls.find(u => u.userType !== 1);
 
       if (matched) {
         if (matched.status === 2) {
           alreadySigned = true;
         }
         signingUrl = matched.signUrl || null;
+      }
+
+      // 懒同步：爱签侧已全部签完但 DB esignStatus 陈旧时，立即把 DB 推到终态，
+      // 避免列表接口按陈旧 esignStatus 归一化出"签约中"、与本接口"已完成签署"口径不一致。
+      // 爱签回调后续到达时为幂等更新，无副作用。
+      if (
+        signUrls.length > 0 &&
+        signUrls.every(u => u.status === 2) &&
+        contract.esignStatus !== '2'
+      ) {
+        try {
+          const syncUpdate: any = {
+            esignStatus: '2',
+            contractStatus: ContractStatus.ACTIVE,
+            updatedAt: new Date(),
+          };
+          if (!contract.esignSignedAt) {
+            syncUpdate.esignSignedAt = new Date();
+          }
+          if (
+            (contract as any).orderCategory !== OrderCategory.TRAINING &&
+            (contract as any).onboardStatus !== OnboardStatus.CONFIRMED
+          ) {
+            syncUpdate.onboardStatus = OnboardStatus.PENDING;
+          }
+          await this.contractModel.findByIdAndUpdate(id, { $set: syncUpdate }).exec();
+          this.logger.log(
+            `[客户签约链接] 爱签实时全签完成，懒同步 DB id=${id} contractNo=${contract.esignContractNo}`,
+          );
+        } catch (syncErr: any) {
+          this.logger.warn(`[客户签约链接] 懒同步 DB 失败（忽略，不影响返回）: ${syncErr?.message || syncErr}`);
+        }
       }
     } catch (err) {
       this.logger.warn(`[客户签约链接] 实时查询失败，尝试用存库链接兜底: ${err.message}`);
@@ -2461,6 +2503,12 @@ export class ContractsService {
           this.logger.warn('[客户签约链接] 使用存库链接兜底（可能已过期，建议客户稍后重试）');
         }
       } catch { /* JSON 解析失败则忽略 */ }
+    }
+
+    // 本人已在爱签侧签完时，signUrl 为空是正常现象（爱签对已签完方不再下发短链），
+    // 据此直接告诉前端"已完成签署"，不再当作取链失败抛 400。
+    if (alreadySigned) {
+      return { signingUrl: signingUrl || '', alreadySigned: true };
     }
 
     if (!signingUrl) {

@@ -196,11 +196,14 @@ export class LeadTransferController {
   @Roles('admin', 'manager')
   @Permissions('customer:edit')
   @ApiOperation({ summary: '手动执行指定规则' })
-  async executeNow(@Body() body: { ruleId?: string }): Promise<ApiResponse> {
+  async executeNow(@Body() body: { ruleId?: string; batchSize?: number }): Promise<ApiResponse> {
     try {
       if (body.ruleId) {
-        // 执行指定规则
-        const result = await this.autoTransferService.executeRuleById(body.ruleId);
+        // 执行指定规则（batchSize 可选，<=0 表示不限制一次性捞完）
+        const result = await this.autoTransferService.executeRuleById(
+          body.ruleId,
+          body.batchSize ?? 100,
+        );
         return this.createResponse(true, '执行成功', {
           transferredCount: result.transferredCount,
           userStats: result.userStats,

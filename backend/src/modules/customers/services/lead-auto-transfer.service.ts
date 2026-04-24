@@ -122,7 +122,8 @@ export class LeadAutoTransferService implements OnModuleInit {
    */
   async executeRuleTransfer(
     rule: LeadTransferRule,
-    ignoreTimeWindow = false
+    ignoreTimeWindow = false,
+    batchSize = 100
   ): Promise<{
     transferredCount: number;
     userStats: Array<{
@@ -247,12 +248,11 @@ export class LeadAutoTransferService implements OnModuleInit {
 
       this.logger.log(`📝 查询条件: 阈值时间=${thresholdTime.toLocaleString('zh-CN')}, 状态=${triggerConditions.contractStatuses.join(',')}`);
 
-      // 查询符合条件的线索（限制每次最多处理100条）
-      const customers = await this.customerModel
+      // 查询符合条件的线索（batchSize <= 0 表示不限制，一次性捞完）
+      const baseQuery = this.customerModel
         .find(query)
-        .sort({ lastActivityAt: 1, updatedAt: 1, _id: 1 })
-        .limit(100)
-        .exec();
+        .sort({ lastActivityAt: 1, updatedAt: 1, _id: 1 });
+      const customers = await (batchSize > 0 ? baseQuery.limit(batchSize) : baseQuery).exec();
 
       if (customers.length === 0) {
         this.logger.log(`规则 ${rule.ruleName}: 没有符合条件的线索`);
@@ -885,7 +885,7 @@ export class LeadAutoTransferService implements OnModuleInit {
   /**
    * 手动执行指定规则
    */
-  async executeRuleById(ruleId: string): Promise<{
+  async executeRuleById(ruleId: string, batchSize = 100): Promise<{
     transferredCount: number;
     userStats: Array<{
       userId: string;
@@ -894,7 +894,7 @@ export class LeadAutoTransferService implements OnModuleInit {
       transferredIn: number;
     }>;
   }> {
-    this.logger.log(`🔄 手动执行规则: ${ruleId}`);
+    this.logger.log(`🔄 手动执行规则: ${ruleId} (batchSize=${batchSize})`);
 
     try {
       // 查询规则
@@ -909,7 +909,7 @@ export class LeadAutoTransferService implements OnModuleInit {
       }
 
       // 执行规则流转（忽略时间窗口限制）
-      const result = await this.executeRuleTransfer(rule, true);
+      const result = await this.executeRuleTransfer(rule, true, batchSize);
 
       this.logger.log(`✅ 规则 ${rule.ruleName} 手动执行完成，流转了 ${result.transferredCount} 条线索`);
 

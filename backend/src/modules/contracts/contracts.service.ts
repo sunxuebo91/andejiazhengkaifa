@@ -384,10 +384,10 @@ export class ContractsService {
         });
       }
 
-      // 🆕 检查是否需要进入换人模式（职培订单不走换人逻辑）
-      if (!isTrainingOrder && createContractDto.customerPhone) {
+      // 🆕 检查是否需要进入换人模式（职培订单不走换人逻辑；forceCreateNew=true 时跳过，用于"一客两单"加单场景）
+      if (!isTrainingOrder && !createContractDto.forceCreateNew && createContractDto.customerPhone) {
         const existingContractCheck = await this.checkCustomerExistingContract(createContractDto.customerPhone);
-        
+
         // 如果客户有现有合同，自动进入换人合并模式
         if (existingContractCheck.hasContract) {
           this.logger.info('contract.create.redirect_change_worker', {
@@ -395,7 +395,7 @@ export class ContractsService {
             existingContract: existingContractCheck.contract?.contractNumber,
             contractCount: existingContractCheck.contractCount
           });
-          
+
           // 自动执行换人合并逻辑
           return await this.createChangeWorkerContract(
             createContractDto,
@@ -403,6 +403,12 @@ export class ContractsService {
             userId || 'system'
           );
         }
+      } else if (!isTrainingOrder && createContractDto.forceCreateNew && createContractDto.customerPhone) {
+        // 一客两单：审计留痕，便于后续追查
+        this.logger.info('contract.create.force_create_new', {
+          customerPhone: createContractDto.customerPhone,
+          reason: '一客两单：跳过自动换人检测',
+        });
       }
       
       // 如果是从爱签同步过来的合同，处理临时字段

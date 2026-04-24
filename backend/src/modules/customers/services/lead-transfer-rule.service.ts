@@ -145,15 +145,35 @@ export class LeadTransferRuleService {
 
   /**
    * 获取规则列表（可按 targetModule 过滤）
+   * 注：targetModule='customer' 时兼容历史数据中 targetModule 字段不存在/为空的记录
    */
   async findAll(targetModule?: string): Promise<LeadTransferRule[]> {
-    const query = targetModule ? { targetModule } : {};
+    const query = targetModule ? this.buildTargetModuleFilter(targetModule) : {};
     const rules = await this.ruleModel
       .find(query)
       .populate('createdBy', 'name username')
       .sort({ createdAt: -1 })
       .exec();
     return rules.map(rule => this.attachRuleUserLists(rule));
+  }
+
+  /**
+   * 构造 targetModule 过滤条件
+   * - customer: 命中 targetModule='customer' 或字段不存在/空（兼容 2026-04 之前的历史规则）
+   * - training: 只命中 targetModule='training'
+   */
+  private buildTargetModuleFilter(targetModule: string): Record<string, unknown> {
+    if (targetModule === 'customer') {
+      return {
+        $or: [
+          { targetModule: 'customer' },
+          { targetModule: { $exists: false } },
+          { targetModule: null },
+          { targetModule: '' },
+        ],
+      };
+    }
+    return { targetModule };
   }
 
   /**
@@ -177,7 +197,9 @@ export class LeadTransferRuleService {
    * @param targetModule 'customer'（默认）或 'training'
    */
   async findEnabledRules(targetModule: 'customer' | 'training' = 'customer'): Promise<LeadTransferRule[]> {
-    return await this.ruleModel.find({ enabled: true, targetModule }).exec();
+    return await this.ruleModel
+      .find({ enabled: true, ...this.buildTargetModuleFilter(targetModule) })
+      .exec();
   }
 
   /**

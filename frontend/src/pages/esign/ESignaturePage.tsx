@@ -186,6 +186,7 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
     selectedPartyB: undefined as UserSearchResult | undefined,
     localContractId: undefined as string | undefined,
     paymentEnabled: false,
+    forceCreateNew: false,
   });
 
   // 步骤2相关状态
@@ -1565,6 +1566,9 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
             // 收款开关（从步骤1带过来）
             paymentEnabled: !!stepData.paymentEnabled,
 
+            // 一客两单：开启后后端跳过"客户已有合同自动换人"检测（从步骤1带过来）
+            forceCreateNew: !!stepData.forceCreateNew,
+
             // 临时字段（会被后端处理）
             customerId: 'temp', // 会被后端处理
             workerId: 'temp', // 会被后端处理
@@ -1728,6 +1732,7 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
         setStepData(prev => ({
           ...prev,
           paymentEnabled: !!values.paymentEnabled,
+          forceCreateNew: !!values.forceCreateNew,
           users: {
             partyA: { success: true, message: '', request: partyARequest, response: partyAResp },
             partyB: null,
@@ -1774,6 +1779,7 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
         setStepData(prev => ({
           ...prev,
           paymentEnabled: !!values.paymentEnabled,
+          forceCreateNew: !!values.forceCreateNew,
           users: {
             partyA: response.partyA,
             partyB: response.partyB,
@@ -1902,6 +1908,21 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
             <UserOutlined style={{ color: '#1890ff' }} />
             <span style={{ color: '#1890ff' }}>{isStudentMode ? '乙方信息（学员）' : '甲方信息（客户）'}</span>
               </Space>
+            }
+            extra={
+              !isChangeMode && !isStudentMode ? (
+                <Space size={8}>
+                  <span
+                    style={{ fontSize: 13, color: '#666' }}
+                    title='开启后跳过"换人检测"，直接为该客户创建独立新合同。仅用于一客同时签多位阿姨（如月嫂+育儿嫂、白班+夜班等加单场景）。默认关闭。'
+                  >
+                    一客两单
+                  </span>
+                  <Form.Item name="forceCreateNew" valuePropName="checked" noStyle>
+                    <Switch size="small" checkedChildren="是" unCheckedChildren="否" />
+                  </Form.Item>
+                </Space>
+              ) : null
             }
         style={{ marginBottom: 24, borderColor: '#1890ff' }}
       >

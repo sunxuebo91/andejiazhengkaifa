@@ -228,6 +228,11 @@ export class CreateContractDto {
   @IsBoolean()
   paymentEnabled?: boolean;
 
+  // 一客两单：开启后跳过"客户已有合同自动换人"检测，强制创建独立新合同
+  @IsOptional()
+  @IsBoolean()
+  forceCreateNew?: boolean;
+
   // 订单类别：区分家政订单与职培订单
   @IsOptional()
   @IsEnum(OrderCategory, { message: '订单类别必须是 housekeeping 或 training' })

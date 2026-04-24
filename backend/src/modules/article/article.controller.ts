@@ -22,6 +22,13 @@ import { CreateArticleDto } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
 import { QueryArticleDto } from './dto/query-article.dto';
 
+/**
+ * 文章内容控制器
+ * 归属：安得褓贝小程序（C 端雇主/家长）
+ *   - /articles/miniprogram/*  小程序端只读公开接口
+ *   - /articles/*              CRM 褓贝后台 CRUD
+ * 安得家政小程序不调用此控制器。
+ */
 @ApiTags('文章内容管理（褓贝后台）')
 @Controller('articles')
 export class ArticleController {

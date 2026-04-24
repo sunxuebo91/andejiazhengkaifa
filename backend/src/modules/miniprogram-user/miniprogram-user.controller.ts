@@ -19,6 +19,12 @@ import { UpdateMiniProgramUserDto } from './dto/update-miniprogram-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 
+/**
+ * 小程序用户控制器
+ * 归属：安得褓贝小程序（C 端雇主/家长）
+ * 路由前缀：/api/miniprogram-users
+ * 注：安得家政员工端登录不走这里，走 /auth/miniprogram-login
+ */
 @ApiTags('小程序用户管理')
 @Controller('miniprogram-users')
 export class MiniProgramUserController {

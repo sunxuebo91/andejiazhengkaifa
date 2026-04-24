@@ -4,6 +4,8 @@ import { AppLogger } from '../../common/logging/app-logger';
 
 /**
  * 小程序 H5 页面访问日志控制器
+ * 归属：通用接口（当前主要由安得家政小程序内嵌 H5 页面上报；安得褓贝暂未调用）
+ * 路由前缀：/api/miniprogram-access-log
  */
 @ApiTags('小程序日志')
 @Controller('miniprogram-access-log')

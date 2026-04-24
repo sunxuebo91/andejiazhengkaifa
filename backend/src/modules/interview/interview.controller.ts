@@ -16,6 +16,12 @@ import { QueryRoomsDto } from './dto/query-rooms.dto';
 import { EndRoomDto } from './dto/end-room.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+/**
+ * 视频面试控制器
+ * 归属：安得家政小程序（B 端员工/管理员）+ CRM Web 端，共用同一套 JWT 鉴权
+ * 路由前缀：/api/interview
+ * 安得褓贝小程序不调用此控制器。
+ */
 @Controller('interview')
 @UseGuards(JwtAuthGuard)
 export class InterviewController {

@@ -420,6 +420,44 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ id: propId, onSuccess, onCanc
         cleanupLocalImages();
       }
 
+      // 上传富文本编辑器中直接粘贴的 base64 图片
+      const dataImageRe = /data:image\/(?:png|jpe?g|gif|webp);base64,[a-zA-Z0-9+/=\s]+/gi;
+      const dataUrls: string[] = [];
+      let dm: RegExpExecArray | null;
+      // eslint-disable-next-line no-cond-assign
+      while ((dm = dataImageRe.exec(contentRaw)) !== null) {
+        const full = dm[0];
+        if (full && isSafeDataImageUrl(full)) dataUrls.push(full);
+      }
+
+      const uniqDataUrls = Array.from(new Set(dataUrls));
+      if (uniqDataUrls.length > 0) {
+        message.loading({ content: '正在上传正文图片到 COS...', key: 'saveUpload', duration: 0 });
+        const extMap: Record<string, string> = {
+          'image/png': 'png',
+          'image/jpeg': 'jpg',
+          'image/jpg': 'jpg',
+          'image/gif': 'gif',
+          'image/webp': 'webp',
+        };
+        const dataUploads = await Promise.all(
+          uniqDataUrls.map(async (dataUrl, idx) => {
+            const mime = dataUrl.match(/^data:([^;]+);base64,/i)?.[1]?.toLowerCase() || 'image/png';
+            const ext = extMap[mime] || 'png';
+            const file = dataUrlToFile(dataUrl, `pasted-${Date.now()}-${idx}.${ext}`);
+            const url = await ImageService.uploadImage(file);
+            return { dataUrl, url };
+          }),
+        );
+
+        dataUploads.forEach(({ dataUrl, url }) => {
+          contentRaw = contentRaw.split(dataUrl).join(url);
+        });
+
+        form.setFieldsValue({ contentRaw });
+        message.destroy('saveUpload');
+      }
+
       if (/data:image\//i.test(contentRaw)) {
         throw new Error('检测到正文里仍包含 data:image/base64，请重新粘贴图片（系统会在保存时上传到 COS）');
       }

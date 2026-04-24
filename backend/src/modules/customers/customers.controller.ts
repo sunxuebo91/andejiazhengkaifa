@@ -41,6 +41,15 @@ import { WeixinService } from '../weixin/weixin.service';
 import { WechatCloudService } from '../weixin/services/wechat-cloud.service';
 import { UsersService } from '../users/users.service';
 
+/**
+ * 客户/线索控制器（CRM Web + 安得家政小程序）
+ * 路由归属：
+ *   - /customers/miniprogram/*  安得家政小程序（B 端员工，JWT 鉴权）
+ *   - /customers/*              CRM Web 端（内部管理，JWT + 权限）
+ * 注：安得褓贝小程序（C 端雇主）的客户列表在独立文件
+ *     customers-baobei.controller.ts（路由前缀 /miniprogram/customers，
+ *     使用 ServiceSecretGuard 机器间鉴权），不在本控制器内。
+ */
 @ApiTags('客户管理')
 @Controller('customers')
 @UseGuards(JwtAuthGuard, PermissionsGuard)

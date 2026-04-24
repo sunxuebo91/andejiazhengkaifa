@@ -9,6 +9,13 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 
+/**
+ * 员工评价控制器
+ * 归属：
+ *   - /employee-evaluations/miniprogram/*  安得褓贝小程序（C 端雇主对阿姨的公开评价展示/创建）
+ *   - /employee-evaluations/*              CRM Web 端（内部管理）
+ * 安得家政小程序不调用此控制器。
+ */
 @ApiTags('员工评价')
 @Controller('employee-evaluations')
 @UseGuards(JwtAuthGuard, PermissionsGuard)

@@ -23,6 +23,14 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 
+/**
+ * Banner 轮播图控制器
+ * 归属：安得褓贝小程序（C 端雇主/家长）
+ *   - /banners/*          CRM 褓贝后台管理（baobei:view / baobei:edit）
+ *   - /banners/miniprogram/active 小程序端公开读取
+ *   - /banners/:id/view|click    小程序端埋点
+ * 安得家政小程序不调用此控制器。
+ */
 @ApiTags('Banner轮播图管理')
 @Controller('banners')
 export class BannerController {

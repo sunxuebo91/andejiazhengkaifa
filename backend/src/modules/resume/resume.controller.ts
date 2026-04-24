@@ -35,6 +35,14 @@ const memoryUploadConfig = {
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
 };
 
+/**
+ * 简历控制器（双端共用 + CRM Web 端）
+ * 路由归属：
+ *   - /resumes/miniprogram/*        安得家政小程序（B 端员工，JWT 鉴权，含 CRUD + 上传 + 自助注册）
+ *   - /resumes/public/*             安得褓贝小程序（C 端雇主，只读公开展示）
+ *   - /resumes/*                    CRM Web 端（内部管理，JWT + 权限）
+ * 由于三端方法混在同一控制器里，归属以方法装饰器的路径前缀为准。
+ */
 @ApiTags('简历管理')
 @Controller('resumes')
 @UseGuards(JwtAuthGuard, PermissionsGuard)

@@ -45,6 +45,24 @@ export interface RoleListResponse {
 }
 
 /**
+ * 权限目录单项（与后端 PERMISSION_CATALOG 对齐）
+ */
+export interface PermissionCatalogItem {
+  key: string;
+  label: string;
+  description: string;
+  color: string;
+}
+
+/**
+ * 权限目录分组
+ */
+export interface PermissionCatalogGroup {
+  title: string;
+  permissions: PermissionCatalogItem[];
+}
+
+/**
  * 角色服务
  */
 const roleService = {
@@ -81,6 +99,13 @@ const roleService = {
    */
   async remove(id: string) {
     return apiService.delete(`/api/roles/${id}`);
+  },
+
+  /**
+   * 获取权限目录（由后端统一提供，角色管理 UI 的唯一事实来源）
+   */
+  async getPermissionCatalog() {
+    return apiService.get<PermissionCatalogGroup[]>('/api/permissions/catalog');
   },
 };
 

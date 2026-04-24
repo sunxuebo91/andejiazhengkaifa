@@ -530,7 +530,7 @@ export class TrainingLeadsController {
   @Post('admin/auto-transfer/trigger-all')
   @ApiOperation({ summary: '手动触发全部学员线索自动流转（管理员测试用）' })
   @ApiResponse({ status: 200, description: '触发成功' })
-  @Permissions('training_leads:admin')
+  @Permissions('training-lead:admin')
   async triggerAutoTransferAll() {
     this.logger.log('🔧 管理员手动触发学员线索自动流转');
     await this.autoTransferService.executeAutoTransfer();
@@ -540,7 +540,7 @@ export class TrainingLeadsController {
   @Post('admin/auto-transfer/trigger-rule/:ruleId')
   @ApiOperation({ summary: '手动触发指定规则的学员线索自动流转（管理员测试用）' })
   @ApiResponse({ status: 200, description: '触发成功' })
-  @Permissions('training_leads:admin')
+  @Permissions('training-lead:admin')
   async triggerAutoTransferByRule(@Param('ruleId') ruleId: string) {
     this.logger.log(`🔧 管理员手动触发规则 ${ruleId}`);
     const result = await this.autoTransferService.executeRuleById(ruleId);
@@ -550,7 +550,7 @@ export class TrainingLeadsController {
   @Post('admin/status-update/trigger')
   @ApiOperation({ summary: '手动触发学员线索状态推进（管理员测试用）' })
   @ApiResponse({ status: 200, description: '触发成功' })
-  @Permissions('training_leads:admin')
+  @Permissions('training-lead:admin')
   async triggerStatusUpdate() {
     this.logger.log('🔧 管理员手动触发学员线索状态推进');
     const result = await this.statusUpdaterService.executeStatusUpdate();

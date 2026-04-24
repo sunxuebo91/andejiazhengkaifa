@@ -13,128 +13,40 @@ import {
   App
 } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
-import roleService, { UpdateRoleDto, CreateRoleDto } from '../../services/role.service';
+import roleService, { UpdateRoleDto, CreateRoleDto, PermissionCatalogGroup } from '../../services/role.service';
 
 const { TextArea } = Input;
 const { Title } = Typography;
-
-interface Permission {
-  key: string;
-  label: string;
-  description: string;
-}
-
-// 权限数据定义
-const permissionsData: Permission[] = [
-  // 阿姨管理权限
-  { key: 'resume:view', label: '查看阿姨简历', description: '允许查看阿姨简历列表和详情' },
-  { key: 'resume:create', label: '创建阿姨简历', description: '允许创建新的阿姨简历' },
-  { key: 'resume:edit', label: '编辑阿姨简历', description: '允许编辑阿姨简历' },
-  { key: 'resume:assign', label: '分配阿姨', description: '允许将阿姨分配给指定员工' },
-  { key: 'resume:delete', label: '删除阿姨简历', description: '允许删除阿姨简历' },
-  { key: 'resume:all', label: '阿姨管理(全部)', description: '阿姨管理全部权限，包含查看、创建、编辑、删除' },
-
-  // 客户管理权限
-  { key: 'customer:view', label: '查看客户', description: '允许查看客户列表和详情' },
-  { key: 'customer:create', label: '创建客户', description: '允许创建新客户' },
-  { key: 'customer:edit', label: '编辑客户', description: '允许编辑客户信息' },
-  { key: 'customer:delete', label: '删除客户', description: '允许删除客户' },
-  { key: 'customer:all', label: '客户管理(全部)', description: '客户管理全部权限，包含查看、创建、编辑、删除' },
-
-  // 合同管理权限
-  { key: 'contract:view', label: '查看合同', description: '允许查看合同列表和详情' },
-  { key: 'contract:create', label: '创建合同', description: '允许创建新合同' },
-  { key: 'contract:edit', label: '编辑合同', description: '允许编辑合同信息' },
-  { key: 'contract:delete', label: '删除合同', description: '允许删除合同' },
-  { key: 'contract:all', label: '合同管理(全部)', description: '合同管理全部权限，包含查看、创建、编辑、删除' },
-
-  // 保险管理权限
-  { key: 'insurance:view', label: '查看保险', description: '允许查看保单列表和详情' },
-  { key: 'insurance:create', label: '创建保险', description: '允许创建新保单' },
-  { key: 'insurance:edit', label: '编辑保险', description: '允许变更、退保、注销等保单操作' },
-  { key: 'insurance:delete', label: '删除保险', description: '允许删除保单记录' },
-  { key: 'insurance:all', label: '保险管理(全部)', description: '保险管理全部权限，包含查看、创建、编辑、删除' },
-
-  // 背调管理权限
-  { key: 'background-check:view', label: '查看背调', description: '允许查看背调列表和详情' },
-  { key: 'background-check:create', label: '创建背调', description: '允许发起新的背调' },
-  { key: 'background-check:edit', label: '编辑背调', description: '允许同步、取消、处理背调记录' },
-  { key: 'background-check:all', label: '背调管理(全部)', description: '背调管理全部权限，包含查看、创建、编辑' },
-
-  // 职培管理权限
-  { key: 'training-lead:view', label: '查看培训线索', description: '允许查看培训线索列表和详情' },
-  { key: 'training-lead:create', label: '创建培训线索', description: '允许创建新的培训线索' },
-  { key: 'training-lead:edit', label: '编辑培训线索', description: '允许编辑培训线索信息' },
-  { key: 'training-lead:delete', label: '删除培训线索', description: '允许删除培训线索' },
-  { key: 'training-lead:all', label: '职培管理(全部)', description: '职培管理全部权限，包含查看、创建、编辑、删除' },
-
-  // 用户管理权限
-  { key: 'user:view', label: '查看用户', description: '允许查看用户列表' },
-  { key: 'user:create', label: '创建用户', description: '允许创建新用户' },
-  { key: 'user:edit', label: '编辑用户', description: '允许编辑用户信息' },
-  { key: 'user:delete', label: '删除用户', description: '允许删除用户' },
-  { key: 'user:all', label: '用户管理(全部)', description: '用户管理全部权限，包含查看、创建、编辑、删除' },
-
-  // 系统管理权限
-  { key: 'admin:roles', label: '角色管理', description: '允许管理角色和权限' },
-  { key: 'admin:settings', label: '系统设置', description: '允许修改系统设置' },
-  { key: 'admin:all', label: '系统管理(全部)', description: '系统管理全部权限，包含角色管理和系统设置' },
-
-  // 褓贝后台权限（小程序内容管理）
-  { key: 'baobei:view', label: '查看褓贝后台', description: '允许查看Banner、文章、爬虫源等内容' },
-  { key: 'baobei:edit', label: '编辑褓贝后台', description: '允许创建、编辑、删除Banner和文章' },
-  { key: 'baobei:all', label: '褓贝后台(全部)', description: '褓贝后台全部权限，包含Banner管理、文章管理、爬虫源管理、小程序用户管理' },
-];
-
-// 按类别分组权限
-const permissionGroups = [
-  {
-    title: '阿姨管理',
-    permissions: permissionsData.filter(p => p.key.startsWith('resume:'))
-  },
-  {
-    title: '客户管理',
-    permissions: permissionsData.filter(p => p.key.startsWith('customer:'))
-  },
-  {
-    title: '合同管理',
-    permissions: permissionsData.filter(p => p.key.startsWith('contract:'))
-  },
-  {
-    title: '用户管理',
-    permissions: permissionsData.filter(p => p.key.startsWith('user:'))
-  },
-  {
-    title: '保险管理',
-    permissions: permissionsData.filter(p => p.key.startsWith('insurance:'))
-  },
-  {
-    title: '背调管理',
-    permissions: permissionsData.filter(p => p.key.startsWith('background-check:'))
-  },
-  {
-    title: '职培管理',
-    permissions: permissionsData.filter(p => p.key.startsWith('training-lead:'))
-  },
-  {
-    title: '系统管理',
-    permissions: permissionsData.filter(p => p.key.startsWith('admin:'))
-  },
-  {
-    title: '褓贝后台',
-    permissions: permissionsData.filter(p => p.key.startsWith('baobei:'))
-  },
-];
 
 const EditRole: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [initialValues, setInitialValues] = useState<any>(null);
+  const [permissionGroups, setPermissionGroups] = useState<PermissionCatalogGroup[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEdit = id !== 'new';
   const { message } = App.useApp();
+
+  // 拉取权限目录（后端 PERMISSION_CATALOG）
+  const fetchPermissionCatalog = async () => {
+    try {
+      setCatalogLoading(true);
+      const response = await roleService.getPermissionCatalog();
+      if (response.success && Array.isArray(response.data)) {
+        setPermissionGroups(response.data);
+      } else {
+        setError('获取权限目录失败');
+      }
+    } catch (err: any) {
+      console.error('获取权限目录失败:', err);
+      setError('获取权限目录失败：' + (err.message || '未知错误'));
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
 
   // 获取角色详情
   const fetchRoleDetail = async (roleId: string) => {
@@ -195,6 +107,10 @@ const EditRole: React.FC = () => {
   };
 
   useEffect(() => {
+    fetchPermissionCatalog();
+  }, []);
+
+  useEffect(() => {
     // id 为 'new' 时是创建模式，不需要请求后端
     if (id && id !== 'new') {
       fetchRoleDetail(id);
@@ -223,7 +139,7 @@ const EditRole: React.FC = () => {
   };
 
   // 如果数据还在加载中，显示加载状态
-  if (loading && !initialValues) {
+  if ((loading && !initialValues) || catalogLoading) {
     return (
       <PageContainer header={{ title: isEdit ? '编辑角色' : '创建角色', onBack: () => navigate(-1) }}>
         <Card loading={true} variant="outlined" />

@@ -3,7 +3,7 @@ import { PageContainer } from '@ant-design/pro-components';
 import { Card, Table, Button, Space, Tag, Popconfirm, Input, App } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
-import roleService from '../../services/role.service';
+import roleService, { PermissionCatalogGroup } from '../../services/role.service';
 
 interface Role {
   id: string;
@@ -14,71 +14,37 @@ interface Role {
   usersCount: number;
 }
 
-// 权限映射表
-const permissionMap: Record<string, { text: string; color: string }> = {
-  // 系统管理
-  'admin:all': { text: '系统管理(全部)', color: 'red' },
-  'admin:roles': { text: '角色管理', color: 'purple' },
-  'admin:settings': { text: '系统设置', color: 'red' },
-  // 阿姨管理
-  'resume:all': { text: '阿姨管理(全部)', color: 'orange' },
-  'resume:view': { text: '查看阿姨简历', color: 'blue' },
-  'resume:create': { text: '创建阿姨简历', color: 'green' },
-  'resume:edit': { text: '编辑阿姨简历', color: 'cyan' },
-  'resume:delete': { text: '删除阿姨简历', color: 'red' },
-  'resume:assign': { text: '分配阿姨', color: 'gold' },
-  // 客户管理
-  'customer:all': { text: '客户管理(全部)', color: 'gold' },
-  'customer:view': { text: '查看客户', color: 'blue' },
-  'customer:create': { text: '创建客户', color: 'green' },
-  'customer:edit': { text: '编辑客户', color: 'cyan' },
-  'customer:delete': { text: '删除客户', color: 'red' },
-  // 合同管理
-  'contract:all': { text: '合同管理(全部)', color: 'magenta' },
-  'contract:view': { text: '查看合同', color: 'blue' },
-  'contract:create': { text: '创建合同', color: 'green' },
-  'contract:edit': { text: '编辑合同', color: 'cyan' },
-  'contract:delete': { text: '删除合同', color: 'red' },
-  // 保险管理
-  'insurance:all': { text: '保险管理(全部)', color: 'volcano' },
-  'insurance:view': { text: '查看保险', color: 'blue' },
-  'insurance:create': { text: '创建保险', color: 'green' },
-  'insurance:edit': { text: '编辑保险', color: 'cyan' },
-  'insurance:delete': { text: '删除保险', color: 'red' },
-  // 背调管理
-  'background-check:all': { text: '背调管理(全部)', color: 'geekblue' },
-  'background-check:view': { text: '查看背调', color: 'blue' },
-  'background-check:create': { text: '创建背调', color: 'green' },
-  'background-check:edit': { text: '编辑背调', color: 'cyan' },
-  // 培训线索管理
-  'training-lead:all': { text: '培训线索(全部)', color: 'lime' },
-  'training-lead:view': { text: '查看培训线索', color: 'blue' },
-  'training-lead:create': { text: '创建培训线索', color: 'green' },
-  'training-lead:edit': { text: '编辑培训线索', color: 'cyan' },
-  'training-lead:delete': { text: '删除培训线索', color: 'red' },
-  // 用户管理
-  'user:all': { text: '用户管理(全部)', color: 'green' },
-  'user:view': { text: '查看用户', color: 'blue' },
-  'user:create': { text: '创建用户', color: 'green' },
-  'user:edit': { text: '编辑用户', color: 'cyan' },
-  'user:delete': { text: '删除用户', color: 'red' },
-  // 褓贝后台
-  'baobei:all': { text: '褓贝后台(全部)', color: 'pink' },
-  'baobei:view': { text: '查看褓贝后台', color: 'blue' },
-  'baobei:edit': { text: '编辑褓贝后台', color: 'cyan' },
-};
-
-// 获取权限的颜色和文本
-const getPermissionInfo = (permission: string) => {
-  return permissionMap[permission] || { text: permission, color: 'default' };
-};
+type PermissionInfo = { text: string; color: string };
 
 const RoleList: React.FC = () => {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [keyword, setKeyword] = useState<string>('');
+  const [permissionMap, setPermissionMap] = useState<Record<string, PermissionInfo>>({});
   const navigate = useNavigate();
   const { message } = App.useApp();
+
+  // 根据后端权限目录生成 code → {text,color} 映射
+  const fetchPermissionCatalog = async () => {
+    try {
+      const response = await roleService.getPermissionCatalog();
+      if (response.success && Array.isArray(response.data)) {
+        const map: Record<string, PermissionInfo> = {};
+        (response.data as PermissionCatalogGroup[]).forEach((group) => {
+          group.permissions.forEach((perm) => {
+            map[perm.key] = { text: perm.label, color: perm.color };
+          });
+        });
+        setPermissionMap(map);
+      }
+    } catch (error: any) {
+      console.error('获取权限目录失败:', error);
+    }
+  };
+
+  const getPermissionInfo = (permission: string): PermissionInfo => {
+    return permissionMap[permission] || { text: permission, color: 'default' };
+  };
 
   // 获取角色列表
   const fetchRoles = async () => {
@@ -139,6 +105,7 @@ const RoleList: React.FC = () => {
   );
 
   useEffect(() => {
+    fetchPermissionCatalog();
     fetchRoles();
   }, []);
 

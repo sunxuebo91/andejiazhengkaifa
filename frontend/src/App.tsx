@@ -11,6 +11,7 @@ const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const ResumeList = React.lazy(() => import('./pages/aunt/ResumeList'));
 const CreateResume = React.lazy(() => import('./pages/aunt/CreateResume'));
 const ResumeDetail = React.lazy(() => import('./pages/aunt/ResumeDetail'));
+const BlacklistList = React.lazy(() => import('./pages/aunt/BlacklistList'));
 const CustomerList = React.lazy(() => import('./pages/customers/CustomerList'));
 const CreateCustomer = React.lazy(() => import('./pages/customers/CreateCustomer'));
 const CustomerDetail = React.lazy(() => import('./pages/customers/CustomerDetail'));
@@ -174,9 +175,13 @@ export default function App({ children }: AppProps) {
                       path="create-resume" 
                       element={<AuthorizedRoute element={<CreateResume />} authority="resume:create" />} 
                     />
-                    <Route 
-                      path="resumes/detail/:id" 
-                      element={<AuthorizedRoute element={<ResumeDetail />} authority="resume:view" />} 
+                    <Route
+                      path="resumes/detail/:id"
+                      element={<AuthorizedRoute element={<ResumeDetail />} authority="resume:view" />}
+                    />
+                    <Route
+                      path="blacklist"
+                      element={<AuthorizedRoute element={<BlacklistList />} authority="blacklist:view" />}
                     />
                   </Route>
                   

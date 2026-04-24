@@ -20,6 +20,7 @@ import { DashubaoModule } from '../dashubao/dashubao.module';
 import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/background-check.model';
 import { InsurancePolicy, InsurancePolicySchema } from '../dashubao/models/insurance-policy.model';
 import { MiniProgramNotificationModule } from '../miniprogram-notification/miniprogram-notification.module';
+import { AuntBlacklistModule } from '../aunt-blacklist/aunt-blacklist.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { MiniProgramNotificationModule } from '../miniprogram-notification/minip
     ContractApprovalsModule,
     DashubaoModule,
     MiniProgramNotificationModule,
+    AuntBlacklistModule,
   ],
   controllers: [ContractsController, ContractsMiniProgramController, ContractsCustomerController],
   providers: [ContractsService, ContractsQueryService, ContractConsistencyService],

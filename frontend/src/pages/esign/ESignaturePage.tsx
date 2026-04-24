@@ -31,6 +31,7 @@ import { contractService } from '../../services/contractService';
 import { trainingLeadService } from '../../services/trainingLeadService';
 import { JobType, JOB_TYPE_MAP } from '../../types/resume';
 import apiService from '../../services/api';
+import { checkBlacklist } from '../../services/auntBlacklistService';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -606,9 +607,34 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
   };
 
   // 选择乙方用户
-  const handlePartyBSelect = (value: string) => {
+  const handlePartyBSelect = async (value: string) => {
     const selectedUser = partyBSearchResults.find(user => user.phone === value);
     if (selectedUser) {
+      // 黑名单预校验：命中则阻止选择并提示
+      try {
+        const checkRes = await checkBlacklist({
+          phone: selectedUser.phone,
+          idCard: selectedUser.idCard || undefined,
+        });
+        const hitInfo = checkRes?.data;
+        if (hitInfo && hitInfo.hit) {
+          Modal.warning({
+            title: '该阿姨已在黑名单中',
+            content: (
+              <div>
+                <div>无法作为乙方发起合同。</div>
+                {hitInfo.reason && <div style={{ marginTop: 8 }}>原因：{hitInfo.reason}</div>}
+                <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>如需调整请先由管理员释放该黑名单记录。</div>
+              </div>
+            ),
+          });
+          setPartyBSearchValue('');
+          return;
+        }
+      } catch (err) {
+        console.warn('黑名单预校验失败，降级继续流程:', err);
+      }
+
       // 获取联系地址（阿姨的currentAddress字段）
       const contactAddress = (selectedUser as any).currentAddress || '';
 
@@ -1406,7 +1432,21 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
             setCurrentStep(2);
           } catch (localError) {
             console.error('培训订单本地保存失败:', localError);
-            message.warning('爱签合同创建成功，但本地数据同步失败。');
+            const respData: any = (localError as any)?.response?.data;
+            if (respData && (respData.code === 'AUNT_BLACKLISTED' || respData.error === 'AUNT_BLACKLISTED')) {
+              Modal.warning({
+                title: '该阿姨已在黑名单中',
+                content: (
+                  <div>
+                    <div>无法发起合同，本地合同未保存。</div>
+                    {respData.reason && <div style={{ marginTop: 8 }}>原因：{respData.reason}</div>}
+                    <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>如需调整请先由管理员释放该黑名单记录。</div>
+                  </div>
+                ),
+              });
+            } else {
+              message.warning('爱签合同创建成功，但本地数据同步失败。');
+            }
             setStepData(prev => ({
               ...prev,
               contract: {
@@ -1560,11 +1600,25 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
           
         } catch (localError) {
           console.error('保存到本地数据库失败:', localError);
-          message.warning('爱签合同创建成功，但本地数据同步失败。您可以手动在合同列表中查看。');
-          
+          const respData: any = (localError as any)?.response?.data;
+          if (respData && (respData.code === 'AUNT_BLACKLISTED' || respData.error === 'AUNT_BLACKLISTED')) {
+            Modal.warning({
+              title: '该阿姨已在黑名单中',
+              content: (
+                <div>
+                  <div>无法发起合同，本地合同未保存。</div>
+                  {respData.reason && <div style={{ marginTop: 8 }}>原因：{respData.reason}</div>}
+                  <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>如需调整请先由管理员释放该黑名单记录。</div>
+                </div>
+              ),
+            });
+          } else {
+            message.warning('爱签合同创建成功，但本地数据同步失败。您可以手动在合同列表中查看。');
+          }
+
           // 即使本地保存失败，也保持原有流程
-          setStepData(prev => ({ 
-            ...prev, 
+          setStepData(prev => ({
+            ...prev,
             contract: {
               contractNo: contractNo,
               contractName: selectedTemplate?.templateName || '安得家政服务合同',

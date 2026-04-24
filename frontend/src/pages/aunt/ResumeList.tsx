@@ -9,6 +9,7 @@ import apiService from '../../services/api';
 import { resumeService } from '../../services/resume.service';
 import { createFollowUp } from '@/services/followUp.service';
 import { useAuth } from '@/contexts/AuthContext';
+import { listBlacklist } from '../../services/auntBlacklistService';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -105,6 +106,10 @@ const ResumeList = () => {
     errors: string[];
   } | null>(null);
 
+  // 黑名单命中集合（phone / idCard 任一命中即视为命中）
+  const [blacklistPhones, setBlacklistPhones] = useState<Set<string>>(new Set());
+  const [blacklistIdCards, setBlacklistIdCards] = useState<Set<string>>(new Set());
+
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -167,7 +172,27 @@ const ResumeList = () => {
   // 组件加载时获取筛选选项
   useEffect(() => {
     fetchFilterOptions();
+    fetchBlacklistIndex();
   }, []);
+
+  // 拉取当前生效中的黑名单，构建 phone/idCard 命中集合
+  const fetchBlacklistIndex = async () => {
+    try {
+      const res = await listBlacklist({ status: 'active', page: 1, pageSize: 1000 });
+      if (res.success && res.data?.items) {
+        const phones = new Set<string>();
+        const ids = new Set<string>();
+        res.data.items.forEach(it => {
+          if (it.phone) phones.add(it.phone);
+          if (it.idCard) ids.add(it.idCard);
+        });
+        setBlacklistPhones(phones);
+        setBlacklistIdCards(ids);
+      }
+    } catch (err) {
+      console.warn('拉取黑名单索引失败（忽略，不影响主流程）:', err);
+    }
+  };
 
   // 监听页面可见性，当从其他页面返回时刷新列表
   useEffect(() => {
@@ -620,17 +645,27 @@ const ResumeList = () => {
       title: '姓名',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string, record: ResumeData) => (
-        <span>
-          {text}
-          {record.isDraft && <Tag color="orange" style={{ marginLeft: 6, fontSize: 11 }}>草稿</Tag>}
-          {(record as any).referralActivated && (
-            <Tooltip title={`推荐人：${(record as any).referralActivatedByName || '未知'} · ${(record as any).referralActivatedAt ? new Date((record as any).referralActivatedAt).toLocaleDateString('zh-CN') : ''}`}>
-              <Tag color="volcano" style={{ marginLeft: 6, fontSize: 11 }}>已被推荐</Tag>
-            </Tooltip>
-          )}
-        </span>
-      ),
+      render: (text: string, record: ResumeData) => {
+        const phone = record.phone;
+        const idNumber = (record as any).idNumber;
+        const isBlacklisted = (phone && blacklistPhones.has(phone)) || (idNumber && blacklistIdCards.has(idNumber));
+        return (
+          <span>
+            {text}
+            {record.isDraft && <Tag color="orange" style={{ marginLeft: 6, fontSize: 11 }}>草稿</Tag>}
+            {(record as any).referralActivated && (
+              <Tooltip title={`推荐人：${(record as any).referralActivatedByName || '未知'} · ${(record as any).referralActivatedAt ? new Date((record as any).referralActivatedAt).toLocaleDateString('zh-CN') : ''}`}>
+                <Tag color="volcano" style={{ marginLeft: 6, fontSize: 11 }}>已被推荐</Tag>
+              </Tooltip>
+            )}
+            {isBlacklisted && (
+              <Tooltip title="该阿姨已被加入黑名单，无法发起新合同，如需调整请联系管理员释放">
+                <Tag color="red" style={{ marginLeft: 6, fontSize: 11 }}>黑名单</Tag>
+              </Tooltip>
+            )}
+          </span>
+        );
+      },
     },
     {
       title: '手机号',

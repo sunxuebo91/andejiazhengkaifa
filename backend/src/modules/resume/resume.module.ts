@@ -18,6 +18,7 @@ import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/backgroun
 import { AIModule } from '../ai/ai.module';
 import { ReferralResume, ReferralResumeSchema } from '../referral/models/referral-resume.model';
 import { ContractsModule } from '../contracts/contracts.module';
+import { AuntBlacklistModule } from '../aunt-blacklist/aunt-blacklist.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { ContractsModule } from '../contracts/contracts.module';
     DashubaoModule,
     AIModule,
     forwardRef(() => ContractsModule),
+    AuntBlacklistModule,
     // 为分享令牌签发/验证提供 JwtService
     JwtModule.registerAsync({
       useFactory: () => {

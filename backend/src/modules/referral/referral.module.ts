@@ -15,6 +15,7 @@ import { MiniProgramUserModule } from '../miniprogram-user/miniprogram-user.modu
 import { MiniProgramNotificationModule } from '../miniprogram-notification/miniprogram-notification.module';
 import { NotificationModule } from '../notification/notification.module';
 import { WeixinModule } from '../weixin/weixin.module';
+import { AuntBlacklistModule } from '../aunt-blacklist/aunt-blacklist.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { WeixinModule } from '../weixin/weixin.module';
     MiniProgramNotificationModule,
     NotificationModule,
     WeixinModule,
+    AuntBlacklistModule,
     // 用于从 Authorization: Bearer JWT 中解析 openid
     JwtModule.registerAsync({
       useFactory: () => {

@@ -20,6 +20,7 @@ import { RequestContextStore } from '../../common/logging/request-context';
 import { ContractsQueryService } from './contracts-query.service';
 import { ContractConsistencyService } from './contract-consistency.service';
 import { MiniProgramNotificationService } from '../miniprogram-notification/miniprogram-notification.service';
+import { AuntBlacklistService } from '../aunt-blacklist/aunt-blacklist.service';
 
 @Injectable()
 export class ContractsService {
@@ -41,7 +42,62 @@ export class ContractsService {
     private contractsQueryService: ContractsQueryService,
     private readonly consistencyService: ContractConsistencyService,
     private mpNotificationService: MiniProgramNotificationService,
+    private readonly auntBlacklistService: AuntBlacklistService,
   ) {}
+
+  /**
+   * 合同发起前置黑名单校验：命中 active 黑名单则直接拦截。
+   * 匹配口径：workerPhone 或 workerIdCard 任一命中即算命中。
+   */
+  private async assertAuntNotBlacklisted(params: {
+    workerPhone?: string;
+    workerIdCard?: string;
+    workerId?: string;
+    scene: string;
+  }): Promise<void> {
+    let phone = (params.workerPhone || '').trim();
+    let idCard = (params.workerIdCard || '').trim();
+
+    if ((!phone || !idCard) && params.workerId && params.workerId !== 'temp') {
+      try {
+        const resume = await this.resumeModel
+          .findById(params.workerId)
+          .select('phone idNumber')
+          .lean()
+          .exec();
+        if (resume) {
+          if (!phone && resume.phone) phone = resume.phone;
+          if (!idCard && (resume as any).idNumber) idCard = (resume as any).idNumber;
+        }
+      } catch (error) {
+        this.logger.warn('contract.blacklist_precheck.resume_lookup_failed', {
+          workerId: params.workerId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (!phone && !idCard) return;
+
+    const hit = await this.auntBlacklistService.checkActive({ phone, idCard });
+    if (hit) {
+      this.logger.warn('contract.blacklist_precheck.hit', {
+        scene: params.scene,
+        workerId: params.workerId,
+        phone,
+        idCard,
+        blacklistId: String(hit._id),
+        reason: hit.reason,
+      });
+      throw new BadRequestException({
+        code: 'AUNT_BLACKLISTED',
+        message: `该阿姨已在黑名单中（原因：${hit.reason}），无法发起合同，如需调整请先由管理员释放`,
+        blacklistId: String(hit._id),
+        reason: hit.reason,
+        reasonType: hit.reasonType,
+      });
+    }
+  }
 
   /**
    * 记录客户操作日志（合同相关）
@@ -316,6 +372,16 @@ export class ContractsService {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+      }
+
+      // 🆕 黑名单前置校验（职培订单无阿姨，跳过）
+      if (!isTrainingOrder) {
+        await this.assertAuntNotBlacklisted({
+          workerPhone: createContractDto.workerPhone,
+          workerIdCard: createContractDto.workerIdCard,
+          workerId: createContractDto.workerId,
+          scene: 'contract.create',
+        });
       }
 
       // 🆕 检查是否需要进入换人模式（职培订单不走换人逻辑）
@@ -1593,6 +1659,14 @@ export class ContractsService {
           });
         }
       }
+
+      // 🆕 黑名单前置校验：换人合同目标阿姨命中黑名单则拦截
+      await this.assertAuntNotBlacklisted({
+        workerPhone: createContractDto.workerPhone || resumeForWorker?.phone,
+        workerIdCard: createContractDto.workerIdCard || resumeForWorker?.idNumber,
+        workerId: Types.ObjectId.isValid(rawWorkerId) ? String(rawWorkerId) : undefined,
+        scene: 'contract.changeWorker',
+      });
 
       // 🆕 使用新的合同数据但保持客户信息一致
       const mergedContractData = {

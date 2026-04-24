@@ -48,8 +48,8 @@ const BasicLayout = () => {
       }
     ];
 
-    // 阿姨管理菜单 - 需要简历查看或创建权限
-    if (hasPermission('resume:view') || hasPermission('resume:create')) {
+    // 阿姨管理菜单 - 需要简历查看或创建权限，或黑名单查看权限
+    if (hasPermission('resume:view') || hasPermission('resume:create') || hasPermission('blacklist:view')) {
       const resumeMenu: MenuRoute = {
         path: '/aunt',
         name: '阿姨管理',
@@ -72,6 +72,15 @@ const BasicLayout = () => {
           path: '/aunt/create-resume',
           name: '创建简历',
           icon: <FileAddOutlined />,
+        });
+      }
+
+      // 阿姨黑名单 - 需要黑名单查看权限
+      if (hasPermission('blacklist:view')) {
+        resumeMenu.routes!.push({
+          path: '/aunt/blacklist',
+          name: '阿姨黑名单',
+          icon: <SafetyOutlined />,
         });
       }
 

@@ -1,0 +1,198 @@
+/*
+ * 移动端响应式适配（应急使用）
+ * - 仅在 <= 768px 屏幕下生效，PC 端（>768px）完全不受影响
+ * - 只覆盖 Ant Design 通用类名，不触碰任何业务组件
+ * - ProLayout 自带 <768px 抽屉式侧边栏，无需额外配置
+ */
+
+@media (max-width: 768px) {
+  /* ---------- 根容器：禁止横向滚动，防止整个页面被内部元素撑宽 ---------- */
+  html, body {
+    overflow-x: hidden !important;
+  }
+  .ant-pro-layout,
+  .ant-pro-layout-content,
+  .ant-pro-basicLayout,
+  .ant-pro-basicLayout-content {
+    overflow-x: hidden !important;
+    max-width: 100vw;
+  }
+
+  /* ---------- ProLayout 头部/内容区：压缩内边距 ---------- */
+  .ant-pro-layout .ant-pro-global-header,
+  .ant-pro-layout .ant-pro-top-nav-header {
+    padding-inline: 8px !important;
+  }
+
+  .ant-pro-page-container-children-content {
+    padding: 8px !important;
+  }
+
+  /* ---------- Row/Col 栅格：所有未显式声明响应式断点的 Col 自动换行占满一行 ---------- */
+  /* 命中 ant-col-1 ~ ant-col-24（固定栅格），排除已写 xs/sm/md/lg/xl 的响应式 Col */
+  .ant-row > .ant-col[class*="ant-col-"]:not([class*="ant-col-xs-"]):not([class*="ant-col-sm-"]):not([class*="ant-col-md-"]):not([class*="ant-col-lg-"]):not([class*="ant-col-xl-"]) {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+  }
+  /* Row 自身的 gutter 在小屏下间距太大，压缩一下 */
+  .ant-row {
+    row-gap: 8px !important;
+  }
+
+  /* ---------- 表格：允许横向滚动，避免挤压 ---------- */
+  .ant-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 表格工具栏按钮换行 */
+  .ant-pro-table-list-toolbar-container {
+    flex-wrap: wrap !important;
+    row-gap: 8px !important;
+  }
+  .ant-pro-table-list-toolbar-left,
+  .ant-pro-table-list-toolbar-right {
+    flex-wrap: wrap !important;
+    row-gap: 8px !important;
+  }
+
+  /* ---------- 表单：label 顶部对齐，控件占满宽度 ---------- */
+  .ant-form-horizontal .ant-form-item-row {
+    flex-direction: column !important;
+  }
+  .ant-form-horizontal .ant-form-item-label {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+    text-align: left !important;
+    padding: 0 0 4px 0 !important;
+  }
+  .ant-form-horizontal .ant-form-item-label > label {
+    height: auto !important;
+  }
+  .ant-form-horizontal .ant-form-item-control {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+  }
+  .ant-form-item {
+    margin-bottom: 12px !important;
+  }
+
+  /* InputNumber / Picker / Select / Search / Input 默认固定宽度，改为 100% */
+  .ant-input-number,
+  .ant-picker,
+  .ant-select,
+  .ant-input-search,
+  .ant-input-group,
+  .ant-input-group-wrapper,
+  .ant-input-affix-wrapper {
+    width: 100% !important;
+  }
+  /* Col 内的 Input 控件也占满（用于未包 Form 的搜索条场景） */
+  .ant-col > .ant-input,
+  .ant-col > .ant-input-number,
+  .ant-col > .ant-input-affix-wrapper,
+  .ant-col > .ant-input-search,
+  .ant-col > .ant-input-group-wrapper,
+  .ant-col > .ant-select,
+  .ant-col > .ant-picker {
+    width: 100% !important;
+  }
+
+  /* ---------- Modal：小屏全屏化 ---------- */
+  .ant-modal {
+    max-width: 100vw !important;
+    margin: 0 auto !important;
+    padding-bottom: 0 !important;
+    top: 0 !important;
+  }
+  .ant-modal-content {
+    border-radius: 0 !important;
+    min-height: 100vh;
+  }
+  .ant-modal-body {
+    max-height: calc(100vh - 108px);
+    overflow-y: auto;
+  }
+
+  /* ---------- Drawer：小屏占满宽度 ---------- */
+  .ant-drawer-right .ant-drawer-content-wrapper,
+  .ant-drawer-left .ant-drawer-content-wrapper {
+    max-width: 100vw !important;
+    width: 100vw !important;
+  }
+
+  /* ---------- Space 工具区：换行 ---------- */
+  .ant-space-horizontal {
+    flex-wrap: wrap !important;
+    row-gap: 8px !important;
+  }
+
+  /* ---------- Descriptions：允许横向滚动，避免截断 ---------- */
+  .ant-descriptions {
+    overflow-x: auto;
+  }
+
+  /* ---------- Tabs：标签栏横向滚动 ---------- */
+  .ant-tabs-nav-wrap {
+    overflow-x: auto !important;
+  }
+
+  /* ---------- Card：压缩内边距，限制最大宽度 ---------- */
+  .ant-card {
+    max-width: 100%;
+  }
+  .ant-card-body {
+    padding: 12px !important;
+  }
+  .ant-card-head {
+    padding-inline: 12px !important;
+  }
+  /* Card 头部右侧 extra 区域允许换行 */
+  .ant-card-head-wrapper {
+    flex-wrap: wrap !important;
+    row-gap: 8px !important;
+  }
+  .ant-card-extra {
+    margin-inline-start: 0 !important;
+  }
+
+  /* ---------- PageHeader / ProLayout 标题行 ---------- */
+  .ant-page-header {
+    padding: 8px 12px !important;
+  }
+
+  /* ---------- 按钮：最小触控高度 ---------- */
+  .ant-btn {
+    min-height: 32px;
+  }
+
+  /* ---------- 分页器：压缩 ---------- */
+  .ant-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  /* ---------- 上传区域：避免溢出 ---------- */
+  .ant-upload-list-picture-card .ant-upload-list-item,
+  .ant-upload.ant-upload-select-picture-card {
+    width: 88px !important;
+    height: 88px !important;
+  }
+}
+
+/*
+ * 超小屏（<= 480px）进一步压缩
+ */
+@media (max-width: 480px) {
+  .ant-pro-page-container-children-content {
+    padding: 4px !important;
+  }
+  .ant-card-body {
+    padding: 8px !important;
+  }
+  .ant-modal-title,
+  .ant-drawer-title {
+    font-size: 15px !important;
+  }
+}

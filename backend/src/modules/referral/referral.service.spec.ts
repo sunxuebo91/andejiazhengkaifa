@@ -32,6 +32,7 @@ function makeService(overrides: {
     dummyService as any,                            // notificationService
     dummyService as any,                            // notificationHelperService
     dummyService as any,                            // wechatCloudService
+    dummyService as any,                            // auntBlacklistService
   );
 }
 

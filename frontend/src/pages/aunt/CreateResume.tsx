@@ -2822,6 +2822,21 @@ const CreateResume: React.FC = () => {
       
     } catch (error: unknown) {
       console.error('❌ 提交失败:', error);
+      const respData: any = (error as any)?.response?.data;
+      // 黑名单命中：弹窗提示，禁止继续
+      if (respData && (respData.error === 'AUNT_BLACKLISTED' || respData.code === 'AUNT_BLACKLISTED')) {
+        Modal.warning({
+          title: '该阿姨已在黑名单中',
+          content: (
+            <div>
+              <div>无法录入或更新简历。</div>
+              {respData.reason && <div style={{ marginTop: 8 }}>原因：{respData.reason}</div>}
+              <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>如需调整请先由管理员释放该黑名单记录。</div>
+            </div>
+          ),
+        });
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : '提交失败，请重试';
       messageApi.error(errorMessage);
     } finally {

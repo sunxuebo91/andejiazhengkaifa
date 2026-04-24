@@ -39,6 +39,15 @@ export const PERMISSION_CATALOG: PermissionCatalogGroup[] = [
     ],
   },
   {
+    title: '阿姨黑名单',
+    permissions: [
+      { key: 'blacklist:view',   label: '查看黑名单', description: '允许查看阿姨黑名单列表与详情', color: 'blue' },
+      { key: 'blacklist:create', label: '加入黑名单', description: '允许将阿姨加入黑名单',         color: 'red' },
+      { key: 'blacklist:edit',   label: '编辑黑名单', description: '允许编辑黑名单记录的原因/证据/备注（不含释放）', color: 'cyan' },
+      { key: 'blacklist:all',    label: '黑名单(全部)', description: '黑名单管理全部权限，含查看、加入、编辑（释放操作仅管理员）', color: 'volcano' },
+    ],
+  },
+  {
     title: '客户管理',
     permissions: [
       { key: 'customer:view',   label: '查看客户', description: '允许查看客户列表和详情', color: 'blue' },

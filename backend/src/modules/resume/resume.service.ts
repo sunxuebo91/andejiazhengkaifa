@@ -23,6 +23,7 @@ import { BackgroundCheck, BackgroundCheckDocument } from '../zmdb/models/backgro
 import { QwenAIService } from '../ai/qwen-ai.service';
 import { ReferralResume, ReferralResumeDocument } from '../referral/models/referral-resume.model';
 import { ContractConsistencyService } from '../contracts/contract-consistency.service';
+import { AuntBlacklistService } from '../aunt-blacklist/aunt-blacklist.service';
 
 /** 状态中文 label（推荐冲突提示用） */
 const REFERRAL_STATUS_LABEL: Record<string, string> = {
@@ -64,7 +65,25 @@ export class ResumeService {
     private readonly referralResumeModel: Model<ReferralResumeDocument>,
     @Inject(forwardRef(() => ContractConsistencyService))
     private readonly consistencyService: ContractConsistencyService,
+    private readonly auntBlacklistService: AuntBlacklistService,
   ) {}
+
+  /**
+   * 反查黑名单：命中 active 记录则拒绝简历落库/更新。
+   * 与 validateReferralUniqueness 并列调用，处于 CRM 录入/编辑入口处。
+   */
+  private async validateBlacklist(phone?: string, idNumber?: string): Promise<void> {
+    if (!phone && !idNumber) return;
+    const hit = await this.auntBlacklistService.checkActive({ phone, idCard: idNumber });
+    if (!hit) return;
+    throw new ConflictException({
+      message: `该阿姨已在黑名单中（原因：${hit.reason}），无法录入或更新，如需调整请先由管理员释放`,
+      error: 'AUNT_BLACKLISTED',
+      blacklistId: String(hit._id),
+      reason: hit.reason,
+      reasonType: hit.reasonType,
+    });
+  }
 
   // 🆕 系统操作人ID（用于系统自动操作）
   private readonly systemOperatorId = new Types.ObjectId('000000000000000000000000');
@@ -133,6 +152,9 @@ export class ResumeService {
 
     // 2b. 反查推荐库（双向去重，保护推荐人权益）
     await this.validateReferralUniqueness(normalizedData.phone, normalizedData.idNumber);
+
+    // 2c. 反查黑名单（命中 active 记录则拒绝）
+    await this.validateBlacklist(normalizedData.phone, normalizedData.idNumber);
 
     // 3. 处理文件上传
     const filesArray = Array.isArray(files) ? files : [];
@@ -1473,6 +1495,9 @@ export class ResumeService {
     // 3a. 反查推荐库（双向去重，保护推荐人权益）
     await this.validateReferralUniqueness(normalizedData.phone, normalizedData.idNumber);
 
+    // 3a2. 反查黑名单（命中 active 记录则拒绝）
+    await this.validateBlacklist(normalizedData.phone, normalizedData.idNumber);
+
     // 3b. 草稿去重：无手机号时检查同名草稿字段重合率，≥80% 则删除旧草稿
     if (!normalizedData.phone && normalizedData.name) {
       await this.deduplicateDraft(normalizedData);
@@ -1548,6 +1573,9 @@ export class ResumeService {
 
     // 2b. 反查推荐库（双向去重，保护推荐人权益）
     await this.validateReferralUniqueness(normalizedData.phone, normalizedData.idNumber);
+
+    // 2c. 反查黑名单（命中 active 记录则拒绝）
+    await this.validateBlacklist(normalizedData.phone, normalizedData.idNumber);
 
     // 3. 构建更新数据
     const updateData: any = { ...normalizedData };
@@ -1737,6 +1765,9 @@ export class ResumeService {
 
     // 2b. 反查推荐库（双向去重，保护推荐人权益）
     await this.validateReferralUniqueness(normalizedData.phone, normalizedData.idNumber);
+
+    // 2c. 反查黑名单（命中 active 记录则拒绝）
+    await this.validateBlacklist(normalizedData.phone, normalizedData.idNumber);
 
     // 3. 检查简历是否存在，并保存原始数据用于日志对比
     const resume = await this.resumeModel.findById(new Types.ObjectId(id));

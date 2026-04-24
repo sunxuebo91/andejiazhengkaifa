@@ -21,6 +21,7 @@ import { MiniProgramNotificationService } from '../miniprogram-notification/mini
 import { MiniProgramNotificationType } from '../miniprogram-notification/models/miniprogram-notification.model';
 import { NotificationHelperService } from '../notification/notification-helper.service';
 import { WechatCloudService } from '../weixin/services/wechat-cloud.service';
+import { AuntBlacklistService } from '../aunt-blacklist/aunt-blacklist.service';
 
 /** 简历库工种枚举（英文 key → 中文 label），小程序以此为准提交 serviceType */
 export const REFERRAL_JOB_TYPES = [
@@ -81,6 +82,7 @@ export class ReferralService {
     private readonly notificationService: MiniProgramNotificationService,
     private readonly notificationHelperService: NotificationHelperService,
     private readonly wechatCloudService: WechatCloudService,
+    private readonly auntBlacklistService: AuntBlacklistService,
   ) {}
 
   // ============================================================
@@ -417,10 +419,16 @@ export class ReferralService {
       if (ref) throw new BadRequestException('该阿姨[身份证号]已在系统中存在，无法重复录入');
     }
 
+    // 黑名单命中：允许落库，但自动拒绝（写入 reviewNote 记录原因）
+    const blacklistHit = await this.auntBlacklistService.checkActive({
+      phone: data.phone,
+      idCard: data.idCard,
+    });
+
     // 计算审核截止时间（提交时间+24小时）
     const reviewDeadlineAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    const resume = await this.referralResumeModel.create({
+    const baseDoc: any = {
       referrerId: (referrer._id as any).toString(),
       referrerPhone: referrer.phone,
       referrerName: referrer.name,
@@ -433,29 +441,46 @@ export class ReferralService {
       assignedStaffId,
       // 从推荐人记录继承来源客户ID（若推荐人注册时扫的是客户海报）
       ...(referrer.sourceCustomerId ? { customerId: referrer.sourceCustomerId } : {}),
-      reviewStatus: 'pending_review',
       reviewDeadlineAt,
-      status: 'pending_review',
       rewardStatus: 'pending',
-    });
+    };
+
+    if (blacklistHit) {
+      baseDoc.reviewStatus = 'rejected';
+      baseDoc.status = 'rejected';
+      baseDoc.reviewedAt = new Date();
+      baseDoc.reviewedBy = 'system:blacklist';
+      baseDoc.reviewNote = `命中阿姨黑名单：${blacklistHit.reason}`;
+      this.logger.warn(
+        `[submitReferral] 黑名单命中自动拒绝 referrerId=${(referrer._id as any).toString()} phone=${data.phone || '-'} idCard=${data.idCard || '-'} blacklistId=${String(blacklistHit._id)}`,
+      );
+    } else {
+      baseDoc.reviewStatus = 'pending_review';
+      baseDoc.status = 'pending_review';
+    }
+
+    const resume = await this.referralResumeModel.create(baseDoc);
 
     // 更新推荐人累计数量
     await this.referrerModel.findByIdAndUpdate(referrer._id, { $inc: { totalReferrals: 1 } });
 
     // 通知归属员工（assignedStaffId = 本次扫码海报员工，或回落 sourceStaffId，或兜底管理员）
-    try {
-      const staff = await this.usersService.findById(assignedStaffId);
-      if (staff?.phone) {
-        await this.sendNotification(
-          staff.phone,
-          MiniProgramNotificationType.REFERRAL_SUBMITTED,
-          '您有新的推荐简历待审核',
-          `推荐人 ${referrer.name} 提交了一条新的推荐简历（${data.name}），请在24小时内完成审核`,
-          { referralResumeId: (resume._id as any).toString() },
-        );
+    // 黑名单命中已自动拒绝，无需推送待审核通知
+    if (!blacklistHit) {
+      try {
+        const staff = await this.usersService.findById(assignedStaffId);
+        if (staff?.phone) {
+          await this.sendNotification(
+            staff.phone,
+            MiniProgramNotificationType.REFERRAL_SUBMITTED,
+            '您有新的推荐简历待审核',
+            `推荐人 ${referrer.name} 提交了一条新的推荐简历（${data.name}），请在24小时内完成审核`,
+            { referralResumeId: (resume._id as any).toString() },
+          );
+        }
+      } catch (err) {
+        this.logger.warn(`通知员工失败: ${err.message}`);
       }
-    } catch (err) {
-      this.logger.warn(`通知员工失败: ${err.message}`);
     }
 
     return resume;
@@ -888,6 +913,20 @@ export class ReferralService {
     // 防重：已有关联简历则不允许再次释放
     if (ref.linkedResumeId) {
       throw new BadRequestException('该推荐记录已关联简历，无需重复释放');
+    }
+
+    // 黑名单兜底：释放入简历库前再次探针，命中则拒绝释放
+    const blacklistHit = await this.auntBlacklistService.checkActive({
+      phone: ref.phone,
+      idCard: ref.idCard,
+    });
+    if (blacklistHit) {
+      throw new BadRequestException({
+        message: `该阿姨已在黑名单中（原因：${blacklistHit.reason}），无法释放到简历库`,
+        error: 'AUNT_BLACKLISTED',
+        blacklistId: String(blacklistHit._id),
+        reason: blacklistHit.reason,
+      });
     }
 
     // 先将推荐记录状态置为 released（排除于双向查重），释放后续 resume.create 路径
@@ -1382,20 +1421,40 @@ export class ReferralService {
             details.push(`激活（简历库已存在）: ${cloudId} - ${record.name}`);
             this.logger.log(`[syncFromCloudDb] ✅ 激活简历: cloudId=${cloudId} resumeId=${resumeId} name=${record.name}`);
           } else {
-            // 简历库无记录 → 正常导入为待审核
+            // 简历库无记录 → 黑名单命中则自动拒绝，否则导入为待审核
             const reviewDeadlineAt = record.reviewDeadlineAt
               ? new Date(record.reviewDeadlineAt)
               : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-            await this.referralResumeModel.create({
-              ...baseDoc,
-              reviewStatus: 'pending_review',
-              status:       'pending_review',
-              reviewDeadlineAt,
+            const blacklistHit = await this.auntBlacklistService.checkActive({
+              phone: record.phone,
+              idCard: record.idCard,
             });
-            imported++;
-            details.push(`导入成功: ${cloudId} - ${record.name}（分配给员工 ${assignedStaffId}）`);
-            this.logger.log(`[syncFromCloudDb] ✅ 导入成功: cloudId=${cloudId} name=${record.name}`);
+
+            if (blacklistHit) {
+              await this.referralResumeModel.create({
+                ...baseDoc,
+                reviewStatus: 'rejected',
+                status:       'rejected',
+                reviewDeadlineAt,
+                reviewedAt:   new Date(),
+                reviewedBy:   'system:blacklist',
+                reviewNote:   `命中阿姨黑名单：${blacklistHit.reason}`,
+              });
+              imported++;
+              details.push(`导入并自动拒绝（黑名单）: ${cloudId} - ${record.name}`);
+              this.logger.warn(`[syncFromCloudDb] ⚠️ 黑名单命中自动拒绝: cloudId=${cloudId} name=${record.name} blacklistId=${String(blacklistHit._id)}`);
+            } else {
+              await this.referralResumeModel.create({
+                ...baseDoc,
+                reviewStatus: 'pending_review',
+                status:       'pending_review',
+                reviewDeadlineAt,
+              });
+              imported++;
+              details.push(`导入成功: ${cloudId} - ${record.name}（分配给员工 ${assignedStaffId}）`);
+              this.logger.log(`[syncFromCloudDb] ✅ 导入成功: cloudId=${cloudId} name=${record.name}`);
+            }
           }
         } catch (err) {
           errors++;

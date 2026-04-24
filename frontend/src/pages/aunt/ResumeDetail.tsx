@@ -20,8 +20,10 @@ import {
   Space,
   Divider,
   Timeline,
-  Empty
+  Empty,
+  Upload
 } from 'antd';
+import type { UploadProps } from 'antd';
 import {
   EditOutlined,
   FilePdfOutlined,
@@ -35,12 +37,15 @@ import {
   ExclamationCircleOutlined,
   AuditOutlined,
   UpOutlined,
-  DownOutlined
+  DownOutlined,
+  StopOutlined,
+  UploadOutlined
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import apiService from '../../services/api';
 import { getCurrentUser, hasRole } from '@/services/auth';
+import { useAuth } from '../../contexts/AuthContext';
 import { resumeService } from '@/services/resume.service';
 import { createFollowUp, getFollowUpsByResumeId, deleteFollowUp, followUpTypeMap, type FollowUpRecord } from '@/services/followUp.service';
 import { backgroundCheckService } from '../../services/backgroundCheckService';
@@ -49,6 +54,13 @@ import { isPdfFile } from '../../utils/uploadHelper';
 import AvailabilityCalendar from '@/components/AvailabilityCalendar';
 import { getDistrictLabel } from '../../constants/beijingDistricts';
 import Authorized from '../../components/Authorized';
+import { ImageService } from '../../services/imageService';
+import {
+  createBlacklist,
+  checkBlacklist,
+  BLACKLIST_REASON_TYPE_LABELS,
+  type BlacklistEvidence,
+} from '../../services/auntBlacklistService';
 // 添加dayjs插件
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
@@ -519,6 +531,13 @@ const ResumeDetail = () => {
   const [operationLogsLoading, setOperationLogsLoading] = useState(false);
   const [showAllOperationLogs, setShowAllOperationLogs] = useState(false);
 
+  // 加入黑名单
+  const { hasPermission } = useAuth();
+  const [blacklistModalOpen, setBlacklistModalOpen] = useState(false);
+  const [blacklistSubmitting, setBlacklistSubmitting] = useState(false);
+  const [blacklistEvidence, setBlacklistEvidence] = useState<BlacklistEvidence[]>([]);
+  const [blacklistForm] = Form.useForm();
+
   // 更新日期格式化函数
   const formatDateToChinese = (dateStr: string): string => {
     if (!dateStr || dateStr === '-') return '-';
@@ -760,6 +779,82 @@ const ResumeDetail = () => {
         }
       },
     });
+  };
+
+  // 打开加入黑名单弹窗（先反查是否已在黑名单）
+  const handleOpenBlacklist = async () => {
+    if (!resume) return;
+    try {
+      const res = await checkBlacklist({ phone: resume.phone, idCard: resume.idNumber });
+      if (res.success && res.data?.hit) {
+        Modal.warning({
+          title: '该阿姨已在黑名单中',
+          content: `原因：${res.data.reason}（${BLACKLIST_REASON_TYPE_LABELS[res.data.reasonType] || res.data.reasonType}）`,
+        });
+        return;
+      }
+    } catch (e) {
+      console.error('黑名单预检失败:', e);
+    }
+    blacklistForm.setFieldsValue({
+      name: resume.name || '',
+      phone: resume.phone || '',
+      idCard: resume.idNumber || '',
+      reasonType: undefined,
+      reason: '',
+      remarks: '',
+    });
+    setBlacklistEvidence([]);
+    setBlacklistModalOpen(true);
+  };
+
+  // 证据材料上传
+  const handleBlacklistEvidenceUpload: UploadProps['customRequest'] = async (options) => {
+    const { file, onSuccess, onError } = options as any;
+    try {
+      const url = await ImageService.uploadImage(file as File);
+      const ev: BlacklistEvidence = {
+        url,
+        filename: (file as File).name,
+        size: (file as File).size,
+        mimetype: (file as File).type,
+      };
+      setBlacklistEvidence(prev => [...prev, ev]);
+      onSuccess?.(ev);
+    } catch (err: any) {
+      messageApi.error(err?.message || '证据上传失败');
+      onError?.(err);
+    }
+  };
+
+  // 提交加入黑名单
+  const handleSubmitBlacklist = async () => {
+    setBlacklistSubmitting(true);
+    try {
+      const values = await blacklistForm.validateFields();
+      if (!values.phone && !values.idCard) {
+        messageApi.error('手机号和身份证号至少填写一个');
+        setBlacklistSubmitting(false);
+        return;
+      }
+      const res = await createBlacklist({
+        ...values,
+        evidence: blacklistEvidence,
+        sourceType: 'resume',
+        sourceResumeId: resume?._id,
+      });
+      if (res.success) {
+        messageApi.success('已加入黑名单');
+        setBlacklistModalOpen(false);
+        blacklistForm.resetFields();
+        setBlacklistEvidence([]);
+      }
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      messageApi.error(err?.response?.data?.message || '加入黑名单失败');
+    } finally {
+      setBlacklistSubmitting(false);
+    }
   };
 
   // 改进的文件预览渲染函数
@@ -1789,6 +1884,15 @@ const ResumeDetail = () => {
                 >
                   编辑简历
                 </Button>
+                {hasPermission('blacklist:create') && (
+                  <Button
+                    danger
+                    icon={<StopOutlined />}
+                    onClick={handleOpenBlacklist}
+                  >
+                    加入黑名单
+                  </Button>
+                )}
                 {hasRole('admin') && (
                   <Button
                     danger
@@ -2711,6 +2815,68 @@ const ResumeDetail = () => {
 
         {/* 添加员工评价弹窗 */}
         <AddEvaluationModal />
+
+        {/* 加入黑名单弹窗 */}
+        <Modal
+          title="加入黑名单"
+          open={blacklistModalOpen}
+          onOk={handleSubmitBlacklist}
+          onCancel={() => {
+            setBlacklistModalOpen(false);
+            blacklistForm.resetFields();
+            setBlacklistEvidence([]);
+          }}
+          confirmLoading={blacklistSubmitting}
+          width={640}
+          destroyOnClose
+          okText="确认加入"
+          okButtonProps={{ danger: true }}
+          cancelText="取消"
+        >
+          <Form form={blacklistForm} layout="vertical" preserve={false}>
+            <Form.Item name="name" label="阿姨姓名" rules={[{ required: true, message: '请输入姓名' }]}>
+              <Input placeholder="请输入阿姨姓名" maxLength={20} />
+            </Form.Item>
+            <Form.Item name="phone" label="手机号（phone / idCard 至少填一个）">
+              <Input placeholder="请输入手机号" maxLength={11} />
+            </Form.Item>
+            <Form.Item name="idCard" label="身份证号">
+              <Input placeholder="请输入身份证号" maxLength={18} />
+            </Form.Item>
+            <Form.Item name="reasonType" label="原因类型" rules={[{ required: true, message: '请选择原因类型' }]}>
+              <Select placeholder="请选择原因类型">
+                {Object.entries(BLACKLIST_REASON_TYPE_LABELS).map(([k, v]) => (
+                  <Select.Option key={k} value={k}>{v}</Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+            <Form.Item name="reason" label="拉黑原因说明" rules={[{ required: true, message: '请填写拉黑原因', min: 2 }]}>
+              <Input.TextArea rows={3} maxLength={500} showCount placeholder="请详细描述拉黑原因" />
+            </Form.Item>
+            <Form.Item label="证据材料（可选，最多 10 张）">
+              <Upload
+                accept="image/*"
+                listType="picture"
+                customRequest={handleBlacklistEvidenceUpload}
+                fileList={blacklistEvidence.map((ev, idx) => ({
+                  uid: `${idx}-${ev.url}`,
+                  name: ev.filename || `证据${idx + 1}`,
+                  status: 'done' as const,
+                  url: ev.url,
+                }))}
+                onRemove={(f) => {
+                  setBlacklistEvidence(blacklistEvidence.filter(ev => ev.url !== f.url));
+                }}
+                maxCount={10}
+              >
+                <Button icon={<UploadOutlined />}>上传证据</Button>
+              </Upload>
+            </Form.Item>
+            <Form.Item name="remarks" label="备注">
+              <Input.TextArea rows={2} maxLength={200} placeholder="内部备注，选填" />
+            </Form.Item>
+          </Form>
+        </Modal>
       </div>
     </>
   );

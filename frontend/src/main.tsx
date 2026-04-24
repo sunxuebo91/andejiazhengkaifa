@@ -6,6 +6,7 @@ import './styles/forced-colors.css';
 import 'antd/dist/reset.css';
 import 'react-quill/dist/quill.snow.css';
 import './styles/quill-chinese.css';
+import './styles/responsive.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

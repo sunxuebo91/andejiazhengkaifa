@@ -258,11 +258,11 @@ const EditCustomer: React.FC = () => {
 
             <Col span={8}>
               <Form.Item
-                label="客户状态"
+                label="签约状态"
                 name="contractStatus"
-                rules={[{ required: true, message: '请选择客户状态' }]}
+                rules={[{ required: true, message: '请选择签约状态' }]}
               >
-                <Select placeholder="请选择客户状态" style={{ width: '100%' }}>
+                <Select placeholder="请选择签约状态" style={{ width: '100%' }}>
                   {CONTRACT_STATUSES.map(status => (
                     <Option
                       key={status}
@@ -270,6 +270,30 @@ const EditCustomer: React.FC = () => {
                       disabled={(status === '已签约' || status === '签约中') && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '')}
                     >
                       {status}{(status === '已签约' || status === '签约中') && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '') ? ' (系统自动设置)' : ''}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={24} justify="center">
+            <Col span={8}>
+              <Form.Item
+                label="线索等级"
+                name="leadLevel"
+                rules={[
+                  { required: true, message: '请选择线索等级' },
+                ]}
+              >
+                <Select placeholder="请选择线索等级" style={{ width: '100%' }}>
+                  {LEAD_LEVELS.map(level => (
+                    <Option
+                      key={level}
+                      value={level}
+                      disabled={level === 'O类' && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '')}
+                    >
+                      {level}{level === 'O类' && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '') ? ' (仅管理员可设置)' : ''}
                     </Option>
                   ))}
                 </Select>
@@ -295,28 +319,6 @@ const EditCustomer: React.FC = () => {
 
             <Col span={8}>
               <Form.Item
-                label="线索等级"
-                name="leadLevel"
-                rules={[
-                  { required: true, message: '请选择线索等级' },
-                ]}
-              >
-                <Select placeholder="请选择线索等级" style={{ width: '100%' }}>
-                  {LEAD_LEVELS.map(level => (
-                    <Option
-                      key={level}
-                      value={level}
-                      disabled={level === 'O类' && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '')}
-                    >
-                      {level}{level === 'O类' && !['admin', 'manager', 'operator', '运营', 'dispatch', '派单老师'].includes(user?.role ?? '') ? ' (仅管理员可设置)' : ''}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-
-            <Col span={8}>
-              <Form.Item
                 label="薪资预算 (可选)"
                 name="salaryBudget"
               >
@@ -327,21 +329,6 @@ const EditCustomer: React.FC = () => {
                   formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                   parser={value => value?.replace(/¥\s?|(,*)/g, '') as any}
                   style={{ width: '100%' }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={24} justify="center">
-            <Col span={8}>
-              <Form.Item
-                label="期望上户日期 (可选)"
-                name="expectedStartDate"
-              >
-                <DatePicker 
-                  placeholder="请选择期望上户日期" 
-                  style={{ width: '100%' }}
-                  format="YYYY-MM-DD"
                 />
               </Form.Item>
             </Col>
@@ -358,16 +345,46 @@ const EditCustomer: React.FC = () => {
                 </Select>
               </Form.Item>
             </Col>
+          </Row>
+
+          <Row gutter={24} justify="center">
+            <Col span={8}>
+              <Form.Item
+                label="期望上户日期 (可选)"
+                name="expectedStartDate"
+              >
+                <DatePicker
+                  placeholder="请选择期望上户日期"
+                  style={{ width: '100%' }}
+                  format="YYYY-MM-DD"
+                />
+              </Form.Item>
+            </Col>
 
             <Col span={8}>
               <Form.Item
                 label="预产期 (可选)"
                 name="expectedDeliveryDate"
               >
-                <DatePicker 
-                  placeholder="请选择预产期" 
+                <DatePicker
+                  placeholder="请选择预产期"
                   style={{ width: '100%' }}
                   format="YYYY-MM-DD"
+                />
+              </Form.Item>
+            </Col>
+
+            <Col span={8}>
+              <Form.Item
+                label="服务天数 (可选)"
+                name="serviceDays"
+              >
+                <InputNumber
+                  placeholder="请输入服务天数"
+                  min={0}
+                  max={3650}
+                  addonAfter="天"
+                  style={{ width: '100%' }}
                 />
               </Form.Item>
             </Col>
@@ -396,7 +413,7 @@ const EditCustomer: React.FC = () => {
               >
                 <InputNumber
                   placeholder="请输入家庭人口"
-                  min={1}
+                  min={0}
                   max={20}
                   addonAfter="人"
                   style={{ width: '100%' }}
@@ -406,10 +423,10 @@ const EditCustomer: React.FC = () => {
 
             <Col span={8}>
               <Form.Item
-                label="客户地址 (可选)"
+                label="服务地址 (可选)"
                 name="address"
               >
-                <Input placeholder="请输入客户地址" style={{ width: '100%' }} />
+                <Input placeholder="请输入服务地址" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
@@ -467,7 +484,7 @@ const EditCustomer: React.FC = () => {
               </Form.Item>
             </Col>
 
-            <Col span={16}>
+            <Col span={8}>
               <Form.Item label="服务周期 (可选)" name="needServicePeriod">
                 <Input placeholder="如:长期、1年" style={{ width: '100%' }} />
               </Form.Item>
@@ -498,8 +515,8 @@ const EditCustomer: React.FC = () => {
             </Col>
           </Row>
 
-          {/* 备注信息区域 */}
-          <Divider orientation="left">备注信息</Divider>
+          {/* 成交信息区域 */}
+          <Divider orientation="left">成交信息</Divider>
           <Row gutter={24} justify="center">
             <Col span={24}>
               <Form.Item
@@ -528,6 +545,11 @@ const EditCustomer: React.FC = () => {
                 />
               </Form.Item>
             </Col>
+          </Row>
+
+          {/* 备注信息区域 */}
+          <Divider orientation="left">备注信息</Divider>
+          <Row gutter={24} justify="center">
             <Col span={24}>
               <Form.Item
                 label="备注 (可选)"

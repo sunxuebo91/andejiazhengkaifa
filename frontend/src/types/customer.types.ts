@@ -22,6 +22,7 @@ export interface Customer {
   originRequirement?: string;
   educationRequirement?: string;
   expectedDeliveryDate?: string;
+  serviceDays?: number;
   remarks?: string;
   dealAmount?: number;
   createdBy: string;
@@ -88,6 +89,7 @@ export interface CreateCustomerData {
   originRequirement?: string;
   educationRequirement?: string;
   expectedDeliveryDate?: string;
+  serviceDays?: number;
   remarks?: string;
   // 创建时可选指定负责人
   assignedTo?: string;

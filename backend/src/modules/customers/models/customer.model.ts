@@ -82,6 +82,9 @@ export class Customer {
   expectedDeliveryDate: Date;
 
   @Prop()
+  serviceDays: number; // 服务天数
+
+  @Prop()
   remarks: string;
 
   @Prop()

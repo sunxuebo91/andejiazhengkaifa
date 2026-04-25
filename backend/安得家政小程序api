@@ -151,6 +151,93 @@
 | 获取业绩进度 | HTTP请求 | `GET /customers/miniprogram/performance-progress` | 获取销售业绩进度统计 | 无 | `{success, data: Object}` | 在用 |
 | 获取合同统计 | HTTP请求 | `GET /customers/miniprogram/contract-stats` | 获取合同统计信息 | 无 | `{success, data: Object}` | 在用 |
 
+### 7.1 客户页面字段与布局规范（详情页 / 创建页 / 编辑页）
+
+> **数据源**：CRM 后端 `CreateCustomerDto` / `UpdateCustomerDto`，三端字段一致。
+> **布局基准**：CRM Web 端 `CustomerDetail.tsx`，小程序请按相同分组与列数实现，保持业务体验一致。
+> **校验规则**：必须与后端 DTO 一致，否则会触发 `400 Bad Request`（`property xxx should not exist` 或值越界）。
+
+#### 7.1.1 分组与列数
+
+| 分组 | 卡片标题 | Web 列数 | 小程序建议 | 字段数 |
+|------|----------|---------|-----------|--------|
+| 基础信息 | 基本信息 | 3 列 | 单列竖排（小程序窄屏） | 9 |
+| 客户需求 | 客户需求 | 3 列 + 跨列长文本 | 单列竖排 + 长文本独占 | 17 |
+| 成交信息 | 成交信息 | 2 列 | 单列 | 1 |
+| 备注信息 | 备注信息 | 1 列 | 单列（多行） | 1 |
+| 系统信息 | 系统信息 | 2 列（仅展示，不可编辑） | 单列（仅展示） | 7 |
+
+#### 7.1.2 字段清单（含校验规则）
+
+**【基础信息】**
+
+| 字段 | 类型 | 必填 | 校验/枚举 | 说明 |
+|------|------|------|----------|------|
+| `customerId` | string | — | 系统生成，仅展示 | 客户编号 |
+| `name` | string | ✅ | 非空 | 客户姓名 |
+| `phone` | string | 二选一 | 中国手机号；与 `wechatId` 至少填一个 | 客户电话 |
+| `wechatId` | string | 二选一 | 与 `phone` 至少填一个 | 微信号 |
+| `idCardNumber` | string | ❌ | — | 身份证号 |
+| `leadSource` | enum | ✅ | 美团 / 抖音 / 快手 / 小红书 / 转介绍 / 99保姆网 / 杭州同馨 / 握个手平台 / 线索购买 / 莲心 / 美家 / 天机鹿 / 孕妈联盟 / 高阁 / 星星 / 妈妈网 / 犀牛 / 宝宝树 / 幼亲舒 / 熊猫 / 官网 / 其他 | 线索来源 |
+| `leadLevel` | enum | ✅ | O类 / A类 / B类 / C类 / D类 / 流失 | 线索等级 |
+| `contractStatus` | enum | ✅ | 已签约 / 签约中 / 匹配中 / 已面试 / 流失客户 / 已退款 / 退款中 / 待定 | 签约状态 |
+| `followUpStatus` | enum | — | 新客未跟进 / 流转未跟进 / 已跟进（系统派生，仅展示） | 跟进状态 |
+
+**【客户需求】**（3 列布局，最后两个长文本字段跨满 3 列）
+
+| 字段 | 类型 | 必填 | 校验/枚举 | 单位/格式 | 说明 |
+|------|------|------|----------|----------|------|
+| `serviceCategory` | enum | ❌ | 月嫂 / 住家育儿嫂 / 保洁 / 住家保姆 / 养宠 / 小时工 / 白班育儿 / 白班保姆 / 住家护老 / 家教 / 陪伴师 | — | 需求品类 |
+| `salaryBudget` | number | ❌ | 0 ≤ x ≤ 50000 | 元 | 薪资预算 |
+| `restSchedule` | enum | ❌ | 单休 / 双休 / 无休 / 调休 / 待定 | — | 休息方式 |
+| `expectedStartDate` | date | ❌ | ISO 日期串 | YYYY-MM-DD | 期望上户日期 |
+| `expectedDeliveryDate` | date | ❌ | ISO 日期串 | YYYY-MM-DD | 预产期 |
+| `serviceDays` | number | ❌ | 0 ≤ x ≤ 3650 | 天 | 服务天数 |
+| `homeArea` | number | ❌ | 0 ≤ x ≤ 1000 | 平方米 | 家庭面积 |
+| `familySize` | number | ❌ | 0 ≤ x ≤ 20 | 人 | 家庭人口 |
+| `address` | string | ❌ | — | — | 服务地址 |
+| `ageRequirement` | string | ❌ | — | 如 "25-40岁" | 年龄要求 |
+| `genderRequirement` | string | ❌ | 女 / 男 / 不限（建议下拉） | — | 性别要求 |
+| `originRequirement` | string | ❌ | — | 如 "山东、河南" | 籍贯要求 |
+| `educationRequirement` | enum | ❌ | 无学历 / 小学 / 初中 / 中专 / 职高 / 高中 / 大专 / 本科 / 研究生及以上 | — | 学历要求 |
+| `needWorkingHours` | string | ❌ | — | — | 工作时间 |
+| `needServicePeriod` | string | ❌ | — | — | 服务周期 |
+| `needWorkContent` | string | ❌ | 长文本，建议 textarea | 跨满 3 列 | 工作内容 |
+| `needRemarks` | string | ❌ | 长文本，建议 textarea | 跨满 3 列 | 需求备注 |
+
+**【成交信息】**
+
+| 字段 | 类型 | 必填 | 校验 | 单位 | 说明 |
+|------|------|------|------|------|------|
+| `dealAmount` | number | ❌ | 0 ≤ x ≤ 10000000 | 元 | 成交金额（金额展示需千分位 + 2 位小数） |
+
+**【备注信息】**
+
+| 字段 | 类型 | 必填 | 校验 | 说明 |
+|------|------|------|------|------|
+| `remarks` | string | ❌ | 长文本 | 客户备注（与"需求备注"区分，属于通用备注） |
+
+**【系统信息】**（仅展示，不可编辑；由后端在响应中返回）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `createdByUser` / `createdBy` | object / string | 线索创建人 |
+| `createdAt` | datetime | 创建时间 |
+| `lastUpdatedByUser` / `lastUpdatedBy` | object / string | 最后更新人 |
+| `updatedAt` | datetime | 最后更新时间 |
+| `assignedToUser` / `assignedTo` | object / string | 当前负责人 |
+| `assignedAt` | datetime | 分配时间 |
+| `assignedByUser` / `assignedBy` | object / string | 分配人 |
+| `assignmentReason` | string | 分配备注 |
+
+#### 7.1.3 提交注意事项
+
+1. **数字字段空值**：`salaryBudget` / `homeArea` / `familySize` / `serviceDays` / `dealAmount` 留空时**不要传 `""` 或 `0`**，应直接省略该字段或传 `null`，后端 `@Transform` 会处理为 `undefined`。
+2. **手机号/微信号互斥校验**：两者必须至少有一个非空，否则后端会返回 `请填写手机号或微信号`。
+3. **小程序兼容字段**：`serviceType` 等价于 `serviceCategory`、`notes` 等价于 `remarks`，已在 DTO 中保留兼容；新版小程序统一使用 `serviceCategory` 与 `remarks`。
+4. **更新接口（PATCH）**：仅传变更字段；勿传系统信息（`createdAt` / `assignedTo` 等），由后端管理。
+5. **创建接口（POST）幂等**：建议在 header 中传 `Idempotency-Key`（如基于客户手机号 + 时间戳的 hash）防止网络重试导致重复创建。
+
 ---
 
 ## 八、订阅消息模块

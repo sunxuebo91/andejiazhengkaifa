@@ -1,9 +1,14 @@
 import React, { ReactNode, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, App as AntdApp, Spin, message } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
+import dayjs from 'dayjs';
+import 'dayjs/locale/zh-cn';
 import BasicLayout from './layouts/BasicLayout';
 import { AuthProvider } from './contexts/AuthContext';
 import AuthorizedRoute from './components/AuthorizedRoute';
+
+dayjs.locale('zh-cn');
 
 // Lazy load components
 const Login = React.lazy(() => import('./pages/Login'));
@@ -112,6 +117,7 @@ export default function App({ children }: AppProps) {
 
   return (
     <ConfigProvider
+      locale={zhCN}
       theme={{
         token: {
           colorPrimary: '#5DBFB3',

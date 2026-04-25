@@ -90,9 +90,9 @@ export class CreateCustomerDto {
 
   @IsOptional()
   @IsNumber({}, { message: '薪资预算必须是数字' })
-  @Min(1000, { message: '薪资预算不能低于1000元' })
+  @Min(0, { message: '薪资预算不能为负数' })
   @Max(50000, { message: '薪资预算不能高于50000元' })
-  @Transform(({ value }) => parseInt(value))
+  @Transform(({ value }) => value === '' || value === null || value === undefined ? undefined : parseInt(value))
   salaryBudget?: number;
 
   @IsOptional()
@@ -101,16 +101,16 @@ export class CreateCustomerDto {
 
   @IsOptional()
   @IsNumber({}, { message: '家庭面积必须是数字' })
-  @Min(10, { message: '家庭面积不能小于10平方米' })
+  @Min(0, { message: '家庭面积不能为负数' })
   @Max(1000, { message: '家庭面积不能大于1000平方米' })
-  @Transform(({ value }) => parseInt(value))
+  @Transform(({ value }) => value === '' || value === null || value === undefined ? undefined : parseInt(value))
   homeArea?: number;
 
   @IsOptional()
   @IsNumber({}, { message: '家庭人口必须是数字' })
-  @Min(1, { message: '家庭人口不能少于1人' })
+  @Min(0, { message: '家庭人口不能为负数' })
   @Max(20, { message: '家庭人口不能超过20人' })
-  @Transform(({ value }) => parseInt(value))
+  @Transform(({ value }) => value === '' || value === null || value === undefined ? undefined : parseInt(value))
   familySize?: number;
 
   @IsOptional()
@@ -150,6 +150,13 @@ export class CreateCustomerDto {
   expectedDeliveryDate?: string;
 
   @IsOptional()
+  @IsNumber({}, { message: '服务天数必须是数字' })
+  @Min(0, { message: '服务天数不能为负数' })
+  @Max(3650, { message: '服务天数不能超过3650天' })
+  @Transform(({ value }) => value === '' || value === null || value === undefined ? undefined : parseInt(value))
+  serviceDays?: number;
+
+  @IsOptional()
   @IsString()
   remarks?: string;
 
@@ -162,7 +169,7 @@ export class CreateCustomerDto {
   @IsNumber({}, { message: '成交金额必须是数字' })
   @Min(0, { message: '成交金额不能为负数' })
   @Max(10000000, { message: '成交金额不能超过1000万元' })
-  @Transform(({ value }) => value ? parseFloat(value) : undefined)
+  @Transform(({ value }) => value === '' || value === null || value === undefined ? undefined : parseFloat(value))
   dealAmount?: number;
 
   // 客户需求详情字段（内联编辑卡片）

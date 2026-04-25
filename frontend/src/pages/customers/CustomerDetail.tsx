@@ -15,11 +15,19 @@ import {
   Alert,
   Input,
   Tooltip,
+  Select,
+  DatePicker,
 } from 'antd';
 import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined, HistoryOutlined, DownOutlined, UpOutlined, AuditOutlined, SaveOutlined, CopyOutlined } from '@ant-design/icons';
+import dayjs, { Dayjs } from 'dayjs';
 import { customerService } from '../../services/customerService';
 import { contractService } from '../../services/contractService';
-import { Customer } from '../../types/customer.types';
+import {
+  Customer,
+  SERVICE_CATEGORIES,
+  REST_SCHEDULES,
+  EDUCATION_REQUIREMENTS,
+} from '../../types/customer.types';
 import { FOLLOW_UP_TYPE_OPTIONS } from '../../types/customer-follow-up.types';
 import CustomerFollowUpModal from '../../components/CustomerFollowUpModal';
 import AssignCustomerModal from '../../components/AssignCustomerModal';
@@ -55,8 +63,27 @@ const CustomerDetail: React.FC = () => {
   // 冻结操作状态
   const [freezeLoading, setFreezeLoading] = useState(false);
 
-  // 客户需求卡片内联编辑状态（仅保留 4 个无结构化对应的自由文本字段）
-  const [needsForm, setNeedsForm] = useState({
+  // 客户需求卡片内联编辑状态（结构化字段 + 自由文本字段）
+  type NeedsFormState = {
+    needWorkingHours: string;
+    needWorkContent: string;
+    needRemarks: string;
+    needServicePeriod: string;
+    serviceCategory?: string;
+    salaryBudget?: number | null;
+    restSchedule?: string;
+    expectedStartDate?: Dayjs | null;
+    expectedDeliveryDate?: Dayjs | null;
+    serviceDays?: number | null;
+    homeArea?: number | null;
+    familySize?: number | null;
+    address?: string;
+    ageRequirement?: string;
+    genderRequirement?: string;
+    originRequirement?: string;
+    educationRequirement?: string;
+  };
+  const [needsForm, setNeedsForm] = useState<NeedsFormState>({
     needWorkingHours: '',
     needWorkContent: '',
     needRemarks: '',
@@ -173,6 +200,19 @@ const CustomerDetail: React.FC = () => {
         needWorkContent: response.needWorkContent || '',
         needRemarks: response.needRemarks || '',
         needServicePeriod: response.needServicePeriod || '',
+        serviceCategory: response.serviceCategory,
+        salaryBudget: response.salaryBudget ?? null,
+        restSchedule: response.restSchedule,
+        expectedStartDate: response.expectedStartDate ? dayjs(response.expectedStartDate) : null,
+        expectedDeliveryDate: response.expectedDeliveryDate ? dayjs(response.expectedDeliveryDate) : null,
+        serviceDays: response.serviceDays ?? null,
+        homeArea: response.homeArea ?? null,
+        familySize: response.familySize ?? null,
+        address: response.address,
+        ageRequirement: response.ageRequirement,
+        genderRequirement: response.genderRequirement,
+        originRequirement: response.originRequirement,
+        educationRequirement: response.educationRequirement,
       });
     } catch (error) {
       console.error('获取客户详情失败:', error);
@@ -187,8 +227,24 @@ const CustomerDetail: React.FC = () => {
     if (!customer) return;
     try {
       setNeedsSaving(true);
-      await customerService.updateCustomer(customer._id, needsForm);
+      const payload: any = {
+        ...needsForm,
+        expectedStartDate: needsForm.expectedStartDate
+          ? needsForm.expectedStartDate.format('YYYY-MM-DD')
+          : undefined,
+        expectedDeliveryDate: needsForm.expectedDeliveryDate
+          ? needsForm.expectedDeliveryDate.format('YYYY-MM-DD')
+          : undefined,
+      };
+      // 过滤 null/undefined，避免后端 @Transform 把 null 转成 NaN 触发校验失败
+      Object.keys(payload).forEach(key => {
+        if (payload[key] === null || payload[key] === undefined) {
+          delete payload[key];
+        }
+      });
+      await customerService.updateCustomer(customer._id, payload);
       message.success('客户需求已保存');
+      await fetchCustomerDetail();
     } catch (e: any) {
       message.error(e?.response?.data?.message || '保存失败');
     } finally {
@@ -205,17 +261,18 @@ const CustomerDetail: React.FC = () => {
       const text = String(value).trim();
       if (text) lines.push(`【${label}】：${text}`);
     };
-    push('订单类型', customer.serviceCategory);
+    push('订单类型', needsForm.serviceCategory);
     push('工作时间', needsForm.needWorkingHours);
-    push('薪资要求', customer.salaryBudget ? `¥${customer.salaryBudget}` : '');
-    push('休息时间', customer.restSchedule);
-    push('家庭成员', customer.familySize ? `${customer.familySize}人` : '');
-    push('服务地址', customer.address);
-    push('房屋面积', customer.homeArea ? `${customer.homeArea}平方米` : '');
+    push('薪资要求', needsForm.salaryBudget ? `¥${needsForm.salaryBudget}` : '');
+    push('休息时间', needsForm.restSchedule);
+    push('家庭成员', needsForm.familySize ? `${needsForm.familySize}人` : '');
+    push('服务地址', needsForm.address);
+    push('房屋面积', needsForm.homeArea ? `${needsForm.homeArea}平方米` : '');
     push('工作内容', needsForm.needWorkContent);
     push('需求备注', needsForm.needRemarks);
     push('服务周期', needsForm.needServicePeriod);
-    push('上户时间', customer.expectedStartDate ? formatDate(customer.expectedStartDate) : '');
+    push('上户时间', needsForm.expectedStartDate ? needsForm.expectedStartDate.format('YYYY-MM-DD') : '');
+    push('服务天数', needsForm.serviceDays ? `${needsForm.serviceDays}天` : '');
     if (lines.length === 0) {
       message.warning('暂无可复制的内容');
       return;
@@ -525,7 +582,7 @@ const CustomerDetail: React.FC = () => {
                       复制
                     </Button>
                   </Tooltip>
-                  <Tooltip title="保存下方文本字段（结构化字段请到编辑页修改）">
+                  <Tooltip title="保存客户需求字段">
                     <Button
                       type="primary"
                       size="small"
@@ -541,60 +598,166 @@ const CustomerDetail: React.FC = () => {
             >
               <Descriptions column={3} bordered>
                 <Descriptions.Item label="需求品类" span={1}>
-                  {customer.serviceCategory ? (
-                    <Tag color="blue">{customer.serviceCategory}</Tag>
-                  ) : (
-                    '未设置'
-                  )}
+                  <Select
+                    value={needsForm.serviceCategory}
+                    onChange={v => setNeedsForm(f => ({ ...f, serviceCategory: v }))}
+                    placeholder="请选择"
+                    variant="borderless"
+                    allowClear
+                    style={{ width: '100%' }}
+                  >
+                    {SERVICE_CATEGORIES.map(c => (
+                      <Select.Option key={c} value={c}>{c}</Select.Option>
+                    ))}
+                  </Select>
                 </Descriptions.Item>
 
                 <Descriptions.Item label="薪资预算" span={1}>
-                  <span style={{ fontWeight: 'bold', color: '#52c41a' }}>
-                    {customer.salaryBudget ? `¥${customer.salaryBudget.toLocaleString()}` : '未设置'}
-                  </span>
+                  <Input
+                    value={needsForm.salaryBudget != null ? String(needsForm.salaryBudget) : ''}
+                    onChange={e => {
+                      const cleaned = e.target.value.replace(/[^\d.]/g, '');
+                      const num = cleaned === '' ? null : parseFloat(cleaned);
+                      setNeedsForm(f => ({ ...f, salaryBudget: num != null && !isNaN(num) ? num : null }));
+                    }}
+                    placeholder="请输入"
+                    variant="borderless"
+                    prefix="¥"
+                  />
                 </Descriptions.Item>
 
                 <Descriptions.Item label="休息方式" span={1}>
-                  {customer.restSchedule || '未设置'}
+                  <Select
+                    value={needsForm.restSchedule}
+                    onChange={v => setNeedsForm(f => ({ ...f, restSchedule: v }))}
+                    placeholder="请选择"
+                    variant="borderless"
+                    allowClear
+                    style={{ width: '100%' }}
+                  >
+                    {REST_SCHEDULES.map(s => (
+                      <Select.Option key={s} value={s}>{s}</Select.Option>
+                    ))}
+                  </Select>
                 </Descriptions.Item>
 
                 <Descriptions.Item label="期望上户日期" span={1}>
-                  {customer.expectedStartDate ? formatDate(customer.expectedStartDate) : '未设置'}
+                  <DatePicker
+                    value={needsForm.expectedStartDate ?? null}
+                    onChange={v => setNeedsForm(f => ({ ...f, expectedStartDate: v }))}
+                    placeholder="请选择"
+                    variant="borderless"
+                    format="YYYY-MM-DD"
+                    style={{ width: '100%' }}
+                  />
                 </Descriptions.Item>
 
-                <Descriptions.Item label="预产期" span={2}>
-                  {customer.expectedDeliveryDate
-                    ? formatDate(customer.expectedDeliveryDate)
-                    : '无'
-                  }
+                <Descriptions.Item label="预产期" span={1}>
+                  <DatePicker
+                    value={needsForm.expectedDeliveryDate ?? null}
+                    onChange={v => setNeedsForm(f => ({ ...f, expectedDeliveryDate: v }))}
+                    placeholder="请选择"
+                    variant="borderless"
+                    format="YYYY-MM-DD"
+                    style={{ width: '100%' }}
+                  />
+                </Descriptions.Item>
+
+                <Descriptions.Item label="服务天数" span={1}>
+                  <Input
+                    value={needsForm.serviceDays != null ? String(needsForm.serviceDays) : ''}
+                    onChange={e => {
+                      const cleaned = e.target.value.replace(/[^\d]/g, '');
+                      setNeedsForm(f => ({ ...f, serviceDays: cleaned === '' ? null : parseInt(cleaned, 10) }));
+                    }}
+                    placeholder="请输入"
+                    variant="borderless"
+                    suffix="天"
+                  />
                 </Descriptions.Item>
 
                 <Descriptions.Item label="家庭面积" span={1}>
-                  {customer.homeArea ? `${customer.homeArea}平方米` : '未设置'}
+                  <Input
+                    value={needsForm.homeArea != null ? String(needsForm.homeArea) : ''}
+                    onChange={e => {
+                      const cleaned = e.target.value.replace(/[^\d.]/g, '');
+                      const num = cleaned === '' ? null : parseFloat(cleaned);
+                      setNeedsForm(f => ({ ...f, homeArea: num != null && !isNaN(num) ? num : null }));
+                    }}
+                    placeholder="请输入"
+                    variant="borderless"
+                    suffix="㎡"
+                  />
                 </Descriptions.Item>
 
                 <Descriptions.Item label="家庭人口" span={1}>
-                  {customer.familySize ? `${customer.familySize}人` : '未设置'}
+                  <Input
+                    value={needsForm.familySize != null ? String(needsForm.familySize) : ''}
+                    onChange={e => {
+                      const cleaned = e.target.value.replace(/[^\d]/g, '');
+                      setNeedsForm(f => ({ ...f, familySize: cleaned === '' ? null : parseInt(cleaned, 10) }));
+                    }}
+                    placeholder="请输入"
+                    variant="borderless"
+                    suffix="人"
+                  />
                 </Descriptions.Item>
 
                 <Descriptions.Item label="服务地址" span={1}>
-                  {customer.address || '未设置'}
+                  <Input
+                    value={needsForm.address}
+                    onChange={e => setNeedsForm(f => ({ ...f, address: e.target.value }))}
+                    placeholder="请输入"
+                    variant="borderless"
+                  />
                 </Descriptions.Item>
 
                 <Descriptions.Item label="年龄要求" span={1}>
-                  {customer.ageRequirement || '无特殊要求'}
+                  <Input
+                    value={needsForm.ageRequirement}
+                    onChange={e => setNeedsForm(f => ({ ...f, ageRequirement: e.target.value }))}
+                    placeholder="如:25-40岁"
+                    variant="borderless"
+                  />
                 </Descriptions.Item>
 
                 <Descriptions.Item label="性别要求" span={1}>
-                  {customer.genderRequirement || '无特殊要求'}
+                  <Select
+                    value={needsForm.genderRequirement}
+                    onChange={v => setNeedsForm(f => ({ ...f, genderRequirement: v }))}
+                    placeholder="请选择"
+                    variant="borderless"
+                    allowClear
+                    style={{ width: '100%' }}
+                  >
+                    <Select.Option value="女">女</Select.Option>
+                    <Select.Option value="男">男</Select.Option>
+                    <Select.Option value="不限">不限</Select.Option>
+                  </Select>
                 </Descriptions.Item>
 
                 <Descriptions.Item label="籍贯要求" span={1}>
-                  {customer.originRequirement || '无特殊要求'}
+                  <Input
+                    value={needsForm.originRequirement}
+                    onChange={e => setNeedsForm(f => ({ ...f, originRequirement: e.target.value }))}
+                    placeholder="如:山东、河南等"
+                    variant="borderless"
+                  />
                 </Descriptions.Item>
 
                 <Descriptions.Item label="学历要求" span={1}>
-                  {customer.educationRequirement || '无特殊要求'}
+                  <Select
+                    value={needsForm.educationRequirement}
+                    onChange={v => setNeedsForm(f => ({ ...f, educationRequirement: v }))}
+                    placeholder="请选择"
+                    variant="borderless"
+                    allowClear
+                    style={{ width: '100%' }}
+                  >
+                    {EDUCATION_REQUIREMENTS.map(e => (
+                      <Select.Option key={e} value={e}>{e}</Select.Option>
+                    ))}
+                  </Select>
                 </Descriptions.Item>
 
                 <Descriptions.Item label="工作时间" span={1}>
@@ -606,7 +769,7 @@ const CustomerDetail: React.FC = () => {
                   />
                 </Descriptions.Item>
 
-                <Descriptions.Item label="服务周期" span={2}>
+                <Descriptions.Item label="服务周期" span={1}>
                   <Input
                     value={needsForm.needServicePeriod}
                     onChange={e => setNeedsForm(f => ({ ...f, needServicePeriod: e.target.value }))}

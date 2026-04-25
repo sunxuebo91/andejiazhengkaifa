@@ -264,6 +264,7 @@ export class CustomersController {
         originRequirement: isOwnCustomer ? customer.originRequirement : undefined,
         educationRequirement: isOwnCustomer ? customer.educationRequirement : undefined,
         expectedDeliveryDate: isOwnCustomer ? customer.expectedDeliveryDate : undefined,
+        serviceDays: isOwnCustomer ? customer.serviceDays : undefined,
         dealAmount: isOwnCustomer ? customer.dealAmount : undefined, // 成交金额
         remarks: isOwnCustomer ? customer.remarks : undefined,
       };
@@ -285,6 +286,7 @@ export class CustomersController {
         originRequirement: isOwnForAdmissions ? customer.originRequirement : undefined,
         educationRequirement: isOwnForAdmissions ? customer.educationRequirement : undefined,
         expectedDeliveryDate: isOwnForAdmissions ? customer.expectedDeliveryDate : undefined,
+        serviceDays: isOwnForAdmissions ? customer.serviceDays : undefined,
         dealAmount: isOwnForAdmissions ? customer.dealAmount : undefined,
         remarks: isOwnForAdmissions ? customer.remarks : undefined,
         needWorkingHours: isOwnForAdmissions ? customer.needWorkingHours : undefined,
@@ -310,6 +312,7 @@ export class CustomersController {
         originRequirement: customer.originRequirement,
         educationRequirement: customer.educationRequirement,
         expectedDeliveryDate: customer.expectedDeliveryDate,
+        serviceDays: customer.serviceDays,
         dealAmount: customer.dealAmount, // 成交金额
         remarks: customer.remarks,
       };

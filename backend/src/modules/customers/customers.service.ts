@@ -494,6 +494,7 @@ export class CustomersService {
         'originRequirement': '籍贯要求',
         'expectedStartDate': '期望上岗时间',
         'expectedDeliveryDate': '预产期',
+        'serviceDays': '服务天数',
         'restSchedule': '休息安排',
         'idCardNumber': '身份证号',
         'assignedTo': '负责人',
@@ -521,7 +522,7 @@ export class CustomersService {
         'name', 'phone', 'wechatId', 'contractStatus', 'leadLevel', 'leadSource',
         'serviceCategory', 'salaryBudget', 'serviceAddress', 'remark', 'notes', 'remarks',
         'address', 'familySize', 'genderRequirement', 'ageRequirement', 'educationRequirement',
-        'originRequirement', 'expectedStartDate', 'expectedDeliveryDate', 'restSchedule',
+        'originRequirement', 'expectedStartDate', 'expectedDeliveryDate', 'serviceDays', 'restSchedule',
         'idCardNumber', 'assignedTo', 'inPublicPool'
       ];
       for (const field of fieldsToTrack) {

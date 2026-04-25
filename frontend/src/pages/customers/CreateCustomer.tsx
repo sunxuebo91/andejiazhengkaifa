@@ -223,11 +223,11 @@ const CreateCustomer: React.FC = () => {
 
             <Col span={8}>
               <Form.Item
-                label="客户状态"
+                label="签约状态"
                 name="contractStatus"
-                rules={[{ required: true, message: '请选择客户状态' }]}
+                rules={[{ required: true, message: '请选择签约状态' }]}
               >
-                <Select placeholder="请选择客户状态" style={{ width: '100%' }}>
+                <Select placeholder="请选择签约状态" style={{ width: '100%' }}>
                   {CONTRACT_STATUSES.map(status => (
                     <Option
                       key={status}
@@ -236,23 +236,6 @@ const CreateCustomer: React.FC = () => {
                     >
                       {status}{status === '已签约' && user?.role !== 'admin' ? ' (系统自动设置)' : ''}
                     </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-
-          {/* 客户需求区域（合并：需求信息 + 家庭信息 + 需求要求 + 客户需求） */}
-          <Divider orientation="left">客户需求</Divider>
-          <Row gutter={24} justify="center">
-            <Col span={8}>
-              <Form.Item
-                label="需求品类"
-                name="serviceCategory"
-              >
-                <Select placeholder="请选择需求品类（可选）" style={{ width: '100%' }}>
-                  {SERVICE_CATEGORIES.map(category => (
-                    <Option key={category} value={category}>{category}</Option>
                   ))}
                 </Select>
               </Form.Item>
@@ -279,22 +262,52 @@ const CreateCustomer: React.FC = () => {
                 </Select>
               </Form.Item>
             </Col>
+          </Row>
+
+          {/* 客户需求区域（合并：需求信息 + 家庭信息 + 需求要求 + 客户需求） */}
+          <Divider orientation="left">客户需求</Divider>
+          <Row gutter={24} justify="center">
+            <Col span={8}>
+              <Form.Item
+                label="需求品类"
+                name="serviceCategory"
+              >
+                <Select placeholder="请选择需求品类（可选）" style={{ width: '100%' }}>
+                  {SERVICE_CATEGORIES.map(category => (
+                    <Option key={category} value={category}>{category}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
 
             <Col span={8}>
               <Form.Item
                 label="薪资预算（元）"
                 name="salaryBudget"
                 rules={[
-                  { type: 'number', min: 1000, message: '薪资预算不能低于1000元' },
+                  { type: 'number', min: 0, message: '薪资预算不能为负数' },
                   { type: 'number', max: 50000, message: '薪资预算不能高于50000元' },
                 ]}
               >
                 <InputNumber
                   style={{ width: '100%' }}
                   placeholder="请输入薪资预算（可选）"
-                  min={1000}
+                  min={0}
                   max={50000}
                 />
+              </Form.Item>
+            </Col>
+
+            <Col span={8}>
+              <Form.Item
+                label="休息方式"
+                name="restSchedule"
+              >
+                <Select placeholder="请选择休息方式（可选）" style={{ width: '100%' }}>
+                  {REST_SCHEDULES.map(schedule => (
+                    <Option key={schedule} value={schedule}>{schedule}</Option>
+                  ))}
+                </Select>
               </Form.Item>
             </Col>
 
@@ -325,14 +338,20 @@ const CreateCustomer: React.FC = () => {
 
             <Col span={8}>
               <Form.Item
-                label="休息方式"
-                name="restSchedule"
+                label="服务天数"
+                name="serviceDays"
+                rules={[
+                  { type: 'number', min: 0, message: '服务天数不能为负数' },
+                  { type: 'number', max: 3650, message: '服务天数不能超过3650天' },
+                ]}
               >
-                <Select placeholder="请选择休息方式（可选）" style={{ width: '100%' }}>
-                  {REST_SCHEDULES.map(schedule => (
-                    <Option key={schedule} value={schedule}>{schedule}</Option>
-                  ))}
-                </Select>
+                <InputNumber
+                  style={{ width: '100%' }}
+                  placeholder="请输入服务天数（可选）"
+                  min={0}
+                  max={3650}
+                  addonAfter="天"
+                />
               </Form.Item>
             </Col>
 
@@ -341,14 +360,14 @@ const CreateCustomer: React.FC = () => {
                 label="家庭面积（平方米）"
                 name="homeArea"
                 rules={[
-                  { type: 'number', min: 10, message: '家庭面积不能小于10平方米' },
+                  { type: 'number', min: 0, message: '家庭面积不能为负数' },
                   { type: 'number', max: 1000, message: '家庭面积不能大于1000平方米' },
                 ]}
               >
                 <InputNumber
                   style={{ width: '100%' }}
                   placeholder="请输入家庭面积（可选）"
-                  min={10}
+                  min={0}
                   max={1000}
                 />
               </Form.Item>
@@ -359,14 +378,14 @@ const CreateCustomer: React.FC = () => {
                 label="家庭人口（人）"
                 name="familySize"
                 rules={[
-                  { type: 'number', min: 1, message: '家庭人口不能少于1人' },
+                  { type: 'number', min: 0, message: '家庭人口不能为负数' },
                   { type: 'number', max: 20, message: '家庭人口不能超过20人' },
                 ]}
               >
                 <InputNumber
                   style={{ width: '100%' }}
                   placeholder="请输入家庭人口（可选）"
-                  min={1}
+                  min={0}
                   max={20}
                 />
               </Form.Item>
@@ -374,7 +393,7 @@ const CreateCustomer: React.FC = () => {
 
             <Col span={8}>
               <Form.Item
-                label="客户地址"
+                label="服务地址"
                 name="address"
                 rules={[
                   { min: 5, message: '地址至少5个字符' },
@@ -435,7 +454,7 @@ const CreateCustomer: React.FC = () => {
               </Form.Item>
             </Col>
 
-            <Col span={16}>
+            <Col span={8}>
               <Form.Item label="服务周期" name="needServicePeriod">
                 <Input placeholder="如：长期、1年（可选）" style={{ width: '100%' }} />
               </Form.Item>
@@ -466,10 +485,10 @@ const CreateCustomer: React.FC = () => {
             </Col>
           </Row>
 
-          {/* 备注区域 */}
-          <Divider orientation="left">备注信息</Divider>
+          {/* 成交信息区域 */}
+          <Divider orientation="left">成交信息</Divider>
           <Row gutter={24} justify="center">
-            <Col span={12}>
+            <Col span={24}>
               <Form.Item
                 label="成交金额"
                 name="dealAmount"
@@ -496,6 +515,11 @@ const CreateCustomer: React.FC = () => {
                 />
               </Form.Item>
             </Col>
+          </Row>
+
+          {/* 备注信息区域 */}
+          <Divider orientation="left">备注信息</Divider>
+          <Row gutter={24} justify="center">
             <Col span={24}>
               <Form.Item
                 label="备注"

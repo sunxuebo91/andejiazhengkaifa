@@ -48,6 +48,7 @@ interface SearchParams {
   ethnicity?: string;
   orderStatus?: keyof typeof orderStatusMap;
   isDraft?: boolean;
+  createdBy?: string;
 }
 
 interface ResumeData {
@@ -97,6 +98,7 @@ const ResumeList = () => {
   const [total, setTotal] = useState(0);
   const [nativePlaceOptions, setNativePlaceOptions] = useState<string[]>([]);
   const [ethnicityOptions, setEthnicityOptions] = useState<string[]>([]);
+  const [creatorOptions, setCreatorOptions] = useState<Array<{ _id: string; name: string; username: string }>>([]);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -169,9 +171,22 @@ const ResumeList = () => {
     }
   };
 
+  // 获取创建人候选列表
+  const fetchCreators = async () => {
+    try {
+      const response = await apiService.get('/api/resumes/creators');
+      if (response.success && Array.isArray(response.data)) {
+        setCreatorOptions(response.data);
+      }
+    } catch (error) {
+      console.error('获取创建人列表失败:', error);
+    }
+  };
+
   // 组件加载时获取筛选选项
   useEffect(() => {
     fetchFilterOptions();
+    fetchCreators();
     fetchBlacklistIndex();
   }, []);
 
@@ -404,11 +419,12 @@ const ResumeList = () => {
     ethnicity?: string;
     orderStatus?: keyof typeof orderStatusMap;
     resumeType?: 'draft' | 'standard' | '';
+    createdBy?: string;
   }) => {
     // 如果正在加载，不处理
     if (loading) return;
 
-    const { keyword, jobType, maxAge, nativePlace, ethnicity, orderStatus, resumeType } = values;
+    const { keyword, jobType, maxAge, nativePlace, ethnicity, orderStatus, resumeType, createdBy } = values;
 
     // 构建搜索参数
     const searchQuery: SearchParams = {};
@@ -421,6 +437,7 @@ const ResumeList = () => {
     if (orderStatus) searchQuery.orderStatus = orderStatus;
     if (resumeType === 'draft') searchQuery.isDraft = true;
     else if (resumeType === 'standard') searchQuery.isDraft = false;
+    if (createdBy) searchQuery.createdBy = createdBy;
 
     // 如果有筛选条件，自动禁用自动刷新
     if (Object.keys(searchQuery).length > 0 && autoRefreshEnabled) {
@@ -704,6 +721,18 @@ const ResumeList = () => {
       },
     },
     {
+      title: '创建人',
+      key: 'createdBy',
+      width: 100,
+      render: (_: any, record: ResumeData) => {
+        const u: any = (record as any).userId;
+        if (u && typeof u === 'object') {
+          return u.name || u.username || '-';
+        }
+        return '-';
+      },
+    },
+    {
       title: '来源/可见性',
       key: 'source',
       width: 130,
@@ -939,6 +968,19 @@ const ResumeList = () => {
                   { value: 'standard', label: '标准简历' },
                   { value: 'draft', label: '草稿简历' },
                 ]}
+              />
+            </Form.Item>
+
+            <Form.Item name="createdBy" style={{ marginBottom: 0 }}>
+              <Select
+                placeholder="创建人"
+                allowClear
+                showSearch
+                style={{ width: '140px' }}
+                options={creatorOptions.map(u => ({ value: u._id, label: u.name || u.username }))}
+                filterOption={(input, option) =>
+                  ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase())
+                }
               />
             </Form.Item>
 

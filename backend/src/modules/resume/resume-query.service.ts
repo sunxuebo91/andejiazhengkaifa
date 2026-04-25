@@ -56,6 +56,7 @@ export class ResumeQueryService {
     isDraft?: boolean,
     isAdmin?: boolean,
     filterLowQuality?: boolean,
+    createdBy?: string,
   ) {
     if (!this.hasCheckedUpdatedAt) {
       await this.batchFixMissingUpdatedAt();
@@ -75,6 +76,20 @@ export class ResumeQueryService {
     if (maxAge !== undefined && maxAge !== null) query.age = { $lte: maxAge };
     if (nativePlace) query.nativePlace = nativePlace;
     if (ethnicity) query.ethnicity = ethnicity;
+    // 创建人筛选：仅返回该员工创建且当前归属仍为该员工的简历
+    // 归属人判定：assignedTo 显式等于该员工，或 assignedTo 未设置（默认归属创建人）
+    if (createdBy && Types.ObjectId.isValid(createdBy)) {
+      const creatorObjectId = new Types.ObjectId(createdBy);
+      query.userId = creatorObjectId;
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { assignedTo: creatorObjectId },
+          { assignedTo: { $exists: false } },
+          { assignedTo: null },
+        ],
+      });
+    }
     if (isDraft === true) {
       query.isDraft = true;
     } else if (isDraft === false) {

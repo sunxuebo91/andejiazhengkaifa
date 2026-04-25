@@ -551,6 +551,7 @@ export class ResumeController {
     @Query('ethnicity') ethnicity?: string,
     @Query('_t') timestamp?: string, // 时间戳参数
     @Query('isDraft') isDraftStr?: string,
+    @Query('createdBy') createdBy?: string,
     @Req() req?: any
   ) {
     try {
@@ -565,7 +566,7 @@ export class ResumeController {
       const isAdmin = user?.role === 'admin' || user?.role === '系统管理员';
 
       // 详细记录请求信息
-      this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, timestamp=${timestamp}, currentUserId=${currentUserId}`);
+      this.logger.log(`接收到简历列表请求, URL: ${req?.url}, 参数: page=${pageStr}, pageSize=${pageSizeStr}, keyword=${keyword}, jobType=${jobType}, createdBy=${createdBy}, timestamp=${timestamp}, currentUserId=${currentUserId}`);
 
       // 安全地解析页码
       try {
@@ -623,6 +624,8 @@ export class ResumeController {
         currentUserId,
         isDraftFilter,
         isAdmin,
+        undefined,
+        createdBy,
       );
 
       return {
@@ -644,6 +647,17 @@ export class ResumeController {
   @Permissions('resume:assign')
   @ApiOperation({ summary: '获取可分配的员工列表（管理员/经理）' })
   async getAssignableUsers() {
+    try {
+      const users = await this.resumeService.getAssignableUsers();
+      return { success: true, data: users };
+    } catch (error) {
+      return { success: false, data: null, message: error.message };
+    }
+  }
+
+  @Get('creators')
+  @ApiOperation({ summary: '获取简历创建人候选列表（用于列表筛选）' })
+  async getCreators() {
     try {
       const users = await this.resumeService.getAssignableUsers();
       return { success: true, data: users };

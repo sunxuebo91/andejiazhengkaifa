@@ -55,19 +55,12 @@ const CustomerDetail: React.FC = () => {
   // 冻结操作状态
   const [freezeLoading, setFreezeLoading] = useState(false);
 
-  // 客户需求卡片内联编辑状态
+  // 客户需求卡片内联编辑状态（仅保留 4 个无结构化对应的自由文本字段）
   const [needsForm, setNeedsForm] = useState({
-    needOrderType: '',
     needWorkingHours: '',
-    needSalary: '',
-    needRestTime: '',
-    needFamilyMembers: '',
-    needServiceAddress: '',
-    needHouseArea: '',
     needWorkContent: '',
     needRemarks: '',
     needServicePeriod: '',
-    needOnboardingTime: '',
   });
   const [needsSaving, setNeedsSaving] = useState(false);
 
@@ -176,17 +169,10 @@ const CustomerDetail: React.FC = () => {
       setCustomer(response);
       // 同步客户需求字段到本地表单状态
       setNeedsForm({
-        needOrderType: response.needOrderType || '',
         needWorkingHours: response.needWorkingHours || '',
-        needSalary: response.needSalary || '',
-        needRestTime: response.needRestTime || '',
-        needFamilyMembers: response.needFamilyMembers || '',
-        needServiceAddress: response.needServiceAddress || '',
-        needHouseArea: response.needHouseArea || '',
         needWorkContent: response.needWorkContent || '',
         needRemarks: response.needRemarks || '',
         needServicePeriod: response.needServicePeriod || '',
-        needOnboardingTime: response.needOnboardingTime || '',
       });
     } catch (error) {
       console.error('获取客户详情失败:', error);
@@ -210,24 +196,26 @@ const CustomerDetail: React.FC = () => {
     }
   };
 
-  // 复制客户需求（只复制有内容的字段，按顺序）
+  // 复制客户需求（只复制有内容的字段，按顺序；结构化字段优先，自由文本字段补充）
   const handleCopyNeeds = () => {
-    const fields: { label: string; key: keyof typeof needsForm }[] = [
-      { label: '订单类型', key: 'needOrderType' },
-      { label: '工作时间', key: 'needWorkingHours' },
-      { label: '薪资要求', key: 'needSalary' },
-      { label: '休息时间', key: 'needRestTime' },
-      { label: '家庭成员', key: 'needFamilyMembers' },
-      { label: '服务地址', key: 'needServiceAddress' },
-      { label: '房屋面积', key: 'needHouseArea' },
-      { label: '工作内容', key: 'needWorkContent' },
-      { label: '需求备注', key: 'needRemarks' },
-      { label: '服务周期', key: 'needServicePeriod' },
-      { label: '上户时间', key: 'needOnboardingTime' },
-    ];
-    const lines = fields
-      .filter(f => needsForm[f.key]?.trim())
-      .map(f => `【${f.label}】：${needsForm[f.key]}`);
+    if (!customer) return;
+    const lines: string[] = [];
+    const push = (label: string, value: any) => {
+      if (value === undefined || value === null) return;
+      const text = String(value).trim();
+      if (text) lines.push(`【${label}】：${text}`);
+    };
+    push('订单类型', customer.serviceCategory);
+    push('工作时间', needsForm.needWorkingHours);
+    push('薪资要求', customer.salaryBudget ? `¥${customer.salaryBudget}` : '');
+    push('休息时间', customer.restSchedule);
+    push('家庭成员', customer.familySize ? `${customer.familySize}人` : '');
+    push('服务地址', customer.address);
+    push('房屋面积', customer.homeArea ? `${customer.homeArea}平方米` : '');
+    push('工作内容', needsForm.needWorkContent);
+    push('需求备注', needsForm.needRemarks);
+    push('服务周期', needsForm.needServicePeriod);
+    push('上户时间', customer.expectedStartDate ? formatDate(customer.expectedStartDate) : '');
     if (lines.length === 0) {
       message.warning('暂无可复制的内容');
       return;
@@ -520,9 +508,37 @@ const CustomerDetail: React.FC = () => {
             </Card>
           </Col>
 
-          {/* 服务需求信息 */}
+          {/* 客户需求（合并：服务需求 + 家庭信息 + 附加要求 + 客户需求） */}
           <Col span={24}>
-            <Card type="inner" title="服务需求" style={{ marginBottom: '16px' }}>
+            <Card
+              type="inner"
+              title="客户需求"
+              style={{ marginBottom: '16px' }}
+              extra={
+                <Space>
+                  <Tooltip title="复制有内容的字段">
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      onClick={handleCopyNeeds}
+                    >
+                      复制
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="保存下方文本字段（结构化字段请到编辑页修改）">
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<SaveOutlined />}
+                      loading={needsSaving}
+                      onClick={handleSaveNeeds}
+                    >
+                      保存
+                    </Button>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <Descriptions column={3} bordered>
                 <Descriptions.Item label="需求品类" span={1}>
                   {customer.serviceCategory ? (
@@ -552,14 +568,7 @@ const CustomerDetail: React.FC = () => {
                     : '无'
                   }
                 </Descriptions.Item>
-              </Descriptions>
-            </Card>
-          </Col>
 
-          {/* 家庭信息 */}
-          <Col span={24}>
-            <Card type="inner" title="家庭信息" style={{ marginBottom: '16px' }}>
-              <Descriptions column={3} bordered>
                 <Descriptions.Item label="家庭面积" span={1}>
                   {customer.homeArea ? `${customer.homeArea}平方米` : '未设置'}
                 </Descriptions.Item>
@@ -571,14 +580,7 @@ const CustomerDetail: React.FC = () => {
                 <Descriptions.Item label="服务地址" span={1}>
                   {customer.address || '未设置'}
                 </Descriptions.Item>
-              </Descriptions>
-            </Card>
-          </Col>
 
-          {/* 附加要求 */}
-          <Col span={24}>
-            <Card type="inner" title="附加要求" style={{ marginBottom: '16px' }}>
-              <Descriptions column={3} bordered>
                 <Descriptions.Item label="年龄要求" span={1}>
                   {customer.ageRequirement || '无特殊要求'}
                 </Descriptions.Item>
@@ -594,50 +596,7 @@ const CustomerDetail: React.FC = () => {
                 <Descriptions.Item label="学历要求" span={1}>
                   {customer.educationRequirement || '无特殊要求'}
                 </Descriptions.Item>
-              </Descriptions>
-            </Card>
-          </Col>
 
-          {/* 客户需求 - 内联可编辑 */}
-          <Col span={24}>
-            <Card
-              type="inner"
-              title="客户需求"
-              style={{ marginBottom: '16px' }}
-              extra={
-                <Space>
-                  <Tooltip title="复制有内容的字段">
-                    <Button
-                      size="small"
-                      icon={<CopyOutlined />}
-                      onClick={handleCopyNeeds}
-                    >
-                      复制
-                    </Button>
-                  </Tooltip>
-                  <Tooltip title="编辑后点击保存">
-                    <Button
-                      type="primary"
-                      size="small"
-                      icon={<SaveOutlined />}
-                      loading={needsSaving}
-                      onClick={handleSaveNeeds}
-                    >
-                      保存
-                    </Button>
-                  </Tooltip>
-                </Space>
-              }
-            >
-              <Descriptions column={3} bordered>
-                <Descriptions.Item label="订单类型" span={1}>
-                  <Input
-                    value={needsForm.needOrderType}
-                    onChange={e => setNeedsForm(f => ({ ...f, needOrderType: e.target.value }))}
-                    placeholder="请输入"
-                    variant="borderless"
-                  />
-                </Descriptions.Item>
                 <Descriptions.Item label="工作时间" span={1}>
                   <Input
                     value={needsForm.needWorkingHours}
@@ -646,47 +605,17 @@ const CustomerDetail: React.FC = () => {
                     variant="borderless"
                   />
                 </Descriptions.Item>
-                <Descriptions.Item label="薪资要求" span={1}>
+
+                <Descriptions.Item label="服务周期" span={2}>
                   <Input
-                    value={needsForm.needSalary}
-                    onChange={e => setNeedsForm(f => ({ ...f, needSalary: e.target.value }))}
+                    value={needsForm.needServicePeriod}
+                    onChange={e => setNeedsForm(f => ({ ...f, needServicePeriod: e.target.value }))}
                     placeholder="请输入"
                     variant="borderless"
                   />
                 </Descriptions.Item>
-                <Descriptions.Item label="休息时间" span={1}>
-                  <Input
-                    value={needsForm.needRestTime}
-                    onChange={e => setNeedsForm(f => ({ ...f, needRestTime: e.target.value }))}
-                    placeholder="请输入"
-                    variant="borderless"
-                  />
-                </Descriptions.Item>
-                <Descriptions.Item label="家庭成员" span={1}>
-                  <Input
-                    value={needsForm.needFamilyMembers}
-                    onChange={e => setNeedsForm(f => ({ ...f, needFamilyMembers: e.target.value }))}
-                    placeholder="请输入"
-                    variant="borderless"
-                  />
-                </Descriptions.Item>
-                <Descriptions.Item label="服务地址" span={1}>
-                  <Input
-                    value={needsForm.needServiceAddress}
-                    onChange={e => setNeedsForm(f => ({ ...f, needServiceAddress: e.target.value }))}
-                    placeholder="请输入"
-                    variant="borderless"
-                  />
-                </Descriptions.Item>
-                <Descriptions.Item label="房屋面积" span={1}>
-                  <Input
-                    value={needsForm.needHouseArea}
-                    onChange={e => setNeedsForm(f => ({ ...f, needHouseArea: e.target.value }))}
-                    placeholder="请输入"
-                    variant="borderless"
-                  />
-                </Descriptions.Item>
-                <Descriptions.Item label="工作内容" span={2}>
+
+                <Descriptions.Item label="工作内容" span={3}>
                   <Input.TextArea
                     value={needsForm.needWorkContent}
                     onChange={e => setNeedsForm(f => ({ ...f, needWorkContent: e.target.value }))}
@@ -695,28 +624,13 @@ const CustomerDetail: React.FC = () => {
                     variant="borderless"
                   />
                 </Descriptions.Item>
+
                 <Descriptions.Item label="需求备注" span={3}>
                   <Input.TextArea
                     value={needsForm.needRemarks}
                     onChange={e => setNeedsForm(f => ({ ...f, needRemarks: e.target.value }))}
                     placeholder="请输入"
                     autoSize={{ minRows: 1, maxRows: 4 }}
-                    variant="borderless"
-                  />
-                </Descriptions.Item>
-                <Descriptions.Item label="服务周期" span={1}>
-                  <Input
-                    value={needsForm.needServicePeriod}
-                    onChange={e => setNeedsForm(f => ({ ...f, needServicePeriod: e.target.value }))}
-                    placeholder="请输入"
-                    variant="borderless"
-                  />
-                </Descriptions.Item>
-                <Descriptions.Item label="上户时间" span={2}>
-                  <Input
-                    value={needsForm.needOnboardingTime}
-                    onChange={e => setNeedsForm(f => ({ ...f, needOnboardingTime: e.target.value }))}
-                    placeholder="请输入"
                     variant="borderless"
                   />
                 </Descriptions.Item>

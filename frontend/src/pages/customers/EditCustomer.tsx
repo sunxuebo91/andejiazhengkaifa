@@ -277,8 +277,8 @@ const EditCustomer: React.FC = () => {
             </Col>
           </Row>
 
-          {/* 需求信息区域 */}
-          <Divider orientation="left">需求信息</Divider>
+          {/* 客户需求区域（合并：需求信息 + 家庭信息 + 附加要求 + 客户需求） */}
+          <Divider orientation="left">客户需求</Divider>
           <Row gutter={24} justify="center">
             <Col span={8}>
               <Form.Item
@@ -373,8 +373,6 @@ const EditCustomer: React.FC = () => {
             </Col>
           </Row>
 
-          {/* 家庭信息区域 */}
-          <Divider orientation="left">家庭信息</Divider>
           <Row gutter={24} justify="center">
             <Col span={8}>
               <Form.Item
@@ -416,8 +414,6 @@ const EditCustomer: React.FC = () => {
             </Col>
           </Row>
 
-          {/* 附加要求区域 */}
-          <Divider orientation="left">附加要求</Divider>
           <Row gutter={24} justify="center">
             <Col span={8}>
               <Form.Item
@@ -462,6 +458,42 @@ const EditCustomer: React.FC = () => {
                     <Option key={education} value={education}>{education}</Option>
                   ))}
                 </Select>
+              </Form.Item>
+            </Col>
+
+            <Col span={8}>
+              <Form.Item label="工作时间 (可选)" name="needWorkingHours">
+                <Input placeholder="如:8:00-17:00、住家" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+
+            <Col span={16}>
+              <Form.Item label="服务周期 (可选)" name="needServicePeriod">
+                <Input placeholder="如:长期、1年" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+
+            <Col span={24}>
+              <Form.Item label="工作内容 (可选)" name="needWorkContent">
+                <TextArea
+                  rows={3}
+                  placeholder="如:负责照顾 9 个月宝宝一切"
+                  style={{ width: '100%' }}
+                  maxLength={500}
+                  showCount
+                />
+              </Form.Item>
+            </Col>
+
+            <Col span={24}>
+              <Form.Item label="需求备注 (可选)" name="needRemarks">
+                <TextArea
+                  rows={3}
+                  placeholder="客户对阿姨的特殊偏好、忌讳等"
+                  style={{ width: '100%' }}
+                  maxLength={500}
+                  showCount
+                />
               </Form.Item>
             </Col>
           </Row>

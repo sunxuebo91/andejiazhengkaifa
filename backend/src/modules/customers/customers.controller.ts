@@ -183,8 +183,22 @@ export class CustomersController {
       this.logger.log(`🔐 权限检查: assignedToId=${assignedToId}, userId=${user.userId}, match=${assignedToId === user.userId}`);
 
       return assignedToId === user.userId;
+    } else if (userRole === '招生老师') {
+      // 招生老师只能访问自己负责（assignedTo）或创建（createdBy）的客户
+      // 与列表查询 customer-query.service.ts 中 admissions 的可见范围保持一致
+      const assignedToId = this.extractUserId(customer.assignedTo);
+      const createdById = this.extractUserId(customer.createdBy);
+      return assignedToId === user.userId || createdById === user.userId;
     }
     return false;
+  }
+
+  // 辅助方法：从 ObjectId / 字符串 / populate 对象中提取 userId 字符串
+  private extractUserId(field: any): string | undefined {
+    if (!field) return undefined;
+    if (typeof field === 'string') return field;
+    if (field._id) return field._id?.toString?.() || field._id;
+    return field.toString?.() || String(field);
   }
 
   // 辅助方法：根据角色脱敏客户数据
@@ -228,6 +242,10 @@ export class CustomersController {
     }
     const isOwnCustomer = assignedToId === userId;
 
+    // 招生老师"自己负责"的范围与列表查询保持一致：assignedTo 或 createdBy 任一命中即可
+    const createdById = this.extractUserId(customer.createdBy);
+    const isOwnForAdmissions = isOwnCustomer || createdById === userId;
+
     if (userRole === '普通员工') {
       // 普通员工：自己的客户显示完整信息，其他客户脱敏
       return {
@@ -248,6 +266,31 @@ export class CustomersController {
         expectedDeliveryDate: isOwnCustomer ? customer.expectedDeliveryDate : undefined,
         dealAmount: isOwnCustomer ? customer.dealAmount : undefined, // 成交金额
         remarks: isOwnCustomer ? customer.remarks : undefined,
+      };
+    } else if (userRole === '招生老师') {
+      // 招生老师：自己负责或自己创建的客户显示完整信息，其他客户脱敏
+      return {
+        ...baseData,
+        phone: isOwnForAdmissions ? customer.phone : this.maskPhoneNumber(customer.phone),
+        wechatId: isOwnForAdmissions ? customer.wechatId : undefined,
+        idCardNumber: isOwnForAdmissions ? customer.idCardNumber : undefined,
+        address: isOwnForAdmissions ? customer.address : undefined,
+        salaryBudget: isOwnForAdmissions ? customer.salaryBudget : undefined,
+        expectedStartDate: isOwnForAdmissions ? customer.expectedStartDate : undefined,
+        homeArea: isOwnForAdmissions ? customer.homeArea : undefined,
+        familySize: isOwnForAdmissions ? customer.familySize : undefined,
+        restSchedule: isOwnForAdmissions ? customer.restSchedule : undefined,
+        ageRequirement: isOwnForAdmissions ? customer.ageRequirement : undefined,
+        genderRequirement: isOwnForAdmissions ? customer.genderRequirement : undefined,
+        originRequirement: isOwnForAdmissions ? customer.originRequirement : undefined,
+        educationRequirement: isOwnForAdmissions ? customer.educationRequirement : undefined,
+        expectedDeliveryDate: isOwnForAdmissions ? customer.expectedDeliveryDate : undefined,
+        dealAmount: isOwnForAdmissions ? customer.dealAmount : undefined,
+        remarks: isOwnForAdmissions ? customer.remarks : undefined,
+        needWorkingHours: isOwnForAdmissions ? customer.needWorkingHours : undefined,
+        needWorkContent: isOwnForAdmissions ? customer.needWorkContent : undefined,
+        needRemarks: isOwnForAdmissions ? customer.needRemarks : undefined,
+        needServicePeriod: isOwnForAdmissions ? customer.needServicePeriod : undefined,
       };
     } else if (userRole === '经理') {
       // 经理可以看到部门内所有客户的完整信息

@@ -132,8 +132,83 @@ export class CustomersService {
     return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
   }
 
+  // 兼容路由：把传入的 7 个旧 need* 字段映射到对应的结构化字段（仅在结构化字段为空时填充）
+  // 4 个独有字段（needWorkingHours / needWorkContent / needRemarks / needServicePeriod）原样保留
+  private mapLegacyNeedFields(dto: any, existing?: Partial<Customer> | null): void {
+    if (!dto) return;
+
+    const validCategories = ['月嫂', '住家育儿嫂', '保洁', '住家保姆', '养宠', '小时工', '白班育儿', '白班保姆', '住家护老', '家教', '陪伴师'];
+    const validRest = ['单休', '双休', '无休', '调休', '待定'];
+
+    const isEmpty = (key: string): boolean => {
+      const inDto = dto[key];
+      if (inDto !== undefined && inDto !== null && inDto !== '') return false;
+      if (existing && (existing as any)[key] !== undefined && (existing as any)[key] !== null && (existing as any)[key] !== '') return false;
+      return true;
+    };
+
+    // needOrderType -> serviceCategory（仅枚举命中）
+    if (dto.needOrderType && isEmpty('serviceCategory') && validCategories.includes(dto.needOrderType.trim())) {
+      dto.serviceCategory = dto.needOrderType.trim();
+    }
+
+    // needSalary -> salaryBudget（取首个整数；范围"7000-7500"取下限 7000）
+    if (dto.needSalary && isEmpty('salaryBudget')) {
+      const m = String(dto.needSalary).match(/\d+/);
+      if (m) {
+        const n = parseInt(m[0], 10);
+        if (n >= 1000 && n <= 50000) dto.salaryBudget = n;
+      }
+    }
+
+    // needRestTime -> restSchedule（仅枚举命中）
+    if (dto.needRestTime && isEmpty('restSchedule') && validRest.includes(dto.needRestTime.trim())) {
+      dto.restSchedule = dto.needRestTime.trim();
+    }
+
+    // needOnboardingTime -> expectedStartDate（仅可解析为日期；"随时"等自然语言保持原样）
+    if (dto.needOnboardingTime && isEmpty('expectedStartDate')) {
+      const t = String(dto.needOnboardingTime).trim();
+      const d = new Date(t);
+      if (!isNaN(d.getTime()) && /\d{4}/.test(t)) {
+        dto.expectedStartDate = d.toISOString().slice(0, 10);
+      }
+    }
+
+    // needHouseArea -> homeArea（取首个整数；"80平左右" -> 80）
+    if (dto.needHouseArea && isEmpty('homeArea')) {
+      const m = String(dto.needHouseArea).match(/\d+/);
+      if (m) {
+        const n = parseInt(m[0], 10);
+        if (n >= 10 && n <= 1000) dto.homeArea = n;
+      }
+    }
+
+    // needFamilyMembers -> familySize（取首个整数；"一家三口"等中文数字不在此处理）
+    if (dto.needFamilyMembers && isEmpty('familySize')) {
+      const raw = String(dto.needFamilyMembers).trim();
+      const m = raw.match(/\d+/);
+      if (m) {
+        const n = parseInt(m[0], 10);
+        if (n >= 1 && n <= 20) dto.familySize = n;
+      } else {
+        const cnMap: Record<string, number> = { '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+        const cn = raw.match(/[一二两三四五六七八九十]/);
+        if (cn && cnMap[cn[0]]) dto.familySize = cnMap[cn[0]];
+      }
+    }
+
+    // needServiceAddress -> address（直接拷贝）
+    if (dto.needServiceAddress && isEmpty('address')) {
+      dto.address = String(dto.needServiceAddress).trim();
+    }
+  }
+
   // 创建客户（支持创建时指定负责人，未指定则默认分配给创建人）
   async create(createCustomerDto: CreateCustomerDto, userId: string): Promise<Customer> {
+    // 兼容路由：将旧 need* 字段映射到结构化字段（仅在结构化字段为空时填充）
+    this.mapLegacyNeedFields(createCustomerDto);
+
     // 验证手机号或微信号至少填一个
     const phone = createCustomerDto.phone?.trim();
     const wechatId = createCustomerDto.wechatId?.trim();
@@ -322,6 +397,9 @@ export class CustomersService {
     if (!currentCustomer) {
       throw new NotFoundException('客户不存在');
     }
+
+    // 兼容路由：将旧 need* 字段映射到结构化字段（仅在 dto 与现有客户的结构化字段都为空时填充）
+    this.mapLegacyNeedFields(updateCustomerDto, currentCustomer.toObject());
 
     // 🔒 权限检查：O类线索等级只能由管理员/运营/派单老师手动修改
     if (updateCustomerDto.leadLevel === 'O类' && userId) {

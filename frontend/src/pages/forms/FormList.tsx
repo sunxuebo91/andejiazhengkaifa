@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Table,
   Button,
@@ -10,8 +10,7 @@ import {
   Select,
   Card,
   Tooltip,
-  Typography,
-  QRCode
+  Typography
 } from 'antd';
 import {
   PlusOutlined,
@@ -23,8 +22,10 @@ import {
   CopyOutlined,
   QrcodeOutlined
 } from '@ant-design/icons';
+import { QRCodeCanvas } from 'qrcode.react';
 import { useNavigate } from 'react-router-dom';
 import { getFormList, deleteForm, FormConfig, generateShareToken } from '../../services/form.service';
+import { useAuth } from '../../contexts/AuthContext';
 import dayjs from 'dayjs';
 
 const { Search } = Input;
@@ -33,6 +34,7 @@ const { Text, Link } = Typography;
 
 const FormList: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState<FormConfig[]>([]);
   const [total, setTotal] = useState(0);
@@ -42,7 +44,10 @@ const FormList: React.FC = () => {
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [qrCodeModalVisible, setQrCodeModalVisible] = useState(false);
   const [selectedFormUrl, setSelectedFormUrl] = useState('');
+  const [selectedFormTitle, setSelectedFormTitle] = useState('');
+  const [posterUrl, setPosterUrl] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     fetchData();
@@ -106,11 +111,13 @@ const FormList: React.FC = () => {
     }
   };
 
-  const showQRCode = async (id: string) => {
+  const showQRCode = async (record: FormConfig) => {
     try {
       setShareLoading(true);
-      const response = await generateShareToken(id);
+      const response = await generateShareToken(record._id!);
+      setSelectedFormTitle(record.title || '表单');
       setSelectedFormUrl(response.shareUrl);
+      setPosterUrl('');
       setQrCodeModalVisible(true);
     } catch (error: any) {
       message.error(error.message || '生成二维码失败');
@@ -119,18 +126,116 @@ const FormList: React.FC = () => {
     }
   };
 
-  const downloadQRCode = () => {
-    const canvas = document.getElementById('qrcode-canvas')?.querySelector('canvas');
-    if (canvas) {
-      const url = canvas.toDataURL();
-      const a = document.createElement('a');
-      a.download = 'form-qrcode.png';
-      a.href = url;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      message.success('二维码已下载');
+  // 在 canvas 上按最大宽度对中文文本做换行
+  const wrapText = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+  ): string[] => {
+    const chars = Array.from(text);
+    const lines: string[] = [];
+    let line = '';
+    for (const ch of chars) {
+      const test = line + ch;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = ch;
+      } else {
+        line = test;
+      }
     }
+    if (line) lines.push(line);
+    return lines;
+  };
+
+  // 合成"表单标题 + 二维码 + 推荐人姓名"的海报图，输出 PNG dataURL
+  const composePoster = () => {
+    const qrCanvas = qrCanvasRef.current;
+    if (!qrCanvas) return;
+
+    const employeeName = user?.name || user?.username || '';
+    const title = selectedFormTitle || '表单分享';
+
+    const padding = 32;
+    const qrSize = 320;
+    const titleFontSize = 22;
+    const titleLineHeight = Math.round(titleFontSize * 1.45);
+    const nameFontSize = 16;
+    const tipFontSize = 12;
+    const width = qrSize + padding * 2;
+
+    // 先用一个临时 ctx 测量标题换行
+    const measureCanvas = document.createElement('canvas');
+    const measureCtx = measureCanvas.getContext('2d')!;
+    measureCtx.font = `bold ${titleFontSize}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    const titleLines = wrapText(measureCtx, title, qrSize);
+    const titleHeight = titleLines.length * titleLineHeight;
+
+    const height =
+      padding + titleHeight + 20 + qrSize + 20 + nameFontSize + 10 + tipFontSize + padding;
+
+    const canvas = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+
+    // 白底
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 标题
+    ctx.fillStyle = '#1f1f1f';
+    ctx.font = `bold ${titleFontSize}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    let curY = padding;
+    titleLines.forEach((line, idx) => {
+      ctx.fillText(line, width / 2, curY + idx * titleLineHeight);
+    });
+    curY += titleHeight + 20;
+
+    // 二维码
+    ctx.drawImage(qrCanvas, padding, curY, qrSize, qrSize);
+    curY += qrSize + 20;
+
+    // 推荐人姓名
+    ctx.fillStyle = '#262626';
+    ctx.font = `${nameFontSize}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    ctx.fillText(`推荐人：${employeeName || '—'}`, width / 2, curY);
+    curY += nameFontSize + 10;
+
+    // 底部提示
+    ctx.fillStyle = '#999999';
+    ctx.font = `${tipFontSize}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    ctx.fillText('微信扫一扫，填写表单', width / 2, curY);
+
+    setPosterUrl(canvas.toDataURL('image/png'));
+  };
+
+  // 弹窗打开 / URL / 标题 / 用户变化时，等待 QR canvas 渲染完成后合成海报
+  useEffect(() => {
+    if (!qrCodeModalVisible || !selectedFormUrl) return;
+    const timer = setTimeout(() => {
+      composePoster();
+    }, 80);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrCodeModalVisible, selectedFormUrl, selectedFormTitle, user]);
+
+  const downloadQRCode = () => {
+    if (!posterUrl) {
+      message.warning('二维码生成中，请稍候');
+      return;
+    }
+    const a = document.createElement('a');
+    a.download = `${selectedFormTitle || 'form'}-二维码.png`;
+    a.href = posterUrl;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    message.success('二维码已下载');
   };
 
   const columns = [
@@ -217,7 +322,7 @@ const FormList: React.FC = () => {
               type="link"
               size="small"
               icon={<QrcodeOutlined />}
-              onClick={() => showQRCode(record._id!)}
+              onClick={() => showQRCode(record)}
             />
           </Tooltip>
           <Tooltip title="复制链接">
@@ -324,22 +429,41 @@ const FormList: React.FC = () => {
           </Button>,
         ]}
         centered
-        width={400}
+        width={440}
       >
-        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          <div id="qrcode-canvas" style={{ display: 'inline-block' }}>
-            <QRCode
-              value={selectedFormUrl || 'loading...'}
-              size={256}
-              style={{ marginBottom: 16 }}
+        {/* 隐藏的 QRCodeCanvas，仅用于绘制海报 */}
+        <div style={{ position: 'absolute', left: -99999, top: -99999, opacity: 0, pointerEvents: 'none' }}>
+          {selectedFormUrl && (
+            <QRCodeCanvas
+              ref={qrCanvasRef}
+              value={selectedFormUrl}
+              size={320}
+              level="H"
+              marginSize={4}
+              bgColor="#ffffff"
+              fgColor="#000000"
             />
-          </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: 'center', padding: '8px 0' }}>
+          {posterUrl ? (
+            <img
+              src={posterUrl}
+              alt="表单二维码"
+              style={{ maxWidth: '100%', display: 'block', margin: '0 auto' }}
+            />
+          ) : (
+            <div style={{ height: 460, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
+              二维码生成中...
+            </div>
+          )}
           <div style={{ marginTop: 16 }}>
             <Text type="secondary" style={{ fontSize: 12, wordBreak: 'break-all' }}>
               {selectedFormUrl}
             </Text>
           </div>
-          <div style={{ marginTop: 16 }}>
+          <div style={{ marginTop: 12 }}>
             <Text type="secondary">
               扫描二维码或复制链接分享表单
             </Text>

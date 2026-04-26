@@ -148,16 +148,42 @@ const FormSubmissionList: React.FC = () => {
     }
   };
 
-  // 从提交数据中提取姓名
-  const getName = (data: Record<string, any>) => {
-    // 尝试多个可能的字段名
-    return data['姓名'] || data['name'] || data['名字'] || data['联系人'] || '-';
-  };
+  // 中国大陆手机号正则
+  const PHONE_REGEX = /^1[3-9]\d{9}$/;
 
   // 从提交数据中提取手机号
   const getPhone = (data: Record<string, any>) => {
-    // 尝试多个可能的字段名
-    return data['手机号'] || data['phone'] || data['电话'] || data['联系电话'] || data['手机'] || '-';
+    if (!data) return '-';
+    // 优先尝试常见字段名
+    const byName = data['手机号'] || data['phone'] || data['电话'] || data['联系电话'] || data['手机'];
+    if (byName) return byName;
+    // 回退：自定义表单使用自动生成的 fieldName，按值的格式匹配
+    for (const value of Object.values(data)) {
+      if (typeof value === 'string' && PHONE_REGEX.test(value.trim())) {
+        return value.trim();
+      }
+    }
+    return '-';
+  };
+
+  // 从提交数据中提取姓名
+  const getName = (data: Record<string, any>) => {
+    if (!data) return '-';
+    // 优先尝试常见字段名
+    const byName = data['姓名'] || data['name'] || data['名字'] || data['联系人'];
+    if (byName) return byName;
+    // 回退：取第一个长度合理且非手机号的字符串值
+    for (const value of Object.values(data)) {
+      if (
+        typeof value === 'string' &&
+        value.trim().length > 0 &&
+        value.trim().length <= 20 &&
+        !PHONE_REGEX.test(value.trim())
+      ) {
+        return value.trim();
+      }
+    }
+    return '-';
   };
 
   // 格式化字段值显示

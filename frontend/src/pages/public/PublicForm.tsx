@@ -295,27 +295,29 @@ const PublicForm: React.FC = () => {
                       required: field.required,
                       message: `请输入${field.label}`,
                     },
-                    field.fieldType === 'phone'
-                      ? {
-                          pattern: /^1[3-9]\d{9}$/,
-                          message: '请输入正确的手机号',
-                        }
-                      : {},
-                    field.fieldType === 'email'
-                      ? {
-                          type: 'email',
-                          message: '请输入正确的邮箱地址',
-                        }
-                      : {},
-                    field.fieldType === 'phone'
-                      ? {
-                          validator: async (_, value) => {
-                            if (value) {
-                              await checkPhoneDuplicate(value);
-                            }
+                    ...(field.fieldType === 'phone'
+                      ? [
+                          {
+                            pattern: /^1[3-9]\d{9}$/,
+                            message: '请输入正确的手机号',
                           },
-                        }
-                      : {},
+                          {
+                            validator: async (_: any, value: string) => {
+                              if (value) {
+                                await checkPhoneDuplicate(value);
+                              }
+                            },
+                          },
+                        ]
+                      : []),
+                    ...(field.fieldType === 'email'
+                      ? [
+                          {
+                            type: 'email' as const,
+                            message: '请输入正确的邮箱地址',
+                          },
+                        ]
+                      : []),
                   ]}
                   validateTrigger={field.fieldType === 'phone' ? ['onBlur', 'onChange'] : 'onChange'}
                 >

@@ -19,6 +19,7 @@ import { AIModule } from '../ai/ai.module';
 import { ReferralResume, ReferralResumeSchema } from '../referral/models/referral-resume.model';
 import { ContractsModule } from '../contracts/contracts.module';
 import { AuntBlacklistModule } from '../aunt-blacklist/aunt-blacklist.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AuntBlacklistModule } from '../aunt-blacklist/aunt-blacklist.module';
     AIModule,
     forwardRef(() => ContractsModule),
     AuntBlacklistModule,
+    NotificationModule,
     // 为分享令牌签发/验证提供 JwtService
     JwtModule.registerAsync({
       useFactory: () => {

@@ -21,6 +21,7 @@ import { BackgroundCheck, BackgroundCheckSchema } from '../zmdb/models/backgroun
 import { InsurancePolicy, InsurancePolicySchema } from '../dashubao/models/insurance-policy.model';
 import { MiniProgramNotificationModule } from '../miniprogram-notification/miniprogram-notification.module';
 import { AuntBlacklistModule } from '../aunt-blacklist/aunt-blacklist.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { AuntBlacklistModule } from '../aunt-blacklist/aunt-blacklist.module';
     DashubaoModule,
     MiniProgramNotificationModule,
     AuntBlacklistModule,
+    NotificationModule,
   ],
   controllers: [ContractsController, ContractsMiniProgramController, ContractsCustomerController],
   providers: [ContractsService, ContractsQueryService, ContractConsistencyService],

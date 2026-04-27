@@ -2,9 +2,11 @@ import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef, 
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { InterviewRoom } from './models/interview-room.entity';
+import { Resume } from '../resume/models/resume.entity';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { QueryRoomsDto } from './dto/query-rooms.dto';
 import { ZegoService } from '../zego/zego.service';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 
 @Injectable()
 export class InterviewService {
@@ -13,8 +15,11 @@ export class InterviewService {
   constructor(
     @InjectModel(InterviewRoom.name)
     private readonly interviewRoomModel: Model<InterviewRoom>,
+    @InjectModel(Resume.name)
+    private readonly resumeModel: Model<Resume>,
     @Inject(forwardRef(() => ZegoService))
     private readonly zegoService: ZegoService,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   /**
@@ -69,6 +74,23 @@ export class InterviewService {
       this.logger.log(`✅ 房间已在 ZegoService 中注册: ${dto.roomId}`);
     } catch (error) {
       this.logger.warn(`⚠️ 注册房间到 ZegoService 失败: ${dto.roomId}`, error);
+    }
+
+    // 🔔 通知简历负责人：阿姨被邀请面试（操作者本人不通知）
+    if (dto.resumeId) {
+      try {
+        const resume = await this.resumeModel.findById(dto.resumeId).select('name assignedTo userId').lean();
+        const ownerId = (resume as any)?.assignedTo?.toString?.() || (resume as any)?.userId?.toString?.();
+        if (resume && ownerId && ownerId !== userId) {
+          await this.notificationHelper.notifyInterviewInvited(ownerId, {
+            resumeId: dto.resumeId,
+            resumeName: (resume as any).name || dto.candidateName || '未填写',
+            operatorName: dto.hostName || '系统',
+          });
+        }
+      } catch (err: any) {
+        this.logger.warn(`发送面试邀请通知失败: ${err?.message}`);
+      }
     }
 
     return savedRoom;

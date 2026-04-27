@@ -1,14 +1,18 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ContractDeletionApproval, ContractDeletionApprovalDocument } from './models/contract-deletion-approval.model';
 import { CreateDeletionApprovalDto, ApproveDeletionDto, RejectDeletionDto } from './dto/create-deletion-approval.dto';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 
 @Injectable()
 export class ContractApprovalsService {
+  private readonly logger = new Logger(ContractApprovalsService.name);
+
   constructor(
     @InjectModel(ContractDeletionApproval.name)
     private approvalModel: Model<ContractDeletionApprovalDocument>,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   // 创建删除审批请求
@@ -38,7 +42,23 @@ export class ContractApprovalsService {
       status: 'pending',
     });
 
-    return approval.save();
+    const saved = await approval.save();
+
+    // 🔔 通知管理员：有新的合同删除审批请求
+    try {
+      const adminIds = await this.notificationHelper.getAdminUserIds(userId);
+      if (adminIds.length > 0) {
+        await this.notificationHelper.notifyContractApprovalRequested(adminIds, {
+          contractNumber,
+          requesterName: userName,
+          reason,
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`发送删除审批申请通知失败: ${err?.message}`);
+    }
+
+    return saved;
   }
 
   // 获取所有审批请求（管理员）
@@ -124,7 +144,20 @@ export class ContractApprovalsService {
     approval.approvalComment = dto.comment;
     approval.approvedAt = new Date();
 
-    return approval.save();
+    const saved = await approval.save();
+
+    // 🔔 通知申请人：审批已通过
+    try {
+      await this.notificationHelper.notifyContractApprovalApproved(approval.requestedBy.toString(), {
+        contractNumber: approval.contractNumber,
+        approverName,
+        comment: dto.comment || '',
+      });
+    } catch (err: any) {
+      this.logger.warn(`发送删除审批通过通知失败: ${err?.message}`);
+    }
+
+    return saved;
   }
 
   // 拒绝删除请求
@@ -150,7 +183,20 @@ export class ContractApprovalsService {
     approval.approvalComment = dto.comment;
     approval.approvedAt = new Date();
 
-    return approval.save();
+    const saved = await approval.save();
+
+    // 🔔 通知申请人：审批已驳回
+    try {
+      await this.notificationHelper.notifyContractApprovalRejected(approval.requestedBy.toString(), {
+        contractNumber: approval.contractNumber,
+        approverName,
+        comment: dto.comment || '',
+      });
+    } catch (err: any) {
+      this.logger.warn(`发送删除审批驳回通知失败: ${err?.message}`);
+    }
+
+    return saved;
   }
 }
 

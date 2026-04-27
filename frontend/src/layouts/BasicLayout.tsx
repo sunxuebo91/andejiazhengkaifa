@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined, AppstoreOutlined, PictureOutlined, BookOutlined, FormOutlined, SearchOutlined, GiftOutlined, AuditOutlined, ProfileOutlined, SolutionOutlined, ShoppingOutlined } from '@ant-design/icons';
+import { DashboardOutlined, TeamOutlined, FileAddOutlined, UnorderedListOutlined, UserOutlined, SettingOutlined, LogoutOutlined, ContactsOutlined, FileTextOutlined, VideoCameraOutlined, QrcodeOutlined, InboxOutlined, SwapOutlined, HistoryOutlined, SafetyOutlined, AppstoreOutlined, PictureOutlined, BookOutlined, FormOutlined, SearchOutlined, GiftOutlined, AuditOutlined, ProfileOutlined, SolutionOutlined, ShoppingOutlined, WechatOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, Dropdown, MenuProps, Space } from 'antd';
 import { useMemo, useEffect } from 'react';
@@ -368,16 +368,29 @@ const BasicLayout = () => {
         ],
       });
 
-      // 系统设置菜单 - 仅管理员可见
+      // 角色管理菜单 - 仅管理员可见
       baseMenus.push({
         path: '/roles',
         name: '角色管理',
-        icon: <SettingOutlined />,
+        icon: <SafetyOutlined />,
         routes: [
           {
             path: '/roles/list',
             name: '角色列表',
           }
+        ],
+      });
+
+      // 系统设置菜单 - 仅管理员可见
+      baseMenus.push({
+        path: '/settings',
+        name: '系统设置',
+        icon: <SettingOutlined />,
+        routes: [
+          {
+            path: '/settings/wechat-subscribers',
+            name: '订阅消息列表',
+          },
         ],
       });
     }
@@ -398,6 +411,12 @@ const BasicLayout = () => {
       icon: <SettingOutlined />,
       label: '账户设置',
       onClick: () => navigate('/settings/account'),
+    },
+    {
+      key: 'wechat-subscribe',
+      icon: <WechatOutlined style={{ color: '#07C160' }} />,
+      label: '微信通知订阅',
+      onClick: () => navigate('/wechat/subscribe'),
     },
     {
       type: 'divider',

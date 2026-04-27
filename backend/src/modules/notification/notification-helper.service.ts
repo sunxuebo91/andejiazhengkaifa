@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { NotificationService } from './notification.service';
 import { NotificationGateway } from './notification.gateway';
 import { NotificationType } from './models/notification-template.model';
+import { User } from '../users/models/user.entity';
+
+/** 视为"管理员"的角色集合（与 training-leads/customers 现有口径保持一致） */
+const ADMIN_ROLES = ['admin', 'manager', 'operator', '系统管理员', '管理员', '经理'];
 
 /**
  * 通知辅助服务 - 提供业务场景的快捷通知方法
@@ -13,7 +19,27 @@ export class NotificationHelperService {
   constructor(
     private readonly notificationService: NotificationService,
     private readonly notificationGateway: NotificationGateway,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
   ) {}
+
+  /**
+   * 查询管理员用户 ID 列表
+   * @param excludeUserId 可选，排除某个用户（如操作发起者本人）
+   */
+  async getAdminUserIds(excludeUserId?: string): Promise<string[]> {
+    try {
+      const admins = await this.userModel
+        .find({ role: { $in: ADMIN_ROLES } })
+        .select('_id')
+        .lean();
+      return admins
+        .map((u: any) => u._id?.toString())
+        .filter((id: string | undefined): id is string => !!id && id !== excludeUserId);
+    } catch (error: any) {
+      this.logger.warn(`查询管理员用户失败: ${error?.message}`);
+      return [];
+    }
+  }
 
   /**
    * 发送通知并实时推送
@@ -75,6 +101,17 @@ export class NotificationHelperService {
     resumeName: string;
   }) {
     return this.sendAndPush([userId], NotificationType.RESUME_ASSIGNED, data);
+  }
+
+  /**
+   * 简历释放申请通知（他人首次用该简历发起合同时，通知简历创建人）
+   */
+  async notifyResumeReleaseRequested(creatorUserId: string, data: {
+    resumeId: string;
+    resumeName: string;
+    initiatorName: string;
+  }) {
+    return this.sendAndPush([creatorUserId], NotificationType.RESUME_RELEASE_REQUESTED, data);
   }
 
   // ========== 客户相关通知 ==========
@@ -269,6 +306,204 @@ export class NotificationHelperService {
     submitterPhone?: string;
   }) {
     return this.sendAndPush([userId], NotificationType.FORM_SUBMISSION_RECEIVED, data);
+  }
+
+  /**
+   * 表单提交通知（管理员/表单创建者）
+   */
+  async notifyFormSubmissionAdmin(userIds: string[], data: {
+    formId: string;
+    formTitle: string;
+    submissionId: string;
+    submitterName?: string;
+    submitterPhone?: string;
+  }) {
+    if (!userIds?.length) return [];
+    return this.sendAndPush(userIds, NotificationType.FORM_SUBMISSION_RECEIVED_ADMIN, data);
+  }
+
+  // ========== 跟进记录相关 ==========
+
+  /**
+   * 简历跟进通知（通知简历负责人）
+   */
+  async notifyResumeFollowUpAdded(userId: string, data: {
+    resumeId: string;
+    resumeName: string;
+    operatorName: string;
+    summary: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.RESUME_FOLLOW_UP_ADDED, data);
+  }
+
+  /**
+   * 客户跟进通知（通知客户负责人）
+   */
+  async notifyCustomerFollowUpAdded(userId: string, data: {
+    customerId: string;
+    customerName: string;
+    operatorName: string;
+    summary: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.CUSTOMER_FOLLOW_UP_ADDED, data);
+  }
+
+  // ========== 合同审批相关 ==========
+
+  async notifyContractApprovalRequested(userIds: string[], data: {
+    contractNumber: string;
+    requesterName: string;
+    reason: string;
+  }) {
+    if (!userIds?.length) return [];
+    return this.sendAndPush(userIds, NotificationType.CONTRACT_APPROVAL_REQUESTED, data);
+  }
+
+  async notifyContractApprovalApproved(userId: string, data: {
+    contractNumber: string;
+    approverName: string;
+    comment: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.CONTRACT_APPROVAL_APPROVED, data);
+  }
+
+  async notifyContractApprovalRejected(userId: string, data: {
+    contractNumber: string;
+    approverName: string;
+    comment: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.CONTRACT_APPROVAL_REJECTED, data);
+  }
+
+  // ========== 阿姨黑名单 ==========
+
+  async notifyAuntBlacklisted(userIds: string[], data: {
+    auntName: string;
+    operatorName: string;
+    reason: string;
+  }) {
+    if (!userIds?.length) return [];
+    return this.sendAndPush(userIds, NotificationType.AUNT_BLACKLISTED, data);
+  }
+
+  // ========== 面试 ==========
+
+  async notifyInterviewInvited(userId: string, data: {
+    resumeId: string;
+    resumeName: string;
+    operatorName: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.INTERVIEW_INVITED, data);
+  }
+
+  // ========== 员工评价 ==========
+
+  async notifyEmployeeEvaluationReceived(userIds: string[], data: {
+    employeeName: string;
+    operatorName: string;
+    score: string | number;
+  }) {
+    if (!userIds?.length) return [];
+    return this.sendAndPush(userIds, NotificationType.EMPLOYEE_EVALUATION_RECEIVED, data);
+  }
+
+  // ========== 状态变更/到期 ==========
+
+  async notifyResumeStatusChanged(userId: string, data: {
+    resumeId: string;
+    resumeName: string;
+    oldStatus: string;
+    newStatus: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.RESUME_STATUS_CHANGED, data);
+  }
+
+  async notifyResumeOrderStatusChanged(userId: string, data: {
+    resumeId: string;
+    resumeName: string;
+    oldStatus: string;
+    newStatus: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.RESUME_ORDER_STATUS_CHANGED, data);
+  }
+
+  async notifyResumeFollowUpDue(userId: string, data: {
+    resumeId: string;
+    resumeName: string;
+    days: number;
+  }) {
+    return this.sendAndPush([userId], NotificationType.RESUME_FOLLOW_UP_DUE, data);
+  }
+
+  async notifyCustomerStatusChanged(userId: string, data: {
+    customerId: string;
+    customerName: string;
+    oldStatus: string;
+    newStatus: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.CUSTOMER_STATUS_CHANGED, data);
+  }
+
+  async notifyCustomerFollowUpDue(userId: string, data: {
+    customerId: string;
+    customerName: string;
+    days: number;
+  }) {
+    return this.sendAndPush([userId], NotificationType.CUSTOMER_FOLLOW_UP_DUE, data);
+  }
+
+  async notifyContractStatusChanged(userIds: string[], data: {
+    contractId: string;
+    contractNumber: string;
+    customerName: string;
+    oldStatus: string;
+    newStatus: string;
+  }) {
+    if (!userIds?.length) return [];
+    return this.sendAndPush(userIds, NotificationType.CONTRACT_STATUS_CHANGED, data);
+  }
+
+  async notifyContractExpiringSoon(userIds: string[], data: {
+    contractId: string;
+    contractNumber: string;
+    customerName: string;
+    daysLeft: number;
+  }) {
+    if (!userIds?.length) return [];
+    return this.sendAndPush(userIds, NotificationType.CONTRACT_EXPIRING_SOON, data);
+  }
+
+  // ========== 周报/月报 ==========
+
+  async notifyWeeklyReport(userIds: string[], data: {
+    newCustomers: number;
+    followUps: number;
+    contracts: number;
+  }) {
+    if (!userIds?.length) return [];
+    return this.sendAndPush(userIds, NotificationType.WEEKLY_REPORT, data);
+  }
+
+  async notifyMonthlyReport(userIds: string[], data: {
+    newCustomers: number;
+    followUps: number;
+    contracts: number;
+  }) {
+    if (!userIds?.length) return [];
+    return this.sendAndPush(userIds, NotificationType.MONTHLY_REPORT, data);
+  }
+
+  // ========== 账号 ==========
+
+  async notifyPermissionChanged(userId: string, data: {
+    operatorName: string;
+    summary: string;
+  }) {
+    return this.sendAndPush([userId], NotificationType.PERMISSION_CHANGED, data);
+  }
+
+  async notifyAccountSecurity(userId: string, data: { summary: string }) {
+    return this.sendAndPush([userId], NotificationType.ACCOUNT_SECURITY, data);
   }
 
   // ========== 推荐奖励系统（CRM 铃铛通知） ==========

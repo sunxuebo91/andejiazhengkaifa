@@ -6,19 +6,21 @@ import { FollowUpService } from './follow-up.service';
 import { User, UserSchema } from '../users/models/user.entity';
 import { Resume, ResumeSchema } from '../resume/models/resume.entity';
 import mongooseAutopopulate from 'mongoose-autopopulate';
+import { NotificationModule } from '../notification/notification.module';
 // import { ResumeModule } from '../resume/resume.module';
 // import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { 
-        name: FollowUp.name, 
+      {
+        name: FollowUp.name,
         schema: FollowUpSchema.plugin(mongooseAutopopulate as any)
       },
       { name: 'User', schema: UserSchema },
       { name: Resume.name, schema: ResumeSchema }
     ]),
+    NotificationModule,
     // ResumeModule,
     // UsersModule,
   ],

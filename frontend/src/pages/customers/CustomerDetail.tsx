@@ -17,7 +17,14 @@ import {
   Tooltip,
   Select,
   DatePicker,
+  Grid,
 } from 'antd';
+
+const { useBreakpoint } = Grid;
+
+// Descriptions 响应式列数：移动端 1 列，平板 2 列，桌面按原始值
+const RESPONSIVE_COL_3 = { xs: 1, sm: 1, md: 2, lg: 3, xl: 3, xxl: 3 } as const;
+const RESPONSIVE_COL_2 = { xs: 1, sm: 1, md: 2, lg: 2, xl: 2, xxl: 2 } as const;
 import { ArrowLeftOutlined, EditOutlined, MessageOutlined, ClockCircleOutlined, FileTextOutlined, HistoryOutlined, DownOutlined, UpOutlined, AuditOutlined, SaveOutlined, CopyOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { customerService } from '../../services/customerService';
@@ -38,6 +45,8 @@ const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth(); // 获取当前用户信息
+  const screens = useBreakpoint();
+  const isMobile = !screens.md; // < 768px 视为移动端
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -439,72 +448,88 @@ const CustomerDetail: React.FC = () => {
     );
   }
 
+  // 移动端把所有头部操作按钮抽出来作为一个独立的横向滚动条，避免拥挤
+  const headerActions = (
+    <Space wrap={!isMobile} size={isMobile ? 8 : 8}>
+      <Authorized role={["admin","manager","operator"]} noMatch={null}>
+        <Button size={isMobile ? 'middle' : 'middle'} onClick={() => setAssignModal({ visible: true, customerId: customer._id })}>
+          分配负责人
+        </Button>
+      </Authorized>
+      {isAdmin && (
+        customer.isFrozen ? (
+          <Button danger loading={freezeLoading} onClick={handleUnfreeze}>
+            解冻
+          </Button>
+        ) : (
+          <Button loading={freezeLoading} onClick={handleFreeze}>
+            冻结
+          </Button>
+        )
+      )}
+      <Button
+        type="primary"
+        icon={<EditOutlined />}
+        onClick={() => navigate(`/customers/edit/${customer._id}`)}
+      >
+        编辑客户
+      </Button>
+      <Button
+        type="primary"
+        icon={<FileTextOutlined />}
+        onClick={handleCreateContract}
+        style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+      >
+        发起合同
+      </Button>
+    </Space>
+  );
+
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: isMobile ? 12 : 24, background: isMobile ? '#f5f5f5' : 'transparent', minHeight: isMobile ? '100vh' : undefined }}>
       <Card
+        bordered={!isMobile}
+        style={{ borderRadius: isMobile ? 8 : undefined }}
+        bodyStyle={{ padding: isMobile ? 12 : 24 }}
         title={
-          <Space>
+          <Space wrap>
             <Button
               type="text"
               icon={<ArrowLeftOutlined />}
               onClick={handleBack}
+              style={{ paddingLeft: 0 }}
             >
               返回
             </Button>
-            <span>客户详情 - {customer.name}</span>
+            <span style={{ fontSize: isMobile ? 15 : 16, fontWeight: 600 }}>
+              客户详情 - {customer.name}
+            </span>
             {customer.isFrozen && (
-              <Tag color="blue" style={{ marginLeft: 8 }}>已冻结</Tag>
+              <Tag color="blue">已冻结</Tag>
             )}
           </Space>
         }
-        extra={
-          <Space>
-            <Authorized role={["admin","manager","operator"]} noMatch={null}>
-              <Button onClick={() => setAssignModal({ visible: true, customerId: customer._id })}>
-                分配负责人
-              </Button>
-            </Authorized>
-            {isAdmin && (
-              customer.isFrozen ? (
-                <Button
-                  danger
-                  loading={freezeLoading}
-                  onClick={handleUnfreeze}
-                >
-                  解冻
-                </Button>
-              ) : (
-                <Button
-                  loading={freezeLoading}
-                  onClick={handleFreeze}
-                >
-                  冻结
-                </Button>
-              )
-            )}
-            <Button
-              type="primary"
-              icon={<EditOutlined />}
-              onClick={() => navigate(`/customers/edit/${customer._id}`)}
-            >
-              编辑客户
-            </Button>
-            <Button
-              type="primary"
-              icon={<FileTextOutlined />}
-              onClick={handleCreateContract}
-              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-            >
-              发起合同
-            </Button>
-          </Space>
-        }
+        extra={isMobile ? undefined : headerActions}
       >
-        <Row gutter={24}>
+        {isMobile && (
+          <div
+            style={{
+              marginBottom: 12,
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              paddingBottom: 4,
+            }}
+          >
+            <div style={{ display: 'inline-flex', whiteSpace: 'nowrap' }}>
+              {headerActions}
+            </div>
+          </div>
+        )}
+        <Row gutter={isMobile ? 0 : 24}>
           {/* 基本信息 */}
           <Col span={24}>
             <Card type="inner" title="基本信息" style={{ marginBottom: '16px' }}>
-              <Descriptions column={3} bordered>
+              <Descriptions column={RESPONSIVE_COL_3} bordered size={isMobile ? 'small' : 'default'}>
                 <Descriptions.Item label="客户ID" span={1}>
                   <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
                     {customer.customerId}
@@ -516,7 +541,16 @@ const CustomerDetail: React.FC = () => {
                 </Descriptions.Item>
 
                 <Descriptions.Item label="客户电话" span={1}>
-                  {customer.phone}
+                  {customer.phone ? (
+                    <a
+                      href={`tel:${customer.phone}`}
+                      style={{ color: '#1890ff', textDecoration: 'none' }}
+                    >
+                      {customer.phone}
+                    </a>
+                  ) : (
+                    '未设置'
+                  )}
                 </Descriptions.Item>
 
                 <Descriptions.Item label="微信号" span={1}>
@@ -596,7 +630,7 @@ const CustomerDetail: React.FC = () => {
                 </Space>
               }
             >
-              <Descriptions column={3} bordered>
+              <Descriptions column={RESPONSIVE_COL_3} bordered size={isMobile ? 'small' : 'default'}>
                 <Descriptions.Item label="需求品类" span={1}>
                   <Select
                     value={needsForm.serviceCategory}
@@ -804,7 +838,7 @@ const CustomerDetail: React.FC = () => {
           {/* 成交金额 */}
           <Col span={24}>
             <Card type="inner" title="成交信息" style={{ marginBottom: '16px' }}>
-              <Descriptions column={2} bordered>
+              <Descriptions column={RESPONSIVE_COL_2} bordered size={isMobile ? 'small' : 'default'}>
                 <Descriptions.Item label="成交金额">
                   {customer.dealAmount !== undefined && customer.dealAmount !== null ? (
                     <span style={{ color: '#52c41a', fontSize: '16px', fontWeight: 'bold' }}>
@@ -822,7 +856,7 @@ const CustomerDetail: React.FC = () => {
           {customer.remarks && (
             <Col span={24}>
               <Card type="inner" title="备注信息" style={{ marginBottom: '16px' }}>
-                <Descriptions column={1} bordered>
+                <Descriptions column={1} bordered size={isMobile ? 'small' : 'default'}>
                   <Descriptions.Item label="备注">
                     <div style={{ whiteSpace: 'pre-wrap' }}>
                       {customer.remarks}
@@ -836,7 +870,7 @@ const CustomerDetail: React.FC = () => {
           {/* 系统信息 */}
           <Col span={24}>
             <Card type="inner" title="系统信息" style={{ marginBottom: '16px' }}>
-              <Descriptions column={2} bordered>
+              <Descriptions column={RESPONSIVE_COL_2} bordered size={isMobile ? 'small' : 'default'}>
                 <Descriptions.Item label="线索创建人" span={1}>
                   {customer.createdByUser ? String(customer.createdByUser.name || customer.createdByUser.username || '未知') : String(customer.createdBy || '未知')}
                 </Descriptions.Item>

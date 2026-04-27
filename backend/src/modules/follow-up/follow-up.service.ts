@@ -6,6 +6,7 @@ import { CreateFollowUpDto } from './dto/create-follow-up.dto';
 import { User } from '../users/models/user.entity';
 import { Resume } from '../resume/models/resume.entity';
 import { AppLogger } from '../../common/logging/app-logger';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 
 // 定义填充后的用户信息类型
 export interface PopulatedUser {
@@ -36,6 +37,7 @@ export class FollowUpService {
     @InjectModel(FollowUp.name) private followUpModel: Model<FollowUp>,
     @InjectModel('User') private userModel: Model<User>,
     @InjectModel(Resume.name) private resumeModel: Model<Resume>,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   // 创建跟进记录
@@ -94,6 +96,22 @@ export class FollowUpService {
     // 转换为普通对象并返回
     const result = populatedFollowUp.toObject();
     this.logger.debug('保存后的跟进记录(带用户信息):', { data: result });
+
+    // 🔔 通知简历负责人：有人为你的简历加了跟进记录（操作者本人不通知）
+    try {
+      const ownerId = (resume as any).assignedTo?.toString?.() || (resume as any).userId?.toString?.();
+      if (ownerId && ownerId !== userId) {
+        const summary = (createFollowUpDto.content || '').slice(0, 80);
+        await this.notificationHelper.notifyResumeFollowUpAdded(ownerId, {
+          resumeId: createFollowUpDto.resumeId,
+          resumeName: (resume as any).name || '未填写',
+          operatorName: user.name || user.username || '系统',
+          summary,
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`发送简历跟进通知失败: ${err?.message}`);
+    }
 
     return result as unknown as PopulatedFollowUp;
   }

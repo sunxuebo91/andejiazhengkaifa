@@ -700,6 +700,44 @@ export class ResumeController {
     }
   }
 
+  @Patch(':id/release')
+  @ApiOperation({ summary: '简历释放开关（创建人或管理员，单向开启）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  async releaseForContract(@Param('id') id: string, @Request() req) {
+    try {
+      const operatorUserId = req.user?.userId;
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === '系统管理员';
+      const result = await this.resumeService.releaseForContract(id, operatorUserId, isAdmin);
+      return {
+        success: true,
+        data: result,
+        message: result.alreadyReleased ? '简历已是释放状态' : '释放成功',
+      };
+    } catch (error) {
+      this.logger.error(`释放简历失败: ${error.message}`);
+      return {
+        success: false,
+        data: null,
+        message: error.message || '释放失败',
+      };
+    }
+  }
+
+  @Get(':id/release-logs')
+  @ApiOperation({ summary: '获取简历释放相关操作日志（管理员/创建人/被拦截发起人可见）' })
+  @ApiParam({ name: 'id', description: '简历ID' })
+  async getReleaseLogs(@Param('id') id: string, @Request() req) {
+    try {
+      const viewerUserId = req.user?.userId;
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === '系统管理员';
+      const logs = await this.resumeService.getReleaseLogs(id, viewerUserId, isAdmin);
+      return { success: true, data: logs, message: '获取成功' };
+    } catch (error) {
+      this.logger.error(`获取释放日志失败: ${error.message}`);
+      return { success: false, data: null, message: error.message || '获取失败' };
+    }
+  }
+
   @Get('options')
   @ApiOperation({ summary: '获取简历筛选选项' })
   @ApiResponse({ status: 200, description: '获取成功' })

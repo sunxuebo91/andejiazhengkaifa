@@ -4,15 +4,19 @@ import { ModuleRef } from '@nestjs/core';
 import { InterviewController } from './interview.controller';
 import { InterviewService } from './interview.service';
 import { InterviewRoom, InterviewRoomSchema } from './models/interview-room.entity';
+import { Resume, ResumeSchema } from '../resume/models/resume.entity';
 import { ZegoModule } from '../zego/zego.module';
 import { ZegoService } from '../zego/zego.service';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: InterviewRoom.name, schema: InterviewRoomSchema },
+      { name: Resume.name, schema: ResumeSchema },
     ]),
     forwardRef(() => ZegoModule),
+    NotificationModule,
   ],
   controllers: [InterviewController],
   providers: [InterviewService],

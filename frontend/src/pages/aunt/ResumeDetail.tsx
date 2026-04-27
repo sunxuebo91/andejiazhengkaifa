@@ -21,8 +21,16 @@ import {
   Divider,
   Timeline,
   Empty,
-  Upload
+  Upload,
+  Grid,
+  Switch
 } from 'antd';
+
+const { useBreakpoint } = Grid;
+
+// 响应式列数：移动端 1 列，小屏 2 列，桌面 3 列
+const RESP_COL_3 = { xs: 1, sm: 1, md: 2, lg: 3, xl: 3, xxl: 3 };
+const RESP_COL_2 = { xs: 1, sm: 1, md: 2, lg: 2, xl: 2, xxl: 2 };
 import type { UploadProps } from 'antd';
 import {
   EditOutlined,
@@ -505,6 +513,8 @@ interface ResumeData {
 const ResumeDetail = () => {
   const { id: shortId } = useParams();
   const navigate = useNavigate();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [loading, setLoading] = useState(true);
   const [resume, setResume] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -530,6 +540,11 @@ const ResumeDetail = () => {
   const [operationLogs, setOperationLogs] = useState<any[]>([]);
   const [operationLogsLoading, setOperationLogsLoading] = useState(false);
   const [showAllOperationLogs, setShowAllOperationLogs] = useState(false);
+
+  // 🔒 简历释放开关（创建人/管理员可操作）
+  const [releaseSubmitting, setReleaseSubmitting] = useState(false);
+  const [releaseLogs, setReleaseLogs] = useState<any[]>([]);
+  const [releaseLogsLoading, setReleaseLogsLoading] = useState(false);
 
   // 加入黑名单
   const { hasPermission } = useAuth();
@@ -666,6 +681,56 @@ const ResumeDetail = () => {
     };
     fetchOperationLogs();
   }, [resume?._id]);
+
+  // 🔒 拉取释放相关日志（后端按权限返回；非创建人/非 admin 仅返回自己被拦截记录）
+  const loadReleaseLogs = async () => {
+    if (!resume?._id) return;
+    try {
+      setReleaseLogsLoading(true);
+      const logs = await resumeService.getReleaseLogs(resume._id);
+      setReleaseLogs(Array.isArray(logs) ? logs : []);
+    } catch (e) {
+      console.error('获取释放日志失败', e);
+      setReleaseLogs([]);
+    } finally {
+      setReleaseLogsLoading(false);
+    }
+  };
+  useEffect(() => {
+    loadReleaseLogs();
+  }, [resume?._id]);
+
+  // 释放开关：仅创建人或管理员可操作；单向开启
+  const handleToggleRelease = async (checked: boolean) => {
+    if (!resume?._id) return;
+    if (!checked) {
+      messageApi.info('释放开关为单向开启，开启后无法关闭');
+      return;
+    }
+    Modal.confirm({
+      title: '确认释放该简历用于签约？',
+      content: '释放后该简历可被任意员工用于发起合同，操作不可撤销。',
+      okText: '确认释放',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          setReleaseSubmitting(true);
+          const res = await resumeService.releaseForContract(resume._id!);
+          if (res?.success) {
+            messageApi.success(res?.data?.alreadyReleased ? '简历已是释放状态' : '释放成功');
+            setResume((prev: any) => prev ? { ...prev, releasedForContract: true, releasedAt: res?.data?.releasedAt || new Date().toISOString() } : prev);
+            loadReleaseLogs();
+          } else {
+            messageApi.error(res?.message || '释放失败');
+          }
+        } catch (err: any) {
+          messageApi.error(err?.response?.data?.message || err?.message || '释放失败');
+        } finally {
+          setReleaseSubmitting(false);
+        }
+      },
+    });
+  };
 
   // 获取背调信息
   const fetchBackgroundCheck = async () => {
@@ -1867,47 +1932,95 @@ const ResumeDetail = () => {
 
   return (
     <>
-      <div style={{ padding: '24px' }}>
-        <Card 
+      <div style={{ padding: isMobile ? '12px' : '24px', background: isMobile ? '#f5f5f5' : undefined, minHeight: isMobile ? '100vh' : undefined }}>
+        <Card
+          bordered={!isMobile}
+          style={isMobile ? { borderRadius: 8 } : undefined}
+          bodyStyle={isMobile ? { padding: 12 } : undefined}
           title={
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="flex items-center">
-                <Typography.Title level={4} style={{ margin: 0 }}>
-                  {resume?.name || '简历详情'}
-                </Typography.Title>
+            isMobile ? (
+              <Typography.Title level={5} style={{ margin: 0, fontSize: 15 }}>
+                {resume?.name || '简历详情'}
+              </Typography.Title>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="flex items-center">
+                  <Typography.Title level={4} style={{ margin: 0 }}>
+                    {resume?.name || '简历详情'}
+                  </Typography.Title>
+                </div>
+                <Space>
+                  {(() => {
+                    const cu = getCurrentUser();
+                    const creatorId = (resume as any)?.userId?._id || (resume as any)?.userId?.id || (typeof (resume as any)?.userId === 'string' ? (resume as any).userId : null);
+                    const canRelease = hasRole('admin') || (cu?.id && creatorId && String(cu.id) === String(creatorId));
+                    if (!canRelease) return null;
+                    const released = !!(resume as any)?.releasedForContract;
+                    return (
+                      <Tooltip title={released ? '已释放：任何员工可用此简历发起合同（不可关闭）' : '未释放：仅创建人可用此简历发起合同；他人需先获得释放'}>
+                        <Space size={4} style={{ marginRight: 4 }}>
+                          <span style={{ fontSize: 13, color: released ? '#52c41a' : '#faad14' }}>{released ? '已释放' : '未释放'}</span>
+                          <Switch checked={released} disabled={released} loading={releaseSubmitting} onChange={handleToggleRelease} />
+                        </Space>
+                      </Tooltip>
+                    );
+                  })()}
+                  <Button
+                    type="primary"
+                    icon={<EditOutlined />}
+                    onClick={handleEdit}
+                  >
+                    编辑简历
+                  </Button>
+                  {hasPermission('blacklist:create') && (
+                    <Button
+                      danger
+                      icon={<StopOutlined />}
+                      onClick={handleOpenBlacklist}
+                    >
+                      加入黑名单
+                    </Button>
+                  )}
+                  {hasRole('admin') && (
+                    <Button
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={handleDelete}
+                    >
+                      删除简历
+                    </Button>
+                  )}
+                </Space>
               </div>
-              <Space>
-                <Button
-                  type="primary"
-                  icon={<EditOutlined />}
-                  onClick={handleEdit}
-                >
-                  编辑简历
-                </Button>
-                {hasPermission('blacklist:create') && (
-                  <Button
-                    danger
-                    icon={<StopOutlined />}
-                    onClick={handleOpenBlacklist}
-                  >
-                    加入黑名单
-                  </Button>
-                )}
-                {hasRole('admin') && (
-                  <Button
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={handleDelete}
-                  >
-                    删除简历
-                  </Button>
-                )}
-              </Space>
-            </div>
+            )
           }
         >
-          <Card title="基本信息" style={{ marginBottom: 24 }}>
-            <Descriptions bordered column={3}>
+          {isMobile && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 12, alignItems: 'center' }}>
+              {(() => {
+                const cu = getCurrentUser();
+                const creatorId = (resume as any)?.userId?._id || (resume as any)?.userId?.id || (typeof (resume as any)?.userId === 'string' ? (resume as any).userId : null);
+                const canRelease = hasRole('admin') || (cu?.id && creatorId && String(cu.id) === String(creatorId));
+                if (!canRelease) return null;
+                const released = !!(resume as any)?.releasedForContract;
+                return (
+                  <Space size={4} style={{ marginRight: 4 }}>
+                    <span style={{ fontSize: 12, color: released ? '#52c41a' : '#faad14' }}>{released ? '已释放' : '未释放'}</span>
+                    <Switch size="small" checked={released} disabled={released} loading={releaseSubmitting} onChange={handleToggleRelease} />
+                  </Space>
+                );
+              })()}
+              <Button type="primary" icon={<EditOutlined />} onClick={handleEdit} size="small">编辑简历</Button>
+              {hasPermission('blacklist:create') && (
+                <Button danger icon={<StopOutlined />} onClick={handleOpenBlacklist} size="small">加入黑名单</Button>
+              )}
+              {hasRole('admin') && (
+                <Button danger icon={<DeleteOutlined />} onClick={handleDelete} size="small">删除简历</Button>
+              )}
+            </div>
+          )}
+          <Card title="基本信息" style={{ marginBottom: isMobile ? 12 : 24 }} bodyStyle={isMobile ? { padding: 12 } : undefined}>
+            <Descriptions bordered column={RESP_COL_3} size={isMobile ? 'small' : 'default'}>
               <Descriptions.Item label="简历ID">
                 <Tooltip title={`完整ID: ${resume?._id || '未知'}`}>
                   <span>{resume?._id ? resume._id.substring(0, 8).padEnd(8, '0') : '-'}</span>
@@ -1916,7 +2029,11 @@ const ResumeDetail = () => {
               <Descriptions.Item label="姓名">{resume?.name || '-'}</Descriptions.Item>
               <Descriptions.Item label="年龄">{resume?.age || '-'}</Descriptions.Item>
               <Descriptions.Item label="体检时间">{resume?.medicalExamDate ? dayjs(resume.medicalExamDate).format('YYYY-MM-DD') : '-'}</Descriptions.Item>
-              <Descriptions.Item label="手机号">{resume?.phone || '-'}</Descriptions.Item>
+              <Descriptions.Item label="手机号">
+                {resume?.phone ? (
+                  <a href={`tel:${resume.phone}`} style={{ color: '#1890ff', textDecoration: 'none' }}>{resume.phone}</a>
+                ) : '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="微信号">{resume?.wechat || '-'}</Descriptions.Item>
               <Descriptions.Item label="身份证号">{resume?.idNumber || '-'}</Descriptions.Item>
               <Descriptions.Item label="学历">{resume?.education ? educationMap[resume.education] : '-'}</Descriptions.Item>
@@ -1937,12 +2054,16 @@ const ResumeDetail = () => {
               <Descriptions.Item label="生肖">{resume?.zodiac ? zodiacMap[resume.zodiac] : '-'}</Descriptions.Item>
               <Descriptions.Item label="星座">{resume?.zodiacSign ? zodiacSignMap[resume.zodiacSign] : '-'}</Descriptions.Item>
               <Descriptions.Item label="紧急联系人">{resume?.emergencyContactName || '-'}</Descriptions.Item>
-              <Descriptions.Item label="紧急联系人电话">{resume?.emergencyContactPhone || '-'}</Descriptions.Item>
+              <Descriptions.Item label="紧急联系人电话">
+                {resume?.emergencyContactPhone ? (
+                  <a href={`tel:${resume.emergencyContactPhone}`} style={{ color: '#1890ff', textDecoration: 'none' }}>{resume.emergencyContactPhone}</a>
+                ) : '-'}
+              </Descriptions.Item>
             </Descriptions>
           </Card>
 
-          <Card title="工作信息" style={{ marginBottom: 24 }}>
-            <Descriptions bordered column={3}>
+          <Card title="工作信息" style={{ marginBottom: isMobile ? 12 : 24 }} bodyStyle={isMobile ? { padding: 12 } : undefined}>
+            <Descriptions bordered column={RESP_COL_3} size={isMobile ? 'small' : 'default'}>
               <Descriptions.Item label="工种">{resume?.jobType ? jobTypeMap[resume.jobType] : '-'}</Descriptions.Item>
               <Descriptions.Item label="月嫂档位">
                 {(resume as any)?.maternityNurseLevel ? maternityNurseLevelMap[(resume as any).maternityNurseLevel] : '-'}
@@ -1978,8 +2099,8 @@ const ResumeDetail = () => {
           </Card>
 
           {/* 培训意向卡片 */}
-          <Card title="培训意向" style={{ marginBottom: 24 }}>
-            <Descriptions bordered column={2}>
+          <Card title="培训意向" style={{ marginBottom: isMobile ? 12 : 24 }} bodyStyle={isMobile ? { padding: 12 } : undefined}>
+            <Descriptions bordered column={RESP_COL_2} size={isMobile ? 'small' : 'default'}>
               <Descriptions.Item label="学习意向">
                 {resume?.learningIntention ? learningIntentionMap[resume.learningIntention] : '-'}
               </Descriptions.Item>
@@ -2377,12 +2498,14 @@ const ResumeDetail = () => {
               </div>
             ) : backgroundCheck ? (
               <div>
-                <Descriptions bordered column={2} size="small">
+                <Descriptions bordered column={RESP_COL_2} size="small">
                   <Descriptions.Item label="候选人姓名">
                     {backgroundCheck.name}
                   </Descriptions.Item>
                   <Descriptions.Item label="手机号">
-                    {backgroundCheck.mobile}
+                    {backgroundCheck.mobile ? (
+                      <a href={`tel:${backgroundCheck.mobile}`} style={{ color: '#1890ff', textDecoration: 'none' }}>{backgroundCheck.mobile}</a>
+                    ) : '-'}
                   </Descriptions.Item>
                   <Descriptions.Item label="身份证号">
                     {backgroundCheck.idNo ?
@@ -2704,6 +2827,61 @@ const ResumeDetail = () => {
             </Card>
           )}
 
+          {/* 🔒 释放记录（admin/创建人看全部，被拦截发起人仅看自己被拦截记录） */}
+          {(releaseLogs.length > 0 || releaseLogsLoading) && (
+            <Card
+              title={
+                <Space>
+                  <SafetyOutlined />
+                  <span>释放记录</span>
+                  {releaseLogs.length > 0 && (
+                    <Tag color="geekblue">{releaseLogs.length} 条记录</Tag>
+                  )}
+                </Space>
+              }
+              style={{ marginBottom: 24 }}
+              loading={releaseLogsLoading}
+            >
+              {releaseLogs.length > 0 ? (
+                <Timeline
+                  mode="left"
+                  items={releaseLogs.map((log: any, idx: number) => {
+                    const operatedAt = log.operatedAt || log.createdAt;
+                    const operatorName = log.operator?.name || log.operator?.username || '系统';
+                    const dotColorMap: Record<string, string> = {
+                      release_for_contract: 'green',
+                      auto_release_first_contract: 'blue',
+                      contract_blocked_by_release: 'orange',
+                    };
+                    const dotColor = dotColorMap[log.operationType] || 'gray';
+                    return {
+                      key: log._id || idx,
+                      color: dotColor,
+                      label: operatedAt ? dayjs(operatedAt).format('YYYY-MM-DD HH:mm:ss') : '-',
+                      children: (
+                        <Card size="small" bordered={false} style={{ background: '#fafafa' }}>
+                          <div>
+                            <Tag color={dotColor}>{log.operationName || log.operationType}</Tag>
+                            <span style={{ color: '#666', marginLeft: 8 }}>
+                              操作人: <strong>{operatorName}</strong>
+                            </span>
+                          </div>
+                          {log.details?.description && (
+                            <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
+                              {log.details.description}
+                            </div>
+                          )}
+                        </Card>
+                      ),
+                    };
+                  })}
+                />
+              ) : (
+                <Empty description="暂无释放相关记录" style={{ padding: '24px 0' }} />
+              )}
+            </Card>
+          )}
+
           {/* 🆕 操作日志 - 仅管理员可见 */}
           <Authorized role={["admin"]} noMatch={null}>
             <Card
@@ -2792,8 +2970,8 @@ const ResumeDetail = () => {
           </Authorized>
 
           {/* 创建信息卡片 */}
-          <Card title="创建信息" style={{ marginBottom: 24 }}>
-            <Descriptions bordered column={2}>
+          <Card title="创建信息" style={{ marginBottom: isMobile ? 12 : 24 }} bodyStyle={isMobile ? { padding: 12 } : undefined}>
+            <Descriptions bordered column={RESP_COL_2} size={isMobile ? 'small' : 'default'}>
               <Descriptions.Item label="创建人">
                 {resume?.userId?.name || resume?.userId?.username || '-'}
               </Descriptions.Item>

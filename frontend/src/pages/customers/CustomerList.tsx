@@ -15,8 +15,11 @@ import {
   Modal,
   UploadProps,
   DatePicker,
-  Popconfirm
+  Popconfirm,
+  Grid
 } from 'antd';
+
+const { useBreakpoint } = Grid;
 import { SearchOutlined, PlusOutlined, MessageOutlined, UploadOutlined, InboxOutlined, ExportOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { customerService } from '../../services/customerService';
@@ -42,6 +45,8 @@ const { RangePicker } = DatePicker;
 const CustomerList: React.FC = () => {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -698,12 +703,12 @@ const CustomerList: React.FC = () => {
 
   return (
     <div style={{ padding: 0 }}>
-      <Card title="客户管理" style={{ marginBottom: '24px' }}>
+      <Card title="客户管理" style={{ marginBottom: isMobile ? '12px' : '24px' }} bodyStyle={isMobile ? { padding: 12 } : undefined}>
         {/* 搜索筛选和操作区域 */}
         <div style={{ marginBottom: '16px' }}>
           {/* 第一行：搜索框 + 下拉筛选 + 搜索/重置按钮 */}
           <Row gutter={[12, 8]} align="middle">
-            <Col span={4}>
+            <Col xs={24} sm={12} md={4}>
               <Search
                 placeholder="搜索客户姓名、电话、微信号"
                 allowClear
@@ -714,7 +719,7 @@ const CustomerList: React.FC = () => {
                 onChange={(e) => setSearchFilters({ ...searchFilters, search: e.target.value })}
               />
             </Col>
-            <Col span={3}>
+            <Col xs={12} sm={8} md={3}>
               <Select
                 placeholder="线索来源"
                 allowClear
@@ -727,7 +732,7 @@ const CustomerList: React.FC = () => {
                 ))}
               </Select>
             </Col>
-            <Col span={3}>
+            <Col xs={12} sm={8} md={3}>
               <Select
                 placeholder="服务类别"
                 allowClear
@@ -740,7 +745,7 @@ const CustomerList: React.FC = () => {
                 ))}
               </Select>
             </Col>
-            <Col span={3}>
+            <Col xs={12} sm={8} md={3}>
               <Select
                 placeholder="客户状态"
                 allowClear
@@ -753,7 +758,7 @@ const CustomerList: React.FC = () => {
                 ))}
               </Select>
             </Col>
-            <Col span={3}>
+            <Col xs={12} sm={8} md={3}>
               <Select
                 placeholder="线索等级"
                 allowClear
@@ -766,7 +771,7 @@ const CustomerList: React.FC = () => {
                 ))}
               </Select>
             </Col>
-            <Col span={3}>
+            <Col xs={12} sm={8} md={3}>
               <Select
                 placeholder="跟进状态"
                 allowClear
@@ -780,7 +785,7 @@ const CustomerList: React.FC = () => {
               </Select>
             </Col>
             {canViewAssignableUsers && (
-              <Col span={3}>
+              <Col xs={12} sm={8} md={3}>
                 <Select
                   placeholder="线索归属人"
                   allowClear
@@ -804,12 +809,12 @@ const CustomerList: React.FC = () => {
                 </Select>
               </Col>
             )}
-            <Col span={2}>
-              <Space>
-                <Button type="primary" onClick={handleSearch}>
+            <Col xs={24} sm={24} md={2}>
+              <Space style={isMobile ? { width: '100%' } : undefined}>
+                <Button type="primary" onClick={handleSearch} style={isMobile ? { flex: 1 } : undefined} block={isMobile}>
                   搜索
                 </Button>
-                <Button onClick={handleReset}>
+                <Button onClick={handleReset} style={isMobile ? { flex: 1 } : undefined} block={isMobile}>
                   重置
                 </Button>
               </Space>
@@ -817,7 +822,7 @@ const CustomerList: React.FC = () => {
           </Row>
           {/* 第二行：日期筛选 + 操作按钮 */}
           <Row gutter={[12, 8]} align="middle" style={{ marginTop: '8px' }}>
-            <Col span={5}>
+            <Col xs={24} sm={12} md={5}>
               <RangePicker
                 placeholder={['线索创建开始日期', '线索创建结束日期']}
                 style={{ width: '100%' }}
@@ -834,7 +839,7 @@ const CustomerList: React.FC = () => {
                 }}
               />
             </Col>
-            <Col span={5}>
+            <Col xs={24} sm={12} md={5}>
               <RangePicker
                 placeholder={['线索分配开始日期', '线索分配结束日期']}
                 style={{ width: '100%' }}
@@ -851,18 +856,20 @@ const CustomerList: React.FC = () => {
                 }}
               />
             </Col>
-            <Col span={14}>
-              <Space>
+            <Col xs={24} sm={24} md={14}>
+              <Space wrap style={isMobile ? { width: '100%' } : undefined}>
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={() => navigate('/customers/create')}
+                  block={isMobile}
                 >
                   新增客户
                 </Button>
                 <Button
                   icon={<UploadOutlined />}
                   onClick={() => setImportModalVisible(true)}
+                  block={isMobile}
                 >
                   批量导入
                 </Button>
@@ -889,36 +896,136 @@ const CustomerList: React.FC = () => {
           </div>
         )}
 
-        {/* 客户列表表格 */}
-        <Table
-          columns={columns}
-          dataSource={customers}
-          rowKey="_id"
-          loading={loading}
-          scroll={{ x: 1440 }}
-          rowSelection={{
-            selectedRowKeys,
-            onChange: (keys) => setSelectedRowKeys(keys),
-            selections: [
-              Table.SELECTION_ALL,
-              Table.SELECTION_INVERT,
-              Table.SELECTION_NONE,
-            ],
-          }}
-          pagination={{
-            current: currentPage,
-            pageSize: pageSize,
-            total: total,
-            showSizeChanger: true,
-            showQuickJumper: true,
-
-
-            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
-            onChange: (page, size) => {
-              loadCustomers(page, size);
-            },
-          }}
-        />
+        {/* 客户列表 */}
+        {isMobile ? (
+          <>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>加载中...</div>
+            ) : customers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>暂无数据</div>
+            ) : (
+              customers.map(record => {
+                const isNewLead = record.transferCount === 0 || !record.transferCount;
+                return (
+                  <Card
+                    key={record._id}
+                    size="small"
+                    style={{ marginBottom: 12, borderRadius: 8 }}
+                    bodyStyle={{ padding: 12 }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Link
+                          to={`/standalone/customers/${record._id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#1890ff', fontWeight: 'bold', fontSize: 13 }}
+                        >
+                          {record.customerId}
+                        </Link>
+                        {isNewLead && (
+                          <Tag color="green" style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px', marginLeft: 6 }}>NEW</Tag>
+                        )}
+                      </div>
+                      <Tag color={getStatusColor(record.contractStatus)} style={{ marginRight: 0 }}>
+                        {record.contractStatus}
+                      </Tag>
+                    </div>
+                    <div style={{ marginBottom: 6, fontSize: 14 }}>
+                      <span style={{ fontWeight: 600 }}>{record.name}</span>
+                      {record.phone && (
+                        <a href={`tel:${record.phone}`} style={{ marginLeft: 8, color: '#1890ff', fontSize: 13 }}>
+                          {record.phone}
+                        </a>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                      {record.leadSource && <Tag color="geekblue" style={{ marginRight: 0 }}>{record.leadSource}</Tag>}
+                      {record.serviceCategory && <Tag style={{ marginRight: 0 }}>{record.serviceCategory}</Tag>}
+                      {record.leadLevel && <Tag color={getLeadLevelColor(record.leadLevel)} style={{ marginRight: 0 }}>{record.leadLevel}</Tag>}
+                      {record.followUpStatus && (
+                        <Tag color={record.followUpStatus === '新客未跟进' ? 'red' : record.followUpStatus === '流转未跟进' ? 'orange' : 'green'} style={{ marginRight: 0 }}>
+                          {record.followUpStatus}
+                        </Tag>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#999', marginBottom: 10 }}>
+                      跟进人：{record.assignedToUser?.name || '-'} · {dayjs(record.updatedAt).format('YYYY-MM-DD HH:mm')}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <Button type="primary" size="small" onClick={() => navigate(`/contracts/create?customerId=${record._id}`)}>
+                        发起合同
+                      </Button>
+                      <Button size="small" icon={<MessageOutlined />} onClick={() => handleAddFollowUp(record)}>
+                        添加跟进
+                      </Button>
+                      <Authorized role={["admin", "manager", "operator"]} noMatch={null}>
+                        <Button size="small" onClick={() => setAssignModal({ visible: true, customerId: record._id, customerName: record.name })}>
+                          分配
+                        </Button>
+                      </Authorized>
+                      {!record.inPublicPool && (
+                        <Button size="small" icon={<ExportOutlined />} onClick={() => handleReleaseToPool(record)} danger>
+                          释放
+                        </Button>
+                      )}
+                      <Authorized role="admin" noMatch={null}>
+                        <Popconfirm
+                          title="确认删除"
+                          description={`确定要删除客户「${record.name}」吗？此操作不可恢复。`}
+                          onConfirm={() => handleDeleteCustomer(record._id, record.name)}
+                          okText="删除"
+                          okButtonProps={{ danger: true }}
+                          cancelText="取消"
+                        >
+                          <Button size="small" icon={<DeleteOutlined />} danger>删除</Button>
+                        </Popconfirm>
+                      </Authorized>
+                    </div>
+                  </Card>
+                );
+              })
+            )}
+            <div style={{ textAlign: 'center', marginTop: 12, color: '#999', fontSize: 12 }}>
+              共 {total} 条
+              {total > pageSize && (
+                <Space style={{ marginLeft: 12 }}>
+                  <Button size="small" disabled={currentPage <= 1} onClick={() => loadCustomers(currentPage - 1, pageSize)}>上一页</Button>
+                  <span>{currentPage}/{Math.ceil(total / pageSize)}</span>
+                  <Button size="small" disabled={currentPage >= Math.ceil(total / pageSize)} onClick={() => loadCustomers(currentPage + 1, pageSize)}>下一页</Button>
+                </Space>
+              )}
+            </div>
+          </>
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={customers}
+            rowKey="_id"
+            loading={loading}
+            scroll={{ x: 1440 }}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: (keys) => setSelectedRowKeys(keys),
+              selections: [
+                Table.SELECTION_ALL,
+                Table.SELECTION_INVERT,
+                Table.SELECTION_NONE,
+              ],
+            }}
+            pagination={{
+              current: currentPage,
+              pageSize: pageSize,
+              total: total,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+              onChange: (page, size) => {
+                loadCustomers(page, size);
+              },
+            }}
+          />
+        )}
       </Card>
 
       {/* 添加跟进记录弹窗 */}

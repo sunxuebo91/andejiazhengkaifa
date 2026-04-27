@@ -1434,6 +1434,7 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
           } catch (localError) {
             console.error('培训订单本地保存失败:', localError);
             const respData: any = (localError as any)?.response?.data;
+            const errMsg: string = (localError as any)?.message || respData?.message || '';
             if (respData && (respData.code === 'AUNT_BLACKLISTED' || respData.error === 'AUNT_BLACKLISTED')) {
               Modal.warning({
                 title: '该阿姨已在黑名单中',
@@ -1442,6 +1443,16 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
                     <div>无法发起合同，本地合同未保存。</div>
                     {respData.reason && <div style={{ marginTop: 8 }}>原因：{respData.reason}</div>}
                     <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>如需调整请先由管理员释放该黑名单记录。</div>
+                  </div>
+                ),
+              });
+            } else if (errMsg.includes('该简历未释放')) {
+              Modal.warning({
+                title: '该简历未释放，无法发起合同',
+                content: (
+                  <div>
+                    <div>{errMsg}</div>
+                    <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>已自动通知简历创建人，请联系其在简历详情页打开释放开关后再发起合同。</div>
                   </div>
                 ),
               });
@@ -1605,6 +1616,7 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
         } catch (localError) {
           console.error('保存到本地数据库失败:', localError);
           const respData: any = (localError as any)?.response?.data;
+          const errMsg: string = (localError as any)?.message || respData?.message || '';
           if (respData && (respData.code === 'AUNT_BLACKLISTED' || respData.error === 'AUNT_BLACKLISTED')) {
             Modal.warning({
               title: '该阿姨已在黑名单中',
@@ -1613,6 +1625,16 @@ const ESignatureStepPage: React.FC<ESignaturePageProps> = ({ mode = 'customer' }
                   <div>无法发起合同，本地合同未保存。</div>
                   {respData.reason && <div style={{ marginTop: 8 }}>原因：{respData.reason}</div>}
                   <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>如需调整请先由管理员释放该黑名单记录。</div>
+                </div>
+              ),
+            });
+          } else if (errMsg.includes('该简历未释放')) {
+            Modal.warning({
+              title: '该简历未释放，无法发起合同',
+              content: (
+                <div>
+                  <div>{errMsg}</div>
+                  <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>已自动通知简历创建人，请联系其在简历详情页打开释放开关后再发起合同。</div>
                 </div>
               ),
             });

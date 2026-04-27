@@ -5,6 +5,7 @@ import { EmployeeEvaluation } from './models/employee-evaluation.entity';
 import { CreateEvaluationDto } from './dto/create-evaluation.dto';
 import { UpdateEvaluationDto } from './dto/update-evaluation.dto';
 import { QueryEvaluationDto } from './dto/query-evaluation.dto';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 
 @Injectable()
 export class EmployeeEvaluationService {
@@ -13,6 +14,7 @@ export class EmployeeEvaluationService {
   constructor(
     @InjectModel(EmployeeEvaluation.name)
     private readonly evaluationModel: Model<EmployeeEvaluation>,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   /**
@@ -35,6 +37,20 @@ export class EmployeeEvaluationService {
 
       const saved = await evaluation.save();
       this.logger.log(`员工评价创建成功: ${saved._id}`);
+
+      // 🔔 通知管理员：有新的员工评价提交
+      try {
+        const adminIds = await this.notificationHelper.getAdminUserIds(evaluatorId);
+        if (adminIds.length > 0) {
+          await this.notificationHelper.notifyEmployeeEvaluationReceived(adminIds, {
+            employeeName: dto.employeeName,
+            operatorName: evaluatorName,
+            score: dto.overallRating ?? '-',
+          });
+        }
+      } catch (err: any) {
+        this.logger.warn(`发送员工评价通知失败: ${err?.message}`);
+      }
 
       return saved;
     } catch (error) {

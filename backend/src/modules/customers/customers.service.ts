@@ -312,6 +312,24 @@ export class CustomersService {
       this.logger.error(`❌ 发送客户创建通知失败: ${err.message}`);
     }
 
+    // 🔔 通知管理员：新客户已创建（排除已通知的负责人和创建者本人）
+    try {
+      const adminIds = await this.notificationHelper.getAdminUserIds(userId);
+      const recipients = adminIds.filter(id => id !== assignedToUserId);
+      if (recipients.length > 0) {
+        const creator = await this.userModel.findById(userId).select('name').lean();
+        await this.notificationHelper.notifyCustomerCreated(recipients, {
+          customerId: savedCustomer._id.toString(),
+          customerName: savedCustomer.name,
+          phone: this.maskPhoneNumber(savedCustomer.phone),
+          leadSource: savedCustomer.leadSource,
+          creatorName: (creator as any)?.name || '系统',
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`发送新客户管理员通知失败: ${err?.message}`);
+    }
+
     return savedCustomer;
   }
 
@@ -921,6 +939,23 @@ export class CustomersService {
     // ⚠️ 注意：跟进记录本身已保存到 customer_follow_ups 表
     // 不需要再记录到操作日志，避免重复显示
 
+    // 🔔 通知客户负责人：有人为你的客户加了跟进记录（操作者本人不通知）
+    try {
+      const ownerId = (customer as any).assignedTo?.toString?.();
+      if (ownerId && ownerId !== userId) {
+        const operator = await this.userModel.findById(userId).select('name username').lean();
+        const summary = ((createFollowUpDto as any).content || (createFollowUpDto as any).remark || '').slice(0, 80);
+        await this.notificationHelper.notifyCustomerFollowUpAdded(ownerId, {
+          customerId,
+          customerName: (customer as any).name || '未填写',
+          operatorName: (operator as any)?.name || (operator as any)?.username || '系统',
+          summary,
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`发送客户跟进通知失败: ${err?.message}`);
+    }
+
     return saved;
   }
 
@@ -939,7 +974,7 @@ export class CustomersService {
     }
 
     // 验证目标用户
-    const targetUser = await this.userModel.findById(assignedTo).select('name username role active').lean();
+    const targetUser = await this.userModel.findById(assignedTo).select('name username role active wechatOpenId').lean();
     if (!targetUser) {
       throw new NotFoundException('指定的负责人不存在');
     }
@@ -1042,6 +1077,9 @@ export class CustomersService {
       }
     );
 
+    // 🔔 服务号订阅通知（额度受限，未订阅则跳过）
+    await this.sendAssignmentNotification(updated, targetUser as any, assignmentReason);
+
     return updated;
   }
 
@@ -1059,7 +1097,7 @@ export class CustomersService {
     }
 
     // 验证目标用户
-    const targetUser = await this.userModel.findById(assignedTo).select('name username role active').lean();
+    const targetUser = await this.userModel.findById(assignedTo).select('name username role active wechatOpenId').lean();
     if (!targetUser) {
       throw new NotFoundException('指定的负责人不存在');
     }
@@ -1142,7 +1180,7 @@ export class CustomersService {
           }
         );
 
-	        // 🔔 发送站内通知（为每个客户单独发送，微信模板消息改由小程序端处理）
+	        // 🔔 发送站内通知（为每个客户单独发送）
         await this.notificationHelper.notifyCustomerAssigned(assignedTo, {
           customerId: customerId,
           customerName: updated.name,
@@ -1152,11 +1190,19 @@ export class CustomersService {
           this.logger.error(`发送客户分配通知失败: ${err.message}`);
         });
 
+        // 🔔 服务号订阅通知（每条独立发送，与单条分配一致；额度不足/未订阅会自动跳过）
+        await this.sendAssignmentNotification(updated, targetUser as any, assignmentReason);
+
         successCount++;
       } catch (error) {
         errors.push({ customerId, error: error.message || '分配失败' });
         failedCount++;
       }
+    }
+
+    // 🔔 服务号订阅通知（按成功条数发送，额度不足则跳过）
+    if (successCount > 0) {
+      await this.sendBatchAssignmentNotification(successCount, targetUser as any, assignmentReason);
     }
 
     return {
@@ -1199,8 +1245,16 @@ export class CustomersService {
         return;
       }
 
-      // 构建客户详情页面URL
-      const detailUrl = `${process.env.FRONTEND_URL || 'https://crm.andejiazheng.com'}/customers/${(customer as any)._id}`;
+      // 构建落地页 URL：跳转到「线索分配确认页」，页面内任何按钮点击都会先弹订阅授权框（+5 条额度）
+      const baseUrl = process.env.FRONTEND_URL || 'https://crm.andejiazheng.com';
+      const cid = (customer as any)._id?.toString?.() || '';
+      const assignedAt = new Date().toLocaleString('zh-CN');
+      const detailUrl =
+        `${baseUrl}/wechat/lead-received` +
+        `?cid=${encodeURIComponent(cid)}` +
+        `&name=${encodeURIComponent(customer.name || '')}` +
+        `&assignedAt=${encodeURIComponent(assignedAt)}` +
+        (assignmentReason ? `&by=${encodeURIComponent(assignmentReason)}` : '');
 
       // 发送微信通知
       await this.wechatService.sendLeadAssignmentNotification(
@@ -1210,7 +1264,7 @@ export class CustomersService {
           phone: customer.phone,
           leadSource: customer.leadSource,
           serviceCategory: customer.serviceCategory || '未指定',
-          assignedAt: new Date().toLocaleString('zh-CN'),
+          assignedAt,
           assignmentReason: assignmentReason,
         },
         detailUrl
@@ -1635,7 +1689,7 @@ export class CustomersService {
     }
 
     // 验证目标用户
-    const targetUser = await this.userModel.findById(assignedTo).select('name username role active').lean();
+    const targetUser = await this.userModel.findById(assignedTo).select('name username role active wechatOpenId').lean();
     if (!targetUser) {
       throw new NotFoundException('指定的负责人不存在');
     }
@@ -1810,6 +1864,16 @@ export class CustomersService {
         description: `将客户释放到公海，原因：${releaseReason}`,
       }
     );
+
+    // 🔔 通知原负责人：客户被回收到公海（自释放时跳过）
+    if (oldAssignedTo && oldAssignedTo.toString() !== userId) {
+      this.notificationHelper
+        .notifyCustomerReclaimed(oldAssignedTo.toString(), {
+          customerName: customer.name,
+          reason: releaseReason || '未填写',
+        })
+        .catch((err: any) => this.logger.warn(`发送客户回收通知失败: ${err?.message}`));
+    }
 
     return updated;
   }

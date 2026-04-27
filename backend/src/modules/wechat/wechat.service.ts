@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { WechatSubscribeService } from './wechat-subscribe.service';
 const WeChatAPI = require('wechat-api');
 
 @Injectable()
@@ -8,10 +9,13 @@ export class WeChatService {
   private readonly logger = new Logger(WeChatService.name);
   private wechatApi: any;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private readonly subscribeService: WechatSubscribeService,
+  ) {
     const appId = this.configService.get<string>('WECHAT_APPID') || 'wx986d99b2dab1b026';
     const appSecret = this.configService.get<string>('WECHAT_APPSECRET') || '93a50c000e7c708fdd33bc569f375387';
-    
+
     this.wechatApi = new WeChatAPI(appId, appSecret);
     this.logger.log('微信服务初始化完成');
   }
@@ -61,69 +65,36 @@ export class WeChatService {
   }
 
   /**
-   * 发送线索分配通知
+   * 发送线索分配通知（服务号订阅通知）
+   * 历史签名保留兼容：phone / leadSource / serviceCategory / detailUrl 字段已不再使用
+   * 真正下发的字段为：客户姓名、分配时间、分配人
    */
   async sendLeadAssignmentNotification(
     openId: string,
     customerData: {
       name: string;
-      phone: string;
-      leadSource: string;
-      serviceCategory: string;
+      phone?: string;
+      leadSource?: string;
+      serviceCategory?: string;
       assignedAt: string;
       assignmentReason?: string;
+      assignerName?: string;
     },
-    detailUrl: string
+    detailUrl?: string,
   ): Promise<boolean> {
-    // 脱敏处理手机号
-    const maskedPhone = this.maskPhoneNumber(customerData.phone);
-    
-    // 模板消息数据
-    const templateData = {
-      first: {
-        value: '您有新的线索分配！',
-        color: '#173177'
-      },
-      keyword1: {
-        value: customerData.name,
-        color: '#173177'
-      },
-      keyword2: {
-        value: maskedPhone,
-        color: '#173177'
-      },
-      keyword3: {
-        value: customerData.leadSource,
-        color: '#173177'
-      },
-      keyword4: {
-        value: customerData.serviceCategory,
-        color: '#173177'
-      },
-      keyword5: {
-        value: customerData.assignedAt,
-        color: '#173177'
-      },
-      remark: {
-        value: `分配原因：${customerData.assignmentReason || '无'}\n\n请及时跟进处理！点击查看详情。`,
-        color: '#FF6600'
-      }
-    };
-
-    // 这里需要配置实际的模板ID，暂时使用占位符
-    const templateId = 'TEMPLATE_ID_PLACEHOLDER';
-    
-    return await this.sendTemplateMessage(openId, templateId, templateData, detailUrl);
-  }
-
-  /**
-   * 脱敏处理手机号
-   */
-  private maskPhoneNumber(phone: string): string {
-    if (!phone || phone.length < 7) {
-      return phone;
+    if (!openId) {
+      this.logger.warn('sendLeadAssignmentNotification 跳过：openId 为空');
+      return false;
     }
-    return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
+
+    const result = await this.subscribeService.sendLeadAssignNotify(openId, {
+      customerName: customerData.name,
+      assignedAt: customerData.assignedAt,
+      assignerName: customerData.assignerName || customerData.assignmentReason,
+      page: detailUrl,
+    });
+
+    return result.success;
   }
 
   /**

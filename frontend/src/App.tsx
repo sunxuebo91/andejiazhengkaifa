@@ -35,6 +35,7 @@ const RoleList = React.lazy(() => import('./pages/roles/RoleList'));
 const EditRole = React.lazy(() => import('./pages/roles/EditRole'));
 const ProfilePage = React.lazy(() => import('./pages/profile/ProfilePage'));
 const AccountSettings = React.lazy(() => import('./pages/settings/AccountSettings'));
+const WechatSubscribeList = React.lazy(() => import('./pages/settings/WechatSubscribeList'));
 const NotFound = React.lazy(() => import('./pages/NotFound'));
 const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
 const ESignaturePage = React.lazy(() => import('./pages/esign/ESignaturePage'));
@@ -85,6 +86,9 @@ const BackgroundCheckDetail = React.lazy(() => import('./pages/background-check/
 const ReferralResumeReview = React.lazy(() => import('./pages/referral/ReferralResumeReview'));
 const ReferralManage = React.lazy(() => import('./pages/referral/ReferralManage'));
 const ReferrerList = React.lazy(() => import('./pages/referral/ReferrerList'));
+// 微信通知订阅
+const WechatSubscribeNotification = React.lazy(() => import('./pages/wechat/SubscribeNotification'));
+const WechatLeadReceived = React.lazy(() => import('./pages/wechat/LeadReceived'));
 // H5 移动端合同页面（用于小程序 WebView 内嵌）
 // const MobileContractCreate = React.lazy(() => import('./pages/mobile/contract/MobileContractCreate'));
 
@@ -138,6 +142,10 @@ export default function App({ children }: AppProps) {
                 <Route path="/public/form/:id" element={<PublicForm />} />
                 {/* 公开培训线索表单 - 不需要登录 */}
                 <Route path="/public/training-lead" element={<PublicTrainingLeadForm />} />
+                {/* 微信通知订阅页（H5，移动友好，页面内部自行校验登录） */}
+                <Route path="/wechat/subscribe" element={<WechatSubscribeNotification />} />
+                {/* 线索分配通知确认页（H5，由服务号通知卡片跳入，点任何按钮都会触发订阅） */}
+                <Route path="/wechat/lead-received" element={<WechatLeadReceived />} />
                 {/* 🔴 PC端视频面试路由（已注释，使用小程序H5代替） */}
                 {/* <Route path="/interview/join/:roomId" element={<JoinInterview />} /> */}
                 {/* <Route path="/interview/video" element={<VideoInterview />} /> */}
@@ -382,6 +390,10 @@ export default function App({ children }: AppProps) {
                   <Route
                     path="settings/account"
                     element={<AuthorizedRoute element={<AccountSettings />} />}
+                  />
+                  <Route
+                    path="settings/wechat-subscribers"
+                    element={<AuthorizedRoute element={<WechatSubscribeList />} role="admin" />}
                   />
 
                   {/* 测试页面 - 开发环境使用 */}

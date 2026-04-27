@@ -7,6 +7,7 @@ import { Customer, CustomerDocument } from '../../customers/models/customer.mode
 import { CustomersService } from '../../customers/customers.service';
 import { ContractConsistencyService } from '../../contracts/contract-consistency.service';
 import { NotificationGateway } from '../../notification/notification.gateway';
+import { NotificationHelperService } from '../../notification/notification-helper.service';
 import { AppLogger } from '../../../common/logging/app-logger';
 import { RequestContextStore } from '../../../common/logging/request-context';
 import { ESignApiService } from './esign-api.service';
@@ -27,6 +28,7 @@ export class ESignCallbackService {
     @Inject(forwardRef(() => NotificationGateway))
     private notificationGateway: NotificationGateway,
     private readonly mpNotificationService: MiniProgramNotificationService,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   /**
@@ -220,6 +222,24 @@ export class ESignCallbackService {
             contract._id.toString(),
             contract.contractNumber || contractNo,
           ).catch(err => this.logger.error('esign.callback.mp_notification_failed', err));
+        }
+
+        // 🔔 CRM 站内铃铛通知：合同签署完成（创建人 + 管理员）
+        try {
+          const recipients = new Set<string>();
+          const owner = (contract as any).createdBy?.toString?.();
+          if (owner) recipients.add(owner);
+          const adminIds = await this.notificationHelper.getAdminUserIds();
+          adminIds.forEach(id => recipients.add(id));
+          if (recipients.size > 0) {
+            await this.notificationHelper.notifyContractSigned(Array.from(recipients), {
+              contractId: contract._id.toString(),
+              contractNumber: contract.contractNumber || contractNo,
+              customerName: contract.customerName || '未填写',
+            });
+          }
+        } catch (err: any) {
+          this.logger.warn('esign.callback.crm_bell_notify_failed', { error: err?.message });
         }
         // 一致性同步：合同 → 客户档案 + 阿姨简历（身份证/手机/地址、客户状态、阿姨接单状态）
         const profileSyncResult = await this.consistencyService.onContractActivated(contract._id.toString());

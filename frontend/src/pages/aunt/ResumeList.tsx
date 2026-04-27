@@ -1,5 +1,7 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber, Upload, Popconfirm } from 'antd';
+import { Card, Form, App, Modal, Button, Select, Input, Table, Space, Tag, Tooltip, InputNumber, Upload, Popconfirm, Grid, List, Pagination } from 'antd';
+
+const { useBreakpoint } = Grid;
 import type { TablePaginationConfig, UploadProps } from 'antd';
 import { SearchOutlined, ReloadOutlined, CommentOutlined, PlusOutlined, UploadOutlined, InboxOutlined, UserSwitchOutlined, DeleteOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
 import { useEffect, useState, useRef } from 'react';
@@ -77,6 +79,8 @@ const ResumeList = () => {
   const [form] = Form.useForm();
   const { message: messageApi } = App.useApp();
   const { hasPermission } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const canAssign = hasPermission('resume:assign');
   const canDelete = hasPermission('resume:delete');
 
@@ -894,46 +898,46 @@ const ResumeList = () => {
       }}
     >
       {/* 查询表单 */}
-      <Card style={{ marginBottom: 16 }}>
+      <Card style={{ marginBottom: isMobile ? 12 : 16 }} bodyStyle={isMobile ? { padding: 12 } : undefined}>
         <Form
           form={form}
           onFinish={handleSearch}
           style={{ marginBottom: 8 }}
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-            <Form.Item name="keyword" style={{ marginBottom: 0 }}>
+            <Form.Item name="keyword" style={{ marginBottom: 0, flex: isMobile ? '1 1 100%' : undefined }}>
               <Input
                 placeholder="关键词(姓名/手机号)"
                 prefix={<SearchOutlined />}
                 allowClear
-                style={{ width: '180px' }}
+                style={{ width: isMobile ? '100%' : '180px' }}
               />
             </Form.Item>
 
-            <Form.Item name="jobType" style={{ marginBottom: 0 }}>
+            <Form.Item name="jobType" style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
               <Select
                 placeholder="工种"
                 allowClear
                 options={Object.entries(jobTypeMap).map(([value, label]) => ({ value, label }))}
-                style={{ width: '140px' }}
+                style={{ width: isMobile ? '100%' : '140px' }}
               />
             </Form.Item>
 
-            <Form.Item name="maxAge" style={{ marginBottom: 0 }}>
+            <Form.Item name="maxAge" style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
               <InputNumber
                 placeholder="≤年龄"
                 min={0}
                 max={100}
-                style={{ width: '100px' }}
+                style={{ width: isMobile ? '100%' : '100px' }}
               />
             </Form.Item>
 
-            <Form.Item name="nativePlace" style={{ marginBottom: 0 }}>
+            <Form.Item name="nativePlace" style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
               <Select
                 placeholder="籍贯"
                 allowClear
                 options={nativePlaceOptions.map(value => ({ value, label: value }))}
-                style={{ width: '140px' }}
+                style={{ width: isMobile ? '100%' : '140px' }}
                 showSearch
                 filterOption={(input, option) =>
                   (option?.label as string).toLowerCase().includes(input.toLowerCase())
@@ -941,29 +945,29 @@ const ResumeList = () => {
               />
             </Form.Item>
 
-            <Form.Item name="ethnicity" style={{ marginBottom: 0 }}>
+            <Form.Item name="ethnicity" style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
               <Select
                 placeholder="民族"
                 allowClear
                 options={ethnicityOptions.map(value => ({ value, label: value }))}
-                style={{ width: '120px' }}
+                style={{ width: isMobile ? '100%' : '120px' }}
               />
             </Form.Item>
 
-            <Form.Item name="orderStatus" style={{ marginBottom: 0 }}>
+            <Form.Item name="orderStatus" style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
               <Select
                 placeholder="接单状态"
                 allowClear
                 options={Object.entries(orderStatusMap).map(([value, { text }]) => ({ value, label: text }))}
-                style={{ width: '120px' }}
+                style={{ width: isMobile ? '100%' : '120px' }}
               />
             </Form.Item>
 
-            <Form.Item name="resumeType" style={{ marginBottom: 0 }}>
+            <Form.Item name="resumeType" style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
               <Select
                 placeholder="简历类型"
                 allowClear
-                style={{ width: '120px' }}
+                style={{ width: isMobile ? '100%' : '120px' }}
                 options={[
                   { value: 'standard', label: '标准简历' },
                   { value: 'draft', label: '草稿简历' },
@@ -971,12 +975,12 @@ const ResumeList = () => {
               />
             </Form.Item>
 
-            <Form.Item name="createdBy" style={{ marginBottom: 0 }}>
+            <Form.Item name="createdBy" style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
               <Select
                 placeholder="创建人"
                 allowClear
                 showSearch
-                style={{ width: '140px' }}
+                style={{ width: isMobile ? '100%' : '140px' }}
                 options={creatorOptions.map(u => ({ value: u._id, label: u.name || u.username }))}
                 filterOption={(input, option) =>
                   ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase())
@@ -984,14 +988,14 @@ const ResumeList = () => {
               />
             </Form.Item>
 
-            <Form.Item style={{ marginBottom: 0 }}>
-              <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
+            <Form.Item style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
+              <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block={isMobile}>
                 查询
               </Button>
             </Form.Item>
 
-            <Form.Item style={{ marginBottom: 0 }}>
-              <Button onClick={handleReset} icon={<ReloadOutlined />} disabled={loading}>
+            <Form.Item style={{ marginBottom: 0, flex: isMobile ? '1 1 calc(50% - 4px)' : undefined }}>
+              <Button onClick={handleReset} icon={<ReloadOutlined />} disabled={loading} block={isMobile}>
                 重置
               </Button>
             </Form.Item>
@@ -1000,23 +1004,158 @@ const ResumeList = () => {
       </Card>
 
       {/* 数据表格 */}
-      <Card>
+      <Card bodyStyle={isMobile ? { padding: 12 } : undefined}>
         <AutoRefreshIndicator />
-        <Table
-          columns={columns}
-          dataSource={resumeList}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            current: currentPage,
-            pageSize: pageSize,
-            total: total,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
-          }}
-          onChange={handleTableChange}
-        />
+        {isMobile ? (
+          <>
+            <List
+              loading={loading}
+              dataSource={resumeList}
+              locale={{ emptyText: '暂无简历' }}
+              renderItem={(record) => {
+                const phone = record.phone;
+                const idNumber = (record as any).idNumber;
+                const isBlacklisted = (phone && blacklistPhones.has(phone)) || (idNumber && blacklistIdCards.has(idNumber));
+                const statusInfo = orderStatusMap[record.orderStatus] || { text: '未知', color: 'default' };
+                const u: any = (record as any).userId;
+                const creatorName = u && typeof u === 'object' ? (u.name || u.username || '-') : '-';
+                const id = record.id || record._id || '';
+                return (
+                  <List.Item style={{ padding: 0, marginBottom: 12, border: 'none' }}>
+                    <Card
+                      size="small"
+                      bodyStyle={{ padding: 12 }}
+                      style={{ width: '100%', borderRadius: 8 }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <a
+                          onClick={() => {
+                            if (!id) { messageApi.warning('简历ID不存在'); return; }
+                            window.open(`/standalone/aunt/resumes/detail/${id}`, '_blank');
+                          }}
+                          style={{ fontSize: 16, fontWeight: 600 }}
+                        >
+                          {record.name}
+                        </a>
+                        <Tag color={statusInfo.color} style={{ marginRight: 0 }}>{statusInfo.text}</Tag>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                        {record.isDraft && <Tag color="orange" style={{ fontSize: 11 }}>草稿</Tag>}
+                        {(record as any).referralActivated && <Tag color="volcano" style={{ fontSize: 11 }}>已被推荐</Tag>}
+                        {isBlacklisted && <Tag color="red" style={{ fontSize: 11 }}>黑名单</Tag>}
+                        {record.fromReferral
+                          ? <Tag color="purple" style={{ fontSize: 11 }}>推荐入库</Tag>
+                          : record.leadSource === 'referral-release'
+                            ? <Tag color="magenta" style={{ fontSize: 11 }}>推荐人录入</Tag>
+                            : record.userId
+                              ? <Tag color="orange" style={{ fontSize: 11 }}>员工创建</Tag>
+                              : <Tag color="blue" style={{ fontSize: 11 }}>自助注册</Tag>}
+                        {record.fromReferral && (record.isHidden
+                          ? <Tag color="red" style={{ fontSize: 11 }}>仅归属可见</Tag>
+                          : <Tag color="green" style={{ fontSize: 11 }}>全员可见</Tag>)}
+                        <Tag color={record.hasMedicalReport ? 'green' : 'red'} style={{ fontSize: 11 }}>
+                          体检{record.hasMedicalReport ? '有' : '无'}
+                        </Tag>
+                      </div>
+                      <div style={{ fontSize: 13, color: '#666', lineHeight: '22px' }}>
+                        <div>编号：<span style={{ color: '#333' }}>{record.formattedId || '-'}</span></div>
+                        <div>
+                          电话：{phone ? (
+                            <a href={`tel:${phone}`} style={{ color: '#1890ff' }}>{phone}</a>
+                          ) : '-'}
+                        </div>
+                        <div>
+                          工种：<span style={{ color: '#333' }}>{jobTypeMap[record.jobType] || record.jobType || '-'}</span>
+                          <span style={{ marginLeft: 12 }}>{record.gender === 'male' ? '男' : record.gender === 'female' ? '女' : '-'} · {record.age || '-'}岁</span>
+                        </div>
+                        <div>籍贯：<span style={{ color: '#333' }}>{record.nativePlace || '-'}</span></div>
+                        <div>创建人：<span style={{ color: '#333' }}>{creatorName}</span></div>
+                        {record.updatedAt && (
+                          <div>更新：<span style={{ color: '#999' }}>{dayjs(record.updatedAt).format('MM-DD HH:mm')}</span></div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                        <Button
+                          type="primary"
+                          icon={<CommentOutlined />}
+                          size="small"
+                          onClick={() => handleFollowUp(record.id)}
+                        >跟进</Button>
+                        {canAssign && (
+                          <Button
+                            icon={<UserSwitchOutlined />}
+                            size="small"
+                            onClick={() => handleOpenAssign(record)}
+                          >分配</Button>
+                        )}
+                        {record.fromReferral && (
+                          <Popconfirm
+                            title={record.isHidden ? '确认取消隐藏？' : '确认设为仅归属员工可见？'}
+                            description={record.isHidden ? '取消后所有员工都可以看到这条简历' : '隐藏后只有您和管理员可以看到这条简历'}
+                            onConfirm={async () => {
+                              try {
+                                const res = await resumeService.toggleHidden(record.id);
+                                messageApi.success(res.isHidden ? '已设为仅归属员工可见' : '已取消隐藏，全员可见');
+                                fetchResumeList();
+                              } catch { messageApi.error('操作失败'); }
+                            }}
+                            okText="确认"
+                            cancelText="取消"
+                          >
+                            <Button
+                              size="small"
+                              icon={record.isHidden ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                              style={{ color: record.isHidden ? '#52c41a' : '#faad14' }}
+                            >{record.isHidden ? '取消隐藏' : '隐藏'}</Button>
+                          </Popconfirm>
+                        )}
+                        {canDelete && (
+                          <Popconfirm
+                            title="确定要删除这条简历吗？"
+                            description={`将删除 ${record.name} 的简历，此操作不可恢复`}
+                            onConfirm={() => handleDeleteResume(record)}
+                            okText="确定删除"
+                            cancelText="取消"
+                            okButtonProps={{ danger: true }}
+                          >
+                            <Button danger icon={<DeleteOutlined />} size="small">删除</Button>
+                          </Popconfirm>
+                        )}
+                      </div>
+                    </Card>
+                  </List.Item>
+                );
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+              <Pagination
+                current={currentPage}
+                pageSize={pageSize}
+                total={total}
+                size="small"
+                showSizeChanger
+                showTotal={(t) => `共 ${t} 条`}
+                onChange={(p, ps) => { setCurrentPage(p); setPageSize(ps); }}
+              />
+            </div>
+          </>
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={resumeList}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: currentPage,
+              pageSize: pageSize,
+              total: total,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 条记录`,
+            }}
+            onChange={handleTableChange}
+          />
+        )}
       </Card>
 
       {/* 跟进记录弹窗 */}

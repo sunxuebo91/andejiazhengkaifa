@@ -1,9 +1,15 @@
-import { Controller, Get, Post, Body, Param, Query, Logger, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Logger, Res, Req, UseGuards, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { Response, Request } from 'express';
 import { WeChatService } from './wechat.service';
+import { WechatOAuthService } from './wechat-oauth.service';
+import { WechatSubscribeService } from './wechat-subscribe.service';
 import { UsersService } from '../users/users.service';
 import { Public } from '../auth/decorators/public.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('微信服务')
 @Controller('wechat')
@@ -12,8 +18,220 @@ export class WeChatController {
 
   constructor(
     private readonly wechatService: WeChatService,
+    private readonly oauthService: WechatOAuthService,
+    private readonly subscribeService: WechatSubscribeService,
     private readonly usersService: UsersService,
+    private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
+
+  // ==================== 服务号 OAuth 网页授权 ====================
+
+  /**
+   * 生成 OAuth 授权 URL（前端引导用户跳转微信完成授权）
+   */
+  @Post('oauth/authorize-url')
+  @ApiOperation({ summary: '生成服务号网页授权 URL' })
+  async getAuthorizeUrl(@Req() req: Request) {
+    const userId = (req as any).user?.userId || (req as any).user?._id || (req as any).user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('未登录');
+    }
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://crm.andejiazheng.com';
+    const state = this.oauthService.signState(String(userId));
+    const redirectUri = `${frontendUrl}/api/wechat/oauth/callback`;
+    const url = this.oauthService.buildAuthorizeUrl(state, redirectUri, 'snsapi_base');
+    return { success: true, data: { url } };
+  }
+
+  /**
+   * 微信回调：用 code 换 openid，绑定到 state 中的 userId，302 跳回订阅页
+   */
+  @Get('oauth/callback')
+  @Public()
+  @ApiOperation({ summary: '服务号 OAuth 回调' })
+  async oauthCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://crm.andejiazheng.com';
+    const subscribePage = `${frontendUrl}/wechat/subscribe`;
+
+    if (!code || !state) {
+      return res.redirect(`${subscribePage}?bind_error=missing_params`);
+    }
+    const verified = this.oauthService.verifyState(state);
+    if (!verified) {
+      this.logger.warn('OAuth state 验证失败');
+      return res.redirect(`${subscribePage}?bind_error=invalid_state`);
+    }
+    const result = await this.oauthService.exchangeCodeForOpenid(code);
+    if (!result?.openid) {
+      return res.redirect(`${subscribePage}?bind_error=exchange_failed`);
+    }
+    try {
+      await this.usersService.updateWeChatInfo(verified.userId, { openId: result.openid });
+      this.logger.log(`员工绑定服务号 openid 成功: userId=${verified.userId}, openid=${result.openid}`);
+      return res.redirect(`${subscribePage}?bound=1`);
+    } catch (error) {
+      this.logger.error(`绑定 openid 失败: ${error.message}`);
+      return res.redirect(`${subscribePage}?bind_error=update_failed`);
+    }
+  }
+
+  // ==================== JS-SDK 签名 ====================
+
+  /**
+   * JS-SDK 签名（前端 wx.config 用）
+   */
+  @Get('jssdk/signature')
+  @ApiOperation({ summary: '获取 JS-SDK 签名' })
+  async getJsSdkSignature(@Query('url') url: string) {
+    if (!url) throw new BadRequestException('缺少 url 参数');
+    const sig = await this.oauthService.signJsApi(url);
+    return { success: true, data: sig };
+  }
+
+  // ==================== 订阅通知额度 ====================
+
+  /**
+   * 查询当前用户订阅通知额度
+   */
+  @Get('subscribe/credit')
+  @ApiOperation({ summary: '查询订阅通知额度' })
+  async getCredit(@Req() req: Request) {
+    const userId = (req as any).user?.userId || (req as any).user?._id || (req as any).user?.id;
+    if (!userId) throw new UnauthorizedException('未登录');
+    const user = await this.usersService.findById(String(userId));
+    if (!user) throw new UnauthorizedException('用户不存在');
+    const templateId = this.configService.get<string>('WECHAT_TPL_LEAD_ASSIGN') || '';
+    const appid = this.configService.get<string>('WECHAT_APPID') || '';
+    if (!user.wechatOpenId) {
+      return { success: true, data: { bound: false, openid: null, remaining: 0, templateId, appid } };
+    }
+    const remaining = templateId ? await this.subscribeService.getCredit(user.wechatOpenId, templateId) : 0;
+    return {
+      success: true,
+      data: { bound: true, openid: user.wechatOpenId, remaining, templateId, appid },
+    };
+  }
+
+  /**
+   * 管理后台：列出所有已绑定服务号的员工，附带订阅额度信息
+   */
+  @Get('subscribe/subscribers')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: '管理后台 - 订阅消息列表' })
+  async listSubscribers() {
+    const templateId = this.configService.get<string>('WECHAT_TPL_LEAD_ASSIGN') || '';
+    const appid = this.configService.get<string>('WECHAT_APPID') || '';
+    const [users, credits] = await Promise.all([
+      this.usersService.findUsersWithWeChat(),
+      this.subscribeService.findAllCredits(),
+    ]);
+    const creditByKey = new Map<string, any>();
+    for (const c of credits) {
+      creditByKey.set(`${c.openid}::${c.templateId}`, c);
+    }
+    const list = users.map((u) => {
+      const openid = u.wechatOpenId || '';
+      const c = templateId ? creditByKey.get(`${openid}::${templateId}`) : undefined;
+      return {
+        userId: String(u._id),
+        username: u.username,
+        name: u.name,
+        role: u.role,
+        department: u.department,
+        active: u.active,
+        wechatOpenId: openid,
+        wechatNickname: u.wechatNickname,
+        remaining: c?.remaining || 0,
+        totalSubscribed: c?.totalSubscribed || 0,
+        totalSent: c?.totalSent || 0,
+        lastSubscribedAt: c?.lastSubscribedAt || null,
+        lastSentAt: c?.lastSentAt || null,
+      };
+    });
+    return { success: true, data: { list, total: list.length, templateId, appid } };
+  }
+
+  /**
+   * 签发 PC 扫码 handoff 短期 JWT（10 分钟），用于二维码授权场景
+   * 员工在 PC 上点"显示二维码" → 后端签发 token → 前端把 token 编入二维码 URL →
+   * 员工微信扫码打开 H5 → H5 把 token 写到 localStorage 充当登录态
+   */
+  @Post('subscribe/issue-handoff')
+  @ApiOperation({ summary: '签发扫码 handoff 短期 JWT（10 分钟）' })
+  async issueHandoff(@Req() req: Request) {
+    const u = (req as any).user;
+    const userId = u?.userId || u?._id || u?.id;
+    if (!userId) throw new UnauthorizedException('未登录');
+    const user = await this.usersService.findById(String(userId));
+    if (!user) throw new UnauthorizedException('用户不存在');
+    const token = this.jwtService.sign(
+      {
+        sub: String(userId),
+        username: user.username,
+        role: user.role,
+        permissions: user.permissions || [],
+        scope: 'wechat-handoff',
+      },
+      { expiresIn: '10m' },
+    );
+    return { success: true, data: { token, expiresIn: 600 } };
+  }
+
+  /**
+   * 构建服务号订阅通知 URL（员工点击「订阅通知」按钮时由前端调用，然后整个页面跳转到该 URL）
+   * 用户允许后微信会 302 回到 redirect_url，并附带 ?action=confirm&template_id=&scene=&openid=&reserved=
+   */
+  @Post('subscribe/build-url')
+  @ApiOperation({ summary: '构建服务号订阅通知授权 URL' })
+  async buildSubscribeUrl(
+    @Req() req: Request,
+    @Body() body: { redirectUrl?: string },
+  ) {
+    const userId = (req as any).user?.userId || (req as any).user?._id || (req as any).user?.id;
+    if (!userId) throw new UnauthorizedException('未登录');
+    const templateId = this.configService.get<string>('WECHAT_TPL_LEAD_ASSIGN') || '';
+    if (!templateId) throw new BadRequestException('未配置模板 ID');
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://crm.andejiazheng.com';
+    const redirectUrl = body.redirectUrl || `${frontendUrl}/wechat/subscribe`;
+    const url = this.oauthService.buildSubscribeNotifyUrl({
+      templateId,
+      redirectUrl,
+      scene: 1000,
+      reserved: this.oauthService.signState(String(userId), 1800),
+    });
+    return { success: true, data: { url } };
+  }
+
+  /**
+   * 订阅授权回调：前端在 ?action=confirm 回跳后调用，+1 额度
+   */
+  @Post('subscribe/confirm')
+  @ApiOperation({ summary: '订阅授权回调（accept 时 +1 额度）' })
+  async confirmSubscribe(
+    @Req() req: Request,
+    @Body() body: { templateId?: string; action: 'accept' | 'reject'; count?: number },
+  ) {
+    const userId = (req as any).user?.userId || (req as any).user?._id || (req as any).user?.id;
+    if (!userId) throw new UnauthorizedException('未登录');
+    const user = await this.usersService.findById(String(userId));
+    if (!user?.wechatOpenId) {
+      throw new BadRequestException('未绑定服务号 openid');
+    }
+    if (body.action !== 'accept') {
+      return { success: true, data: { remaining: 0, skipped: true } };
+    }
+    const templateId = body.templateId || this.configService.get<string>('WECHAT_TPL_LEAD_ASSIGN') || '';
+    if (!templateId) throw new BadRequestException('未配置模板 ID');
+    const count = Math.max(1, Math.min(body.count || 1, 10));
+    const updated = await this.subscribeService.addCredit(user.wechatOpenId, templateId, count);
+    return { success: true, data: { remaining: updated.remaining, totalSubscribed: updated.totalSubscribed } };
+  }
 
   /**
    * 生成员工绑定二维码

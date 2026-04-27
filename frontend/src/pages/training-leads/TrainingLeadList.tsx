@@ -14,9 +14,14 @@ import {
   Popconfirm,
   DatePicker,
   Modal,
-  Upload
+  Upload,
+  Grid,
+  List,
+  Pagination
 } from 'antd';
 import type { UploadProps } from 'antd';
+
+const { useBreakpoint } = Grid;
 import { SearchOutlined, PlusOutlined, MessageOutlined, EditOutlined, DeleteOutlined, UploadOutlined, InboxOutlined, ShareAltOutlined, QrcodeOutlined, CopyOutlined, UserSwitchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { trainingLeadService } from '../../services/trainingLeadService';
@@ -39,6 +44,8 @@ const { RangePicker } = DatePicker;
 const TrainingLeadList: React.FC = () => {
   const navigate = useNavigate();
   const { hasPermission, user } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const isAdmin = hasPermission('*') || hasPermission('training-lead:all');
   const [leads, setLeads] = useState<TrainingLead[]>([]);
   const [loading, setLoading] = useState(false);
@@ -557,8 +564,8 @@ const TrainingLeadList: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Card>
+    <div style={{ padding: isMobile ? '12px' : '24px' }}>
+      <Card bodyStyle={{ padding: isMobile ? 12 : 24 }}>
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           {/* 搜索筛选区域 - 第一行 */}
           <Row gutter={[12, 12]}>

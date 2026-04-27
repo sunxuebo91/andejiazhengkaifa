@@ -113,6 +113,15 @@ export class Resume extends Document implements IResume {
   @Prop({ nullable: true })
   assignedAt?: Date;
 
+  @Prop({ type: Boolean, default: false, index: true })
+  releasedForContract?: boolean;
+
+  @Prop({ type: Date, nullable: true })
+  releasedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', nullable: true })
+  releasedBy?: Types.ObjectId;
+
   @ApiProperty({ description: '姓名' })
   @Prop()
   @IsString()

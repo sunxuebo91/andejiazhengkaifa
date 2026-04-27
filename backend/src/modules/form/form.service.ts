@@ -425,27 +425,48 @@ export class FormService {
     // 增加提交次数
     await this.formConfigModel.findByIdAndUpdate(formId, { $inc: { submissionCount: 1 } });
 
-    // 发送通知给归属人
-    if (referredBy) {
-      try {
-        // 提取提交者姓名和手机号（如果有）
-        const nameField = fields.find(field => field.fieldType === 'text' && (field.fieldName.includes('name') || field.label.includes('姓名')));
-        const submitterName = nameField ? dto.data[nameField.fieldName] : undefined;
-        const submitterPhone = phoneField ? dto.data[phoneField.fieldName] : undefined;
-
-        await this.notificationHelper.notifyFormSubmission(referredBy.toString(), {
-          formId: formId,
-          formTitle: form.title,
-          submissionId: submission._id.toString(),
-          submitterName,
-          submitterPhone,
-        });
-
-        this.logger.log(`已发送表单提交通知给用户: ${referredBy}`);
-      } catch (error) {
-        this.logger.error(`发送表单提交通知失败: ${error.message}`, error.stack);
-        // 通知失败不影响表单提交
+    // 发送通知
+    try {
+      // 提取提交者姓名和手机号（兼容自定义字段：先按字段名/标签匹配，再按手机号正则兜底）
+      const nameField = fields.find(field => field.fieldType === 'text' && (field.fieldName.includes('name') || field.label.includes('姓名')));
+      let submitterName = nameField ? dto.data[nameField.fieldName] : undefined;
+      let submitterPhone = phoneField ? dto.data[phoneField.fieldName] : undefined;
+      if (!submitterPhone) {
+        const PHONE_REGEX = /^1[3-9]\d{9}$/;
+        for (const v of Object.values(dto.data || {})) {
+          if (typeof v === 'string' && PHONE_REGEX.test(v.trim())) { submitterPhone = v.trim(); break; }
+        }
       }
+
+      const payload = {
+        formId,
+        formTitle: form.title,
+        submissionId: submission._id.toString(),
+        submitterName,
+        submitterPhone,
+      };
+
+      // 1) 通知归属人（推荐人）
+      if (referredBy) {
+        await this.notificationHelper.notifyFormSubmission(referredBy.toString(), payload);
+      }
+
+      // 2) 通知表单创建者 + 管理员（去重，并排除已通知的归属人）
+      const recipients = new Set<string>();
+      const creatorId = (form as any).createdBy?.toString?.();
+      if (creatorId) recipients.add(creatorId);
+      const adminIds = await this.notificationHelper.getAdminUserIds();
+      adminIds.forEach(id => recipients.add(id));
+      if (referredBy) recipients.delete(referredBy.toString());
+
+      if (recipients.size > 0) {
+        await this.notificationHelper.notifyFormSubmissionAdmin(Array.from(recipients), payload);
+      }
+
+      this.logger.log(`表单提交通知已派发：归属人=${referredBy?.toString() || '-'}，管理/创建者=${recipients.size}`);
+    } catch (error) {
+      this.logger.error(`发送表单提交通知失败: ${error.message}`, error.stack);
+      // 通知失败不影响表单提交
     }
 
     return {

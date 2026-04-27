@@ -40,6 +40,9 @@ export class ResumeOperationLog extends Document {
       'import',                // 导入简历
       'create_from_referral',  // 推荐审核通过自动入库
       'release_from_referral', // 从推荐库手动释放到简历库
+      'release_for_contract',  // 创建人/管理员手动开启简历"可签约"释放开关
+      'auto_release_first_contract', // 创建人本人首次签约自动释放
+      'contract_blocked_by_release', // 他人首次签约被释放校验拦截
       'other'                  // 其他操作
     ],
     index: true

@@ -59,12 +59,17 @@ const LoginPage: React.FC = () => {
           onFinish={handleSubmit}
           submitter={{
             searchConfig: {
-              submitText: '登录',
+              submitText: '立即登录',
             },
             submitButtonProps: {
               loading: loading,
+              size: 'large',
               style: {
                 width: '100%',
+                height: 44,
+                fontSize: 16,
+                background: '#5DBFB3',
+                borderColor: '#5DBFB3',
               },
             },
           }}

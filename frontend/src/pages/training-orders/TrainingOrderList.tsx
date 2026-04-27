@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Table, Button, Space, Input, Tag, message, Modal, Form, Select } from 'antd';
+import { Card, Table, Button, Space, Input, Tag, message, Modal, Form, Select, Grid } from 'antd';
 import { SearchOutlined, EyeOutlined, PlusOutlined, UserSwitchOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { trainingOrderService } from '../../services/trainingOrderService';
@@ -10,10 +10,14 @@ import { Contract } from '../../types/contract.types';
 import ContractStatusMini from '../../components/ContractStatusMini';
 import { useAuth } from '../../contexts/AuthContext';
 
+const { useBreakpoint } = Grid;
+
 // 职培订单列表：复用 Contract 模型（orderCategory='training'），字段沿用合同表
 const TrainingOrderList: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [orders, setOrders] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -300,44 +304,182 @@ const TrainingOrderList: React.FC = () => {
     },
   ];
 
+  // 移动端卡片视图：每条订单渲染一个紧凑卡片
+  const renderMobileCard = (record: Contract) => {
+    const courses = resolveEnrolledCourses(record);
+    const amount = record.courseAmount ?? Number(record.templateParams?.['报课金额']) ?? undefined;
+    const isGraduated = record.contractStatus === 'graduated' || !!(record as any).graduatedAt;
+    const statusMap: Record<string, { text: string; color: string }> = {
+      signing: { text: '签约中', color: 'blue' },
+      signed: { text: '已签约', color: 'cyan' },
+      active: { text: '学习中', color: 'processing' },
+      graduated: { text: '已毕业', color: 'green' },
+      refunded: { text: '已退款', color: 'orange' },
+    };
+    const s = statusMap[record.contractStatus || 'signing'] || statusMap.signing;
+    const lead = (record as any).trainingLeadId;
+    const leadSrc = lead && typeof lead === 'object' ? lead.leadSource : undefined;
+    const creator = record.createdBy as any;
+    const creatorName = creator
+      ? typeof creator === 'string'
+        ? (creator === 'temp' || /^[a-fA-F0-9]{24}$/.test(creator) ? '-' : creator)
+        : (creator.name || creator.username || '-')
+      : '-';
+    return (
+      <Card
+        key={record._id}
+        size="small"
+        style={{ marginBottom: 12, borderRadius: 8 }}
+        bodyStyle={{ padding: 12 }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+          <span style={{ fontWeight: 600, color: '#1890ff', fontSize: 13, wordBreak: 'break-all', marginRight: 8 }}>
+            {record.contractNumber}
+          </span>
+          {record.esignContractNo ? (
+            <ContractStatusMini contractNo={record.esignContractNo} orderCategory="training" />
+          ) : (
+            <Tag color={s.color} style={{ marginRight: 0 }}>{s.text}</Tag>
+          )}
+        </div>
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>{record.customerName}</span>
+          {record.customerPhone && (
+            <a href={`tel:${record.customerPhone}`} style={{ marginLeft: 8, color: '#1890ff', fontSize: 13 }}>
+              {record.customerPhone}
+            </a>
+          )}
+        </div>
+        {leadSrc && (
+          <div style={{ marginBottom: 6 }}>
+            <span style={{ color: '#999', fontSize: 12, marginRight: 4 }}>来源：</span>
+            <Tag color="geekblue" style={{ marginRight: 0 }}>{leadSrc}</Tag>
+          </div>
+        )}
+        {courses.length > 0 && (
+          <div style={{ marginBottom: 6 }}>
+            <span style={{ color: '#999', fontSize: 12, marginRight: 4 }}>课程：</span>
+            <Space size={4} wrap>
+              {courses.map(c => <Tag key={c} color="blue" style={{ fontSize: 11, marginRight: 0 }}>{c}</Tag>)}
+            </Space>
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666', marginBottom: 6 }}>
+          <span>报课：<span style={{ color: '#1890ff', fontWeight: 600 }}>{amount ? `¥${Number(amount).toLocaleString()}` : '-'}</span></span>
+          <span>证书：<Tag color={isGraduated ? 'green' : 'default'} style={{ marginRight: 0 }}>{isGraduated ? '是' : '否'}</Tag></span>
+        </div>
+        <div style={{ fontSize: 11, color: '#999', marginBottom: 10 }}>
+          {creatorName} · {dayjs(record.createdAt).format('YYYY-MM-DD HH:mm')}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button
+            type="primary"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => window.open(`/standalone/contracts/${record._id}`, '_blank')}
+          >
+            查看
+          </Button>
+          {isAdmin && (
+            <>
+              <Button size="small" icon={<UserSwitchOutlined />} onClick={() => handleOpenAssignModal(record)}>分配</Button>
+              <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDeleteOrder(record)}>删除</Button>
+            </>
+          )}
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <PageContainer header={{ title: '职培订单列表' }}>
-      <Card>
-        <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
-          <Space>
+      <Card bodyStyle={isMobile ? { padding: 12 } : undefined}>
+        {isMobile ? (
+          <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Input
               placeholder="搜索学员姓名/手机号/订单号"
               allowClear
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onPressEnter={() => setPagination(prev => ({ ...prev, current: 1 }))}
-              style={{ width: 280 }}
               prefix={<SearchOutlined />}
             />
-            <Button type="primary" onClick={() => setPagination(prev => ({ ...prev, current: 1 }))}>
-              搜索
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button type="primary" style={{ flex: 1 }} onClick={() => setPagination(prev => ({ ...prev, current: 1 }))}>
+                搜索
+              </Button>
+              <Button type="primary" icon={<PlusOutlined />} style={{ flex: 1 }} onClick={() => navigate('/training-orders/create')}>
+                新建订单
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
+            <Space>
+              <Input
+                placeholder="搜索学员姓名/手机号/订单号"
+                allowClear
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onPressEnter={() => setPagination(prev => ({ ...prev, current: 1 }))}
+                style={{ width: 280 }}
+                prefix={<SearchOutlined />}
+              />
+              <Button type="primary" onClick={() => setPagination(prev => ({ ...prev, current: 1 }))}>
+                搜索
+              </Button>
+            </Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/training-orders/create')}>
+              新建职培订单
             </Button>
           </Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/training-orders/create')}>
-            新建职培订单
-          </Button>
-        </Space>
-        <Table
-          rowKey="_id"
-          loading={loading}
-          columns={columns}
-          dataSource={orders}
-          pagination={{
-            current: pagination.current,
-            pageSize: pagination.pageSize,
-            total: pagination.total,
-            showSizeChanger: true,
-            showTotal: (t) => `共 ${t} 条`,
-          }}
-          onChange={(p) => setPagination({ current: p.current || 1, pageSize: p.pageSize || 10, total: pagination.total })}
-          size="middle"
-          scroll={{ x: 'max-content' }}
-        />
+        )}
+        {isMobile ? (
+          <>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>加载中...</div>
+            ) : orders.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>暂无数据</div>
+            ) : (
+              orders.map(renderMobileCard)
+            )}
+            <div style={{ textAlign: 'center', marginTop: 12, color: '#999', fontSize: 12 }}>
+              共 {pagination.total} 条
+              {pagination.total > pagination.pageSize && (
+                <Space style={{ marginLeft: 12 }}>
+                  <Button
+                    size="small"
+                    disabled={pagination.current <= 1}
+                    onClick={() => setPagination(p => ({ ...p, current: p.current - 1 }))}
+                  >上一页</Button>
+                  <span>{pagination.current}/{Math.ceil(pagination.total / pagination.pageSize)}</span>
+                  <Button
+                    size="small"
+                    disabled={pagination.current >= Math.ceil(pagination.total / pagination.pageSize)}
+                    onClick={() => setPagination(p => ({ ...p, current: p.current + 1 }))}
+                  >下一页</Button>
+                </Space>
+              )}
+            </div>
+          </>
+        ) : (
+          <Table
+            rowKey="_id"
+            loading={loading}
+            columns={columns}
+            dataSource={orders}
+            pagination={{
+              current: pagination.current,
+              pageSize: pagination.pageSize,
+              total: pagination.total,
+              showSizeChanger: true,
+              showTotal: (t) => `共 ${t} 条`,
+            }}
+            onChange={(p) => setPagination({ current: p.current || 1, pageSize: p.pageSize || 10, total: pagination.total })}
+            size="middle"
+            scroll={{ x: 'max-content' }}
+          />
+        )}
       </Card>
 
       {/* 分配职培订单弹窗 */}

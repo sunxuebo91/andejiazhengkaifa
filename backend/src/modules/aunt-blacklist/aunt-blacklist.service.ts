@@ -7,6 +7,7 @@ import { CreateBlacklistDto } from './dto/create-blacklist.dto';
 import { UpdateBlacklistDto } from './dto/update-blacklist.dto';
 import { ReleaseBlacklistDto } from './dto/release-blacklist.dto';
 import { QueryBlacklistDto } from './dto/query-blacklist.dto';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 
 /** 算作"进行中"的合同状态 */
 const ACTIVE_CONTRACT_STATUSES: ContractStatus[] = [
@@ -24,6 +25,7 @@ export class AuntBlacklistService {
     private readonly blacklistModel: Model<AuntBlacklistDocument>,
     @InjectModel(Contract.name)
     private readonly contractModel: Model<ContractDocument>,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   /**
@@ -96,6 +98,20 @@ export class AuntBlacklistService {
     this.logger.log(
       `blacklist.create id=${created._id} phone=${phone || '-'} idCard=${idCard || '-'} operator=${operator.userId}`,
     );
+
+    // 🔔 通知管理员：阿姨被拉黑
+    try {
+      const adminIds = await this.notificationHelper.getAdminUserIds(operator.userId);
+      if (adminIds.length > 0) {
+        await this.notificationHelper.notifyAuntBlacklisted(adminIds, {
+          auntName: dto.name || '未填写',
+          operatorName: operator.name || '系统',
+          reason: dto.reason || '未填写',
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`发送黑名单通知失败: ${err?.message}`);
+    }
 
     return created;
   }

@@ -227,6 +227,18 @@ export const resumeService = {
     const response = await apiService.patch(`/api/resumes/${resumeId}/toggle-hidden`, {});
     return response.data;
   },
+
+  // 释放简历可签约（创建人或管理员，单向开启）
+  releaseForContract: async (resumeId: string): Promise<ApiResponse<{ alreadyReleased: boolean; releasedAt: string | null }>> => {
+    const response = await apiService.patch(`/api/resumes/${resumeId}/release`, {});
+    return response as unknown as ApiResponse<{ alreadyReleased: boolean; releasedAt: string | null }>;
+  },
+
+  // 获取简历释放相关日志
+  getReleaseLogs: async (resumeId: string): Promise<any[]> => {
+    const response = await apiService.get(`/api/resumes/${resumeId}/release-logs`);
+    return Array.isArray(response.data) ? response.data : [];
+  },
 };
 
 export default resumeService;

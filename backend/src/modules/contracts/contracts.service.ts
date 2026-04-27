@@ -21,6 +21,7 @@ import { ContractsQueryService } from './contracts-query.service';
 import { ContractConsistencyService } from './contract-consistency.service';
 import { MiniProgramNotificationService } from '../miniprogram-notification/miniprogram-notification.service';
 import { AuntBlacklistService } from '../aunt-blacklist/aunt-blacklist.service';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 
 @Injectable()
 export class ContractsService {
@@ -43,7 +44,61 @@ export class ContractsService {
     private readonly consistencyService: ContractConsistencyService,
     private mpNotificationService: MiniProgramNotificationService,
     private readonly auntBlacklistService: AuntBlacklistService,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
+
+  /**
+   * 🔔 通知管理员 + 创建人：合同已创建（不阻塞主流程）
+   */
+  private notifyContractCreatedSafe(contract: any, creatorUserId?: string) {
+    (async () => {
+      try {
+        const recipients = new Set<string>();
+        if (creatorUserId) recipients.add(creatorUserId);
+        const adminIds = await this.notificationHelper.getAdminUserIds();
+        adminIds.forEach(id => recipients.add(id));
+        if (recipients.size === 0) return;
+        await this.notificationHelper.notifyContractCreated(Array.from(recipients), {
+          contractId: contract?._id?.toString?.() || '',
+          contractNumber: contract?.contractNumber || '',
+          customerName: contract?.customerName || '未填写',
+        });
+      } catch (err: any) {
+        this.logger.warn(`发送合同创建通知失败: ${err?.message}`);
+      }
+    })();
+  }
+
+  /**
+   * 🔔 通知合同相关人员：合同状态变更（不阻塞主流程）
+   */
+  private notifyContractStatusChangedSafe(
+    contract: any,
+    oldStatus: string,
+    newStatus: string,
+    creatorUserId?: string,
+  ) {
+    (async () => {
+      try {
+        const recipients = new Set<string>();
+        const owner = contract?.createdBy?.toString?.();
+        if (owner) recipients.add(owner);
+        if (creatorUserId) recipients.add(creatorUserId);
+        const adminIds = await this.notificationHelper.getAdminUserIds();
+        adminIds.forEach(id => recipients.add(id));
+        if (recipients.size === 0) return;
+        await this.notificationHelper.notifyContractStatusChanged(Array.from(recipients), {
+          contractId: contract?._id?.toString?.() || '',
+          contractNumber: contract?.contractNumber || '',
+          customerName: contract?.customerName || '未填写',
+          oldStatus: oldStatus || '未知',
+          newStatus: newStatus || '未知',
+        });
+      } catch (err: any) {
+        this.logger.warn(`发送合同状态变更通知失败: ${err?.message}`);
+      }
+    })();
+  }
 
   /**
    * 合同发起前置黑名单校验：命中 active 黑名单则直接拦截。
@@ -384,6 +439,16 @@ export class ContractsService {
         });
       }
 
+      // 🔒 简历"释放"前置校验（职培订单无阿姨，跳过；workerId 为 'temp' 或无效时由 service 内部 silently 跳过）
+      if (
+        !isTrainingOrder &&
+        createContractDto.workerId &&
+        createContractDto.workerId !== 'temp' &&
+        Types.ObjectId.isValid(createContractDto.workerId)
+      ) {
+        await this.resumeService.assertReleasedForContract(createContractDto.workerId, userId);
+      }
+
       // 🆕 检查是否需要进入换人模式（职培订单不走换人逻辑；forceCreateNew=true 时跳过，用于"一客两单"加单场景）
       if (!isTrainingOrder && !createContractDto.forceCreateNew && createContractDto.customerPhone) {
         const existingContractCheck = await this.checkCustomerExistingContract(createContractDto.customerPhone);
@@ -551,6 +616,9 @@ export class ContractsService {
         contractNumber: savedContract.contractNumber,
         customerId: String(createContractDto.customerId),
       });
+
+      // 🔔 通知管理员 + 创建人：合同已创建
+      this.notifyContractCreatedSafe(savedContract, userId);
 
       // 📝 记录客户操作日志 - 发起合同
       if (createContractDto.customerId && createContractDto.customerId !== 'temp' && userId) {
@@ -1610,6 +1678,18 @@ export class ContractsService {
       // 职培订单不支持换人流程（无阿姨、无服务周期）
       if (originalContract.orderCategory === OrderCategory.TRAINING) {
         throw new BadRequestException('原合同为职培订单，不支持换人操作');
+      }
+
+      // 🔒 简历"释放"前置校验（换人合同的新简历同样需要走释放校验）
+      if (
+        (createContractDto as any).workerId &&
+        (createContractDto as any).workerId !== 'temp' &&
+        Types.ObjectId.isValid((createContractDto as any).workerId)
+      ) {
+        await this.resumeService.assertReleasedForContract(
+          (createContractDto as any).workerId,
+          userId,
+        );
       }
 
       // 计算服务时间

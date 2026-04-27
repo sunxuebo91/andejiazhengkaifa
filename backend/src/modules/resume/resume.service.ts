@@ -24,6 +24,7 @@ import { QwenAIService } from '../ai/qwen-ai.service';
 import { ReferralResume, ReferralResumeDocument } from '../referral/models/referral-resume.model';
 import { ContractConsistencyService } from '../contracts/contract-consistency.service';
 import { AuntBlacklistService } from '../aunt-blacklist/aunt-blacklist.service';
+import { NotificationHelperService } from '../notification/notification-helper.service';
 
 /** 状态中文 label（推荐冲突提示用） */
 const REFERRAL_STATUS_LABEL: Record<string, string> = {
@@ -66,7 +67,35 @@ export class ResumeService {
     @Inject(forwardRef(() => ContractConsistencyService))
     private readonly consistencyService: ContractConsistencyService,
     private readonly auntBlacklistService: AuntBlacklistService,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
+
+  /**
+   * 🔔 通知管理员：新简历创建（与 training-leads 同口径，复用 NotificationHelper 的 admin 查询）
+   * 失败不影响主流程
+   */
+  private async notifyResumeCreatedSafe(saved: any, creatorUserId?: string) {
+    try {
+      const resumeId = (saved?._id || '').toString();
+      if (!resumeId) return;
+      const adminIds = await this.notificationHelper.getAdminUserIds(creatorUserId);
+      if (adminIds.length === 0) return;
+      let creatorName = '系统';
+      if (creatorUserId && Types.ObjectId.isValid(creatorUserId)) {
+        const creator = await this.userModel.findById(creatorUserId).select('name').lean();
+        creatorName = (creator as any)?.name || creatorName;
+      }
+      await this.notificationHelper.notifyResumeCreated(adminIds, {
+        resumeId,
+        resumeName: saved?.name || '未填写',
+        phone: saved?.phone || '未填写',
+        jobType: saved?.jobType || saved?.serviceType || '未填写',
+        creatorName,
+      });
+    } catch (error: any) {
+      this.logger.warn(`发送新简历通知失败: ${error?.message}`);
+    }
+  }
 
   /**
    * 反查黑名单：命中 active 记录则拒绝简历落库/更新。
@@ -129,6 +158,187 @@ export class ResumeService {
         operationType,
       });
     }
+  }
+
+  /**
+   * 🔒 合同发起前的"释放"校验（中心化）
+   * 规则（按顺序）：
+   *  1) resume.releasedForContract === true → 放行
+   *  2) 发起人 === resume.userId（创建人本人）→ 自动释放并放行（写日志）
+   *  3) 否则 → 拒绝合同创建（写日志 + 通知创建人 + 抛 ConflictException）
+   * 注意：职培订单等无 worker 场景，由调用方决定是否调用本方法。
+   */
+  async assertReleasedForContract(resumeId: string | Types.ObjectId, initiatorUserId?: string): Promise<void> {
+    const idStr = resumeId.toString();
+    if (!Types.ObjectId.isValid(idStr)) {
+      return;
+    }
+    const resume = await this.resumeModel
+      .findById(new Types.ObjectId(idStr))
+      .select('_id name userId releasedForContract')
+      .lean();
+    if (!resume) {
+      return;
+    }
+    if ((resume as any).releasedForContract === true) {
+      return;
+    }
+    const creatorIdStr = (resume as any).userId ? (resume as any).userId.toString() : '';
+    const isSelf = !!initiatorUserId && creatorIdStr && initiatorUserId === creatorIdStr;
+    if (isSelf) {
+      try {
+        await this.resumeModel.updateOne(
+          { _id: (resume as any)._id, releasedForContract: { $ne: true } },
+          {
+            $set: {
+              releasedForContract: true,
+              releasedAt: new Date(),
+              releasedBy: new Types.ObjectId(initiatorUserId),
+            },
+          },
+        );
+      } catch (e: any) {
+        this.logger.warn(`assertReleasedForContract.auto_release_update_failed: ${e?.message}`);
+      }
+      await this.logOperation(
+        idStr,
+        initiatorUserId!,
+        'auto_release_first_contract',
+        '创建人本人首次签约自动释放',
+        { description: '简历创建人本人发起首次合同，自动释放简历可签约状态' },
+      );
+      return;
+    }
+    let initiatorName = '某员工';
+    if (initiatorUserId && Types.ObjectId.isValid(initiatorUserId)) {
+      try {
+        const u = await this.userModel.findById(initiatorUserId).select('name username').lean();
+        initiatorName = (u as any)?.name || (u as any)?.username || initiatorName;
+      } catch {}
+    }
+    let creatorName = '简历创建人';
+    if (creatorIdStr && Types.ObjectId.isValid(creatorIdStr)) {
+      try {
+        const c = await this.userModel.findById(creatorIdStr).select('name username').lean();
+        creatorName = (c as any)?.name || (c as any)?.username || creatorName;
+      } catch {}
+    }
+    await this.logOperation(
+      idStr,
+      initiatorUserId || this.systemOperatorId.toString(),
+      'contract_blocked_by_release',
+      '合同发起被释放校验拦截',
+      {
+        description: `${initiatorName} 试图用本简历发起合同，已通知创建人 ${creatorName} 释放`,
+        relatedType: 'user',
+        relatedId: creatorIdStr,
+      },
+    );
+    if (creatorIdStr) {
+      try {
+        await this.notificationHelper.notifyResumeReleaseRequested(creatorIdStr, {
+          resumeId: idStr,
+          resumeName: (resume as any)?.name || '未填写',
+          initiatorName,
+        });
+      } catch (e: any) {
+        this.logger.warn(`assertReleasedForContract.notify_failed: ${e?.message}`);
+      }
+    }
+    throw new ConflictException(
+      `该简历未释放，已通知创建人 ${creatorName}，请等待其在简历详情页打开释放开关后再发起合同`,
+    );
+  }
+
+  /**
+   * 🔓 创建人 / 管理员 手动开启释放开关（单向：仅"开"，已开启幂等返回）
+   */
+  async releaseForContract(
+    resumeId: string,
+    operatorUserId: string,
+    isAdmin: boolean,
+  ): Promise<{ alreadyReleased: boolean; releasedAt: Date | null }> {
+    if (!Types.ObjectId.isValid(resumeId)) {
+      throw new BadRequestException('无效的简历ID格式');
+    }
+    const resume = await this.resumeModel
+      .findById(new Types.ObjectId(resumeId))
+      .select('_id name userId releasedForContract releasedAt')
+      .lean();
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+    const creatorIdStr = (resume as any).userId ? (resume as any).userId.toString() : '';
+    const isCreator = !!operatorUserId && creatorIdStr && operatorUserId === creatorIdStr;
+    if (!isAdmin && !isCreator) {
+      throw new ForbiddenException('仅简历创建人或管理员可释放该简历');
+    }
+    if ((resume as any).releasedForContract === true) {
+      return { alreadyReleased: true, releasedAt: (resume as any).releasedAt || null };
+    }
+    const now = new Date();
+    await this.resumeModel.updateOne(
+      { _id: (resume as any)._id, releasedForContract: { $ne: true } },
+      {
+        $set: {
+          releasedForContract: true,
+          releasedAt: now,
+          releasedBy: new Types.ObjectId(operatorUserId),
+        },
+      },
+    );
+    await this.logOperation(
+      resumeId,
+      operatorUserId,
+      'release_for_contract',
+      isAdmin && !isCreator ? '管理员手动释放简历可签约' : '创建人手动释放简历可签约',
+      { description: '通过详情页释放开关开启' },
+    );
+    return { alreadyReleased: false, releasedAt: now };
+  }
+
+  /**
+   * 📜 查询简历的"释放相关"操作日志（详情页时间线用）
+   * 权限规则：
+   *  - admin 或 创建人本人 → 返回全部三种类型
+   *  - 其他用户 → 仅返回自己作为 operatorId 出现过的 contract_blocked_by_release 记录
+   */
+  async getReleaseLogs(
+    resumeId: string,
+    viewerUserId?: string,
+    isAdmin?: boolean,
+  ): Promise<any[]> {
+    if (!Types.ObjectId.isValid(resumeId)) {
+      throw new BadRequestException('无效的简历ID格式');
+    }
+    const resume = await this.resumeModel
+      .findById(new Types.ObjectId(resumeId))
+      .select('_id userId')
+      .lean();
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+    const creatorIdStr = (resume as any).userId ? (resume as any).userId.toString() : '';
+    const isCreator = !!viewerUserId && creatorIdStr && viewerUserId === creatorIdStr;
+    const releaseTypes = ['release_for_contract', 'auto_release_first_contract', 'contract_blocked_by_release'];
+    const baseQuery: any = {
+      resumeId: new Types.ObjectId(resumeId),
+      operationType: { $in: releaseTypes },
+    };
+    if (!isAdmin && !isCreator) {
+      if (!viewerUserId || !Types.ObjectId.isValid(viewerUserId)) {
+        return [];
+      }
+      baseQuery.operationType = 'contract_blocked_by_release';
+      baseQuery.operatorId = new Types.ObjectId(viewerUserId);
+    }
+    const logs = await this.resumeOperationLogModel
+      .find(baseQuery)
+      .populate('operatorId', 'name username')
+      .sort({ operatedAt: -1 })
+      .lean()
+      .exec();
+    return logs.map((log: any) => ({ ...log, operator: log.operatorId }));
   }
 
   /**
@@ -226,6 +436,9 @@ export class ResumeService {
       const savedResume = await resume.save();
 
       this.logger.log(`✅ createWithFiles 成功: ${savedResume._id}`);
+
+      // 🔔 通知管理员：新简历创建（不阻塞主流程）
+      this.notifyResumeCreatedSafe(savedResume, createResumeDto.userId).catch(() => {});
 
       // 📝 记录操作日志 - 创建简历
       await this.logOperation(
@@ -471,6 +684,15 @@ export class ResumeService {
     );
 
     this.logger.log(`✅ 分配简历 ${resumeId}（${resume.name}）给员工 ${(targetUser as any).name}`);
+
+    // 🔔 通知新负责人：被分配了一份简历（不阻塞主流程）
+    this.notificationHelper
+      .notifyResumeAssigned(assignedToId, {
+        resumeId,
+        resumeName: resume.name || '未填写',
+      })
+      .catch((err: any) => this.logger.warn(`发送简历分配通知失败: ${err?.message}`));
+
     return updated;
   }
 
@@ -1524,6 +1746,10 @@ export class ResumeService {
       }
 
       this.logger.log(`✅ 核心创建成功: ${savedResume._id}, 来源: ${options.leadSource}`);
+
+      // 🔔 通知管理员：新简历创建（不阻塞主流程）
+      this.notifyResumeCreatedSafe(savedResume, options.userId).catch(() => {});
+
       return savedResume;
     } catch (error) {
       // 处理 MongoDB 唯一索引冲突

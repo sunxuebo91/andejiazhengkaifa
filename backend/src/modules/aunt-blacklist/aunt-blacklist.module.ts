@@ -4,6 +4,7 @@ import { AuntBlacklistController } from './aunt-blacklist.controller';
 import { AuntBlacklistService } from './aunt-blacklist.service';
 import { AuntBlacklist, AuntBlacklistSchema } from './models/aunt-blacklist.model';
 import { Contract, ContractSchema } from '../contracts/models/contract.model';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { Contract, ContractSchema } from '../contracts/models/contract.model';
       { name: AuntBlacklist.name, schema: AuntBlacklistSchema },
       { name: Contract.name, schema: ContractSchema },
     ]),
+    NotificationModule,
   ],
   controllers: [AuntBlacklistController],
   providers: [AuntBlacklistService],
